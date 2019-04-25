@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -42,7 +42,7 @@ type StorageClusterSpec struct {
 	Image string `json:"image"`
 	// ImagePullPolicy is the image pull policy.
 	// One of Always, Never, IfNotPresent. Defaults to Always.
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy"`
 	// ImagePullSecret is a reference to secret in the 'kube-system'
 	// namespace used for pulling images used by this StorageClusterSpec
 	ImagePullSecret *string `json:"imagePullSecret"`
@@ -89,7 +89,7 @@ type CommonConfig struct {
 	// Storage details of storage used by the driver
 	Storage *StorageSpec `json:"storage"`
 	// Env is a list of environment variables used by the driver
-	Env []corev1.EnvVar `json:"env"`
+	Env []v1.EnvVar `json:"env"`
 	// RuntimeOpts is a map of options with extra configs for storage driver
 	RuntimeOpts map[string]string `json:"runtimeOptions"`
 }
@@ -108,7 +108,7 @@ type NodeSelector struct {
 // PlacementSpec has placement configuration for the storage cluster nodes
 type PlacementSpec struct {
 	// NodeAffinity describes node affinity scheduling rules for the pods
-	NodeAffinity *corev1.NodeAffinity `json:"nodeAffinity"`
+	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity"`
 }
 
 // KvdbSpec contains the details to access kvdb

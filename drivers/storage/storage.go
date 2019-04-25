@@ -1,8 +1,10 @@
 package storage
 
 import (
+	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"k8s.io/api/core/v1"
 )
 
 // Driver defines an external storage driver interface.
@@ -15,8 +17,14 @@ type Driver interface {
 	// String returns the string name of the driver
 	String() string
 
-	// Stop the driver
-	Stop() error
+	// ClusterPluginInterface interface to manage storage cluster
+	ClusterPluginInterface
+}
+
+// ClusterPluginInterface interface to manage storage cluster
+type ClusterPluginInterface interface {
+	// GetStoragePodSpec given the storage cluster spec it returns the pod spec
+	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
 }
 
 var (

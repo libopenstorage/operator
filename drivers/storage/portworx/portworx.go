@@ -7,7 +7,7 @@ import (
 
 const (
 	// driverName is the name of the portworx storage driver implementation
-	driverName = "pxd"
+	driverName = "portworx"
 )
 
 type portworx struct{}
@@ -17,10 +17,6 @@ func (p *portworx) String() string {
 }
 
 func (p *portworx) Init(_ interface{}) error {
-	return nil
-}
-
-func (p *portworx) Stop() error {
 	return nil
 }
 
