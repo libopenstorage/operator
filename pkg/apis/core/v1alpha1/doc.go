@@ -1,5 +1,4 @@
+// Package v1alpha1 contains API Schema definitions for the core v1alpha1 API group
 // +k8s:deepcopy-gen=package,register
-
-// Package v1alpha1 is the v1alpha1 version of the API.
 // +groupName=core.libopenstorage.org
 package v1alpha1
