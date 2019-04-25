@@ -48,6 +48,16 @@ func (in *CloudStorageSpec) DeepCopyInto(out *CloudStorageSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.MaxStorageNodes != nil {
+		in, out := &in.MaxStorageNodes, &out.MaxStorageNodes
+		*out = new(uint32)
+		**out = **in
+	}
+	if in.MaxStorageNodesPerZone != nil {
+		in, out := &in.MaxStorageNodesPerZone, &out.MaxStorageNodesPerZone
+		*out = new(uint32)
+		**out = **in
+	}
 	return
 }
 
@@ -353,6 +363,11 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		*out = new(PlacementSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ImagePullSecret != nil {
+		in, out := &in.ImagePullSecret, &out.ImagePullSecret
+		*out = new(string)
+		**out = **in
+	}
 	if in.Kvdb != nil {
 		in, out := &in.Kvdb, &out.Kvdb
 		*out = new(KvdbSpec)
@@ -362,6 +377,28 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		in, out := &in.CloudStorage, &out.CloudStorage
 		*out = new(CloudStorageSpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.SecretsProvider != nil {
+		in, out := &in.SecretsProvider, &out.SecretsProvider
+		*out = new(string)
+		**out = **in
+	}
+	if in.StartPort != nil {
+		in, out := &in.StartPort, &out.StartPort
+		*out = new(uint32)
+		**out = **in
+	}
+	if in.CallHome != nil {
+		in, out := &in.CallHome, &out.CallHome
+		*out = new(bool)
+		**out = **in
+	}
+	if in.FeatureGates != nil {
+		in, out := &in.FeatureGates, &out.FeatureGates
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 	in.CommonConfig.DeepCopyInto(&out.CommonConfig)
 	if in.Nodes != nil {

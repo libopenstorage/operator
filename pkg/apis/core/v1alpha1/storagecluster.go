@@ -40,6 +40,12 @@ type StorageClusterSpec struct {
 	Placement *PlacementSpec `json:"placement"`
 	// Image is docker image of the storage driver
 	Image string `json:"image"`
+	// ImagePullPolicy is the image pull policy.
+	// One of Always, Never, IfNotPresent. Defaults to Always.
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
+	// ImagePullSecret is a reference to secret in the 'kube-system'
+	// namespace used for pulling images used by this StorageClusterSpec
+	ImagePullSecret *string `json:"imagePullSecret"`
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb"`
 	// CloudStorage details of storage in cloud environment.
@@ -47,11 +53,14 @@ type StorageClusterSpec struct {
 	// cloud storage at node level is added.
 	CloudStorage *CloudStorageSpec `json:"cloudStorage"`
 	// SecretsProvider is the name of secret provider that driver will connect to
-	SecretsProvider string `json:"secretsProvider"`
-	// CSIEndpoint is the csi endpoint for the driver
-	CSIEndpoint string `json:"csiEndpoint"`
+	SecretsProvider *string `json:"secretsProvider"`
+	// StartPort is the starting port in the range of ports used by the cluster
+	StartPort *uint32 `json:"startPort"`
 	// CallHome send cluster information for analytics
-	CallHome bool `json:"callHome"`
+	CallHome *bool `json:"callHome"`
+	// FeatureGates are a set of key-value pairs that describe what experimental
+	// features need to be enabled
+	FeatureGates map[string]string `json:"featureGates,omitempty"`
 	// CommonConfig that is present at both cluster and node level
 	CommonConfig
 	// Nodes node level configurations that will override the ones at cluster
@@ -154,10 +163,10 @@ type CloudStorageSpec struct {
 	// SystemMdDeviceSpec spec for the metadata device
 	SystemMdDeviceSpec *string `json:"systemMetadataDeviceSpec"`
 	// MaxStorageNodes maximum nodes that will have storage in the cluster
-	MaxStorageNodes uint32 `json:"maxStorageNodes"`
+	MaxStorageNodes *uint32 `json:"maxStorageNodes"`
 	// MaxStorageNodesPerZone maximum nodes in every zone that will have
 	// storage in the cluster
-	MaxStorageNodesPerZone uint32 `json:"maxStorageNodesPerZone"`
+	MaxStorageNodesPerZone *uint32 `json:"maxStorageNodesPerZone"`
 }
 
 // Geography is topology information for a node
@@ -263,3 +272,7 @@ const (
 	// NodeUnknown means the node condition is not known
 	NodeUnknown ConditionStatus = "Unknown"
 )
+
+func init() {
+	SchemeBuilder.Register(&StorageCluster{}, &StorageClusterList{})
+}
