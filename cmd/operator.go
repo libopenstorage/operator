@@ -3,31 +3,24 @@ package main
 import (
 	"flag"
 	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
-	"github.com/libopenstorage/operator/pkg/cluster"
-	"github.com/libopenstorage/operator/pkg/controller"
+	"github.com/libopenstorage/operator/pkg/apis"
+	storagecluster "github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	api_v1 "k8s.io/api/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
-	core_v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	componentconfig "k8s.io/kubernetes/pkg/apis/componentconfig/v1alpha1"
+	"k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 const (
 	defaultLockObjectName      = "openstorage-operator"
 	defaultLockObjectNamespace = "kube-system"
-	eventComponentName         = "openstorage-operator"
+	defaultResyncPeriod        = 30 * time.Second
 )
 
 func main() {
@@ -61,17 +54,13 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "lock-object-name",
-			Usage: "Name for the lock object (default: stork)",
+			Usage: "Name for the lock object",
 			Value: defaultLockObjectName,
 		},
 		cli.StringFlag{
 			Name:  "lock-object-namespace",
-			Usage: "Namespace for the lock object (default: kube-system)",
+			Usage: "Namespace for the lock object",
 			Value: defaultLockObjectNamespace,
-		},
-		cli.BoolTFlag{
-			Name:  "storage-cluster-controller",
-			Usage: "Start the storage cluster controller (default: true)",
 		},
 	}
 
@@ -106,96 +95,35 @@ func run(c *cli.Context) {
 		log.Fatalf("Error getting cluster config: %v", err)
 	}
 
-	k8sClient, err := clientset.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Error getting client, %v", err)
+	syncPeriod := defaultResyncPeriod
+	managerOpts := manager.Options{
+		SyncPeriod: &syncPeriod,
 	}
-
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&core_v1.EventSinkImpl{Interface: core_v1.New(k8sClient.CoreV1().RESTClient()).Events("")})
-	recorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, api_v1.EventSource{Component: eventComponentName})
-
-	runFunc := func(_ <-chan struct{}) {
-		runOperator(d, recorder, c)
-	}
-
 	if c.BoolT("leader-elect") {
-		lockObjectName := c.String("lock-object-name")
-		lockObjectNamespace := c.String("lock-object-namespace")
-
-		id, err := os.Hostname()
-		if err != nil {
-			log.Fatalf("Error getting hostname: %v", err)
-		}
-
-		lockConfig := resourcelock.ResourceLockConfig{
-			Identity:      id,
-			EventRecorder: recorder,
-		}
-
-		resourceLock, err := resourcelock.New(
-			resourcelock.ConfigMapsResourceLock,
-			lockObjectNamespace,
-			lockObjectName,
-			k8sClient.CoreV1(),
-			lockConfig)
-		if err != nil {
-			log.Fatalf("Error creating resource lock: %v", err)
-		}
-
-		defaultConfig := &componentconfig.LeaderElectionConfiguration{}
-		componentconfig.SetDefaults_LeaderElectionConfiguration(defaultConfig)
-
-		leaderElectionConfig := leaderelection.LeaderElectionConfig{
-			Lock:          resourceLock,
-			LeaseDuration: defaultConfig.LeaseDuration.Duration,
-			RenewDeadline: defaultConfig.RenewDeadline.Duration,
-			RetryPeriod:   defaultConfig.RetryPeriod.Duration,
-
-			Callbacks: leaderelection.LeaderCallbacks{
-				OnStartedLeading: runFunc,
-				OnStoppedLeading: func() {
-					log.Fatalf("Openstorage operator lost master")
-				},
-			},
-		}
-		leaderElector, err := leaderelection.NewLeaderElector(leaderElectionConfig)
-		if err != nil {
-			log.Fatalf("Error creating leader elector: %v", err)
-		}
-
-		leaderElector.Run()
-	} else {
-		runFunc(nil)
+		managerOpts.LeaderElection = true
+		managerOpts.LeaderElectionID = c.String("lock-object-name")
+		managerOpts.LeaderElectionNamespace = c.String("lock-object-namespace")
 	}
-}
-
-func runOperator(d storage.Driver, recorder record.EventRecorder, c *cli.Context) {
-	if err := controller.Init(); err != nil {
-		log.Fatalf("Error initializing controller: %v", err)
+	mgr, err := manager.New(config, managerOpts)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	clusterController := cluster.Controller{
-		Driver:   d,
-		Recorder: recorder,
+	log.Info("Registering components")
+
+	// Setup Scheme for all resources
+	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatal(err)
 	}
-	if err := clusterController.Init(); err != nil {
+
+	// Setup storage cluster controller
+	clusterController := storagecluster.Controller{Driver: d}
+	if err := clusterController.Init(mgr); err != nil {
 		log.Fatalf("Error initializing storage cluster controller: %v", err)
 	}
 
-	// The controller should be started at the end
-	if err := controller.Run(); err != nil {
-		log.Fatalf("Error starting controller: %v", err)
-	}
-
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-	for {
-		<-signalChan
-		log.Printf("Shutdown signal received, exiting...")
-		if err := d.Stop(); err != nil {
-			log.Warnf("Error stopping driver: %v", err)
-		}
-		os.Exit(0)
+	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+		log.Error(err, "Manager exited non-zero")
+		os.Exit(1)
 	}
 }
