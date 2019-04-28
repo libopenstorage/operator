@@ -580,6 +580,8 @@ type StorageClusterOps interface {
 	GetStorageCluster(string, string) (*corev1alpha1.StorageCluster, error)
 	// ListStorageClusters lists all the StorageClusters
 	ListStorageClusters(string) (*corev1alpha1.StorageClusterList, error)
+	// UpdateStorageClusterStatus update the status of given StorageCluster
+	UpdateStorageClusterStatus(*corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error)
 }
 
 // ObjectOps is an interface to perform generic Object operations
@@ -3709,6 +3711,14 @@ func (k *k8sOps) ListStorageClusters(namespace string) (*corev1alpha1.StorageClu
 	}
 
 	return k.ostClient.CoreV1alpha1().StorageClusters(namespace).List(meta_v1.ListOptions{})
+}
+
+func (k *k8sOps) UpdateStorageClusterStatus(cluster *corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.ostClient.CoreV1alpha1().StorageClusters(cluster.Namespace).UpdateStatus(cluster)
 }
 
 // StorageCluster APIs - END
