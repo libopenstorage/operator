@@ -61,6 +61,9 @@ staticcheck:
 
 pretest: check-fmt lint vet staticcheck
 
+test:
+	go test -v $(PKGS)
+
 codegen:
 	@echo "Generating CRD"
 	@hack/update-codegen.sh
