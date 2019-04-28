@@ -53,13 +53,13 @@ func main() {
 			Usage: "Enable leader election (default: true)",
 		},
 		cli.StringFlag{
-			Name:  "lock-object-name",
-			Usage: "Name for the lock object",
+			Name:  "leader-elect-lock-name",
+			Usage: "Name for the leader election lock object",
 			Value: defaultLockObjectName,
 		},
 		cli.StringFlag{
-			Name:  "lock-object-namespace",
-			Usage: "Namespace for the lock object",
+			Name:  "leader-elect-lock-namespace",
+			Usage: "Namespace for the leader election lock object",
 			Value: defaultLockObjectNamespace,
 		},
 	}
@@ -101,8 +101,8 @@ func run(c *cli.Context) {
 	}
 	if c.BoolT("leader-elect") {
 		managerOpts.LeaderElection = true
-		managerOpts.LeaderElectionID = c.String("lock-object-name")
-		managerOpts.LeaderElectionNamespace = c.String("lock-object-namespace")
+		managerOpts.LeaderElectionID = c.String("leader-elect-lock-name")
+		managerOpts.LeaderElectionNamespace = c.String("leader-elect-lock-namespace")
 	}
 	mgr, err := manager.New(config, managerOpts)
 	if err != nil {

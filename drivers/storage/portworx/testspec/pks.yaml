@@ -1,0 +1,123 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: portworx
+  namespace: kube-system
+  annotations:
+    portworx.com/install-source: "https://install.portworx.com/?mc=false&kbver=1.12.3&b=true&c=px-cluster&st=k8s&pks=true"
+spec:
+  minReadySeconds: 0
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: portworx
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+      hostNetwork: true
+      hostPID: false
+      containers:
+        - name: portworx
+          image: portworx/oci-monitor:2.0.3.4
+          imagePullPolicy: Always
+          args:
+            ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b", "--keep-px-up",
+             "-x", "kubernetes"]
+          env:
+            - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
+              value: "1500"
+            - name: "PX_TEMPLATE_VERSION"
+              value: "v4"
+            - name: "PRE-EXEC"
+              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+
+          livenessProbe:
+            periodSeconds: 30
+            initialDelaySeconds: 840 # allow image pull in slow networks
+            httpGet:
+              host: 127.0.0.1
+              path: /status
+              port: 9001
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              host: 127.0.0.1
+              path: /health
+              port: 9015
+          terminationMessagePath: "/tmp/px-termination-log"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: diagsdump
+              mountPath: /var/cores
+            - name: dockersock
+              mountPath: /var/run/docker.sock
+            - name: containerdsock
+              mountPath: /run/containerd
+            - name: etcpwx
+              mountPath: /etc/pwx
+            - name: optpwx
+              mountPath: /opt/pwx
+            - name: procmount
+              mountPath: /host_proc
+            - name: sysdmount
+              mountPath: /etc/systemd/system
+            - name: journalmount1
+              mountPath: /var/run/log
+              readOnly: true
+            - name: journalmount2
+              mountPath: /var/log
+              readOnly: true
+            - name: dbusmount
+              mountPath: /var/run/dbus
+            - name: pxlogs
+              mountPath: /var/lib/osd/log
+      restartPolicy: Always
+      serviceAccountName: px-account
+      volumes:
+        - name: diagsdump
+          hostPath:
+            path: /var/vcap/store/cores
+        - name: dockersock
+          hostPath:
+            path: /var/vcap/sys/run/docker/docker.sock
+        - name: containerdsock
+          hostPath:
+            path: /var/vcap/sys/run/containerd
+        - name: etcpwx
+          hostPath:
+            path: /var/vcap/store/etc/pwx
+        - name: optpwx
+          hostPath:
+            path: /var/vcap/store/opt/pwx
+        - name: procmount
+          hostPath:
+            path: /proc
+        - name: sysdmount
+          hostPath:
+            path: /etc/systemd/system
+        - name: journalmount1
+          hostPath:
+            path: /var/run/log
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - name: dbusmount
+          hostPath:
+            path: /var/run/dbus
+        - name: pxlogs
+          hostPath:
+            path: /var/vcap/store/lib/osd/log

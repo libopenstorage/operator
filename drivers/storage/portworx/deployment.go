@@ -32,6 +32,33 @@ const (
 	masterTaint              = "node-role.kubernetes.io/master"
 )
 
+type volumeInfo struct {
+	name             string
+	hostPath         string
+	mountPath        string
+	readOnly         bool
+	mountPropagation *v1.MountPropagationMode
+	hostPathType     *v1.HostPathType
+	pks              *pksVolumeInfo
+	openshift        *openshiftVolumeInfo
+	coreos           *coreosVolumeInfo
+}
+
+type pksVolumeInfo struct {
+	hostPath  string
+	mountPath string
+}
+
+type openshiftVolumeInfo struct {
+	hostPath  string
+	mountPath string
+}
+
+type coreosVolumeInfo struct {
+	hostPath  string
+	mountPath string
+}
+
 var (
 	// commonDockerRegistries is a map of commonly used Docker registries
 	commonDockerRegistries = map[string]bool{
@@ -39,6 +66,151 @@ var (
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
+	}
+
+	// commonVolumeInfoList is list of volumes across all options
+	commonVolumeInfoList = []volumeInfo{
+		{
+			name:      "diagsdump",
+			hostPath:  "/var/cores",
+			mountPath: "/var/cores",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/cores",
+			},
+		},
+		{
+			name:      "dockersock",
+			hostPath:  "/var/run/docker.sock",
+			mountPath: "/var/run/docker.sock",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/docker/docker.sock",
+			},
+		},
+		{
+			name:      "containerdsock",
+			hostPath:  "/run/containerd",
+			mountPath: "/run/containerd",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/containerd",
+			},
+		},
+		{
+			name:      "etcpwx",
+			hostPath:  "/etc/pwx",
+			mountPath: "/etc/pwx",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/etc/pwx",
+			},
+		},
+	}
+
+	// runcVolumeInfoList is a list of volumes applicable when running as runc
+	runcVolumeInfoList = []volumeInfo{
+		{
+			name: "pxlogs",
+			pks: &pksVolumeInfo{
+				hostPath:  "/var/vcap/store/lib/osd/log",
+				mountPath: "/var/lib/osd/log",
+			},
+		},
+		{
+			name:      "optpwx",
+			hostPath:  "/opt/pwx",
+			mountPath: "/opt/pwx",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/opt/pwx",
+			},
+		},
+		{
+			name:      "procmount",
+			hostPath:  "/proc",
+			mountPath: "/host_proc",
+		},
+		{
+			name:      "sysdmount",
+			hostPath:  "/etc/systemd/system",
+			mountPath: "/etc/systemd/system",
+		},
+		{
+			name:      "journalmount1",
+			hostPath:  "/var/run/log",
+			mountPath: "/var/run/log",
+			readOnly:  true,
+		},
+		{
+			name:      "journalmount2",
+			hostPath:  "/var/log",
+			mountPath: "/var/log",
+			readOnly:  true,
+		},
+		{
+			name:      "dbusmount",
+			hostPath:  "/var/run/dbus",
+			mountPath: "/var/run/dbus",
+		},
+	}
+
+	// dockerVolumeInfoList is a list of volumes applicable when running in docker
+	dockerVolumeInfoList = []volumeInfo{
+		{
+			name:      "dev",
+			hostPath:  "/dev",
+			mountPath: "/dev",
+		},
+		{
+			name:      "optpwx",
+			hostPath:  "/opt/pwx/bin",
+			mountPath: "/export_bin",
+		},
+		{
+			name:      "dockerplugins",
+			hostPath:  "/run/docker/plugins",
+			mountPath: "/run/docker/plugins",
+		},
+		{
+			name:             "libosd",
+			hostPath:         "/var/lib/osd",
+			mountPath:        "/var/lib/osd",
+			mountPropagation: mountPropagationPtr(v1.MountPropagationBidirectional),
+		},
+		{
+			name:      "hostproc",
+			hostPath:  "/proc",
+			mountPath: "/hostproc",
+		},
+		{
+			name:      "src",
+			hostPath:  "/usr/src",
+			mountPath: "/usr/src",
+			coreos: &coreosVolumeInfo{
+				hostPath:  "/lib/modules",
+				mountPath: "/lib/modules",
+			},
+		},
+		{
+			name:             "kubelet",
+			hostPath:         "/var/lib/kubelet",
+			mountPath:        "/var/lib/kubelet",
+			mountPropagation: mountPropagationPtr(v1.MountPropagationBidirectional),
+			openshift: &openshiftVolumeInfo{
+				hostPath:  "/var/lib/origin/openshift.local.volumes",
+				mountPath: "/var/lib/origin/openshift.local.volumes",
+			},
+		},
+	}
+
+	// csiVolumeInfoList is a list of volumes applicable when running csi sidecars
+	csiVolumeInfoList = []volumeInfo{
+		{
+			name:         "registration-dir",
+			hostPath:     "/var/lib/kubelet/plugins_registry",
+			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+		},
+		{
+			name:         "csi-driver-path",
+			hostPath:     "/var/lib/kubelet/plugins/com.openstorage.pxd",
+			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+		},
 	}
 )
 
@@ -93,6 +265,7 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	return t, nil
 }
 
+// TODO [Imp] Validate the cluster spec and return errors in the configuration
 func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.PodSpec {
 	t, err := newTemplate(cluster)
 	if err != nil {
@@ -112,13 +285,7 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      "px/enabled",
-								Operator: v1.NodeSelectorOpNotIn,
-								Values:   []string{"false"},
-							},
-						},
+						MatchExpressions: t.getSelectorRequirements(),
 					},
 				},
 			},
@@ -192,6 +359,37 @@ func (t *template) portworxContainer() v1.Container {
 	}
 }
 
+func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
+	selectorRequirements := []v1.NodeSelectorRequirement{
+		{
+			Key:      "px/enabled",
+			Operator: v1.NodeSelectorOpNotIn,
+			Values:   []string{"false"},
+		},
+	}
+
+	if !t.runOnMaster {
+		if t.isOpenshift {
+			selectorRequirements = append(
+				selectorRequirements,
+				v1.NodeSelectorRequirement{
+					Key:      "node-role.kubernetes.io/infra",
+					Operator: v1.NodeSelectorOpDoesNotExist,
+				},
+			)
+		}
+		selectorRequirements = append(
+			selectorRequirements,
+			v1.NodeSelectorRequirement{
+				Key:      "node-role.kubernetes.io/master",
+				Operator: v1.NodeSelectorOpDoesNotExist,
+			},
+		)
+	}
+
+	return selectorRequirements
+}
+
 func (t *template) getArguments() []string {
 	args := []string{
 		"-c", t.cluster.Name,
@@ -240,9 +438,8 @@ func (t *template) getArguments() []string {
 			*t.cluster.Spec.Storage.SystemMdDevice != "" {
 			args = append(args, "-metadata", *t.cluster.Spec.Storage.SystemMdDevice)
 		}
-	}
 
-	if t.cluster.Spec.CloudStorage != nil {
+	} else if t.cluster.Spec.CloudStorage != nil {
 		if t.cluster.Spec.CloudStorage.DeviceSpecs != nil {
 			for _, dev := range *t.cluster.Spec.CloudStorage.DeviceSpecs {
 				args = append(args, "-s", dev)
@@ -357,252 +554,73 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	volumeMounts := []v1.VolumeMount{
-		{
-			Name:      "diagsdump",
-			MountPath: "/var/cores",
-		},
-		{
-			Name:      "dockersock",
-			MountPath: "/var/run/docker.sock",
-		},
-		{
-			Name:      "containerdsock",
-			MountPath: "/run/containerd",
-		},
-		{
-			Name:      "etcpwx",
-			MountPath: "/etc/pwx",
-		},
-	}
-
-	if !t.isDocker {
-		volumeMounts = append(volumeMounts,
-			v1.VolumeMount{
-				Name:      "optpwx",
-				MountPath: "/opt/pwx",
-			},
-			v1.VolumeMount{
-				Name:      "procmount",
-				MountPath: "/host_proc",
-			},
-			v1.VolumeMount{
-				Name:      "sysdmount",
-				MountPath: "/etc/systemd/system",
-			},
-			v1.VolumeMount{
-				Name:      "journalmount1",
-				MountPath: "/var/run/log",
-				ReadOnly:  true,
-			},
-			v1.VolumeMount{
-				Name:      "journalmount2",
-				MountPath: "/var/log",
-				ReadOnly:  true,
-			},
-			v1.VolumeMount{
-				Name:      "dbusmount",
-				MountPath: "/var/run/dbus",
-			},
-		)
-
-		if t.isPKS {
-			volumeMounts = append(volumeMounts,
-				v1.VolumeMount{
-					Name:      "pxlogs",
-					MountPath: "/var/lib/osd/log",
-				},
-			)
-		}
-	} else {
-		// TODO: older versions of k8s don't support mountPropagation
-		// Use "/mount/path:shared" as mount path instead
-		mountPropagation := v1.MountPropagationBidirectional
-		volumeMounts = append(volumeMounts,
-			v1.VolumeMount{
-				Name:      "dev",
-				MountPath: "/dev",
-			},
-			v1.VolumeMount{
-				Name:      "optpwx",
-				MountPath: "/export_bin",
-			},
-			v1.VolumeMount{
-				Name:      "dockerplugins",
-				MountPath: "/run/docker/plugins",
-			},
-			v1.VolumeMount{
-				Name:             "libosd",
-				MountPath:        "/var/lib/osd",
-				MountPropagation: &mountPropagation,
-			},
-			v1.VolumeMount{
-				Name:      "hostproc",
-				MountPath: "/hostproc",
-			},
-		)
-
-		srcMount := v1.VolumeMount{
-			Name:      "src",
-			MountPath: "/usr/src",
-		}
-		if t.isCoreOS {
-			srcMount.MountPath = "/lib/modules"
-		}
-
-		kubeletMount := v1.VolumeMount{
-			Name:             "kubelet",
-			MountPath:        "/var/lib/kubelet",
-			MountPropagation: &mountPropagation,
-		}
-		if t.isOpenshift {
-			kubeletMount.MountPath = "/var/lib/origin/openshift.local.volumes"
-		}
-
-		volumeMounts = append(volumeMounts, srcMount, kubeletMount)
-	}
-
 	// TODO: Imp: add etcd certs to the volume mounts
+	volumeInfoList := append([]volumeInfo{}, commonVolumeInfoList...)
+	if t.isDocker {
+		volumeInfoList = append(volumeInfoList, dockerVolumeInfoList...)
+	} else {
+		volumeInfoList = append(volumeInfoList, runcVolumeInfoList...)
+	}
+	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
+		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
+	}
+
+	volumeMounts := make([]v1.VolumeMount, 0)
+	for _, v := range volumeInfoList {
+		volMount := v1.VolumeMount{
+			Name:             v.name,
+			MountPath:        v.mountPath,
+			ReadOnly:         v.readOnly,
+			MountPropagation: v.mountPropagation,
+		}
+		if t.isPKS && v.pks != nil && v.pks.mountPath != "" {
+			volMount.MountPath = v.pks.mountPath
+		} else if t.isCoreOS && v.coreos != nil && v.coreos.mountPath != "" {
+			volMount.MountPath = v.coreos.mountPath
+		} else if t.isOpenshift && v.openshift != nil && v.openshift.mountPath != "" {
+			volMount.MountPath = v.openshift.mountPath
+		}
+		if volMount.MountPath != "" {
+			volumeMounts = append(volumeMounts, volMount)
+		}
+	}
 	return volumeMounts
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	volumeMap := map[string]string{
-		"diagsdump":      "/var/cores",
-		"dockersock":     "/var/run/docker.sock",
-		"containerdsock": "/run/containerd",
-		"etcpwx":         "/etc/pwx",
+	// TODO: Imp: add etcd certs to the volume list
+	volumeInfoList := append([]volumeInfo{}, commonVolumeInfoList...)
+	if t.isDocker {
+		volumeInfoList = append(volumeInfoList, dockerVolumeInfoList...)
+	} else {
+		volumeInfoList = append(volumeInfoList, runcVolumeInfoList...)
 	}
-	if t.isPKS {
-		volumeMap["diagsdump"] = "/var/vcap/stores/cores"
-		volumeMap["dockersock"] = "/var/vcap/sys/run/docker/docker.sock"
-		volumeMap["containerdsock"] = "/var/vcap/sys/run/containerd"
-		volumeMap["etcpwx"] = "/var/vcap/store/etc/pwx"
-		volumeMap["pxlogs"] = "/var/vcap/store/lib/osd/log"
+	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
+		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
 	}
 
 	volumes := make([]v1.Volume, 0)
-	for name, path := range volumeMap {
-		volumes = append(volumes,
-			v1.Volume{
-				Name: name,
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{
-						Path: path,
-					},
-				},
-			},
-		)
-	}
-
-	if !t.isDocker {
-		runcVolumeMap := map[string]string{
-			"procmount":     "/proc",
-			"sysdmount":     "/etc/systemd/system",
-			"journalmount1": "/var/run/log",
-			"journalmount2": "/var/log",
-			"dbusmount":     "/var/run/dbus",
-		}
-		for name, path := range runcVolumeMap {
-			volumes = append(volumes,
-				v1.Volume{
-					Name: name,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: path,
-						},
-					},
-				},
-			)
-		}
-
-		optpwxVolume := v1.Volume{
-			Name: "optpwx",
+	for _, v := range volumeInfoList {
+		volume := v1.Volume{
+			Name: v.name,
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
-					Path: "/opt/pwx",
+					Path: v.hostPath,
+					Type: v.hostPathType,
 				},
 			},
 		}
-		if t.isPKS {
-			optpwxVolume.VolumeSource.HostPath.Path = "/var/vcap/store/opt/pwx"
+		if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
+			volume.VolumeSource.HostPath.Path = v.pks.hostPath
+		} else if t.isCoreOS && v.coreos != nil && v.coreos.hostPath != "" {
+			volume.VolumeSource.HostPath.Path = v.coreos.hostPath
+		} else if t.isOpenshift && v.openshift != nil && v.openshift.hostPath != "" {
+			volume.VolumeSource.HostPath.Path = v.openshift.hostPath
 		}
-		volumes = append(volumes, optpwxVolume)
-
-	} else {
-		dockerVolumeMap := map[string]string{
-			"dev":           "/dev",
-			"optpwx":        "/opt/pwx/bin",
-			"cores":         "/var/cores",
-			"dockerplugins": "/run/docker/plugins",
-			"libosd":        "/var/lib/osd",
-			"hostproc":      "/proc",
+		if volume.VolumeSource.HostPath.Path != "" {
+			volumes = append(volumes, volume)
 		}
-		for name, path := range dockerVolumeMap {
-			volumes = append(volumes,
-				v1.Volume{
-					Name: name,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: path,
-						},
-					},
-				},
-			)
-		}
-
-		srcVolume := v1.Volume{
-			Name: "src",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: "/usr/src",
-				},
-			},
-		}
-		if t.isCoreOS {
-			srcVolume.VolumeSource.HostPath.Path = "/lib/modules"
-		}
-
-		kubeletVolume := v1.Volume{
-			Name: "kubelet",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: "/var/lib/kubelet",
-				},
-			},
-		}
-		if t.isOpenshift {
-			kubeletVolume.VolumeSource.HostPath.Path = "/var/lib/origin/openshift.local.volumes"
-		}
-
-		volumes = append(volumes, srcVolume, kubeletVolume)
 	}
-
-	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
-		hostPathType := v1.HostPathDirectoryOrCreate
-		volumes = append(volumes,
-			v1.Volume{
-				Name: "registration-dir",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{
-						Path: "/var/lib/kubelet/plugins_registry",
-						Type: &hostPathType,
-					},
-				},
-			},
-			v1.Volume{
-				Name: "csi-driver-path",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{
-						Path: "/var/lib/kubelet/plugins/com.openstorage.pxd",
-						Type: &hostPathType,
-					},
-				},
-			},
-		)
-	}
-
-	// TODO: Imp: add etcd certs to the volume mounts
 	return volumes
 }
 
@@ -633,4 +651,20 @@ func getImageURN(registryAndRepo, image string) string {
 		imgParts = imgParts[len(imgParts)-1:]
 	}
 	return registryAndRepo + "/" + path.Join(imgParts...)
+}
+
+func stringPtr(val string) *string {
+	return &val
+}
+
+func boolPtr(val bool) *bool {
+	return &val
+}
+
+func mountPropagationPtr(val v1.MountPropagationMode) *v1.MountPropagationMode {
+	return &val
+}
+
+func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
+	return &val
 }
