@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -36,6 +37,13 @@ type StorageClusterList struct {
 
 // StorageClusterSpec is the spec used to define a storage cluster
 type StorageClusterSpec struct {
+	// An update strategy to replace existing StorageCluster pods with new pods.
+	// Default strategy is RollingUpdate
+	UpdateStrategy StorageClusterUpdateStrategy `json:"updateStrategy,omitempty"`
+	// RevisionHistoryLimit is the number of old history to retain to allow rollback.
+	// This is a pointer to distinguish between explicit zero and not specified.
+	// Defaults to 10.
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 	// Placement configuration for the storage cluster nodes
 	Placement *PlacementSpec `json:"placement"`
 	// Image is docker image of the storage driver
@@ -109,6 +117,44 @@ type NodeSelector struct {
 type PlacementSpec struct {
 	// NodeAffinity describes node affinity scheduling rules for the pods
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity"`
+}
+
+// StorageClusterUpdateStrategy is used to control the update strategy for a StorageCluster
+type StorageClusterUpdateStrategy struct {
+	// Type of storage cluster update strategy. Default is RollingUpdate.
+	Type StorageClusterUpdateStrategyType `json:"type,omitempty"`
+	// Rolling update config params. Present only if type = "RollingUpdate".
+	RollingUpdate *RollingUpdateStorageCluster `json:"rollingUpdate,omitempty"`
+}
+
+// StorageClusterUpdateStrategyType is enum for storage cluster update strategies
+type StorageClusterUpdateStrategyType string
+
+const (
+	// RollingUpdateStorageClusterStrategyType replace the old pods by new ones
+	// using rolling update i.e replace them on each node one after the other.
+	RollingUpdateStorageClusterStrategyType StorageClusterUpdateStrategyType = "RollingUpdate"
+	// OnDeleteStorageClusterStrategyType replace the old pods only when they are killed
+	OnDeleteStorageClusterStrategyType StorageClusterUpdateStrategyType = "OnDelete"
+)
+
+// RollingUpdateStorageCluster controls the desired behavior of storage cluster rolling update.
+type RollingUpdateStorageCluster struct {
+	// The maximum number of StorageCluster pods that can be unavailable during the
+	// update. Value can be an absolute number (ex: 5) or a percentage of total
+	// number of StorageCluster pods at the start of the update (ex: 10%). Absolute
+	// number is calculated from percentage by rounding up.
+	// This cannot be 0.
+	// Default value is 1.
+	// Example: when this is set to 30%, at most 30% of the total number of nodes
+	// that should be running the storage pod
+	// can have their pods stopped for an update at any given
+	// time. The update starts by stopping at most 30% of those StorageCluster pods
+	// and then brings up new StorageCluster pods in their place. Once the new pods
+	// are available, it then proceeds onto other StorageCluster pods, thus ensuring
+	// that at least 70% of original number of StorageCluster pods are available at
+	// all times during the update.
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // KvdbSpec contains the details to access kvdb
@@ -193,6 +239,10 @@ type StorageClusterStatus struct {
 	Reason string `json:"reason,omitempty"`
 	// NodeStatuses list of statuses for all the nodes in the storage cluster
 	NodeStatuses []NodeStatus `json:"nodes"`
+	// Count of hash collisions for the StorageCluster. The StorageCluster
+	// controller uses this field as a collision avoidance mechanism when it
+	// needs to create the name of the newest ControllerRevision.
+	CollisionCount *int32 `json:"collisionCount,omitempty"`
 }
 
 // ClusterStatus is the enum type for cluster statuses
