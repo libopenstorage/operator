@@ -37,6 +37,10 @@ func TestBasicRuncPodSpec(t *testing.T) {
 						Value: "TEST_VALUE",
 					},
 				},
+				RuntimeOpts: map[string]string{
+					"op1": "10",
+					"op2": "20",
+				},
 			},
 		},
 	}
