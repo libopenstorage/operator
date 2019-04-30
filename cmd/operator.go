@@ -8,7 +8,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
-	storagecluster "github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -106,14 +106,14 @@ func run(c *cli.Context) {
 	}
 	mgr, err := manager.New(config, managerOpts)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to create controller manager: %v", err)
 	}
 
 	log.Info("Registering components")
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
 
 	// Setup storage cluster controller

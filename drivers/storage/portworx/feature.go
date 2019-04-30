@@ -8,8 +8,8 @@ import (
 type Feature string
 
 const (
-	// CSI is used to indicate CSI feature
-	CSI Feature = "CSI"
+	// FeatureCSI is used to indicate CSI feature
+	FeatureCSI Feature = "CSI"
 )
 
 func (feature Feature) isEnabled(featureMap map[string]string) bool {
