@@ -386,6 +386,23 @@ func (t *template) getArguments() []string {
 		args = append(args, "--log", t.cluster.Annotations[annotationLogFile])
 	}
 
+	rtOpts := make([]string, 0)
+	for k, v := range t.cluster.Spec.RuntimeOpts {
+		key := strings.TrimSpace(k)
+		value := strings.TrimSpace(v)
+		_, err := strconv.Atoi(value)
+		if err != nil {
+			logrus.Warnf("Invalid integer value %v in runtime options", value)
+			continue
+		}
+		if key != "" && value != "" {
+			rtOpts = append(rtOpts, key+"="+value)
+		}
+	}
+	if len(rtOpts) > 0 {
+		args = append(args, "-rt_opts", strings.Join(rtOpts, ","))
+	}
+
 	if t.cluster.Annotations[annotationMiscArgs] != "" {
 		parts, err := shlex.Split(t.cluster.Annotations[annotationMiscArgs])
 		if err == nil {
