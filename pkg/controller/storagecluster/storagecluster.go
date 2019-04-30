@@ -51,12 +51,12 @@ const (
 
 // Reasons for StorageCluster events
 const (
-	// FailedPlacementReason is added to an event when operator can't schedule a Pod to a specified node.
-	FailedPlacementReason = "FailedPlacement"
-	// FailedStoragePodReason is added to an event when the status of a Pod of a StorageCluster is 'Failed'.
-	FailedStoragePodReason = "FailedStoragePod"
-	// FailedSyncReason is added to an event when the status the cluster could not be synced.
-	FailedSyncReason = "FailedSync"
+	// failedPlacementReason is added to an event when operator can't schedule a Pod to a specified node.
+	failedPlacementReason = "FailedPlacement"
+	// failedStoragePodReason is added to an event when the status of a Pod of a StorageCluster is 'Failed'.
+	failedStoragePodReason = "FailedStoragePod"
+	// failedSyncReason is added to an event when the status the cluster could not be synced.
+	failedSyncReason = "FailedSync"
 )
 
 var controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
@@ -157,7 +157,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	}
 
 	if err := c.syncStorageCluster(instance); err != nil {
-		c.recorder.Event(instance, v1.EventTypeWarning, FailedSyncReason, err.Error())
+		c.recorder.Event(instance, v1.EventTypeWarning, failedSyncReason, err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -342,7 +342,7 @@ func (c *Controller) podsShouldBeOnNode(
 			if pod.Status.Phase == v1.PodFailed {
 				msg := fmt.Sprintf("Found failed storage pod %s on node %s, will try to kill it", pod.Name, node.Name)
 				logrus.Warnf(msg)
-				c.recorder.Eventf(cluster, v1.EventTypeWarning, FailedStoragePodReason, msg)
+				c.recorder.Eventf(cluster, v1.EventTypeWarning, failedStoragePodReason, msg)
 				podsToDelete = append(podsToDelete, pod.Name)
 			} else {
 				storagePodsRunning = append(storagePodsRunning, pod)
@@ -367,6 +367,9 @@ func (c *Controller) podsShouldBeOnNode(
 	return nodesNeedingStoragePods, podsToDelete, nil
 }
 
+// nodeShouldRunStoragePod simulates a storage pod on the given node which helps
+// us determine whether we want to run the pod on that node, or if the pod should
+// to be scheduled on the node, or to allow running if it is already running.
 func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
@@ -374,6 +377,9 @@ func (c *Controller) nodeShouldRunStoragePod(
 	newPod := c.newPod(cluster, node.Name)
 	wantToRun, shouldSchedule, shouldContinueRunning = true, true, true
 
+	// TODO: We should get rid of simulate and let the scheduler try to deploy
+	// the pods on the nodes based off the tolerations. The scheduler can handle
+	// the resource checks.
 	reasons, nodeInfo, err := c.simulate(newPod, node, cluster)
 	if err != nil {
 		logrus.Debugf("StorageCluster Predicates failed on node %s for storage cluster '%s' "+
@@ -436,7 +442,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 				emitEvent = true
 			}
 			if emitEvent {
-				c.recorder.Eventf(cluster, v1.EventTypeWarning, FailedPlacementReason,
+				c.recorder.Eventf(cluster, v1.EventTypeWarning, failedPlacementReason,
 					"failed to place pod on %q: %s", node.Name, reason.GetReason)
 			}
 		}
@@ -444,7 +450,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 	// only emit this event if insufficient resource is the only thing
 	// preventing the storage cluster from scheduling
 	if shouldSchedule && insufficientResourceErr != nil {
-		c.recorder.Eventf(cluster, v1.EventTypeWarning, FailedPlacementReason,
+		c.recorder.Eventf(cluster, v1.EventTypeWarning, failedPlacementReason,
 			"failed to place pod on %q: %s", node.Name, insufficientResourceErr.Error())
 		shouldSchedule = false
 	}
@@ -478,7 +484,7 @@ func (c *Controller) createPodTemplate(cluster *corev1alpha1.StorageCluster) v1.
 		Effect:   v1.TaintEffectNoExecute,
 	})
 
-	// All StorageCluster pods should tolerate MemoryPressure, DisPressure and
+	// All StorageCluster pods should tolerate MemoryPressure, DiskPressure and
 	// OutOfDisk taints
 	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
 		Key:      schedapi.TaintNodeDiskPressure,

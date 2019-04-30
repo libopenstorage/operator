@@ -109,69 +109,6 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
-func TestBasicDockerPodSpec(t *testing.T) {
-	expected := getExpectedPodSpec(t, "testspec/docker.yaml")
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-			Annotations: map[string]string{
-				annotationIsDocker: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/px-enterprise:2.0.3.4",
-			Kvdb: &corev1alpha1.KvdbSpec{
-				Internal: true,
-			},
-			SecretsProvider: stringPtr("k8s"),
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
-					UseAll: boolPtr(true),
-				},
-			},
-		},
-	}
-
-	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
-
-	assertPodSpecEqual(t, expected, &actual)
-}
-
-func TestOpenshiftDockerPodSpec(t *testing.T) {
-	expected := getExpectedPodSpec(t, "testspec/openshift_docker.yaml")
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-			Annotations: map[string]string{
-				annotationIsDocker:    "true",
-				annotationIsOpenshift: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/px-enterprise:2.0.3.4",
-			Kvdb: &corev1alpha1.KvdbSpec{
-				Internal: true,
-			},
-			SecretsProvider: stringPtr("k8s"),
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
-					UseAll: boolPtr(true),
-				},
-			},
-		},
-	}
-
-	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
-
-	assertPodSpecEqual(t, expected, &actual)
-}
-
 func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)

@@ -16,16 +16,13 @@ import (
 const (
 	pxContainerName          = "portworx"
 	pxServiceAccount         = "px-account"
-	annotationIsDocker       = "portworx/is-docker"
-	annotationIsPxDev        = "portworx/is-px-dev"
-	annotationRunOnMaster    = "portworx/run-on-master"
-	annotationIsPKS          = "portworx/is-pks"
-	annotationIsCoreOS       = "portworx/is-coreos"
-	annotationIsOpenshift    = "portworx/is-openshift"
-	annotationLogFile        = "portworx/log-file"
-	annotationCustomRegistry = "portworx/custom-registry"
-	annotationCSIVersion     = "portworx/csi-version"
-	annotationMiscArgs       = "portworx/misc-args"
+	pxAnnotationPrefix       = "portworx.io"
+	annotationIsPKS          = pxAnnotationPrefix + "/is-pks"
+	annotationIsOpenshift    = pxAnnotationPrefix + "/is-openshift"
+	annotationLogFile        = pxAnnotationPrefix + "/log-file"
+	annotationCustomRegistry = pxAnnotationPrefix + "/custom-registry"
+	annotationCSIVersion     = pxAnnotationPrefix + "/csi-version"
+	annotationMiscArgs       = pxAnnotationPrefix + "/misc-args"
 	templateVersion          = "v4"
 	defaultStartPort         = 9001
 	csiBasePath              = "/var/lib/kubelet/plugins/com.openstorage.pxd"
@@ -40,21 +37,9 @@ type volumeInfo struct {
 	mountPropagation *v1.MountPropagationMode
 	hostPathType     *v1.HostPathType
 	pks              *pksVolumeInfo
-	openshift        *openshiftVolumeInfo
-	coreos           *coreosVolumeInfo
 }
 
 type pksVolumeInfo struct {
-	hostPath  string
-	mountPath string
-}
-
-type openshiftVolumeInfo struct {
-	hostPath  string
-	mountPath string
-}
-
-type coreosVolumeInfo struct {
 	hostPath  string
 	mountPath string
 }
@@ -68,8 +53,8 @@ var (
 		"registry.connect.redhat.com": true,
 	}
 
-	// commonVolumeInfoList is list of volumes across all options
-	commonVolumeInfoList = []volumeInfo{
+	// defaultVolumeInfoList is a list of volumes across all options
+	defaultVolumeInfoList = []volumeInfo{
 		{
 			name:      "diagsdump",
 			hostPath:  "/var/cores",
@@ -102,10 +87,6 @@ var (
 				hostPath: "/var/vcap/store/etc/pwx",
 			},
 		},
-	}
-
-	// runcVolumeInfoList is a list of volumes applicable when running as runc
-	runcVolumeInfoList = []volumeInfo{
 		{
 			name: "pxlogs",
 			pks: &pksVolumeInfo{
@@ -150,55 +131,6 @@ var (
 		},
 	}
 
-	// dockerVolumeInfoList is a list of volumes applicable when running in docker
-	dockerVolumeInfoList = []volumeInfo{
-		{
-			name:      "dev",
-			hostPath:  "/dev",
-			mountPath: "/dev",
-		},
-		{
-			name:      "optpwx",
-			hostPath:  "/opt/pwx/bin",
-			mountPath: "/export_bin",
-		},
-		{
-			name:      "dockerplugins",
-			hostPath:  "/run/docker/plugins",
-			mountPath: "/run/docker/plugins",
-		},
-		{
-			name:             "libosd",
-			hostPath:         "/var/lib/osd",
-			mountPath:        "/var/lib/osd",
-			mountPropagation: mountPropagationPtr(v1.MountPropagationBidirectional),
-		},
-		{
-			name:      "hostproc",
-			hostPath:  "/proc",
-			mountPath: "/hostproc",
-		},
-		{
-			name:      "src",
-			hostPath:  "/usr/src",
-			mountPath: "/usr/src",
-			coreos: &coreosVolumeInfo{
-				hostPath:  "/lib/modules",
-				mountPath: "/lib/modules",
-			},
-		},
-		{
-			name:             "kubelet",
-			hostPath:         "/var/lib/kubelet",
-			mountPath:        "/var/lib/kubelet",
-			mountPropagation: mountPropagationPtr(v1.MountPropagationBidirectional),
-			openshift: &openshiftVolumeInfo{
-				hostPath:  "/var/lib/origin/openshift.local.volumes",
-				mountPath: "/var/lib/origin/openshift.local.volumes",
-			},
-		},
-	}
-
 	// csiVolumeInfoList is a list of volumes applicable when running csi sidecars
 	csiVolumeInfoList = []volumeInfo{
 		{
@@ -216,11 +148,7 @@ var (
 
 type template struct {
 	cluster         *corev1alpha1.StorageCluster
-	isDocker        bool
-	isPxDev         bool
-	runOnMaster     bool
 	isPKS           bool
-	isCoreOS        bool
 	isOpenshift     bool
 	imagePullPolicy v1.PullPolicy
 	startPort       int
@@ -236,20 +164,8 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
 	t.isPKS = err == nil && enabled
 
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsCoreOS])
-	t.isCoreOS = err == nil && enabled
-
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsOpenshift])
 	t.isOpenshift = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsDocker])
-	t.isDocker = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsPxDev])
-	t.isPxDev = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationRunOnMaster])
-	t.runOnMaster = err == nil && enabled
 
 	t.imagePullPolicy = v1.PullAlways
 	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
@@ -301,37 +217,11 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 		)
 	}
 
-	if t.isPxDev || t.runOnMaster {
-		podSpec.Tolerations = []v1.Toleration{
-			{
-				Key:    masterTaint,
-				Effect: v1.TaintEffectNoSchedule,
-			},
-		}
-	}
-
 	return podSpec
 }
 
 func (t *template) portworxContainer() v1.Container {
 	imageRegistry := t.cluster.Annotations[annotationCustomRegistry]
-
-	readinessProbe := &v1.Probe{
-		PeriodSeconds: 10,
-		Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "127.0.0.1",
-				Path: "/health",
-				Port: intstr.FromInt(t.startPort + 14),
-			},
-		},
-	}
-	if t.isDocker {
-		readinessProbe.Handler.HTTPGet.Path = "/v1/cluster/nodehealth"
-		readinessProbe.Handler.HTTPGet.Port = intstr.FromInt(t.startPort)
-	}
-
-	isPrivileged := true
 
 	return v1.Container{
 		Name:            pxContainerName,
@@ -350,10 +240,19 @@ func (t *template) portworxContainer() v1.Container {
 				},
 			},
 		},
-		ReadinessProbe:         readinessProbe,
+		ReadinessProbe: &v1.Probe{
+			PeriodSeconds: 10,
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/health",
+					Port: intstr.FromInt(t.startPort + 14),
+				},
+			},
+		},
 		TerminationMessagePath: "/tmp/px-termination-log",
 		SecurityContext: &v1.SecurityContext{
-			Privileged: &isPrivileged,
+			Privileged: boolPtr(true),
 		},
 		VolumeMounts: t.getVolumeMounts(),
 	}
@@ -368,24 +267,22 @@ func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
 		},
 	}
 
-	if !t.runOnMaster {
-		if t.isOpenshift {
-			selectorRequirements = append(
-				selectorRequirements,
-				v1.NodeSelectorRequirement{
-					Key:      "node-role.kubernetes.io/infra",
-					Operator: v1.NodeSelectorOpDoesNotExist,
-				},
-			)
-		}
+	if t.isOpenshift {
 		selectorRequirements = append(
 			selectorRequirements,
 			v1.NodeSelectorRequirement{
-				Key:      "node-role.kubernetes.io/master",
+				Key:      "node-role.kubernetes.io/infra",
 				Operator: v1.NodeSelectorOpDoesNotExist,
 			},
 		)
 	}
+	selectorRequirements = append(
+		selectorRequirements,
+		v1.NodeSelectorRequirement{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: v1.NodeSelectorOpDoesNotExist,
+		},
+	)
 
 	return selectorRequirements
 }
@@ -480,10 +377,7 @@ func (t *template) getArguments() []string {
 		args = append(args, "--csiversion", t.cluster.Annotations[annotationCSIVersion])
 	}
 
-	if t.isPxDev {
-		args = append(args, "--dev")
-	}
-
+	// --keep-px-up is default on from px-enterprise from 2.1
 	if t.isPKS {
 		args = append(args, "--keep-px-up")
 	}
@@ -523,7 +417,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 		})
 	}
 
-	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
 		envList = append(envList, v1.EnvVar{
 			Name:  "CSI_ENDPOINT",
 			Value: "unix://" + csiBasePath + "/csi.sock",
@@ -555,13 +449,9 @@ func (t *template) getEnvList() []v1.EnvVar {
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
 	// TODO: Imp: add etcd certs to the volume mounts
-	volumeInfoList := append([]volumeInfo{}, commonVolumeInfoList...)
-	if t.isDocker {
-		volumeInfoList = append(volumeInfoList, dockerVolumeInfoList...)
-	} else {
-		volumeInfoList = append(volumeInfoList, runcVolumeInfoList...)
-	}
-	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
+
+	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
 		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
 	}
 
@@ -575,10 +465,6 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		}
 		if t.isPKS && v.pks != nil && v.pks.mountPath != "" {
 			volMount.MountPath = v.pks.mountPath
-		} else if t.isCoreOS && v.coreos != nil && v.coreos.mountPath != "" {
-			volMount.MountPath = v.coreos.mountPath
-		} else if t.isOpenshift && v.openshift != nil && v.openshift.mountPath != "" {
-			volMount.MountPath = v.openshift.mountPath
 		}
 		if volMount.MountPath != "" {
 			volumeMounts = append(volumeMounts, volMount)
@@ -589,13 +475,9 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 
 func (t *template) getVolumes() []v1.Volume {
 	// TODO: Imp: add etcd certs to the volume list
-	volumeInfoList := append([]volumeInfo{}, commonVolumeInfoList...)
-	if t.isDocker {
-		volumeInfoList = append(volumeInfoList, dockerVolumeInfoList...)
-	} else {
-		volumeInfoList = append(volumeInfoList, runcVolumeInfoList...)
-	}
-	if CSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
+
+	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
 		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
 	}
 
@@ -612,10 +494,6 @@ func (t *template) getVolumes() []v1.Volume {
 		}
 		if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
 			volume.VolumeSource.HostPath.Path = v.pks.hostPath
-		} else if t.isCoreOS && v.coreos != nil && v.coreos.hostPath != "" {
-			volume.VolumeSource.HostPath.Path = v.coreos.hostPath
-		} else if t.isOpenshift && v.openshift != nil && v.openshift.hostPath != "" {
-			volume.VolumeSource.HostPath.Path = v.openshift.hostPath
 		}
 		if volume.VolumeSource.HostPath.Path != "" {
 			volumes = append(volumes, volume)
@@ -658,10 +536,6 @@ func stringPtr(val string) *string {
 }
 
 func boolPtr(val bool) *bool {
-	return &val
-}
-
-func mountPropagationPtr(val v1.MountPropagationMode) *v1.MountPropagationMode {
 	return &val
 }
 
