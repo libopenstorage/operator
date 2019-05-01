@@ -27,6 +27,9 @@ type ClusterPluginInterface interface {
 	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
 	GetSelectorLabels() map[string]string
+	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage
+	// cluster spec if they are not set
+	SetDefaultsOnStorageCluster(*corev1alpha1.StorageCluster)
 }
 
 var (

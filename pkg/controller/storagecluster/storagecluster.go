@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/integer"
@@ -230,7 +231,10 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	// Set defaults in the storage cluster object if not set
-	setDefaultsStorageCluster(cluster)
+	if err := c.setStorageClusterDefaults(cluster); err != nil {
+		return fmt.Errorf("failed to update StorageCluster %v/%v with default values: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
 
 	// Construct histories of the StorageCluster, and get the hash of current history
 	cur, old, err := c.constructHistory(cluster)
@@ -601,6 +605,45 @@ func (c *Controller) simulate(
 
 	_, reasons, err := checkPredicates(newPod, nodeInfo)
 	return reasons, nodeInfo, err
+}
+
+func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageCluster) error {
+	toUpdate := cluster.DeepCopy()
+
+	updateStrategy := &toUpdate.Spec.UpdateStrategy
+	if updateStrategy.Type == "" {
+		updateStrategy.Type = corev1alpha1.RollingUpdateStorageClusterStrategyType
+	}
+	if updateStrategy.Type == corev1alpha1.RollingUpdateStorageClusterStrategyType {
+		if updateStrategy.RollingUpdate == nil {
+			updateStrategy.RollingUpdate = &corev1alpha1.RollingUpdateStorageCluster{}
+		}
+		if updateStrategy.RollingUpdate.MaxUnavailable == nil {
+			// Set default MaxUnavailable as 1 by default.
+			maxUnavailable := intstr.FromInt(defaultMaxUnavailablePods)
+			updateStrategy.RollingUpdate.MaxUnavailable = &maxUnavailable
+		}
+	}
+
+	if toUpdate.Spec.RevisionHistoryLimit == nil {
+		toUpdate.Spec.RevisionHistoryLimit = new(int32)
+		*toUpdate.Spec.RevisionHistoryLimit = defaultRevisionHistoryLimit
+	}
+
+	if toUpdate.Spec.ImagePullPolicy == "" {
+		toUpdate.Spec.ImagePullPolicy = v1.PullAlways
+	}
+
+	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
+
+	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) {
+		err := c.client.Update(context.TODO(), toUpdate)
+		if err != nil {
+			return err
+		}
+		cluster.Spec = *toUpdate.Spec.DeepCopy()
+	}
+	return nil
 }
 
 func isControlledByStorageCluster(pod *v1.Pod, uid types.UID) bool {
