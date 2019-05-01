@@ -322,6 +322,10 @@ func (t *template) getArguments() []string {
 				args = append(args, "-a")
 			}
 		}
+		if t.cluster.Spec.Storage.Force != nil &&
+			*t.cluster.Spec.Storage.Force {
+			args = append(args, "-f")
+		}
 		if t.cluster.Spec.Storage.JournalDevice != nil &&
 			*t.cluster.Spec.Storage.JournalDevice != "" {
 			args = append(args, "-j", *t.cluster.Spec.Storage.JournalDevice)

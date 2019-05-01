@@ -51,6 +51,7 @@ func TestBasicRuncPodSpec(t *testing.T) {
 			CommonConfig: corev1alpha1.CommonConfig{
 				Storage: &corev1alpha1.StorageSpec{
 					UseAll: boolPtr(true),
+					Force:  boolPtr(true),
 				},
 				Env: []v1.EnvVar{
 					{

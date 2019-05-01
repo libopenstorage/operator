@@ -35,7 +35,7 @@ spec:
           imagePullPolicy: Always
           args:
             ["-c", "px-cluster",
-            "-a",
+            "-a", "-f",
             "-secret_type", "k8s",
             "-b",
             "-rt_opts", "op1=10,op2=20",
