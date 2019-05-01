@@ -23,6 +23,27 @@ func TestBasicRuncPodSpec(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			Kvdb: &corev1alpha1.KvdbSpec{
 				Internal: true,
 			},
@@ -64,6 +85,27 @@ func TestPKSPodSpec(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			Kvdb: &corev1alpha1.KvdbSpec{
 				Internal: true,
 			},
@@ -95,6 +137,31 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/infra",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			Kvdb: &corev1alpha1.KvdbSpec{
 				Internal: true,
 			},
