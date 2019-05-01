@@ -93,7 +93,7 @@ spec:
       - command:
         - /operator
         - --verbose
-        - --driver=pxd
+        - --driver=portworx
         - --leader-elect=true
         imagePullPolicy: Always
         image: piyushpx/openstorage-operator:latest
