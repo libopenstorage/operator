@@ -1,0 +1,10 @@
+apiVersion: core.libopenstorage.org/v1alpha1
+kind: StorageCluster
+metadata:
+  name: portworx
+  namespace: kube-system
+spec:
+  image: 'portworx/oci-monitor:2.0.3.3'
+  storage:
+    devices:
+      useAll: true
