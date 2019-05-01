@@ -7,7 +7,8 @@ import (
 
 const (
 	// driverName is the name of the portworx storage driver implementation
-	driverName = "portworx"
+	driverName   = "portworx"
+	labelKeyName = "name"
 )
 
 type portworx struct{}
@@ -18,6 +19,12 @@ func (p *portworx) String() string {
 
 func (p *portworx) Init(_ interface{}) error {
 	return nil
+}
+
+func (p *portworx) GetSelectorLabels() map[string]string {
+	return map[string]string{
+		labelKeyName: driverName,
+	}
 }
 
 func init() {

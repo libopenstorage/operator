@@ -1,3 +1,20 @@
+/*
+Copyright 2015 The Kubernetes Authors.
+Modifications Copyright 2019 The Libopenstorage Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package storagecluster
 
 import (
@@ -12,6 +29,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
+	apps "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -24,12 +42,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/integer"
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	daemonutil "k8s.io/kubernetes/pkg/controller/daemon/util"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
-	schedapi "k8s.io/kubernetes/pkg/scheduler/api"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -40,13 +56,16 @@ import (
 )
 
 const (
-	slowStartInitialBatchSize = 1
-	validateCRDInterval       = 5 * time.Second
-	validateCRDTimeout        = 1 * time.Minute
-	controllerName            = "storagecluster-controller"
-	labelKeyName              = "name"
-	labelKeyDriverName        = "driver"
-	nodeNameIndex             = "nodeName"
+	slowStartInitialBatchSize           = 1
+	validateCRDInterval                 = 5 * time.Second
+	validateCRDTimeout                  = 1 * time.Minute
+	controllerName                      = "storagecluster-controller"
+	labelKeyName                        = "libopenstorage.org/name"
+	labelKeyDriverName                  = "libopenstorage.org/driver"
+	nodeNameIndex                       = "nodeName"
+	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
+	defaultRevisionHistoryLimit         = 10
+	defaultMaxUnavailablePods           = 1
 )
 
 // Reasons for StorageCluster events
@@ -70,6 +89,7 @@ type Controller struct {
 	scheme     *runtime.Scheme
 	recorder   record.EventRecorder
 	podControl k8scontroller.PodControlInterface
+	crControl  k8scontroller.ControllerRevisionControlInterface
 	Driver     storage.Driver
 }
 
@@ -111,14 +131,31 @@ func (c *Controller) Init(mgr manager.Manager) error {
 		return err
 	}
 
-	// Create pod control interface object to manage pods under storage cluster
+	// Watch for changes to ControllerRevisions that belong to StorageCluster object
+	err = ctrl.Watch(
+		&source.Kind{Type: &apps.ControllerRevision{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &corev1alpha1.StorageCluster{},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("error getting kubernetes client: %v", err)
 	}
+	// Create pod control interface object to manage pods under storage cluster
 	c.podControl = k8scontroller.RealPodControl{
 		KubeClient: clientset,
 		Recorder:   c.recorder,
+	}
+	// Create controller revision control interface object to manage histories
+	// for storage cluster objects
+	c.crControl = k8scontroller.RealControllerRevisionControl{
+		KubeClient: clientset,
 	}
 
 	// Add nodeName field index to the cache indexer
@@ -192,9 +229,47 @@ func (c *Controller) syncStorageCluster(
 		return nil
 	}
 
-	// TODO: Handle history of specs for multiple upgrades
-	// Cleanup history once all pods are updated and using the same spec
+	// Set defaults in the storage cluster object if not set
+	setDefaultsStorageCluster(cluster)
 
+	// Construct histories of the StorageCluster, and get the hash of current history
+	cur, old, err := c.constructHistory(cluster)
+	if err != nil {
+		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
+	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
+
+	// TODO: Don't process a storage clsuter until all its previous creations and
+	// deletions have been processed.
+	err = c.manage(cluster, hash)
+	if err != nil {
+		return err
+	}
+
+	switch cluster.Spec.UpdateStrategy.Type {
+	case corev1alpha1.OnDeleteStorageClusterStrategyType:
+	case corev1alpha1.RollingUpdateStorageClusterStrategyType:
+		err = c.rollingUpdate(cluster, hash)
+	}
+	if err != nil {
+		return err
+	}
+
+	err = c.cleanupHistory(cluster, old)
+	if err != nil {
+		return fmt.Errorf("failed to clean up revisions of StorageCluster %v/%v: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
+
+	return nil
+}
+
+func (c *Controller) manage(
+	cluster *corev1alpha1.StorageCluster,
+	hash string,
+) error {
+	// Find out the pods which are created for the nodes by StorageCluster
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
 	if err != nil {
 		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
@@ -221,7 +296,7 @@ func (c *Controller) syncStorageCluster(
 		podsToDelete = append(podsToDelete, podsToDeleteOnNode...)
 	}
 
-	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods); err != nil {
+	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods, hash); err != nil {
 		return err
 	}
 
@@ -233,6 +308,7 @@ func (c *Controller) syncStorageCluster(
 func (c *Controller) syncNodes(
 	cluster *corev1alpha1.StorageCluster,
 	podsToDelete, nodesNeedingStoragePods []string,
+	hash string,
 ) error {
 	createDiff := len(nodesNeedingStoragePods)
 	deleteDiff := len(podsToDelete)
@@ -241,11 +317,20 @@ func (c *Controller) syncNodes(
 	// Make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
 
-	podTemplate := c.createPodTemplate(cluster)
+	podTemplate := c.createPodTemplate(cluster, hash)
 	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
 
 	createWait := sync.WaitGroup{}
+
+	// Batch the pod creates. Batch sizes start at slowStartInitialBatchSize
+	// and double with each successful iteration in a kind of "slow start".
+	// This handles attempts to start large numbers of pods that would
+	// likely all fail with the same error. For example a project with a
+	// low quota that attempts to create a large number of pods will be
+	// prevented from spamming the API service with the pod create requests
+	// after one of its pods fails.  Conveniently, this also prevents the
+	// event spam that those failures would generate.
 	batchSize := integer.IntMin(createDiff, slowStartInitialBatchSize)
 	for pos := 0; pos < createDiff; batchSize, pos = integer.IntMin(2*batchSize, createDiff-(pos+batchSize)), pos+batchSize {
 		errorCount := len(errCh)
@@ -389,7 +474,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 
 	var insufficientResourceErr error
 	for _, r := range reasons {
-		logrus.Warnf("StorageCluster Predicates failed on node %s for storage cluster '%s'"+
+		logrus.Debugf("StorageCluster Predicates failed on node %s for storage cluster '%s'"+
 			" for reason: %v", node.Name, cluster.Name, r.GetReason())
 
 		switch reason := r.(type) {
@@ -457,53 +542,19 @@ func (c *Controller) nodeShouldRunStoragePod(
 	return
 }
 
-func (c *Controller) createPodTemplate(cluster *corev1alpha1.StorageCluster) v1.PodTemplateSpec {
+func (c *Controller) createPodTemplate(
+	cluster *corev1alpha1.StorageCluster,
+	hash string,
+) v1.PodTemplateSpec {
 	pod := c.newPod(cluster, "")
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: pod.ObjectMeta,
 		Spec:       pod.Spec,
 	}
 
-	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint notReady:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns not ready.
-	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
-		Key:      schedapi.TaintNodeNotReady,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
-	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint unreachable:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns unreachable.
-	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
-		Key:      schedapi.TaintNodeUnreachable,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
-	// All StorageCluster pods should tolerate MemoryPressure, DiskPressure and
-	// OutOfDisk taints
-	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
-		Key:      schedapi.TaintNodeDiskPressure,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
-	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
-		Key:      schedapi.TaintNodeMemoryPressure,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
-	v1helper.AddOrUpdateTolerationInPodSpec(&newTemplate.Spec, &v1.Toleration{
-		Key:      schedapi.TaintNodeOutOfDisk,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
+	if len(hash) > 0 {
+		newTemplate.ObjectMeta.Labels[defaultStorageClusterUniqueLabelKey] = hash
+	}
 	return newTemplate
 }
 
@@ -511,15 +562,14 @@ func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName strin
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				labelKeyName:       cluster.Name,
-				labelKeyDriverName: c.Driver.String(),
-			},
+			Labels:    c.storageClusterSelectorLabels(cluster),
 		},
 		// TODO: add node specific spec here for heterogeneous config
 		Spec: c.Driver.GetStoragePodSpec(cluster),
 	}
 	newPod.Spec.NodeName = nodeName
+	// Add default tolerations for StorageCluster pods
+	addOrUpdateStoragePodTolerations(newPod)
 	return newPod
 }
 
@@ -528,46 +578,6 @@ func (c *Controller) simulate(
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
 ) ([]algorithm.PredicateFailureReason, *schedulercache.NodeInfo, error) {
-	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint notReady:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns not ready.
-	v1helper.AddOrUpdateTolerationInPod(newPod, &v1.Toleration{
-		Key:      schedapi.TaintNodeNotReady,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
-	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint unreachable:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns unreachable.
-	v1helper.AddOrUpdateTolerationInPod(newPod, &v1.Toleration{
-		Key:      schedapi.TaintNodeUnreachable,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
-	// All StorageCluster pods should tolerate MemoryPressure,
-	// DiskPressure and OutOfDisk taints.
-	v1helper.AddOrUpdateTolerationInPod(newPod, &v1.Toleration{
-		Key:      schedapi.TaintNodeDiskPressure,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
-	v1helper.AddOrUpdateTolerationInPod(newPod, &v1.Toleration{
-		Key:      schedapi.TaintNodeMemoryPressure,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
-	v1helper.AddOrUpdateTolerationInPod(newPod, &v1.Toleration{
-		Key:      schedapi.TaintNodeOutOfDisk,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
 	podList := &v1.PodList{}
 	fieldSelector := fields.SelectorFromSet(map[string]string{nodeNameIndex: node.Name})
 	err := c.client.List(context.TODO(), &client.ListOptions{FieldSelector: fieldSelector}, podList)
@@ -675,16 +685,13 @@ func (c *Controller) getStoragePods(
 			return nil, err
 		}
 		if fresh.UID != cluster.UID {
-			return nil, fmt.Errorf("original StorageCluster %v is gone, got uid %v, wanted %v",
-				cluster.Name, fresh.UID, cluster.UID)
+			return nil, fmt.Errorf("original StorageCluster %v/%v is gone, got uid %v, wanted %v",
+				cluster.Namespace, cluster.Name, fresh.UID, cluster.UID)
 		}
 		return fresh, nil
 	})
 
-	selector := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: c.Driver.String(),
-	}
+	selector := c.storageClusterSelectorLabels(cluster)
 	// Use ControllerRefManager to adopt/orphan as needed. Pods that don't match the
 	// labels but are owned by this storage cluster are released (disowned). Pods that
 	// match the labels and do not have ref to this storage cluster are owned by it.
@@ -698,18 +705,14 @@ func (c *Controller) getStoragePods(
 	return cm.ClaimPods(allPods)
 }
 
-func indexByPodNodeName(obj runtime.Object) []string {
-	pod, isPod := obj.(*v1.Pod)
-	if !isPod {
-		return []string{}
+func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
+	labels := c.Driver.GetSelectorLabels()
+	if labels == nil {
+		labels = make(map[string]string)
 	}
-	// We are only interested in active pods with nodeName set
-	if len(pod.Spec.NodeName) == 0 ||
-		pod.Status.Phase == v1.PodSucceeded ||
-		pod.Status.Phase == v1.PodFailed {
-		return []string{}
-	}
-	return []string{pod.Spec.NodeName}
+	labels[labelKeyName] = cluster.Name
+	labels[labelKeyDriverName] = c.Driver.String()
+	return labels
 }
 
 type podByCreationTimestampAndPhase []*v1.Pod

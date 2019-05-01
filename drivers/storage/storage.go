@@ -25,6 +25,8 @@ type Driver interface {
 type ClusterPluginInterface interface {
 	// GetStoragePodSpec given the storage cluster spec it returns the pod spec
 	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
+	// GetSelectorLabels returns driver specific labels that are applied on the pods
+	GetSelectorLabels() map[string]string
 }
 
 var (
