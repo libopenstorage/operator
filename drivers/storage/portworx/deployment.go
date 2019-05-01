@@ -197,16 +197,10 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 		Volumes:            t.getVolumes(),
 	}
 
-	podSpec.Affinity = &v1.Affinity{
-		NodeAffinity: &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: []v1.NodeSelectorTerm{
-					{
-						MatchExpressions: t.getSelectorRequirements(),
-					},
-				},
-			},
-		},
+	if t.cluster.Spec.Placement != nil && t.cluster.Spec.Placement.NodeAffinity != nil {
+		podSpec.Affinity = &v1.Affinity{
+			NodeAffinity: t.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+		}
 	}
 
 	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {

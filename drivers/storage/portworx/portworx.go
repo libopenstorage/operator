@@ -4,6 +4,7 @@ import (
 	storage "github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/sirupsen/logrus"
+	"k8s.io/api/core/v1"
 )
 
 const (
@@ -40,6 +41,23 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	}
 	if toUpdate.Spec.StartPort == nil {
 		toUpdate.Spec.StartPort = &startPort
+	}
+	if toUpdate.Spec.Placement == nil || toUpdate.Spec.Placement.NodeAffinity == nil {
+		t, err := newTemplate(toUpdate)
+		if err != nil {
+			return
+		}
+		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: t.getSelectorRequirements(),
+						},
+					},
+				},
+			},
+		}
 	}
 }
 
