@@ -185,6 +185,9 @@ type StorageSpec struct {
 	// UseAllWithPartitions use all available unformatted devices
 	// including partitions. This will be ignored if Devices is not empty.
 	UseAllWithPartitions *bool `json:"useAllWithPartitions"`
+	// Force use the drives even if there is file system present on it. Note
+	// that the drives will be wiped before using.
+	Force *bool `json:"force"`
 	// Devices list of devices to be used by storage driver
 	Devices *[]string `json:"devices"`
 	// JournalDevice device for journaling

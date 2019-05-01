@@ -515,6 +515,11 @@ func (in *StorageSpec) DeepCopyInto(out *StorageSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.Force != nil {
+		in, out := &in.Force, &out.Force
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Devices != nil {
 		in, out := &in.Devices, &out.Devices
 		*out = new([]string)
