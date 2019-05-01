@@ -74,7 +74,7 @@ operator:
 
 container:
 	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_IMG) -f Dockerfile ."
-	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f Dockerfile .
+	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f build/Dockerfile .
 
 deploy:
 	sudo docker push $(STORAGE_OPERATOR_IMG)
