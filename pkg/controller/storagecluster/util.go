@@ -8,7 +8,6 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/rand"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	schedapi "k8s.io/kubernetes/pkg/scheduler/api"
@@ -88,28 +87,6 @@ func computeHash(clusterSpec *corev1alpha1.StorageClusterSpec, collisionCount *i
 	}
 
 	return rand.SafeEncodeString(fmt.Sprint(storageClusterSpecHasher.Sum32()))
-}
-
-func setDefaultsStorageCluster(cluster *corev1alpha1.StorageCluster) {
-	updateStrategy := &cluster.Spec.UpdateStrategy
-	if updateStrategy.Type == "" {
-		updateStrategy.Type = corev1alpha1.RollingUpdateStorageClusterStrategyType
-	}
-	if updateStrategy.Type == corev1alpha1.RollingUpdateStorageClusterStrategyType {
-		if updateStrategy.RollingUpdate == nil {
-			rollingUpdate := corev1alpha1.RollingUpdateStorageCluster{}
-			updateStrategy.RollingUpdate = &rollingUpdate
-		}
-		if updateStrategy.RollingUpdate.MaxUnavailable == nil {
-			// Set default MaxUnavailable as 1 by default.
-			maxUnavailable := intstr.FromInt(defaultMaxUnavailablePods)
-			updateStrategy.RollingUpdate.MaxUnavailable = &maxUnavailable
-		}
-	}
-	if cluster.Spec.RevisionHistoryLimit == nil {
-		cluster.Spec.RevisionHistoryLimit = new(int32)
-		*cluster.Spec.RevisionHistoryLimit = defaultRevisionHistoryLimit
-	}
 }
 
 func indexByPodNodeName(obj runtime.Object) []string {

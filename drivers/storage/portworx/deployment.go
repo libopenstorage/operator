@@ -25,6 +25,7 @@ const (
 	annotationMiscArgs       = pxAnnotationPrefix + "/misc-args"
 	templateVersion          = "v4"
 	defaultStartPort         = 9001
+	defaultSecretsProvider   = "k8s"
 	csiBasePath              = "/var/lib/kubelet/plugins/com.openstorage.pxd"
 	masterTaint              = "node-role.kubernetes.io/master"
 )
