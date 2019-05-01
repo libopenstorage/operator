@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    scheduler.alpha.kubernetes.io/critical-pod: ""
+  name: portworx-operator
+  namespace: kube-system
+  initializers:
+    pending: []
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        name: portworx-operator
+    spec:
+      containers:
+      - command:
+        - /operator
+        - --verbose
+        - --driver=portworx
+        - --leader-elect=true
+        imagePullPolicy: Always
+        image: portworx/openstorage-operator:latest
+        securityContext:
+          privileged: false
+        name: portworx-operator
+      hostPID: false
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "name"
+                    operator: In
+                    values:
+                    - portworx-operator
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: portworx-operator

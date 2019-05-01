@@ -10,29 +10,26 @@ metadata:
    name: storage-operator-role
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/exec"]
-    verbs: ["get", "list", "delete", "create", "watch"]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete", "create", "patch", "watch"]
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["controllerrevisions"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["core.libopenstorage.org"]
-    resources: ["storageclusters"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
+    resources: ["storageclusters", "storageclusters/finalizers"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["create", "get"]
-  - apiGroups: ["extensions"]
-    resources: [" thirdpartyresources"]
-    verbs: [ "get", "list", "watch","create","delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "create", "update", "watch"]
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["get", "list"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -77,7 +74,7 @@ spec:
       - command:
         - /operator
         - --verbose
-        - --driver=pxd
+        - --driver=portworx
         - --leader-elect=true
         imagePullPolicy: Always
         image: piyushpx/openstorage-operator:latest
