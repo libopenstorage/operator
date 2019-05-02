@@ -19,7 +19,10 @@ metadata:
           "kind": "StorageCluster",
           "metadata": {
             "name": "portworx",
-            "namespace": "kube-system"
+            "namespace": "kube-system",
+            "annotations": {
+              "portworx.io/is-openshift": "true"
+            }
           },
           "spec": {
             "image": "portworx/oci-monitor:2.0.3.3",
