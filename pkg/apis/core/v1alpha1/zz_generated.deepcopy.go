@@ -515,8 +515,8 @@ func (in *StorageSpec) DeepCopyInto(out *StorageSpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.Force != nil {
-		in, out := &in.Force, &out.Force
+	if in.ForceUseDisks != nil {
+		in, out := &in.ForceUseDisks, &out.ForceUseDisks
 		*out = new(bool)
 		**out = **in
 	}

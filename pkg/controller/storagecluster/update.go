@@ -151,8 +151,6 @@ func (c *Controller) constructHistory(
 
 // controlledHistories returns all ControllerRevisions controlled by the given StorageCluster.
 // This also reconciles ControllerRef by adopting/orphaning.
-// Note that returned histories are pointers to objects in the cache.
-// If you want to modify one, you need to deep-copy it first.
 func (c *Controller) controlledHistories(
 	cluster *corev1alpha1.StorageCluster,
 ) ([]*apps.ControllerRevision, error) {
@@ -224,8 +222,8 @@ func (c *Controller) snapshot(
 		Revision: revision,
 	}
 
-	err = c.client.Create(context.TODO(), history)
-	if outerErr := err; errors.IsAlreadyExists(outerErr) {
+	createErr := c.client.Create(context.TODO(), history)
+	if errors.IsAlreadyExists(createErr) {
 		// TODO: Is it okay to get from cache?
 		existedHistory := &apps.ControllerRevision{}
 		getErr := c.client.Get(
@@ -237,7 +235,8 @@ func (c *Controller) snapshot(
 			existedHistory,
 		)
 		if getErr != nil {
-			return nil, getErr
+			return nil, fmt.Errorf("error getting history that matched current "+
+				"hash %s: %v", name, getErr)
 		}
 		// Check if we already created it
 		ok, matchErr := match(cluster, existedHistory)
@@ -252,7 +251,8 @@ func (c *Controller) snapshot(
 		// the API server to make sure collision count is only increased when necessary.
 		currSC, getErr := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if getErr != nil {
-			return nil, getErr
+			return nil, fmt.Errorf("error getting StorageCluster %v/%v to get the latest "+
+				"collision count: %v", cluster.Namespace, cluster.Name, getErr)
 		}
 		// If the collision count used to compute hash was in fact stale,
 		// there's no need to bump collision count; retry again
@@ -273,9 +273,9 @@ func (c *Controller) snapshot(
 		logrus.Debugf("Found a hash collision for StorageCluster %v -"+
 			" bumping collisionCount to %d to resolve it",
 			cluster.Name, *currSC.Status.CollisionCount)
-		return nil, outerErr
+		return nil, createErr
 	}
-	return history, err
+	return history, createErr
 }
 
 func (c *Controller) dedupCurHistories(
@@ -458,8 +458,14 @@ func (c *Controller) cleanupHistory(
 	return nil
 }
 
-// isPodUpdated checks if pod contains label value that matches the hash
-func (c *Controller) isPodUpdated(cluster *corev1alpha1.StorageCluster, pod *v1.Pod, hash string) bool {
+// isPodUpdated checks if pod contains label value that matches the hash.
+// We consider the pod to be really updated if certain fields (that need
+// pod restart) have changed, else we consider the pod to be updated.
+func (c *Controller) isPodUpdated(
+	cluster *corev1alpha1.StorageCluster,
+	pod *v1.Pod,
+	hash string,
+) bool {
 	podHash := pod.Labels[defaultStorageClusterUniqueLabelKey]
 	if len(hash) > 0 && podHash == hash {
 		return true
@@ -483,6 +489,7 @@ func (c *Controller) isPodUpdated(cluster *corev1alpha1.StorageCluster, pod *v1.
 
 	logrus.Debugf("Checking if relevant fields in pod %v/%v have changed since %v",
 		pod.Namespace, pod.Name, podHash)
+	// If the selected fields match then the pods can be considered as updated
 	matched, err := matchSelectedFields(cluster, podHistory)
 	if err != nil {
 		logrus.Warnf("Could not check the diff between current pod and latest spec. %v", err)

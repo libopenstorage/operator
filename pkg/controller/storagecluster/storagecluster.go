@@ -244,7 +244,7 @@ func (c *Controller) syncStorageCluster(
 	}
 	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
 
-	// TODO: Don't process a storage clsuter until all its previous creations and
+	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
 	err = c.manage(cluster, hash)
 	if err != nil {
@@ -254,10 +254,9 @@ func (c *Controller) syncStorageCluster(
 	switch cluster.Spec.UpdateStrategy.Type {
 	case corev1alpha1.OnDeleteStorageClusterStrategyType:
 	case corev1alpha1.RollingUpdateStorageClusterStrategyType:
-		err = c.rollingUpdate(cluster, hash)
-	}
-	if err != nil {
-		return err
+		if err := c.rollingUpdate(cluster, hash); err != nil {
+			return err
+		}
 	}
 
 	err = c.cleanupHistory(cluster, old)

@@ -50,8 +50,8 @@ func TestBasicRuncPodSpec(t *testing.T) {
 			SecretsProvider: stringPtr("k8s"),
 			CommonConfig: corev1alpha1.CommonConfig{
 				Storage: &corev1alpha1.StorageSpec{
-					UseAll: boolPtr(true),
-					Force:  boolPtr(true),
+					UseAll:        boolPtr(true),
+					ForceUseDisks: boolPtr(true),
 				},
 				Env: []v1.EnvVar{
 					{

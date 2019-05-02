@@ -9,8 +9,10 @@ import (
 
 const (
 	// driverName is the name of the portworx storage driver implementation
-	driverName   = "portworx"
-	labelKeyName = "name"
+	driverName             = "portworx"
+	labelKeyName           = "name"
+	defaultStartPort       = 9001
+	defaultSecretsProvider = "k8s"
 )
 
 type portworx struct{}
