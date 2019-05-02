@@ -123,6 +123,6 @@ func run(c *cli.Context) {
 	}
 
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Fatalf("Manager exited non-zero: %v", err)
+		log.Fatalf("Manager exited non-zero error: %v", err)
 	}
 }

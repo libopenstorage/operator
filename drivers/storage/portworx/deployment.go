@@ -24,10 +24,7 @@ const (
 	annotationCSIVersion     = pxAnnotationPrefix + "/csi-version"
 	annotationMiscArgs       = pxAnnotationPrefix + "/misc-args"
 	templateVersion          = "v4"
-	defaultStartPort         = 9001
-	defaultSecretsProvider   = "k8s"
 	csiBasePath              = "/var/lib/kubelet/plugins/com.openstorage.pxd"
-	masterTaint              = "node-role.kubernetes.io/master"
 )
 
 type volumeInfo struct {
@@ -322,8 +319,8 @@ func (t *template) getArguments() []string {
 				args = append(args, "-a")
 			}
 		}
-		if t.cluster.Spec.Storage.Force != nil &&
-			*t.cluster.Spec.Storage.Force {
+		if t.cluster.Spec.Storage.ForceUseDisks != nil &&
+			*t.cluster.Spec.Storage.ForceUseDisks {
 			args = append(args, "-f")
 		}
 		if t.cluster.Spec.Storage.JournalDevice != nil &&
@@ -391,7 +388,7 @@ func (t *template) getArguments() []string {
 		value := strings.TrimSpace(v)
 		_, err := strconv.Atoi(value)
 		if err != nil {
-			logrus.Warnf("Invalid integer value %v in runtime options", value)
+			logrus.Warnf("Invalid integer value %v in runtime options. %v", value, err)
 			continue
 		}
 		if key != "" && value != "" {

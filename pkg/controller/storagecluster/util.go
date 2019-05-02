@@ -14,6 +14,7 @@ import (
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
+// TODO: make the storage cluster pod a critical pod to guarantee scheduling
 func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
 	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
 	// Add infinite toleration for taint notReady:NoExecute here to survive taint-based
