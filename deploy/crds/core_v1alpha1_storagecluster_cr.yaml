@@ -5,6 +5,8 @@ metadata:
   namespace: kube-system
 spec:
   image: 'portworx/oci-monitor:2.0.3.3'
+  kvdb:
+    internal: true
   storage:
     devices:
       useAll: true
