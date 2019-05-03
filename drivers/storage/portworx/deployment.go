@@ -80,6 +80,22 @@ var (
 			},
 		},
 		{
+			name:      "criosock",
+			hostPath:  "/var/run/crio",
+			mountPath: "/var/run/crio",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/crio",
+			},
+		},
+		{
+			name:      "crioconf",
+			hostPath:  "/etc/crictl.yaml",
+			mountPath: "/etc/crictl.yaml",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/etc/crictl.yaml",
+			},
+		},
+		{
 			name:      "etcpwx",
 			hostPath:  "/etc/pwx",
 			mountPath: "/etc/pwx",
