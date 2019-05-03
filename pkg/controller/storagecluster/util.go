@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
@@ -115,4 +115,15 @@ func deleteFinalizerExists(cluster *corev1alpha1.StorageCluster) bool {
 		}
 	}
 	return false
+}
+
+func removeDeleteFinalizer(finalizers []string) []string {
+	newFinalizers := []string{}
+	for _, finalizer := range finalizers {
+		if finalizer == deleteFinalizerName {
+			continue
+		}
+		newFinalizers = append(newFinalizers, finalizer)
+	}
+	return newFinalizers
 }
