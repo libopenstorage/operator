@@ -259,6 +259,8 @@ type JobOps interface {
 
 // RBACOps is an interface to perform RBAC operations
 type RBACOps interface {
+	// GetRole gets the given role
+	GetRole(name, namespace string) (*rbac_v1.Role, error)
 	// CreateRole creates the given role
 	CreateRole(role *rbac_v1.Role) (*rbac_v1.Role, error)
 	// UpdateRole updates the given role
@@ -269,6 +271,8 @@ type RBACOps interface {
 	GetClusterRole(name string) (*rbac_v1.ClusterRole, error)
 	// UpdateClusterRole updates the given cluster role
 	UpdateClusterRole(role *rbac_v1.ClusterRole) (*rbac_v1.ClusterRole, error)
+	// GetRoleBinding gets the given role binding
+	GetRoleBinding(name, namespace string) (*rbac_v1.RoleBinding, error)
 	// CreateRoleBinding creates the given role binding
 	CreateRoleBinding(role *rbac_v1.RoleBinding) (*rbac_v1.RoleBinding, error)
 	// UpdateRoleBinding updates the given role binding
@@ -281,8 +285,12 @@ type RBACOps interface {
 	CreateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
 	// UpdateClusterRoleBinding updates the given cluster role binding
 	UpdateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
+	// GetServiceAccount gets the given service account
+	GetServiceAccount(name, namespace string) (*v1.ServiceAccount, error)
 	// CreateServiceAccount creates the given service account
 	CreateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error)
+	// UpdateServiceAccount updates the given service account
+	UpdateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error)
 	// DeleteRole deletes the given role
 	DeleteRole(name, namespace string) error
 	// DeleteRoleBinding deletes the given role binding
@@ -2002,6 +2010,14 @@ func (k *k8sOps) getListOptionsForStatefulSet(ss *apps_api.StatefulSet) (meta_v1
 
 // RBAC APIs - BEGIN
 
+func (k *k8sOps) GetRole(name, namespace string) (*rbac_v1.Role, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.Rbac().Roles(namespace).Get(name, meta_v1.GetOptions{})
+}
+
 func (k *k8sOps) CreateRole(role *rbac_v1.Role) (*rbac_v1.Role, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
@@ -2040,6 +2056,14 @@ func (k *k8sOps) UpdateClusterRole(role *rbac_v1.ClusterRole) (*rbac_v1.ClusterR
 	}
 
 	return k.client.Rbac().ClusterRoles().Update(role)
+}
+
+func (k *k8sOps) GetRoleBinding(name, namespace string) (*rbac_v1.RoleBinding, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.Rbac().RoleBindings(namespace).Get(name, meta_v1.GetOptions{})
 }
 
 func (k *k8sOps) CreateRoleBinding(binding *rbac_v1.RoleBinding) (*rbac_v1.RoleBinding, error) {
@@ -2090,12 +2114,28 @@ func (k *k8sOps) ListClusterRoleBindings() (*rbac_v1.ClusterRoleBindingList, err
 	return k.client.Rbac().ClusterRoleBindings().List(meta_v1.ListOptions{})
 }
 
+func (k *k8sOps) GetServiceAccount(name, namespace string) (*v1.ServiceAccount, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.Core().ServiceAccounts(namespace).Get(name, meta_v1.GetOptions{})
+}
+
 func (k *k8sOps) CreateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
 	}
 
 	return k.client.Core().ServiceAccounts(account.Namespace).Create(account)
+}
+
+func (k *k8sOps) UpdateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.Core().ServiceAccounts(account.Namespace).Update(account)
 }
 
 func (k *k8sOps) DeleteRole(name, namespace string) error {

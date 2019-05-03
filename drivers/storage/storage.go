@@ -27,6 +27,10 @@ type ClusterPluginInterface interface {
 	// start to make sure the cluster comes up correctly. This should be
 	// idempotent and subsequent calls should result in the same result.
 	PreInstall(*corev1alpha1.StorageCluster) error
+	// PreDelete the driver should do whatever it is needed before deleting
+	// the storage cluster. This should be idempotent and subsequent calls
+	// should result in the same result.
+	PreDelete(*corev1alpha1.StorageCluster) error
 	// GetStoragePodSpec given the storage cluster spec it returns the pod spec
 	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
