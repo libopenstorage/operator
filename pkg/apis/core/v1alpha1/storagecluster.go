@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -40,6 +40,8 @@ type StorageClusterSpec struct {
 	// An update strategy to replace existing StorageCluster pods with new pods.
 	// Default strategy is RollingUpdate
 	UpdateStrategy StorageClusterUpdateStrategy `json:"updateStrategy,omitempty"`
+	// A delete strategy to uninstall and wipe an existing StorageCluster
+	DeleteStrategy *StorageClusterDeleteStrategy `json:"deleteStrategy,omitempty"`
 	// RevisionHistoryLimit is the number of old history to retain to allow rollback.
 	// This is a pointer to distinguish between explicit zero and not specified.
 	// Defaults to 10.
@@ -155,6 +157,54 @@ type RollingUpdateStorageCluster struct {
 	// that at least 70% of original number of StorageCluster pods are available at
 	// all times during the update.
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+}
+
+// StorageClusterDeleteStrategyType is enum for storage cluster delete strategies
+type StorageClusterDeleteStrategyType string
+
+const (
+	// UninstallStorageClusterStrategyType will only uninstall the storage service
+	// from all the nodes in the cluster. It will not wipe/format the storage devices
+	// being used by the Storage Cluster
+	UninstallStorageClusterStrategyType StorageClusterDeleteStrategyType = "Uninstall"
+	// UninstallAndWipeStorageClusterStrategyType will uninstall the storage service
+	// from all the nodes in the cluster. It also wipe/format the storage devices
+	// being used by the Storage Cluster
+	UninstallAndWipeStorageClusterStrategyType StorageClusterDeleteStrategyType = "UninstallAndWipe"
+)
+
+// StorageClusterDeleteStatus provides the current status of deletion of StorageCluster
+type StorageClusterDeleteStatus struct {
+	// Status contains the current status of deletion
+	Status StorageClusterDeleteStatusType `json:"status,omitempty"`
+
+	// Message indicates any message associated with the status
+	Message string `json:"message,omitempty"`
+
+	// TODO: We can add more details here like the no. of nodes that have
+	// been deleted etc
+}
+
+// StorageClusterDeleteStatusType defines the status type
+type StorageClusterDeleteStatusType string
+
+const (
+	// InProgressStorageClusterDeleteStatusType indicates that the deletion is in progress
+	InProgressStorageClusterDeleteStatusType StorageClusterDeleteStatusType = "InProgress"
+	// CompletedStorageClusterDeleteStatusType indicates the deletion has completed
+	CompletedStorageClusterDeleteStatusType StorageClusterDeleteStatusType = "Completed"
+	// TimeoutStorageClusterDeleteStatusType indicates the delete operation timed out
+	TimeoutStorageClusterDeleteStatusType StorageClusterDeleteStatusType = "Timeout"
+	// FailedStorageClusterDeleteStatusType indicates the delete operation failed
+	FailedStorageClusterDeleteStatusType StorageClusterDeleteStatusType = "Failed"
+)
+
+// StorageClusterDeleteStrategy is used to control the delete strategy for a StorageCluster
+type StorageClusterDeleteStrategy struct {
+	// Type of storage cluster delete strategy.
+	Type StorageClusterDeleteStrategyType `json:"type,omitempty"`
+	// Status of any delete operation
+	Status *StorageClusterDeleteStatus `json:"status,omitempty"`
 }
 
 // KvdbSpec contains the details to access kvdb
