@@ -107,3 +107,12 @@ func indexByPodNodeName(obj runtime.Object) []string {
 func historyName(clusterName, hash string) string {
 	return clusterName + "-" + hash
 }
+
+func deleteFinalizerExists(cluster *corev1alpha1.StorageCluster) bool {
+	for _, finalizerName := range cluster.Finalizers {
+		if finalizerName == deleteFinalizerName {
+			return true
+		}
+	}
+	return false
+}

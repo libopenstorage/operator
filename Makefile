@@ -77,7 +77,7 @@ container:
 	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f build/Dockerfile .
 
 deploy:
-	sudo docker push $(STORAGE_OPERATOR_IMG)
+	docker push $(STORAGE_OPERATOR_IMG)
 
 olm-verify:
 	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx/$(RELEASE_VER):/portworx \

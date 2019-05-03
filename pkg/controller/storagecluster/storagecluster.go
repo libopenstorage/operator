@@ -67,6 +67,7 @@ const (
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
+	deleteFinalizerName                 = "libopenstorage.org/delete"
 )
 
 // Reasons for StorageCluster events
@@ -228,7 +229,7 @@ func (c *Controller) syncStorageCluster(
 	if cluster.DeletionTimestamp != nil {
 		// TODO: Handle CRD deletion
 		logrus.Infof("Storage cluster %v has been marked for deletion", cluster.Name)
-		return nil
+		return c.deleteStorageCluster(cluster)
 	}
 
 	// Set defaults in the storage cluster object if not set
@@ -264,6 +265,33 @@ func (c *Controller) syncStorageCluster(
 	if err != nil {
 		return fmt.Errorf("failed to clean up revisions of StorageCluster %v/%v: %v",
 			cluster.Namespace, cluster.Name, err)
+	}
+
+	return nil
+}
+
+func (c *Controller) deleteStorageCluster(cluster *corev1alpha1.StorageCluster) error {
+	if deleteFinalizerExists(cluster) {
+		if err := c.Driver.PreDelete(cluster); err != nil {
+			return fmt.Errorf("failed to run pre-delete hooks for %v/%v: %v",
+				cluster.Namespace, cluster.Name, err)
+		}
+
+		toDelete := cluster.DeepCopy()
+		newFinalizers := []string{}
+		for _, finalizer := range toDelete.Finalizers {
+			if finalizer == deleteFinalizerName {
+				continue
+			}
+			newFinalizers = append(newFinalizers, finalizer)
+		}
+		toDelete.Finalizers = newFinalizers
+
+		if len(toDelete.Finalizers) < len(cluster.Finalizers) {
+			if err := c.client.Update(context.TODO(), toDelete); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -638,6 +666,17 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 
 	if toUpdate.Spec.ImagePullPolicy == "" {
 		toUpdate.Spec.ImagePullPolicy = v1.PullAlways
+	}
+
+	foundDeleteFinalizer := false
+	for _, finalizer := range toUpdate.Finalizers {
+		if finalizer == deleteFinalizerName {
+			foundDeleteFinalizer = true
+			break
+		}
+	}
+	if !foundDeleteFinalizer {
+		toUpdate.Finalizers = append(toUpdate.Finalizers, deleteFinalizerName)
 	}
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
