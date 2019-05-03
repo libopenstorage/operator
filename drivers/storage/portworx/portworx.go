@@ -15,7 +15,15 @@ const (
 	defaultSecretsProvider = "k8s"
 )
 
-type portworx struct{}
+type portworx struct {
+	serviceAccountCreated     bool
+	clusterRoleCreated        bool
+	clusterRoleBindingCreated bool
+	roleCreated               bool
+	roleBindingCreated        bool
+	secretsNamespaceCreated   bool
+	portworxSerivceCreated    bool
+}
 
 func (p *portworx) String() string {
 	return driverName

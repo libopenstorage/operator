@@ -164,6 +164,8 @@ type ServiceOps interface {
 	GetService(string, string) (*v1.Service, error)
 	// CreateService creates the given service
 	CreateService(*v1.Service) (*v1.Service, error)
+	// UpdateService updates the given service
+	UpdateService(*v1.Service) (*v1.Service, error)
 	// DeleteService deletes the given service
 	DeleteService(name, namespace string) error
 	// ValidateDeletedService validates if given service is deleted
@@ -277,6 +279,8 @@ type RBACOps interface {
 	ListClusterRoleBindings() (*rbac_v1.ClusterRoleBindingList, error)
 	// CreateClusterRoleBinding creates the given cluster role binding
 	CreateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
+	// UpdateClusterRoleBinding updates the given cluster role binding
+	UpdateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
 	// CreateServiceAccount creates the given service account
 	CreateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error)
 	// DeleteRole deletes the given role
@@ -1227,6 +1231,14 @@ func (k *k8sOps) CreateService(service *v1.Service) (*v1.Service, error) {
 	return k.client.CoreV1().Services(ns).Create(service)
 }
 
+func (k *k8sOps) UpdateService(service *v1.Service) (*v1.Service, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.CoreV1().Services(service.Namespace).Update(service)
+}
+
 func (k *k8sOps) DeleteService(name, namespace string) error {
 	if err := k.initK8sClient(); err != nil {
 		return err
@@ -2052,6 +2064,14 @@ func (k *k8sOps) CreateClusterRoleBinding(binding *rbac_v1.ClusterRoleBinding) (
 	}
 
 	return k.client.Rbac().ClusterRoleBindings().Create(binding)
+}
+
+func (k *k8sOps) UpdateClusterRoleBinding(binding *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.Rbac().ClusterRoleBindings().Update(binding)
 }
 
 func (k *k8sOps) GetClusterRoleBinding(name string) (*rbac_v1.ClusterRoleBinding, error) {

@@ -23,6 +23,10 @@ type Driver interface {
 
 // ClusterPluginInterface interface to manage storage cluster
 type ClusterPluginInterface interface {
+	// PreInstall the driver should do whatever it is needed before the pods
+	// start to make sure the cluster comes up correctly. This should be
+	// idempotent and subsequent calls should result in the same result.
+	PreInstall(*corev1alpha1.StorageCluster) error
 	// GetStoragePodSpec given the storage cluster spec it returns the pod spec
 	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
