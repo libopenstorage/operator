@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -40,6 +40,8 @@ type StorageClusterSpec struct {
 	// An update strategy to replace existing StorageCluster pods with new pods.
 	// Default strategy is RollingUpdate
 	UpdateStrategy StorageClusterUpdateStrategy `json:"updateStrategy,omitempty"`
+	// A delete strategy to uninstall and wipe an existing StorageCluster
+	DeleteStrategy *StorageClusterDeleteStrategy `json:"deleteStrategy,omitempty"`
 	// RevisionHistoryLimit is the number of old history to retain to allow rollback.
 	// This is a pointer to distinguish between explicit zero and not specified.
 	// Defaults to 10.
@@ -157,6 +159,26 @@ type RollingUpdateStorageCluster struct {
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
+// StorageClusterDeleteStrategyType is enum for storage cluster delete strategies
+type StorageClusterDeleteStrategyType string
+
+const (
+	// UninstallStorageClusterStrategyType will only uninstall the storage service
+	// from all the nodes in the cluster. It will not wipe/format the storage devices
+	// being used by the Storage Cluster
+	UninstallStorageClusterStrategyType StorageClusterDeleteStrategyType = "Uninstall"
+	// UninstallAndWipeStorageClusterStrategyType will uninstall the storage service
+	// from all the nodes in the cluster. It also wipe/format the storage devices
+	// being used by the Storage Cluster
+	UninstallAndWipeStorageClusterStrategyType StorageClusterDeleteStrategyType = "UninstallAndWipe"
+)
+
+// StorageClusterDeleteStrategy is used to control the delete strategy for a StorageCluster
+type StorageClusterDeleteStrategy struct {
+	// Type of storage cluster delete strategy.
+	Type StorageClusterDeleteStrategyType `json:"type,omitempty"`
+}
+
 // KvdbSpec contains the details to access kvdb
 type KvdbSpec struct {
 	// Internal flag indicates whether to use internal kvdb or an external one
@@ -236,8 +258,6 @@ type StorageClusterStatus struct {
 	ClusterUUID string `json:"clusterUuid"`
 	// CreatedAt timestamp at which the storage cluster was created
 	CreatedAt *meta.Time `json:"createdAt"`
-	// Status status of the storage cluster
-	Status ClusterStatus `json:"status"`
 	// Reason is human readable message indicating the status of the cluster
 	Reason string `json:"reason,omitempty"`
 	// NodeStatuses list of statuses for all the nodes in the storage cluster
@@ -246,21 +266,54 @@ type StorageClusterStatus struct {
 	// controller uses this field as a collision avoidance mechanism when it
 	// needs to create the name of the newest ControllerRevision.
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
+	// Conditions describes the current conditions of the cluster
+	Conditions []ClusterCondition `json:"condition,omitempty"`
 }
 
-// ClusterStatus is the enum type for cluster statuses
-type ClusterStatus string
+// ClusterCondition contains condition information for the cluster
+type ClusterCondition struct {
+	// Type is the type of condition
+	Type ClusterConditionType `json:"type"`
+	// Status of the condition
+	Status ClusterConditionStatus `json:"status"`
+	// Reason is human readable message indicating details about the current state of the cluster
+	Reason string `json:"reason"`
+}
+
+// ClusterConditionType is the enum type for different cluster conditions
+type ClusterConditionType string
+
+// These are valid cluster condition types
+const (
+	// ClusterConditionTypeUpgrade indicates the status for an upgrade operation on the cluster
+	ClusterConditionTypeUpgrade ClusterConditionType = "Upgrade"
+	// ClusterConditionTypeDelete indicates the status for a delete operation on the cluster
+	ClusterConditionTypeDelete ClusterConditionType = "Delete"
+	// ClusterConditionTypeInstall indicates the status for an install operation on the cluster
+	ClusterConditionTypeInstall ClusterConditionType = "Install"
+)
+
+// ClusterConditionStatus is the enum type for cluster condition statuses
+type ClusterConditionStatus string
 
 // These are valid cluster statuses.
 const (
 	// ClusterOK means the cluster is up and healthy
-	ClusterOk ClusterStatus = "Ok"
+	ClusterOk ClusterConditionStatus = "Ok"
 	// ClusterOffline means the cluster is offline
-	ClusterOffline ClusterStatus = "Offline"
+	ClusterOffline ClusterConditionStatus = "Offline"
 	// ClusterNotInQuorum means the cluster is out of quorum
-	ClusterNotInQuorum ClusterStatus = "NotInQuorum"
+	ClusterNotInQuorum ClusterConditionStatus = "NotInQuorum"
 	// ClusterUnknown means the cluser status is not known
-	ClusterUnknown ClusterStatus = "Unknown"
+	ClusterUnknown ClusterConditionStatus = "Unknown"
+	// ClusterOperationInProgress means the cluster operation is in progress
+	ClusterOperationInProgress ClusterConditionStatus = "InProgress"
+	// ClusterOperationCompleted means the cluster operation has completed
+	ClusterOperationCompleted ClusterConditionStatus = "Completed"
+	// ClusterOperationFailed means the cluster operation failed
+	ClusterOperationFailed ClusterConditionStatus = "Failed"
+	// ClusterOperationTimeout means the cluster operation timedout
+	ClusterOperationTimeout ClusterConditionStatus = "Timeout"
 )
 
 // NodeStatus status of the storage cluster node
