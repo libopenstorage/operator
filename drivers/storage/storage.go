@@ -4,7 +4,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 // Driver defines an external storage driver interface.
@@ -30,6 +30,11 @@ type ClusterPluginInterface interface {
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage
 	// cluster spec if they are not set
 	SetDefaultsOnStorageCluster(*corev1alpha1.StorageCluster)
+	// DeleteStorage is going to uninstall and delete the storage service based on
+	// StorageClusterDeleteStrategy. DeleteStorage should provide idempotent behavior
+	// If the storage service has already been deleted then it will return nil
+	// If the storage service deletion is in progress then it will return the appropriate status
+	DeleteStorage(*corev1alpha1.StorageCluster) (*corev1alpha1.StorageClusterDeleteStatus, error)
 }
 
 var (

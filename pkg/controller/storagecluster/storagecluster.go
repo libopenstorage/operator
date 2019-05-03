@@ -30,7 +30,7 @@ import (
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,6 +63,7 @@ const (
 	controllerName                      = "storagecluster-controller"
 	labelKeyName                        = "libopenstorage.org/name"
 	labelKeyDriverName                  = "libopenstorage.org/driver"
+	deleteFinalizerName                 = "libopenstorage.org/delete"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
@@ -224,9 +225,18 @@ func (c *Controller) createCRD() error {
 func (c *Controller) syncStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
+	// Construct histories of the StorageCluster, and get the hash of current history
+	cur, old, err := c.constructHistory(cluster)
+	if err != nil {
+		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
+	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
+
 	if cluster.DeletionTimestamp != nil {
-		// TODO: Handle CRD deletion
-		logrus.Infof("Storage cluster %v has been marked for deletion", cluster.Name)
+		if err := c.deleteCluster(cluster, hash); err != nil {
+			logrus.Warnf("Failed to initiate cluster deletion: %v", err)
+		}
 		return nil
 	}
 
@@ -235,14 +245,6 @@ func (c *Controller) syncStorageCluster(
 		return fmt.Errorf("failed to update StorageCluster %v/%v with default values: %v",
 			cluster.Namespace, cluster.Name, err)
 	}
-
-	// Construct histories of the StorageCluster, and get the hash of current history
-	cur, old, err := c.constructHistory(cluster)
-	if err != nil {
-		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
-			cluster.Namespace, cluster.Name, err)
-	}
-	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
 
 	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
@@ -305,6 +307,56 @@ func (c *Controller) manage(
 
 	return nil
 	// TODO: Update the status of the pods in the CR (available, running, etc)
+}
+
+func (c *Controller) deleteCluster(
+	cluster *corev1alpha1.StorageCluster,
+	hash string,
+) error {
+	// get all the storage pods
+	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
+	if err != nil {
+		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
+			cluster.Name, err)
+	}
+	var nodesNeedingStoragePods, podsToDelete []string
+	for _, storagePods := range nodeToStoragePods {
+		for _, storagePod := range storagePods {
+			podsToDelete = append(podsToDelete, storagePod.Name)
+		}
+	}
+	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods, hash); err != nil {
+		return err
+	}
+
+	// Check if the finalizer exists
+	if deleteFinalizerExist(cluster) {
+		logrus.Infof("Storage cluster delete finalizer exists. Deleting Storage...")
+		toDelete := cluster.DeepCopy()
+		deleteStatus, err := c.Driver.DeleteStorage(toDelete)
+		logrus.Infof("Delete Storage returned: %v %v", deleteStatus, err)
+		if err != nil {
+			logrus.Errorf("Failed to delete storage: %v", err)
+			return fmt.Errorf("driver failed to delete storage: %v", err)
+		}
+		if deleteStatus.Status == corev1alpha1.CompletedStorageClusterDeleteStatusType {
+			// Remove the finalizer
+			newFinalizers := []string{}
+			for i := 0; i < len(toDelete.Finalizers); i++ {
+				if toDelete.Finalizers[i] == deleteFinalizerName {
+					continue
+				}
+				newFinalizers = append(newFinalizers, toDelete.Finalizers[i])
+			}
+			toDelete.Finalizers = newFinalizers
+		}
+		toDelete.Spec.DeleteStrategy.Status = deleteStatus
+		if err := c.client.Update(context.TODO(), toDelete); err != nil {
+			return err
+		}
+
+	} // else nothing needs to be done
+	return nil
 }
 
 // syncNodes deletes given pods and creates new storage pods on the given nodes
@@ -624,6 +676,16 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 		}
 	}
 
+	finalizerUpdated := false
+	// Add a finalizer so that when the CRD gets deleted
+	// the operator will get invoked for performing the cleanup
+	if cluster.Spec.DeleteStrategy != nil {
+		if !deleteFinalizerExist(toUpdate) {
+			// Add the finalizer
+			toUpdate.Finalizers = append(toUpdate.Finalizers, deleteFinalizerName)
+			finalizerUpdated = true
+		}
+	}
 	if toUpdate.Spec.RevisionHistoryLimit == nil {
 		toUpdate.Spec.RevisionHistoryLimit = new(int32)
 		*toUpdate.Spec.RevisionHistoryLimit = defaultRevisionHistoryLimit
@@ -635,7 +697,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
-	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) {
+	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) || finalizerUpdated {
 		err := c.client.Update(context.TODO(), toUpdate)
 		if err != nil {
 			return err
@@ -643,6 +705,18 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 		cluster.Spec = *toUpdate.Spec.DeepCopy()
 	}
 	return nil
+}
+
+func deleteFinalizerExist(cluster *corev1alpha1.StorageCluster) bool {
+	found := false
+	for _, finalizerName := range cluster.Finalizers {
+		if finalizerName == deleteFinalizerName {
+			found = true
+			break
+		}
+	}
+	return found
+
 }
 
 func isControlledByStorageCluster(pod *v1.Pod, uid types.UID) bool {
