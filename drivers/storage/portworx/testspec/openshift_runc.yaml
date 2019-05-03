@@ -88,7 +88,7 @@ spec:
             - name: dbusmount
               mountPath: /var/run/dbus
       restartPolicy: Always
-      serviceAccountName: px-account
+      serviceAccountName: portworx
       volumes:
         - name: diagsdump
           hostPath:
