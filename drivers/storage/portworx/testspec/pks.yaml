@@ -86,7 +86,7 @@ spec:
             - name: pxlogs
               mountPath: /var/lib/osd/log
       restartPolicy: Always
-      serviceAccountName: px-account
+      serviceAccountName: portworx
       volumes:
         - name: diagsdump
           hostPath:
