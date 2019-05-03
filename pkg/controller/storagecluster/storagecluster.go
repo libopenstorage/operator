@@ -196,6 +196,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 
 	if err := c.syncStorageCluster(instance); err != nil {
 		c.recorder.Event(instance, v1.EventTypeWarning, failedSyncReason, err.Error())
+		logrus.Warnf("failed to sync: %v", err)
 		return reconcile.Result{}, err
 	}
 
@@ -272,6 +273,12 @@ func (c *Controller) manage(
 	cluster *corev1alpha1.StorageCluster,
 	hash string,
 ) error {
+	// Run the pre install hook for the driver to ensure we are ready to create storage pods
+	if err := c.Driver.PreInstall(cluster); err != nil {
+		return fmt.Errorf("failed to run preinstall hooks for %v/%v: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
+
 	// Find out the pods which are created for the nodes by StorageCluster
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
 	if err != nil {

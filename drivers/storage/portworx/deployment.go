@@ -15,9 +15,11 @@ import (
 
 const (
 	pxContainerName          = "portworx"
-	pxServiceAccount         = "px-account"
 	pxAnnotationPrefix       = "portworx.io"
 	annotationIsPKS          = pxAnnotationPrefix + "/is-pks"
+	annotationIsGKE          = pxAnnotationPrefix + "/is-gke"
+	annotationIsAKS          = pxAnnotationPrefix + "/is-aks"
+	annotationIsEKS          = pxAnnotationPrefix + "/is-eks"
 	annotationIsOpenshift    = pxAnnotationPrefix + "/is-openshift"
 	annotationLogFile        = pxAnnotationPrefix + "/log-file"
 	annotationCustomRegistry = pxAnnotationPrefix + "/custom-registry"
@@ -147,6 +149,9 @@ var (
 type template struct {
 	cluster         *corev1alpha1.StorageCluster
 	isPKS           bool
+	isGKE           bool
+	isAKS           bool
+	isEKS           bool
 	isOpenshift     bool
 	imagePullPolicy v1.PullPolicy
 	startPort       int
@@ -161,6 +166,15 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
 	t.isPKS = err == nil && enabled
+
+	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsGKE])
+	t.isGKE = err == nil && enabled
+
+	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsAKS])
+	t.isAKS = err == nil && enabled
+
+	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsEKS])
+	t.isEKS = err == nil && enabled
 
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsOpenshift])
 	t.isOpenshift = err == nil && enabled
@@ -189,7 +203,7 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
-		ServiceAccountName: pxServiceAccount,
+		ServiceAccountName: pxServiceAccountName,
 		Containers:         []v1.Container{t.portworxContainer()},
 		Volumes:            t.getVolumes(),
 	}

@@ -337,14 +337,14 @@
 
 [[projects]]
   branch = "kubernetes-1.13.1"
-  digest = "1:8e9f24fbf40c7adcad04e948d0f8b51d1d5e9d8ff0f62f3fc297051578675b1f"
+  digest = "1:a66478f9e22b86899dd0e8d1e0521a6227f75e47f0f6e345dbb75c9e33c529d0"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "0ca152bceb2eb170fb4c3888f9e458c88f24b204"
+  revision = "d59eaa529af2b46e8e7f75866b13d9d1c31f2c9e"
 
 [[projects]]
   branch = "kubernetes-1.11"
@@ -1156,6 +1156,7 @@
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
+    "k8s.io/api/rbac/v1",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
