@@ -16,13 +16,17 @@ const (
 )
 
 type portworx struct {
-	serviceAccountCreated     bool
-	clusterRoleCreated        bool
-	clusterRoleBindingCreated bool
-	roleCreated               bool
-	roleBindingCreated        bool
-	secretsNamespaceCreated   bool
-	portworxSerivceCreated    bool
+	serviceAccountCreated                  bool
+	clusterRoleCreated                     bool
+	clusterRoleBindingCreated              bool
+	roleCreated                            bool
+	roleBindingCreated                     bool
+	secretsNamespaceCreated                bool
+	portworxSerivceCreated                 bool
+	pvcControllerServiceAccountCreated     bool
+	pvcControllerClusterRoleCreated        bool
+	pvcControllerClusterRoleBindingCreated bool
+	pvcControllerDeploymentCreated         bool
 }
 
 func (p *portworx) String() string {

@@ -21,6 +21,7 @@ const (
 	annotationIsAKS          = pxAnnotationPrefix + "/is-aks"
 	annotationIsEKS          = pxAnnotationPrefix + "/is-eks"
 	annotationIsOpenshift    = pxAnnotationPrefix + "/is-openshift"
+	annotationPVCController  = pxAnnotationPrefix + "/pvc-controller"
 	annotationLogFile        = pxAnnotationPrefix + "/log-file"
 	annotationCustomRegistry = pxAnnotationPrefix + "/custom-registry"
 	annotationCSIVersion     = pxAnnotationPrefix + "/csi-version"
@@ -163,14 +164,15 @@ var (
 )
 
 type template struct {
-	cluster         *corev1alpha1.StorageCluster
-	isPKS           bool
-	isGKE           bool
-	isAKS           bool
-	isEKS           bool
-	isOpenshift     bool
-	imagePullPolicy v1.PullPolicy
-	startPort       int
+	cluster            *corev1alpha1.StorageCluster
+	isPKS              bool
+	isGKE              bool
+	isAKS              bool
+	isEKS              bool
+	isOpenshift        bool
+	needsPVCController bool
+	imagePullPolicy    v1.PullPolicy
+	startPort          int
 }
 
 func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
@@ -194,6 +196,13 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsOpenshift])
 	t.isOpenshift = err == nil && enabled
+
+	enabled, err = strconv.ParseBool(cluster.Annotations[annotationPVCController])
+	t.needsPVCController = err == nil && enabled
+
+	if t.isPKS || t.isEKS || t.isGKE || t.isAKS {
+		t.needsPVCController = true
+	}
 
 	t.imagePullPolicy = v1.PullAlways
 	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
