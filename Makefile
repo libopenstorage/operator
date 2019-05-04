@@ -15,7 +15,7 @@ ifeq ($(BUILD_TYPE),debug)
 BUILDFLAGS += -gcflags "-N -l"
 endif
 
-RELEASE_VER := 0.1
+RELEASE_VER := 1.0.0
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
@@ -74,10 +74,14 @@ operator:
 
 container:
 	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_IMG) -f Dockerfile ."
-	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f Dockerfile .
+	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f build/Dockerfile .
 
 deploy:
 	sudo docker push $(STORAGE_OPERATOR_IMG)
+
+olm-verify:
+	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx/$(RELEASE_VER):/portworx \
+		python:3 bash -c "pip3 install operator-courier && operator-courier --verbose verify --ui_validate_io /portworx"
 
 clean:
 	-rm -rf $(BIN)
