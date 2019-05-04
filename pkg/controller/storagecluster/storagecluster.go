@@ -61,13 +61,13 @@ const (
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
 	controllerName                      = "storagecluster-controller"
-	labelKeyName                        = "libopenstorage.org/name"
-	labelKeyDriverName                  = "libopenstorage.org/driver"
+	labelKeyName                        = "operator.libopenstorage.org/name"
+	labelKeyDriverName                  = "operator.libopenstorage.org/driver"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
-	deleteFinalizerName                 = "libopenstorage.org/delete"
+	deleteFinalizerName                 = "operator.libopenstorage.org/delete"
 )
 
 // Reasons for StorageCluster events
@@ -227,7 +227,6 @@ func (c *Controller) syncStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
 	if cluster.DeletionTimestamp != nil {
-		// TODO: Handle CRD deletion
 		logrus.Infof("Storage cluster %v has been marked for deletion", cluster.Name)
 		return c.deleteStorageCluster(cluster)
 	}

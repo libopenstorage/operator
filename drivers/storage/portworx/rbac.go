@@ -571,7 +571,7 @@ func (p *portworx) createPVCControllerDeployment(
 												Key:      "name",
 												Operator: metav1.LabelSelectorOpIn,
 												Values: []string{
-													"portworx-pvc-controller",
+													pvcDeploymentName,
 												},
 											},
 										},
