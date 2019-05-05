@@ -27,10 +27,6 @@ type ClusterPluginInterface interface {
 	// start to make sure the cluster comes up correctly. This should be
 	// idempotent and subsequent calls should result in the same result.
 	PreInstall(*corev1alpha1.StorageCluster) error
-	// PreDelete the driver should do whatever it is needed before deleting
-	// the storage cluster. This should be idempotent and subsequent calls
-	// should result in the same result.
-	PreDelete(*corev1alpha1.StorageCluster) error
 	// GetStoragePodSpec given the storage cluster spec it returns the pod spec
 	GetStoragePodSpec(*corev1alpha1.StorageCluster) v1.PodSpec
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
@@ -40,6 +36,7 @@ type ClusterPluginInterface interface {
 	SetDefaultsOnStorageCluster(*corev1alpha1.StorageCluster)
 	// DeleteStorage is going to uninstall and delete the storage service based on
 	// StorageClusterDeleteStrategy. DeleteStorage should provide idempotent behavior
+	// and subsequent calls should result in the same result.
 	// If the storage service has already been deleted then it will return nil
 	// If the storage service deletion is in progress then it will return the appropriate status
 	DeleteStorage(*corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error)

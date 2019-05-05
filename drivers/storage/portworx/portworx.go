@@ -12,12 +12,15 @@ import (
 
 const (
 	// driverName is the name of the portworx storage driver implementation
-	driverName             = "portworx"
-	labelKeyName           = "name"
-	defaultStartPort       = 9001
-	defaultSecretsProvider = "k8s"
-	defaultNodeWiperImage  = "adityadani/px-node-wiper"
-	defaultNodeWiperTag    = "latest"
+	driverName                        = "portworx"
+	labelKeyName                      = "name"
+	defaultStartPort                  = 9001
+	defaultSecretsProvider            = "k8s"
+	defaultNodeWiperImage             = "adityadani/px-node-wiper"
+	defaultNodeWiperTag               = "latest"
+	storageClusterDeleteMsg           = "StorageCluster deleted. Portworx service and Portworx drives and data NOT wiped."
+	storageClusterUninstallMsg        = "StorageCluster deleted. Portworx service removed. Portworx drives and data NOT wiped."
+	storageClusterUninstallAndWipeMsg = "StorageCluster deleted. Portworx service removed. Portworx drives and data wiped."
 )
 
 type portworx struct {
@@ -81,14 +84,30 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 }
 
 func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error) {
+	if err := p.unsetInstallParams(storageCluster); err != nil {
+		return nil, err
+	}
+	if storageCluster.Spec.DeleteStrategy == nil {
+		// No Delete strategy provided. Do not wipe portworx
+		status := &corev1alpha1.ClusterCondition{
+			Type:   corev1alpha1.ClusterConditionTypeDelete,
+			Status: corev1alpha1.ClusterOperationCompleted,
+			Reason: storageClusterDeleteMsg,
+		}
+		return status, nil
+	} // else portworx needs to be removed
+
+	removeData := false
+	completeMsg := storageClusterUninstallMsg
+	if storageCluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
+		removeData = true
+		completeMsg = storageClusterUninstallAndWipeMsg
+	}
+
 	u := NewUninstaller(storageCluster)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
-		removeData := false
-		if storageCluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
-			removeData = true
-		}
 		// TODO: Add capability to change the node wiper image
 		if err := u.RunNodeWiper(defaultNodeWiperImage, defaultNodeWiperTag, removeData); err != nil {
 			status := &corev1alpha1.ClusterCondition{
@@ -115,6 +134,7 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		status := &corev1alpha1.ClusterCondition{
 			Type:   corev1alpha1.ClusterConditionTypeDelete,
 			Status: corev1alpha1.ClusterOperationCompleted,
+			Reason: completeMsg,
 		}
 		if err := u.DeleteNodeWiper(); err != nil {
 			logrus.Errorf("Failed to delete node wiper daemonset: %v", err)
