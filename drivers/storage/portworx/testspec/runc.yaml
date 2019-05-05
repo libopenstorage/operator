@@ -38,7 +38,7 @@ spec:
             "-a", "-f",
             "-secret_type", "k8s",
             "-b",
-            "-rt_opts", "op1=10,op2=20",
+            "-rt_opts", "op1=10",
              "-x", "kubernetes"]
           env:
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"

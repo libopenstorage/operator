@@ -1,8 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations:
-    scheduler.alpha.kubernetes.io/critical-pod: ""
   name: portworx-operator
   namespace: kube-system
   initializers:
@@ -14,10 +12,11 @@ spec:
       maxUnavailable: 1
     type: RollingUpdate
   replicas: 1
+  selector:
+    matchLabels:
+      name: portworx-operator
   template:
     metadata:
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ""
       labels:
         name: portworx-operator
     spec:
@@ -28,7 +27,7 @@ spec:
         - --driver=portworx
         - --leader-elect=true
         imagePullPolicy: Always
-        image: portworx/openstorage-operator:1.0.0
+        image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.1
         securityContext:
           privileged: false
         name: portworx-operator

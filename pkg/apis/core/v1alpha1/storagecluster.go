@@ -47,27 +47,27 @@ type StorageClusterSpec struct {
 	// Defaults to 10.
 	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 	// Placement configuration for the storage cluster nodes
-	Placement *PlacementSpec `json:"placement"`
+	Placement *PlacementSpec `json:"placement,omitempty"`
 	// Image is docker image of the storage driver
-	Image string `json:"image"`
+	Image string `json:"image,omitempty"`
 	// ImagePullPolicy is the image pull policy.
 	// One of Always, Never, IfNotPresent. Defaults to Always.
-	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy"`
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
 	// ImagePullSecret is a reference to secret in the 'kube-system'
 	// namespace used for pulling images used by this StorageClusterSpec
-	ImagePullSecret *string `json:"imagePullSecret"`
+	ImagePullSecret *string `json:"imagePullSecret,omitempty"`
 	// Kvdb is the information of kvdb that storage driver uses
-	Kvdb *KvdbSpec `json:"kvdb"`
+	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
 	// Keep this only at cluster level for now until support to change
 	// cloud storage at node level is added.
-	CloudStorage *CloudStorageSpec `json:"cloudStorage"`
+	CloudStorage *CloudStorageSpec `json:"cloudStorage,omitempty"`
 	// SecretsProvider is the name of secret provider that driver will connect to
-	SecretsProvider *string `json:"secretsProvider"`
+	SecretsProvider *string `json:"secretsProvider,omitempty"`
 	// StartPort is the starting port in the range of ports used by the cluster
-	StartPort *uint32 `json:"startPort"`
+	StartPort *uint32 `json:"startPort,omitempty"`
 	// CallHome send cluster information for analytics
-	CallHome *bool `json:"callHome"`
+	CallHome *bool `json:"callHome,omitempty"`
 	// FeatureGates are a set of key-value pairs that describe what experimental
 	// features need to be enabled
 	FeatureGates map[string]string `json:"featureGates,omitempty"`
@@ -75,7 +75,7 @@ type StorageClusterSpec struct {
 	CommonConfig
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
-	Nodes []NodeSpec `json:"nodes"`
+	// Nodes []NodeSpec `json:"nodes"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -84,9 +84,9 @@ type StorageClusterSpec struct {
 type NodeSpec struct {
 	// Selector rest of the attributes are applied to a node that matches
 	// the selector
-	Selector NodeSelector `json:"selector"`
+	Selector NodeSelector `json:"selector,omitempty"`
 	// Geo is topology information for the node
-	Geo *Geography `json:"geography"`
+	Geo *Geography `json:"geography,omitempty"`
 	// CommonConfig that is present at both cluster and node level
 	CommonConfig
 }
@@ -95,13 +95,13 @@ type NodeSpec struct {
 // cluster and node level
 type CommonConfig struct {
 	// Network is the network information for storage driver
-	Network *NetworkSpec `json:"network"`
+	Network *NetworkSpec `json:"network,omitempty"`
 	// Storage details of storage used by the driver
-	Storage *StorageSpec `json:"storage"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 	// Env is a list of environment variables used by the driver
-	Env []v1.EnvVar `json:"env"`
+	Env []v1.EnvVar `json:"env,omitempty"`
 	// RuntimeOpts is a map of options with extra configs for storage driver
-	RuntimeOpts map[string]string `json:"runtimeOptions"`
+	RuntimeOpts map[string]string `json:"runtimeOptions,omitempty"`
 }
 
 // NodeSelector let's the user select a node or group of nodes based on either
@@ -110,15 +110,15 @@ type CommonConfig struct {
 // match any node names.
 type NodeSelector struct {
 	// NodeName is the name of Kubernetes node that it to be selected
-	NodeName string `json:"nodeName"`
+	NodeName string `json:"nodeName,omitempty"`
 	// LabelSelector is label query over all the nodes in the cluster
-	LabelSelector *meta.LabelSelector `json:"labelSelector"`
+	LabelSelector *meta.LabelSelector `json:"labelSelector,omitempty"`
 }
 
 // PlacementSpec has placement configuration for the storage cluster nodes
 type PlacementSpec struct {
 	// NodeAffinity describes node affinity scheduling rules for the pods
-	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity"`
+	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty"`
 }
 
 // StorageClusterUpdateStrategy is used to control the update strategy for a StorageCluster
@@ -182,44 +182,44 @@ type StorageClusterDeleteStrategy struct {
 // KvdbSpec contains the details to access kvdb
 type KvdbSpec struct {
 	// Internal flag indicates whether to use internal kvdb or an external one
-	Internal bool `json:"internal"`
+	Internal bool `json:"internal,omitempty"`
 	// Endpoints to access the kvdb
-	Endpoints []string `json:"endpoints"`
+	Endpoints []string `json:"endpoints,omitempty"`
 	// AuthSecret is name of the kubernetes secret containing information
 	// to authenticate with the kvdb. It could have the username/password
 	// for basic auth, certificate information or ACL token.
-	AuthSecret string `json:"authSecret"`
+	AuthSecret string `json:"authSecret,omitempty"`
 }
 
 // NetworkSpec contains network information
 type NetworkSpec struct {
 	// DataInterface is the network interface used by driver for data traffic
-	DataInterface *string `json:"dataInterface"`
+	DataInterface *string `json:"dataInterface,omitempty"`
 	// MgmtInterface is the network interface used by driver for mgmt traffic
-	MgmtInterface *string `json:"mgmtInterface"`
+	MgmtInterface *string `json:"mgmtInterface,omitempty"`
 }
 
 // StorageSpec details of storage used by the driver
 type StorageSpec struct {
 	// UseAll use all available, unformatted, unpartioned devices.
 	// This will be ignored if Devices is not empty.
-	UseAll *bool `json:"useAll"`
+	UseAll *bool `json:"useAll,omitempty"`
 	// UseAllWithPartitions use all available unformatted devices
 	// including partitions. This will be ignored if Devices is not empty.
-	UseAllWithPartitions *bool `json:"useAllWithPartitions"`
+	UseAllWithPartitions *bool `json:"useAllWithPartitions,omitempty"`
 	// ForceUseDisks use the drives even if there is file system present on it.
 	// Note that the drives may be wiped before using.
-	ForceUseDisks *bool `json:"forceUseDisks"`
+	ForceUseDisks *bool `json:"forceUseDisks,omitempty"`
 	// Devices list of devices to be used by storage driver
-	Devices *[]string `json:"devices"`
+	Devices *[]string `json:"devices,omitempty"`
 	// JournalDevice device for journaling
-	JournalDevice *string `json:"journalDevice"`
+	JournalDevice *string `json:"journalDevice,omitempty"`
 	// SystemMdDevice device that will be used to store system metadata
-	SystemMdDevice *string `json:"systemMetadataDevice"`
+	SystemMdDevice *string `json:"systemMetadataDevice,omitempty"`
 	// DataStorageType backing store type for managing drives and pools
-	DataStorageType *string `json:"dataStorageType"`
+	DataStorageType *string `json:"dataStorageType,omitempty"`
 	// RaidLevel raid level for the storage pool
-	RaidLevel *string `json:"raidLevel"`
+	RaidLevel *string `json:"raidLevel,omitempty"`
 }
 
 // CloudStorageSpec details of storage in cloud environment
@@ -228,40 +228,40 @@ type CloudStorageSpec struct {
 	// be created for every spec in the DeviceSpecs list. Currently,
 	// CloudStorageSpec is only at the cluster level, so the below specs
 	// be applied to all storage nodes in the cluster.
-	DeviceSpecs *[]string `json:"deviceSpecs"`
+	DeviceSpecs *[]string `json:"deviceSpecs,omitempty"`
 	// JournalDeviceSpec spec for the journal device
-	JournalDeviceSpec *string `json:"journalDeviceSpec"`
+	JournalDeviceSpec *string `json:"journalDeviceSpec,omitempty"`
 	// SystemMdDeviceSpec spec for the metadata device
-	SystemMdDeviceSpec *string `json:"systemMetadataDeviceSpec"`
+	SystemMdDeviceSpec *string `json:"systemMetadataDeviceSpec,omitempty"`
 	// MaxStorageNodes maximum nodes that will have storage in the cluster
-	MaxStorageNodes *uint32 `json:"maxStorageNodes"`
+	MaxStorageNodes *uint32 `json:"maxStorageNodes,omitempty"`
 	// MaxStorageNodesPerZone maximum nodes in every zone that will have
 	// storage in the cluster
-	MaxStorageNodesPerZone *uint32 `json:"maxStorageNodesPerZone"`
+	MaxStorageNodesPerZone *uint32 `json:"maxStorageNodesPerZone,omitempty"`
 }
 
 // Geography is topology information for a node
 type Geography struct {
 	// Region region in which the node is placed
-	Region string `json:"region"`
+	Region string `json:"region,omitempty"`
 	// Zone zone in which the node is placed
-	Zone string `json:"zone"`
+	Zone string `json:"zone,omitempty"`
 	// Rack rack on which the node is placed
-	Rack string `json:"rack"`
+	Rack string `json:"rack,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster
 type StorageClusterStatus struct {
 	// ClusterName name of the storage cluster
-	ClusterName string `json:"clusterName"`
+	ClusterName string `json:"clusterName,omitempty"`
 	// ClusterUUID uuid for the storage cluster
-	ClusterUUID string `json:"clusterUuid"`
+	ClusterUUID string `json:"clusterUuid,omitempty"`
 	// CreatedAt timestamp at which the storage cluster was created
-	CreatedAt *meta.Time `json:"createdAt"`
+	CreatedAt *meta.Time `json:"createdAt,omitempty"`
 	// Reason is human readable message indicating the status of the cluster
 	Reason string `json:"reason,omitempty"`
 	// NodeStatuses list of statuses for all the nodes in the storage cluster
-	NodeStatuses []NodeStatus `json:"nodes"`
+	// NodeStatuses []NodeStatus `json:"nodes"`
 	// Count of hash collisions for the StorageCluster. The StorageCluster
 	// controller uses this field as a collision avoidance mechanism when it
 	// needs to create the name of the newest ControllerRevision.
@@ -319,13 +319,13 @@ const (
 // NodeStatus status of the storage cluster node
 type NodeStatus struct {
 	// NodeName name of the node
-	NodeName string `json:"nodeName"`
+	NodeName string `json:"nodeName,omitempty"`
 	// NodeUID unique identifier for the node
-	NodeUID string `json:"nodeUID"`
+	NodeUID string `json:"nodeUID,omitempty"`
 	// Network details used by the storage driver
-	Network NetworkStatus `json:"network"`
+	Network NetworkStatus `json:"network,omitempty"`
 	// Geo topology information for a node
-	Geo Geography `json:"geography"`
+	Geo Geography `json:"geography,omitempty"`
 	// Conditions is an array of current node conditions
 	Conditions []NodeCondition `json:"conditions,omitempty"`
 }
@@ -333,19 +333,19 @@ type NodeStatus struct {
 // NetworkStatus network status of the node
 type NetworkStatus struct {
 	// DataIP is the IP address used by storage driver for data traffic
-	DataIP string `json:"dataIP"`
+	DataIP string `json:"dataIP,omitempty"`
 	// MgmtIP is the IP address used by storage driver for management traffic
-	MgmtIP string `json:"mgmtIP"`
+	MgmtIP string `json:"mgmtIP,omitempty"`
 }
 
 // NodeCondition contains condition information for a node
 type NodeCondition struct {
 	// Type of the node condition
-	Type NodeConditionType `json:"type"`
+	Type NodeConditionType `json:"type,omitempty"`
 	// Status of the condition
-	Status ConditionStatus `json:"status"`
+	Status ConditionStatus `json:"status,omitempty"`
 	// Reason is human readable message indicating details about the condition status
-	Reason string `json:"reason"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // NodeConditionType is the enum type for different node conditions
