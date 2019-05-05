@@ -16,8 +16,8 @@ const (
 	labelKeyName                      = "name"
 	defaultStartPort                  = 9001
 	defaultSecretsProvider            = "k8s"
-	defaultNodeWiperImage             = "adityadani/px-node-wiper"
-	defaultNodeWiperTag               = "latest"
+	defaultNodeWiperImage             = "portworx/px-node-wiper"
+	defaultNodeWiperTag               = "2.1.2-rc1"
 	storageClusterDeleteMsg           = "StorageCluster deleted. Portworx service and Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "StorageCluster deleted. Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "StorageCluster deleted. Portworx service removed. Portworx drives and data wiped."
