@@ -466,13 +466,6 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		}
 	}
 	in.CommonConfig.DeepCopyInto(&out.CommonConfig)
-	if in.Nodes != nil {
-		in, out := &in.Nodes, &out.Nodes
-		*out = make([]NodeSpec, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	return
 }
 
@@ -492,13 +485,6 @@ func (in *StorageClusterStatus) DeepCopyInto(out *StorageClusterStatus) {
 	if in.CreatedAt != nil {
 		in, out := &in.CreatedAt, &out.CreatedAt
 		*out = (*in).DeepCopy()
-	}
-	if in.NodeStatuses != nil {
-		in, out := &in.NodeStatuses, &out.NodeStatuses
-		*out = make([]NodeStatus, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
 	}
 	if in.CollisionCount != nil {
 		in, out := &in.CollisionCount, &out.CollisionCount

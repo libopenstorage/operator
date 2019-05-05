@@ -7,7 +7,7 @@ metadata:
     capabilities: Seamless Upgrades
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: portworx/openstorage-operator:1.0.0
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator:1.0.1
     repository: https://github.com/libopenstorage/operator
     createdAt: 2019-04-28T08:00:00Z
     support: Portworx, Inc
@@ -19,20 +19,18 @@ metadata:
           "kind": "StorageCluster",
           "metadata": {
             "name": "portworx",
-            "namespace": "kube-system",
+            "namespace": "test-operator",
             "annotations": {
               "portworx.io/is-openshift": "true"
             }
           },
           "spec": {
-            "image": "portworx/oci-monitor:2.0.3.3",
+            "image": "registry.connect.redhat.com/portworx/px-monitor:2.1.2-rc1",
             "kvdb": {
               "internal": true
             },
             "storage": {
-              "devices": {
-                  "useAll": true
-              }
+              "useAll": true
             }
           }
         }
@@ -86,8 +84,6 @@ spec:
     Portworx runs as a privileged pod. Hence you need to add the Portworx service accounts to the privileged security context.
 
     ```
-    oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:portworx
-    oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:portworx-pvc-controller
     oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:px-lh-account
     oc adm policy add-scc-to-user anyuid system:serviceaccount:kube-system:px-lh-account
     oc adm policy add-scc-to-user anyuid system:serviceaccount:default:default
@@ -125,10 +121,11 @@ spec:
           verbs:
           - get
           - list
-          - delete
-          - create
-          - patch
           - watch
+          - create
+          - delete
+          - update
+          - patch
         - apiGroups:
           - ""
           resources:
@@ -143,6 +140,7 @@ spec:
           - apps
           resources:
           - controllerrevisions
+          - deployments
           verbs:
           - get
           - list
@@ -152,10 +150,19 @@ spec:
           - update
           - patch
         - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          verbs:
+          - get
+          - create
+          - delete
+        - apiGroups:
           - core.libopenstorage.org
           resources:
           - storageclusters
           - storageclusters/finalizers
+          - storageclusters/status
           verbs:
           - get
           - list
@@ -169,44 +176,68 @@ spec:
           resources:
           - customresourcedefinitions
           verbs:
-          - create
           - get
+          - create
         - apiGroups:
           - ""
           resources:
           - configmaps
           verbs:
           - get
+          - list
+          - watch
           - create
-          - update
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - nodes
-          verbs:
-          - get
-          - list
-          - watch
-      - serviceAccountName: px-account
-        rules:
-        - apiGroups:
-          - ""
-          resources:
-          - nodes
-          verbs:
-          - get
-          - list
-          - watch
-          - update
-        - apiGroups:
-          - ""
-          resources:
-          - pods
-          verbs:
-          - get
-          - list
           - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          - rolebindings
+          - clusterroles
+          - clusterrolebindings
+          verbs:
+          - get
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - get
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - endpoints
+          - services
+          verbs:
+          - get
+          - create
+          - delete
+          - update
         - apiGroups:
           - ""
           resources:
@@ -220,26 +251,49 @@ spec:
         - apiGroups:
           - ""
           resources:
-          - persistentvolumeclaims
           - persistentvolumes
           verbs:
           - get
           - list
+          - create
+          - delete
+          - update
+          - watch
         - apiGroups:
           - ""
           resources:
-          - configmaps
+          - persistentvolumes/status
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
           verbs:
           - get
           - list
-          - create
+          - watch
           - update
         - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims/status
+          verbs:
+          - update
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - storageclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - extensions
+          resourceNames:
+          - privileged
           resources:
           - podsecuritypolicies
-          resourcesNames:
-          - privileged
           verbs:
           - use
         - apiGroups:
@@ -257,11 +311,33 @@ spec:
           - privileged
           verbs:
           - use
+      - serviceAccountName: portworx
+        rules:
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          resourceNames:
+          - privileged
+          verbs:
+          - use
+      - serviceAccountName: portworx-pvc-controller
+        rules:
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          resourceNames:
+          - privileged
+          verbs:
+          - use
       deployments:
       - name: portworx-operator
         spec:
           replicas: 1
-          selector: null
+          selector:
+            matchLabels:
+              name: portworx-operator
           strategy:
             rollingUpdate:
               maxSurge: 1
@@ -288,7 +364,7 @@ spec:
                 - --verbose
                 - --driver=portworx
                 - --leader-elect=true
-                image: portworx/openstorage-operator:1.0.0
+                image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.1
                 imagePullPolicy: Always
                 name: portworx-operator
                 resources: {}
@@ -336,6 +412,9 @@ spec:
         displayName: Secrets Provider
         description: The secret provider that Portworx should integrate with to
           provider features like volume encryption, security, cloud backup and migration.
+      - path: startPort
+        displayName: Start Port
+        description: It is the starting port in the range of ports used by the cluster.
       - path: env
         displayName: Environment Variables
         description: Extra enviroment variables that are needed by Portworx can be
@@ -355,3 +434,42 @@ spec:
         displayName: Update Strategy
         description: Specify an update strategy for the Portworx pods. You can either do
           a OnDelete update or RollingUpdate with configurable max unavailable pods.
+      - path: revisionHistoryLimit
+        displayName: Revision History Limit
+        description: It is the number of old histories of storage cluster specs to retain
+          to allow rollback.
+      statusDescriptors:
+      - path: clusterName
+        displayName: Cluster Name
+        description: Unique name for the Portworx cluster.
+      resources:
+      - kind: CustomResourceDefinition
+        name: ""
+        version: v1beta1
+      - kind: ServiceAccount
+        name: ""
+        version: v1
+      - kind: ClusterRole
+        name: ""
+        version: v1
+      - kind: ClusterRoleBinding
+        name: ""
+        version: v1
+      - kind: Role
+        name: ""
+        version: v1
+      - kind: RoleBinding
+        name: ""
+        version: v1
+      - kind: Namespace
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: Deployment
+        name: ""
+        version: v1
+      - kind: DaemonSet
+        name: ""
+        version: v1

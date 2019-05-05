@@ -266,7 +266,11 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
-	return nil
+	// Update status of the cluster
+	// TODO: Update the complete status of the cluster even from the storage driver
+	cluster.Status.ClusterName = cluster.Name
+	_, err = k8s.Instance().UpdateStorageClusterStatus(cluster)
+	return err
 }
 
 func (c *Controller) deleteStorageCluster(
