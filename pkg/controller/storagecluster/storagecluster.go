@@ -290,39 +290,27 @@ func (c *Controller) deleteStorageCluster(
 	}
 
 	if deleteFinalizerExists(cluster) {
-		// Perform PreDelete operations
-		if err := c.Driver.PreDelete(cluster); err != nil {
-			return fmt.Errorf("failed to run pre-delete hooks for %v/%v: %v",
-				cluster.Namespace, cluster.Name, err)
+		toDelete := cluster.DeepCopy()
+		deleteClusterCondition, err := c.Driver.DeleteStorage(toDelete)
+		if err != nil {
+			logrus.Errorf("Failed to delete storage: %v", err)
+			return fmt.Errorf("driver failed to delete storage: %v", err)
+		}
+		// Check if there is an existing delete condition and overwrite it
+		foundIndex := -1
+		for i, deleteCondition := range toDelete.Status.Conditions {
+			if deleteCondition.Type == corev1alpha1.ClusterConditionTypeDelete {
+				foundIndex = i
+				break
+			}
+		}
+		if foundIndex == -1 {
+			toDelete.Status.Conditions = append(toDelete.Status.Conditions, *deleteClusterCondition)
+		} else {
+			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
 
-		toDelete := cluster.DeepCopy()
-		// If DeleteStrategy is provided perform storage delete
-		if toDelete.Spec.DeleteStrategy != nil {
-			deleteClusterCondition, err := c.Driver.DeleteStorage(toDelete)
-			if err != nil {
-				logrus.Errorf("Failed to delete storage: %v", err)
-				return fmt.Errorf("driver failed to delete storage: %v", err)
-			}
-			// Check if there is an existing delete condition and overwrite it
-			foundIndex := -1
-			for i, deleteCondition := range toDelete.Status.Conditions {
-				if deleteCondition.Type == corev1alpha1.ClusterConditionTypeDelete {
-					foundIndex = i
-					break
-				}
-			}
-			if foundIndex == -1 {
-				toDelete.Status.Conditions = append(toDelete.Status.Conditions, *deleteClusterCondition)
-			} else {
-				toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
-			}
-
-			if deleteClusterCondition.Status == corev1alpha1.ClusterOperationCompleted {
-				newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
-				toDelete.Finalizers = newFinalizers
-			}
-		} else {
+		if deleteClusterCondition.Status == corev1alpha1.ClusterOperationCompleted {
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
 		}

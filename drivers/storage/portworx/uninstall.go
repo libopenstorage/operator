@@ -24,22 +24,22 @@ var (
 )
 
 const (
-	dsOptPwxVolumeName            = "optpwx"
-	dsEtcPwxVolumeName            = "etcpwx"
-	dsDbusVolumeName              = "dbus"
-	dsSysdVolumeName              = "sysdmount"
-	sysdmount                     = "/etc/systemd/system"
-	dbusPath                      = "/var/run/dbus"
-	pksPersistentStoreRoot        = "/var/vcap/store"
-	pxOptPwx                      = "/opt/pwx"
-	pxEtcdPwx                     = "/etc/pwx"
-	pxNodeWiperDaemonSetName      = "px-node-wiper"
-	pxKvdbPrefix                  = "pwx/"
-	pxImageEnvKey                 = "PX_IMAGE"
-	internalEtcdConfigMapPrefix   = "px-bootstrap-"
-	cloudDriveConfigMapPrefix     = "px-cloud-drive-"
-	bootstrapCloudDriveNamespace  = "kube-system"
-	storageOperatorServiceAccount = "storage-operator-account"
+	dsOptPwxVolumeName           = "optpwx"
+	dsEtcPwxVolumeName           = "etcpwx"
+	dsDbusVolumeName             = "dbus"
+	dsSysdVolumeName             = "sysdmount"
+	sysdmount                    = "/etc/systemd/system"
+	dbusPath                     = "/var/run/dbus"
+	pksPersistentStoreRoot       = "/var/vcap/store"
+	pxOptPwx                     = "/opt/pwx"
+	pxEtcdPwx                    = "/etc/pwx"
+	pxNodeWiperDaemonSetName     = "px-node-wiper"
+	pxKvdbPrefix                 = "pwx/"
+	pxImageEnvKey                = "PX_IMAGE"
+	internalEtcdConfigMapPrefix  = "px-bootstrap-"
+	cloudDriveConfigMapPrefix    = "px-cloud-drive-"
+	bootstrapCloudDriveNamespace = "kube-system"
+	portworxServiceAccount       = "portworx"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -213,7 +213,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						},
 					},
 					RestartPolicy:      "Always",
-					ServiceAccountName: storageOperatorServiceAccount,
+					ServiceAccountName: portworxServiceAccount,
 					Volumes: []v1.Volume{
 						{
 							Name: dsEtcPwxVolumeName,

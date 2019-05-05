@@ -8,7 +8,7 @@ import (
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1beta2"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -116,7 +116,7 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 
 	return nil
 }
-func (p *portworx) PreDelete(cluster *corev1alpha1.StorageCluster) error {
+func (p *portworx) unsetInstallParams(cluster *corev1alpha1.StorageCluster) error {
 	p.serviceAccountCreated = false
 	p.clusterRoleCreated = false
 	p.clusterRoleBindingCreated = false
