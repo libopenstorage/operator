@@ -226,17 +226,10 @@ func (c *Controller) createCRD() error {
 func (c *Controller) syncStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
-	// Construct histories of the StorageCluster, and get the hash of current history
-	cur, old, err := c.constructHistory(cluster)
-	if err != nil {
-		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
-			cluster.Namespace, cluster.Name, err)
-	}
-	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
-
 	if cluster.DeletionTimestamp != nil {
-		logrus.Infof("Storage cluster %v has been marked for deletion", cluster.Name)
-		return c.deleteStorageCluster(cluster, hash)
+		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
+			cluster.Namespace, cluster.Name)
+		return c.deleteStorageCluster(cluster)
 	}
 
 	// Set defaults in the storage cluster object if not set
@@ -244,6 +237,14 @@ func (c *Controller) syncStorageCluster(
 		return fmt.Errorf("failed to update StorageCluster %v/%v with default values: %v",
 			cluster.Namespace, cluster.Name, err)
 	}
+
+	// Construct histories of the StorageCluster, and get the hash of current history
+	cur, old, err := c.constructHistory(cluster)
+	if err != nil {
+		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
+			cluster.Namespace, cluster.Name, err)
+	}
+	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
 
 	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
@@ -275,7 +276,6 @@ func (c *Controller) syncStorageCluster(
 
 func (c *Controller) deleteStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
-	hash string,
 ) error {
 	// get all the storage pods
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
@@ -283,13 +283,16 @@ func (c *Controller) deleteStorageCluster(
 		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
 			cluster.Name, err)
 	}
-	var nodesNeedingStoragePods, podsToDelete []string
+
+	podsToDelete := make([]string, 0)
 	for _, storagePods := range nodeToStoragePods {
 		for _, storagePod := range storagePods {
 			podsToDelete = append(podsToDelete, storagePod.Name)
 		}
 	}
-	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods, hash); err != nil {
+
+	// Hash param can be empty as we are only deleting pods
+	if err := c.syncNodes(cluster, podsToDelete, nil, ""); err != nil {
 		return err
 	}
 
@@ -313,14 +316,17 @@ func (c *Controller) deleteStorageCluster(
 		} else {
 			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
+		if toDelete, err = k8s.Instance().UpdateStorageClusterStatus(toDelete); err != nil {
+			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
+				toDelete.Namespace, toDelete.Name, err)
+		}
 
 		if deleteClusterCondition.Status == corev1alpha1.ClusterOperationCompleted {
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
-		}
-
-		if err := c.client.Update(context.TODO(), toDelete); err != nil {
-			return err
+			if err := c.client.Update(context.TODO(), toDelete); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -689,8 +695,6 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 		}
 	}
 
-	finalizerUpdated := false
-
 	if toUpdate.Spec.RevisionHistoryLimit == nil {
 		toUpdate.Spec.RevisionHistoryLimit = new(int32)
 		*toUpdate.Spec.RevisionHistoryLimit = defaultRevisionHistoryLimit
@@ -713,7 +717,8 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
-	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) || finalizerUpdated {
+	// Update the spec only if anything has changed
+	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) || !foundDeleteFinalizer {
 		err := c.client.Update(context.TODO(), toUpdate)
 		if err != nil {
 			return err
