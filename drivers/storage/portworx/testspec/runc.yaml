@@ -41,6 +41,8 @@ spec:
             "-rt_opts", "op1=10",
              "-x", "kubernetes"]
           env:
+            - name: "PX_SECRETS_NAMESPACE"
+              value: "kube-system"
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"

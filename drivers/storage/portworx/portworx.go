@@ -29,7 +29,6 @@ type portworx struct {
 	clusterRoleBindingCreated              bool
 	roleCreated                            bool
 	roleBindingCreated                     bool
-	secretsNamespaceCreated                bool
 	portworxSerivceCreated                 bool
 	pvcControllerServiceAccountCreated     bool
 	pvcControllerClusterRoleCreated        bool

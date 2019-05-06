@@ -453,6 +453,10 @@ func (t *template) getArguments() []string {
 func (t *template) getEnvList() []v1.EnvVar {
 	envList := []v1.EnvVar{
 		{
+			Name:  "PX_SECRETS_NAMESPACE",
+			Value: t.cluster.Namespace,
+		},
+		{
 			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
 			Value: "1500",
 		},

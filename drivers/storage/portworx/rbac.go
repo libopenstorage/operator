@@ -22,7 +22,6 @@ const (
 	pxClusterRoleBindingName  = "portworx"
 	pxRoleName                = "portworx"
 	pxRoleBindingName         = "portworx"
-	pxSecretsNamespace        = "portworx"
 	pxServiceName             = "portworx-service"
 	pvcServiceAccountName     = "portworx-pvc-controller"
 	pvcClusterRoleName        = "portworx-pvc-controller"
@@ -44,12 +43,6 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 		}
 		p.serviceAccountCreated = true
 	}
-	if !p.secretsNamespaceCreated {
-		if err := createSecretsNamespace(); err != nil {
-			return err
-		}
-		p.secretsNamespaceCreated = true
-	}
 	if !p.clusterRoleCreated {
 		if err := createClusterRole(ownerRef); err != nil {
 			return err
@@ -63,7 +56,7 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 		p.clusterRoleBindingCreated = true
 	}
 	if !p.roleCreated {
-		if err := createRole(ownerRef); err != nil {
+		if err := createRole(cluster.Namespace, ownerRef); err != nil {
 			return err
 		}
 		p.roleCreated = true
@@ -122,7 +115,6 @@ func (p *portworx) unsetInstallParams(cluster *corev1alpha1.StorageCluster) erro
 	p.clusterRoleBindingCreated = false
 	p.roleCreated = false
 	p.roleBindingCreated = false
-	p.secretsNamespaceCreated = false
 	p.portworxSerivceCreated = false
 	p.pvcControllerServiceAccountCreated = false
 	p.pvcControllerClusterRoleCreated = false
@@ -165,13 +157,13 @@ func createPVCControllerServiceAccount(
 	)
 }
 
-func createRole(ownerRef *metav1.OwnerReference) error {
+func createRole(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 	logrus.Debugf("Creating/updating %s role", pxRoleName)
 	return createOrUpdateRole(
 		&rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            pxRoleName,
-				Namespace:       pxSecretsNamespace,
+				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -195,7 +187,7 @@ func createRoleBinding(
 		&rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            pxRoleBindingName,
-				Namespace:       pxSecretsNamespace,
+				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
@@ -395,15 +387,6 @@ func createPVCControllerClusterRoleBinding(
 		},
 		ownerRef,
 	)
-}
-
-func createSecretsNamespace() error {
-	logrus.Debugf("Creating %s namespace", pxSecretsNamespace)
-	_, err := k8s.Instance().CreateNamespace(pxSecretsNamespace, nil)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return err
-	}
-	return nil
 }
 
 func (p *portworx) createPortworxSerivce(
