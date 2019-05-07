@@ -6,8 +6,57 @@ metadata:
   annotations:
     portworx.io/is-openshift: "true"
 spec:
-  image: 'registry.connect.redhat.com/portworx/px-monitor:2.1.2-rc1'
+  image: "registry.connect.redhat.com/portworx/px-monitor:2.1.2-rc1"
+  imagePullPolicy: "Always"
   kvdb:
     internal: true
+    # endpoints:
+    # - etcd:http://<endpoint-1>:2379
+    # - etcd:http://<endpoint-2>:2379
+    # - etcd:http://<endpoint-3>:2379
+    # authSecret: <secret-name-in-same-namespace>
   storage:
     useAll: true
+    # useAllWithPartitions: false
+    # forceUseDisks: false
+    # devices:
+    # - /dev/sdb
+    # - /dev/sdc
+    # journalDevice: /dev/sdd
+    # systemMetadataDevice: /dev/sde
+  # cloudStorage:
+    # deviceSpecs:
+    # - type=gp2,size=500
+    # journalDeviceSpec: type=gp2,size=10
+    # systemMetadataDeviceSpec: type=gp2,size=100
+    # maxStorageNodesPerZone: 3
+    # maxStorageNodes: 10
+  # network:
+    # dataInterface: eth0
+    # mgmtInterface: eth0
+  # secretsProvider: k8s
+  # startPort: 9001
+  # env:
+  # - name: KEY
+    # value : VALUE
+  # runtimeOptions:
+    # foo: bar
+  # imagePullSecret: <secret-name-in-same-namespace>
+  # revisionHistoryLimit: 10
+  # updateStrategy:
+    # type: RollingUpdate
+    # rollingUpdate:
+      # maxUnavailable: 1
+  # deleteStrategy:
+    # type: UninstallAndWipe
+  # placement:
+    # nodeAffinity:
+      # requiredDuringSchedulingIgnoredDuringExecution:
+        # nodeSelectorTerms:
+        # - matchExpressions:
+          # - key: px/enabled
+            # operator: NotIn
+            # values:
+            # - "false"
+          # - key: node-role.kubernetes.io/master
+            # operator: DoesNotExist
