@@ -45,6 +45,8 @@ spec:
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
+            - name: "PRE-EXEC"
+              value: "if grep -q 'Red Hat Enterprise Linux CoreOS' /etc/os-release && /bin/ls -dZ /var/opt/ | grep -q :object_r:var_t: ; then semanage fcontext -a -t usr_t '/var/opt(/.*)?' ; restorecon -Rv /var/opt/ ; fi"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks

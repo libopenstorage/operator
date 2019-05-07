@@ -466,12 +466,14 @@ func (t *template) getEnvList() []v1.EnvVar {
 		},
 	}
 
-	if t.isPKS {
-		envList = append(envList, v1.EnvVar{
-			Name:  "PRE-EXEC",
-			Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
-		})
+	preExecEnv := v1.EnvVar{
+		Name:  "PRE-EXEC",
+		Value: "if grep -q 'Red Hat Enterprise Linux CoreOS' /etc/os-release && /bin/ls -dZ /var/opt/ | grep -q :object_r:var_t: ; then semanage fcontext -a -t usr_t '/var/opt(/.*)?' ; restorecon -Rv /var/opt/ ; fi",
 	}
+	if t.isPKS {
+		preExecEnv.Value = "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+	}
+	envList = append(envList, preExecEnv)
 
 	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
 		envList = append(envList, v1.EnvVar{
