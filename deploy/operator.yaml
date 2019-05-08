@@ -27,7 +27,7 @@ spec:
         - --driver=portworx
         - --leader-elect=true
         imagePullPolicy: Always
-        image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.1
+        image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.2
         securityContext:
           privileged: false
         name: portworx-operator
