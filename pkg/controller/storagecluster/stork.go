@@ -1,0 +1,797 @@
+package storagecluster
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+	"sort"
+	"strings"
+
+	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/portworx/sched-ops/k8s"
+	apps "k8s.io/api/apps/v1"
+	"k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+const (
+	storkConfigMapName               = "stork-config"
+	storkServiceAccountName          = "stork"
+	storkClusterRoleName             = "stork"
+	storkClusterRoleBindingName      = "stork"
+	storkServiceName                 = "stork-service"
+	storkDeploymentName              = "stork"
+	storkContainerName               = "stork"
+	storkSnapshotStorageClassName    = "stork-snapshot-sc"
+	storkSchedServiceAccountName     = "stork-scheduler"
+	storkSchedClusterRoleName        = "stork-scheduler"
+	storkSchedClusterRoleBindingName = "stork-scheduler"
+	storkSchedDeploymentName         = "stork-scheduler"
+	storkServicePort                 = 8099
+)
+
+func (c *Controller) syncStork(
+	cluster *corev1alpha1.StorageCluster,
+) error {
+	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+		return c.setupStork(cluster)
+	}
+	return c.removeStork(cluster.Namespace)
+}
+
+func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	if err := c.createStorkConfigMap(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkServiceAccount(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkClusterRole(ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if !c.isStorkServiceCreated {
+		if err := c.createStorkService(cluster.Namespace, ownerRef); err != nil {
+			return err
+		}
+		c.isStorkServiceCreated = true
+	}
+	if err := c.createStorkDeployment(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkSnapshotStorageClass(ownerRef); err != nil {
+		return err
+	}
+	return c.setupStorkScheduler(cluster)
+}
+
+func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	if err := c.createStorkSchedServiceAccount(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkSchedClusterRole(ownerRef); err != nil {
+		return err
+	}
+	if err := c.createStorkSchedClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if !c.isStorkSchedDeploymentCreated {
+		if err := c.createStorkSchedDeployment(cluster, ownerRef); err != nil {
+			return err
+		}
+		c.isStorkSchedDeploymentCreated = true
+	}
+	return nil
+}
+
+func (c *Controller) removeStork(namespace string) error {
+	if err := k8sutil.DeleteConfigMap(c.client, storkConfigMapName, namespace); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteServiceAccount(c.client, storkServiceAccountName, namespace); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRole(c.client, storkClusterRoleName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkClusterRoleBindingName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteService(c.client, storkServiceName, namespace); err != nil {
+		return err
+	}
+	c.isStorkServiceCreated = false
+	if err := k8sutil.DeleteDeployment(c.client, storkDeploymentName, namespace); err != nil {
+		return err
+	}
+	c.isStorkDeploymentCreated = false
+	if err := k8sutil.DeleteStorageClass(c.client, storkSnapshotStorageClassName); err != nil {
+		return err
+	}
+	return c.removeStorkScheduler(namespace)
+}
+
+func (c *Controller) removeStorkScheduler(namespace string) error {
+	if err := k8sutil.DeleteServiceAccount(c.client, storkSchedServiceAccountName, namespace); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRole(c.client, storkSchedClusterRoleName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkSchedClusterRoleBindingName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDeployment(c.client, storkSchedDeploymentName, namespace); err != nil {
+		return err
+	}
+	c.isStorkSchedDeploymentCreated = false
+	return nil
+}
+
+func (c *Controller) createStorkConfigMap(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	policyConfig := fmt.Sprintf(`
+{
+  "kind": "Policy",
+  "apiVersion": "v1",
+  "extenders": [
+    {
+      "urlPrefix": "http://%s.%s:%d",
+      "apiVersion": "v1beta1",
+      "filterVerb": "filter",
+      "prioritizeVerb": "prioritize",
+      "weight": 5,
+      "enableHttps": false,
+      "nodeCacheCapable": false
+    }
+  ]
+}`, storkServiceName, clusterNamespace, storkServicePort)
+
+	return k8sutil.CreateOrUpdateConfigMap(
+		c.client,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkConfigMapName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				"policy.cfg": policyConfig,
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkSnapshotStorageClass(
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateStorageClass(
+		c.client,
+		&storagev1.StorageClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkSnapshotStorageClassName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Provisioner: "stork-snapshot",
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkServiceAccount(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		c.client,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkServiceAccountName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkSchedServiceAccount(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		c.client,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkSchedServiceAccountName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkClusterRole(ownerRef *metav1.OwnerReference) error {
+	return k8sutil.CreateOrUpdateClusterRole(
+		c.client,
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkClusterRoleName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods", "pods/exec"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumes"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumeclaims"},
+					Verbs:     []string{"get", "list", "watch", "update"},
+				},
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"events"},
+					Verbs:     []string{"list", "watch", "create", "update", "patch"},
+				},
+				{
+					APIGroups: []string{"stork.libopenstorage.org"},
+					Resources: []string{"*"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
+				},
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"get", "create"},
+				},
+				{
+					APIGroups: []string{"volumesnapshot.external-storage.k8s.io"},
+					Resources: []string{"volumesnapshots", "volumesnapshotdatas"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps"},
+					Verbs:     []string{"get", "create", "update"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"services"},
+					Verbs:     []string{"get"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"nodes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"deployments", "deployments/extensions"},
+					Verbs:     []string{"get", "list", "watch", "update", "patch", "initialize"},
+				},
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"statefulsets", "statefulsets/extensions"},
+					Verbs:     []string{"get", "list", "watch", "update", "patch", "initialize"},
+				},
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"get", "list"},
+				},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference) error {
+	return k8sutil.CreateOrUpdateClusterRole(
+		c.client,
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkSchedClusterRoleName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"endpoints"},
+					Verbs:     []string{"get", "create", "update"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps"},
+					Verbs:     []string{"get"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"events"},
+					Verbs:     []string{"create", "update", "patch"},
+				},
+				{
+					APIGroups:     []string{""},
+					ResourceNames: []string{"kube-scheduler"},
+					Resources:     []string{"endpoints"},
+					Verbs:         []string{"get", "delete", "update", "patch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"nodes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list", "watch", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"bindings", "pods/binding"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/status"},
+					Verbs:     []string{"update", "patch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"replicationcontrollers", "services"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"apps", "extensions"},
+					Resources: []string{"replicasets"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"apps"},
+					Resources: []string{"statefulsets"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"policy"},
+					Resources: []string{"poddisruptionbudgets"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkClusterRoleBinding(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		c.client,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkClusterRoleBindingName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      storkServiceAccountName,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     storkClusterRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkSchedClusterRoleBinding(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		c.client,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkSchedClusterRoleBindingName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      storkSchedServiceAccountName,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     storkSchedClusterRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkService(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateService(
+		c.client,
+		&v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            storkServiceName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Spec: v1.ServiceSpec{
+				Selector: getStorkServiceLabels(),
+				Ports: []v1.ServicePort{
+					{
+						Protocol:   v1.ProtocolTCP,
+						Port:       int32(storkServicePort),
+						TargetPort: intstr.FromInt(storkServicePort),
+					},
+				},
+				Type: v1.ServiceTypeClusterIP,
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *Controller) createStorkDeployment(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if cluster.Spec.Stork.Image == "" {
+		return fmt.Errorf("stork image cannot be empty")
+	}
+
+	existingDeployment := &apps.Deployment{}
+	err := c.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      storkDeploymentName,
+			Namespace: cluster.Namespace,
+		},
+		existingDeployment,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	args := map[string]string{
+		"verbose":                 "true",
+		"leader-elect":            "true",
+		"health-monitor-interval": "120",
+	}
+	for k, v := range cluster.Spec.Stork.Args {
+		key := strings.TrimLeft(k, "-")
+		if len(key) > 0 && len(v) > 0 {
+			args[key] = v
+		}
+	}
+	args["driver"] = c.Driver.GetStorkDriverName()
+
+	argList := make([]string, 0)
+	for k, v := range args {
+		argList = append(argList, fmt.Sprintf("--%s=%s", k, v))
+	}
+	sort.Strings(argList)
+	command := append([]string{"/stork"}, argList...)
+
+	var existingImage string
+	var existingCommand []string
+	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
+		if c.Name == storkContainerName {
+			existingImage = c.Image
+			existingCommand = c.Command
+			break
+		}
+	}
+
+	imageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		cluster.Spec.Stork.Image,
+	)
+
+	// Check if image or args are modified
+	modified := existingImage != imageName || !reflect.DeepEqual(existingCommand, command)
+
+	if !c.isStorkDeploymentCreated || modified {
+		deployment, err := getStorkDeploymentSpec(cluster, ownerRef, imageName, command)
+		if err != nil {
+			return err
+		}
+		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
+			return err
+		}
+	}
+	c.isStorkDeploymentCreated = true
+	return nil
+}
+
+func getStorkDeploymentSpec(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	imageName string,
+	command []string,
+) (*apps.Deployment, error) {
+	imagePullPolicy := v1.PullAlways
+	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
+		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
+		imagePullPolicy = cluster.Spec.ImagePullPolicy
+	}
+
+	cpuQuantity, err := resource.ParseQuantity("0.1")
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentLabels := map[string]string{
+		"tier": "control-plane",
+	}
+	templateLabels := getStorkServiceLabels()
+	for k, v := range deploymentLabels {
+		templateLabels[k] = v
+	}
+
+	replicas := int32(3)
+	maxUnavailable := intstr.FromInt(1)
+	maxSurge := intstr.FromInt(1)
+
+	deployment := &apps.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      storkDeploymentName,
+			Namespace: cluster.Namespace,
+			Annotations: map[string]string{
+				"scheduler.alpha.kubernetes.io/critical-pod": "",
+			},
+			Labels:          deploymentLabels,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: apps.DeploymentSpec{
+			Strategy: apps.DeploymentStrategy{
+				Type: apps.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &apps.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
+				},
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: templateLabels,
+			},
+			Replicas: &replicas,
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"scheduler.alpha.kubernetes.io/critical-pod": "",
+					},
+					Labels: templateLabels,
+				},
+				Spec: v1.PodSpec{
+					ServiceAccountName: storkServiceAccountName,
+					Containers: []v1.Container{
+						{
+							Name:            storkContainerName,
+							Image:           imageName,
+							ImagePullPolicy: imagePullPolicy,
+							Command:         command,
+							Resources: v1.ResourceRequirements{
+								Requests: map[v1.ResourceName]resource.Quantity{
+									v1.ResourceCPU: cpuQuantity,
+								},
+							},
+						},
+					},
+					Affinity: &v1.Affinity{
+						PodAntiAffinity: &v1.PodAntiAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+								{
+									TopologyKey: "kubernetes.io/hostname",
+									LabelSelector: &metav1.LabelSelector{
+										MatchExpressions: []metav1.LabelSelectorRequirement{
+											{
+												Key:      "name",
+												Operator: metav1.LabelSelectorOpIn,
+												Values: []string{
+													storkDeploymentName,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment, nil
+}
+
+func (c *Controller) createStorkSchedDeployment(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	cpuQuantity, err := resource.ParseQuantity("0.1")
+	if err != nil {
+		return err
+	}
+
+	templateLabels := map[string]string{
+		"tier":      "control-plane",
+		"component": "scheduler",
+	}
+	deploymentLabels := map[string]string{
+		"name": storkSchedDeploymentName,
+	}
+	for k, v := range templateLabels {
+		deploymentLabels[k] = v
+	}
+
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return err
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
+		"gcr.io/google_containers/kube-scheduler-amd64:"+matches[1])
+
+	replicas := int32(3)
+
+	deployment := &apps.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            storkSchedDeploymentName,
+			Namespace:       cluster.Namespace,
+			Labels:          deploymentLabels,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: apps.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: templateLabels,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   storkSchedDeploymentName,
+					Labels: templateLabels,
+				},
+				Spec: v1.PodSpec{
+					ServiceAccountName: storkSchedServiceAccountName,
+					Containers: []v1.Container{
+						{
+							Name:  "stork-scheduler",
+							Image: imageName,
+							Command: []string{
+								"/usr/local/bin/kube-scheduler",
+								"--address=0.0.0.0",
+								"--leader-elect=true",
+								"--scheduler-name=stork",
+								"--policy-configmap=stork-config",
+								"--policy-configmap-namespace=kube-system",
+								"--lock-object-name=stork-scheduler",
+							},
+							LivenessProbe: &v1.Probe{
+								InitialDelaySeconds: 15,
+								Handler: v1.Handler{
+									HTTPGet: &v1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.FromInt(10251),
+									},
+								},
+							},
+							ReadinessProbe: &v1.Probe{
+								Handler: v1.Handler{
+									HTTPGet: &v1.HTTPGetAction{
+										Path: "/healthz",
+										Port: intstr.FromInt(10251),
+									},
+								},
+							},
+							Resources: v1.ResourceRequirements{
+								Requests: map[v1.ResourceName]resource.Quantity{
+									v1.ResourceCPU: cpuQuantity,
+								},
+							},
+						},
+					},
+					Affinity: &v1.Affinity{
+						PodAntiAffinity: &v1.PodAntiAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+								{
+									TopologyKey: "kubernetes.io/hostname",
+									LabelSelector: &metav1.LabelSelector{
+										MatchExpressions: []metav1.LabelSelectorRequirement{
+											{
+												Key:      "name",
+												Operator: metav1.LabelSelectorOpIn,
+												Values: []string{
+													storkSchedDeploymentName,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef)
+}
+
+func getStorkServiceLabels() map[string]string {
+	return map[string]string{
+		"name": "stork",
+	}
+}

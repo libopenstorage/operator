@@ -35,11 +35,9 @@ const (
 	pxEtcdPwx                    = "/etc/pwx"
 	pxNodeWiperDaemonSetName     = "px-node-wiper"
 	pxKvdbPrefix                 = "pwx/"
-	pxImageEnvKey                = "PX_IMAGE"
 	internalEtcdConfigMapPrefix  = "px-bootstrap-"
 	cloudDriveConfigMapPrefix    = "px-cloud-drive-"
 	bootstrapCloudDriveNamespace = "kube-system"
-	portworxServiceAccount       = "portworx"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -213,7 +211,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						},
 					},
 					RestartPolicy:      "Always",
-					ServiceAccountName: portworxServiceAccount,
+					ServiceAccountName: pxServiceAccountName,
 					Volumes: []v1.Volume{
 						{
 							Name: dsEtcPwxVolumeName,

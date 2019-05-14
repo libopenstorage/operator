@@ -79,15 +79,8 @@ func run(c *cli.Context) {
 	verbose := c.Bool("verbose")
 	if verbose {
 		log.SetLevel(log.DebugLevel)
-	}
-
-	d, err := storage.Get(driverName)
-	if err != nil {
-		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
-	}
-
-	if err = d.Init(nil); err != nil {
-		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
+	} else {
+		log.SetLevel(log.InfoLevel)
 	}
 
 	config, err := rest.InClusterConfig()
@@ -107,6 +100,15 @@ func run(c *cli.Context) {
 	mgr, err := manager.New(config, managerOpts)
 	if err != nil {
 		log.Fatalf("Failed to create controller manager: %v", err)
+	}
+
+	d, err := storage.Get(driverName)
+	if err != nil {
+		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
+	}
+
+	if err = d.Init(mgr.GetClient()); err != nil {
+		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
 	log.Info("Registering components")
