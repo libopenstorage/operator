@@ -360,6 +360,8 @@ type StorageClassOps interface {
 	GetStorageClass(name string) (*storage_api.StorageClass, error)
 	// CreateStorageClass creates the given storage class
 	CreateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error)
+	// UpdateStorageClass updates the given storage class
+	UpdateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error)
 	// DeleteStorageClass deletes the given storage class
 	DeleteStorageClass(name string) error
 	// GetStorageClassParams returns the parameters of the given sc in the native map format
@@ -2542,6 +2544,14 @@ func (k *k8sOps) CreateStorageClass(sc *storage_api.StorageClass) (*storage_api.
 	}
 
 	return k.client.StorageV1().StorageClasses().Create(sc)
+}
+
+func (k *k8sOps) UpdateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.StorageV1().StorageClasses().Update(sc)
 }
 
 func (k *k8sOps) DeleteStorageClass(name string) error {
