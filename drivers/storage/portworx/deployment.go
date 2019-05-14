@@ -200,7 +200,7 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationPVCController])
 	t.needsPVCController = err == nil && enabled
 
-	if t.isPKS || t.isEKS || t.isGKE || t.isAKS {
+	if t.isOpenshift || t.isPKS || t.isEKS || t.isGKE || t.isAKS {
 		t.needsPVCController = true
 	}
 
