@@ -8,11 +8,13 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	// driverName is the name of the portworx storage driver implementation
 	driverName                        = "portworx"
+	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
 	defaultStartPort                  = 9001
 	defaultSecretsProvider            = "k8s"
@@ -24,24 +26,30 @@ const (
 )
 
 type portworx struct {
-	serviceAccountCreated                  bool
-	clusterRoleCreated                     bool
-	clusterRoleBindingCreated              bool
-	roleCreated                            bool
-	roleBindingCreated                     bool
-	portworxSerivceCreated                 bool
-	pvcControllerServiceAccountCreated     bool
-	pvcControllerClusterRoleCreated        bool
-	pvcControllerClusterRoleBindingCreated bool
-	pvcControllerDeploymentCreated         bool
+	k8sClient                         client.Client
+	portworxServiceCreated            bool
+	pxAPIServiceCreated               bool
+	pxAPIDaemonSetCreated             bool
+	volumePlacementStrategyCRDCreated bool
+	pvcControllerDeploymentCreated    bool
+	lhServiceCreated                  bool
+	lhDeploymentCreated               bool
 }
 
 func (p *portworx) String() string {
 	return driverName
 }
 
-func (p *portworx) Init(_ interface{}) error {
+func (p *portworx) Init(k8sClient client.Client) error {
+	if k8sClient == nil {
+		return fmt.Errorf("kubernetes client cannot be nil")
+	}
+	p.k8sClient = k8sClient
 	return nil
+}
+
+func (p *portworx) GetStorkDriverName() string {
+	return storkDriverName
 }
 
 func (p *portworx) GetSelectorLabels() map[string]string {
@@ -82,10 +90,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	}
 }
 
+func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
+	return p.installComponents(cluster)
+}
+
 func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error) {
-	if err := p.unsetInstallParams(storageCluster); err != nil {
-		return nil, err
-	}
+	p.unsetInstallParams()
+
 	if storageCluster.Spec.DeleteStrategy == nil {
 		// No Delete strategy provided. Do not wipe portworx
 		status := &corev1alpha1.ClusterCondition{

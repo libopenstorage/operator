@@ -14,20 +14,19 @@ import (
 )
 
 const (
-	pxContainerName          = "portworx"
-	pxAnnotationPrefix       = "portworx.io"
-	annotationIsPKS          = pxAnnotationPrefix + "/is-pks"
-	annotationIsGKE          = pxAnnotationPrefix + "/is-gke"
-	annotationIsAKS          = pxAnnotationPrefix + "/is-aks"
-	annotationIsEKS          = pxAnnotationPrefix + "/is-eks"
-	annotationIsOpenshift    = pxAnnotationPrefix + "/is-openshift"
-	annotationPVCController  = pxAnnotationPrefix + "/pvc-controller"
-	annotationLogFile        = pxAnnotationPrefix + "/log-file"
-	annotationCustomRegistry = pxAnnotationPrefix + "/custom-registry"
-	annotationCSIVersion     = pxAnnotationPrefix + "/csi-version"
-	annotationMiscArgs       = pxAnnotationPrefix + "/misc-args"
-	templateVersion          = "v4"
-	csiBasePath              = "/var/lib/kubelet/plugins/com.openstorage.pxd"
+	pxContainerName         = "portworx"
+	pxAnnotationPrefix      = "portworx.io"
+	annotationIsPKS         = pxAnnotationPrefix + "/is-pks"
+	annotationIsGKE         = pxAnnotationPrefix + "/is-gke"
+	annotationIsAKS         = pxAnnotationPrefix + "/is-aks"
+	annotationIsEKS         = pxAnnotationPrefix + "/is-eks"
+	annotationIsOpenshift   = pxAnnotationPrefix + "/is-openshift"
+	annotationPVCController = pxAnnotationPrefix + "/pvc-controller"
+	annotationLogFile       = pxAnnotationPrefix + "/log-file"
+	annotationCSIVersion    = pxAnnotationPrefix + "/csi-version"
+	annotationMiscArgs      = pxAnnotationPrefix + "/misc-args"
+	templateVersion         = "v4"
+	csiBasePath             = "/var/lib/kubelet/plugins/com.openstorage.pxd"
 )
 
 type volumeInfo struct {
@@ -252,11 +251,10 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 }
 
 func (t *template) portworxContainer() v1.Container {
-	imageRegistry := t.cluster.Annotations[annotationCustomRegistry]
-
+	pxImage := getImageURN(t.cluster.Spec.CustomImageRegistry, t.cluster.Spec.Image)
 	return v1.Container{
 		Name:            pxContainerName,
-		Image:           getImageURN(imageRegistry, t.cluster.Spec.Image),
+		Image:           pxImage,
 		ImagePullPolicy: t.imagePullPolicy,
 		Args:            t.getArguments(),
 		Env:             t.getEnvList(),

@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -61,13 +62,14 @@ const (
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
 	controllerName                      = "storagecluster-controller"
-	labelKeyName                        = "operator.libopenstorage.org/name"
-	labelKeyDriverName                  = "operator.libopenstorage.org/driver"
+	operatorPrefix                      = "operator.libopenstorage.org"
+	labelKeyName                        = operatorPrefix + "/name"
+	labelKeyDriverName                  = operatorPrefix + "/driver"
+	deleteFinalizerName                 = operatorPrefix + "/delete"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
-	deleteFinalizerName                 = "operator.libopenstorage.org/delete"
 )
 
 // Reasons for StorageCluster events
@@ -80,19 +82,26 @@ const (
 	failedSyncReason = "FailedSync"
 )
 
-var controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
 var _ reconcile.Reconciler = &Controller{}
+
+var (
+	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
+)
 
 // Controller reconciles a StorageCluster object
 type Controller struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client     client.Client
-	scheme     *runtime.Scheme
-	recorder   record.EventRecorder
-	podControl k8scontroller.PodControlInterface
-	crControl  k8scontroller.ControllerRevisionControlInterface
-	Driver     storage.Driver
+	client                        client.Client
+	scheme                        *runtime.Scheme
+	recorder                      record.EventRecorder
+	podControl                    k8scontroller.PodControlInterface
+	crControl                     k8scontroller.ControllerRevisionControlInterface
+	Driver                        storage.Driver
+	isStorkServiceCreated         bool
+	isStorkDeploymentCreated      bool
+	isStorkSchedDeploymentCreated bool
 }
 
 // Init initialize the storage cluster controller
@@ -238,6 +247,11 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
+	// Ensure Stork is deployed with right configuration
+	if err := c.syncStork(cluster); err != nil {
+		return fmt.Errorf("failed to install/update stork: %v", err)
+	}
+
 	// Construct histories of the StorageCluster, and get the hash of current history
 	cur, old, err := c.constructHistory(cluster)
 	if err != nil {
@@ -329,6 +343,10 @@ func (c *Controller) deleteStorageCluster(
 			}
 		}
 	}
+
+	c.isStorkServiceCreated = false
+	c.isStorkDeploymentCreated = false
+	c.isStorkSchedDeploymentCreated = false
 
 	return nil
 }
