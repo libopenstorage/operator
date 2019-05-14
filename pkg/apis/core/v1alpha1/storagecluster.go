@@ -53,9 +53,13 @@ type StorageClusterSpec struct {
 	// ImagePullPolicy is the image pull policy.
 	// One of Always, Never, IfNotPresent. Defaults to Always.
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	// ImagePullSecret is a reference to secret in the 'kube-system'
-	// namespace used for pulling images used by this StorageClusterSpec
+	// ImagePullSecret is a reference to secret in the same namespace as the
+	// storage cluster, used for pulling images used by this StorageClusterSpec
 	ImagePullSecret *string `json:"imagePullSecret,omitempty"`
+	// CustomImageRegistry is a custom container registry server (may include
+	// repository) that will be used instead of index.docker.io to download Docker
+	// images. (Example: myregistry.net:5443 or myregistry.com/myrepository)
+	CustomImageRegistry string `json:"customImageRegistry,omitempty"`
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
@@ -73,6 +77,11 @@ type StorageClusterSpec struct {
 	FeatureGates map[string]string `json:"featureGates,omitempty"`
 	// CommonConfig that is present at both cluster and node level
 	CommonConfig
+	// UserInterface contains details of a user interface for the storage driver
+	UserInterface *UserInterfaceSpec `json:"userInterface,omitempty"`
+	// Stork contains STORK related parameters. For more information about STORK,
+	// check https://github.com/libopenstorage/stork
+	Stork *StorkSpec `json:"stork,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	// Nodes []NodeSpec `json:"nodes"`
@@ -248,6 +257,24 @@ type Geography struct {
 	Zone string `json:"zone,omitempty"`
 	// Rack rack on which the node is placed
 	Rack string `json:"rack,omitempty"`
+}
+
+// UserInterfaceSpec contains details of a user interface for the storage driver
+type UserInterfaceSpec struct {
+	// Enabled decides whether the user interface component needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is the docker image of the user interface container
+	Image string `json:"image,omitempty"`
+}
+
+// StorkSpec contains STORK related spec
+type StorkSpec struct {
+	// Enabled decides whether STORK needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is docker image of the STORK container
+	Image string `json:"image,omitempty"`
+	// Args is a map of arguments given to STORK
+	Args map[string]string `json:"args,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster
