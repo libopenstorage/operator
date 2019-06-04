@@ -326,7 +326,7 @@ func CreateOrUpdateConfigMap(
 		existingConfigMap,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %v config map", configMap.Name)
+		logrus.Debugf("Creating %v config map", configMap.Name)
 		return k8sClient.Create(context.TODO(), configMap)
 	} else if err != nil {
 		return err
@@ -342,7 +342,7 @@ func CreateOrUpdateConfigMap(
 	}
 
 	if modified || len(configMap.OwnerReferences) > len(existingConfigMap.OwnerReferences) {
-		logrus.Infof("Updating %v config map", configMap.Name)
+		logrus.Debugf("Updating %v config map", configMap.Name)
 		return k8sClient.Update(context.TODO(), configMap)
 	}
 	return nil

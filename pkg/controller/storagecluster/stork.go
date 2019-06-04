@@ -144,8 +144,7 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	policyConfig := fmt.Sprintf(`
-{
+	policyConfig := fmt.Sprintf(`{
   "kind": "Policy",
   "apiVersion": "v1",
   "extenders": [

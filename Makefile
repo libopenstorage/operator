@@ -31,10 +31,10 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 all: operator pretest
 
 vendor-update:
-	dep ensure -update
+	dep ensure -v -update
 
 vendor:
-	dep ensure
+	dep ensure -v
 
 lint:
 	go get -u golang.org/x/lint/golint
@@ -70,6 +70,9 @@ test:
 			rm profile.out; \
 		fi; \
 	done
+	sed -i '/mode: atomic/d' coverage.txt
+	sed -i '1d' coverage.txt
+	sed -i '1s/^/mode: atomic\n/' coverage.txt
 
 codegen:
 	@echo "Generating CRD"
