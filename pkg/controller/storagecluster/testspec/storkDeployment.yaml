@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    scheduler.alpha.kubernetes.io/critical-pod: ""
+  labels:
+    tier: control-plane
+  name: stork
+  namespace: kube-test
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 3
+  selector:
+    matchLabels:
+      name: stork
+      tier: control-plane
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        name: stork
+        tier: control-plane
+    spec:
+      containers:
+      - command:
+        - /stork
+        - --driver=pxd
+        - --health-monitor-interval=120
+        - --leader-elect=true
+        - --verbose=true
+        imagePullPolicy: Always
+        image: osd/stork:test
+        resources:
+          requests:
+            cpu: '0.1'
+        name: stork
+      hostPID: false
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "name"
+                    operator: In
+                    values:
+                    - stork
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: stork

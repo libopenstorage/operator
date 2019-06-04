@@ -1,0 +1,13 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: stork-service
+  namespace: kube-test
+spec:
+  type: ClusterIP
+  selector:
+    name: stork
+  ports:
+  - protocol: TCP
+    port: 8099
+    targetPort: 8099

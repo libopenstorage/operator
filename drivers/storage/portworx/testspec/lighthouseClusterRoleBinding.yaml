@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: px-lighthouse
+subjects:
+  - kind: ServiceAccount
+    name: px-lighthouse
+    namespace: kube-test
+roleRef:
+  kind: ClusterRole
+  name: px-lighthouse
+  apiGroup: rbac.authorization.k8s.io

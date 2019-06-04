@@ -122,7 +122,7 @@ func (p *portworx) setupPortworxService(t *template) error {
 
 func (p *portworx) setupPortworxAPI(t *template) error {
 	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
-	if !p.pxAPIDaemonSetCreated {
+	if !p.pxAPIServiceCreated {
 		if err := p.createPortworxAPIService(t, ownerRef); err != nil {
 			return err
 		}
@@ -375,12 +375,12 @@ func (p *portworx) createClusterRole(ownerRef *metav1.OwnerReference) error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"nodes"},
-					Verbs:     []string{"get", "update", "list", "watch"},
+					Verbs:     []string{"get", "list", "watch", "update"},
 				},
 				{
 					APIGroups: []string{""},
 					Resources: []string{"pods"},
-					Verbs:     []string{"get", "list", "delete", "watch", "update"},
+					Verbs:     []string{"get", "list", "watch", "delete", "update"},
 				},
 				{
 					APIGroups: []string{""},
@@ -390,7 +390,7 @@ func (p *portworx) createClusterRole(ownerRef *metav1.OwnerReference) error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"configmaps"},
-					Verbs:     []string{"get", "update", "list", "create"},
+					Verbs:     []string{"get", "list", "create", "update"},
 				},
 				{
 					APIGroups:     []string{"extensions"},
@@ -421,7 +421,7 @@ func (p *portworx) createPVCControllerClusterRole(ownerRef *metav1.OwnerReferenc
 				{
 					APIGroups: []string{""},
 					Resources: []string{"persistentvolumes"},
-					Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
 				},
 				{
 					APIGroups: []string{""},
@@ -431,7 +431,7 @@ func (p *portworx) createPVCControllerClusterRole(ownerRef *metav1.OwnerReferenc
 				{
 					APIGroups: []string{""},
 					Resources: []string{"persistentvolumeclaims"},
-					Verbs:     []string{"get", "list", "update", "watch"},
+					Verbs:     []string{"get", "list", "watch", "update"},
 				},
 				{
 					APIGroups: []string{""},
@@ -441,7 +441,7 @@ func (p *portworx) createPVCControllerClusterRole(ownerRef *metav1.OwnerReferenc
 				{
 					APIGroups: []string{""},
 					Resources: []string{"pods"},
-					Verbs:     []string{"create", "delete", "get", "list", "watch"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete"},
 				},
 				{
 					APIGroups: []string{"storage.k8s.io"},
@@ -451,7 +451,7 @@ func (p *portworx) createPVCControllerClusterRole(ownerRef *metav1.OwnerReferenc
 				{
 					APIGroups: []string{""},
 					Resources: []string{"endpoints", "services"},
-					Verbs:     []string{"create", "delete", "get", "update"},
+					Verbs:     []string{"get", "create", "delete", "update"},
 				},
 				{
 					APIGroups: []string{""},
@@ -466,7 +466,7 @@ func (p *portworx) createPVCControllerClusterRole(ownerRef *metav1.OwnerReferenc
 				{
 					APIGroups: []string{""},
 					Resources: []string{"events"},
-					Verbs:     []string{"create", "update", "patch", "watch"},
+					Verbs:     []string{"watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{""},
@@ -677,6 +677,18 @@ func (p *portworx) createPortworxAPIService(
 					Port:       int32(9001),
 					TargetPort: intstr.FromInt(t.startPort),
 				},
+				{
+					Name:       "px-sdk",
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(9020),
+					TargetPort: intstr.FromInt(t.startPort + 19),
+				},
+				{
+					Name:       "px-rest-gateway",
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(9021),
+					TargetPort: intstr.FromInt(t.startPort + 20),
+				},
 			},
 		},
 	}
@@ -873,14 +885,7 @@ func (p *portworx) createLighthouseDeployment(
 		return err
 	}
 
-	var existingImage string
-	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
-		if c.Name == lhContainerName {
-			existingImage = c.Image
-			break
-		}
-	}
-
+	existingImage := getLighthouseImage(existingDeployment)
 	lhImageName := util.GetImageURN(
 		t.cluster.Spec.CustomImageRegistry,
 		t.cluster.Spec.UserInterface.Image,
@@ -1043,6 +1048,7 @@ func (p *portworx) createPortworxAPIDaemonSet(
 								PeriodSeconds: int32(10),
 								Handler: v1.Handler{
 									HTTPGet: &v1.HTTPGetAction{
+										Host: "127.0.0.1",
 										Path: "/status",
 										Port: intstr.FromInt(t.startPort),
 									},
@@ -1074,4 +1080,13 @@ func getLighthouseLabels() map[string]string {
 	return map[string]string{
 		"tier": "px-web-console",
 	}
+}
+
+func getLighthouseImage(deployment *appsv1.Deployment) string {
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == lhContainerName {
+			return c.Image
+		}
+	}
+	return ""
 }
