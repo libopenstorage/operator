@@ -62,7 +62,14 @@ staticcheck:
 pretest: check-fmt lint vet staticcheck
 
 test:
-	go test -v $(PKGS)
+	echo "" > coverage.txt
+	for pkg in $(PKGS);	do \
+		go test -v -coverprofile=profile.out -covermode=atomic $${pkg} || exit 1; \
+		if [ -f profile.out ]; then \
+			cat profile.out >> coverage.txt; \
+			rm profile.out; \
+		fi; \
+	done
 
 codegen:
 	@echo "Generating CRD"
