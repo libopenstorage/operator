@@ -40,6 +40,7 @@ spec:
   version: 1.0.3
   minKubeVersion: "1.10.0"
   maturity: alpha
+  replaces: portworx-operator.v1.0.0
   maintainers:
   - name: Portworx
     email: support@portworx.com
