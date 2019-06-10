@@ -2,6 +2,8 @@ package storagecluster
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path"
 	"testing"
@@ -18,11 +20,13 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -52,22 +56,31 @@ func TestStorkInstallation(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 
 	require.NoError(t, err)
 
 	// Stork ConfigMap
-	expectedCM := getExpectedConfigMap(t, "storkConfigMap.yaml")
+	expectedPolicy, _ := json.Marshal(schedulerv1.Policy{
+		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+			{
+				URLPrefix:      "http://stork-service.kube-test:8099",
+				FilterVerb:     "filter",
+				PrioritizeVerb: "prioritize",
+				Weight:         5,
+			},
+		},
+	})
 	storkConfigMap := &v1.ConfigMap{}
 	err = get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, expectedCM.Name, storkConfigMap.Name)
-	require.Equal(t, expectedCM.Namespace, storkConfigMap.Namespace)
+	require.Equal(t, storkConfigMapName, storkConfigMap.Name)
+	require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
 	require.Len(t, storkConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
-	require.Equal(t, expectedCM.Data, storkConfigMap.Data)
+	require.Equal(t, string(expectedPolicy), storkConfigMap.Data["policy.cfg"])
 
 	// ServiceAccounts
 	serviceAccountList := &v1.ServiceAccountList{}
@@ -224,10 +237,13 @@ func TestStorkWithoutImage(t *testing.T) {
 		},
 	}
 
+	driver := mockDriver(t)
 	controller := Controller{
 		client: fakeK8sClient(cluster),
-		Driver: mockDriver(t),
+		Driver: driver,
 	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.EqualError(t, err, "stork image cannot be empty")
@@ -262,7 +278,7 @@ func TestStorkImageChange(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd").Times(2)
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -311,7 +327,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd").Times(2)
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -345,6 +361,176 @@ func TestStorkArgumentsChange(t *testing.T) {
 	)
 }
 
+func TestStorkCPUChange(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity := resource.MustParse(defaultStorkCPU)
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Change the CPU resource required for Stork deployment
+	expectedCPU := "0.2"
+	cluster.Annotations = map[string]string{annotationStorkCPU: expectedCPU}
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity = resource.MustParse(expectedCPU)
+	err = get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+}
+
+func TestStorkSchedulerCPUChange(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity := resource.MustParse(defaultStorkCPU)
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Change the CPU resource required for Stork scheduler deployment
+	expectedCPU := "0.2"
+	cluster.Annotations = map[string]string{annotationStorkSchedCPU: expectedCPU}
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity = resource.MustParse(expectedCPU)
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+}
+
+func TestStorkInvalidCPU(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationStorkCPU: "invalid-cpu",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.Error(t, err)
+}
+
+func TestStorkSchedulerInvalidCPU(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationStorkSchedCPU: "invalid-cpu",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.Error(t, err)
+}
+
 func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1alpha1.StorageCluster{
@@ -372,7 +558,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -422,7 +608,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -475,7 +661,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -524,7 +710,7 @@ func TestDisableStork(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 
@@ -649,7 +835,7 @@ func TestRemoveStork(t *testing.T) {
 		Driver: driver,
 	}
 
-	driver.EXPECT().GetStorkDriverName().Return("pxd")
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
 
@@ -749,6 +935,82 @@ func TestRemoveStork(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestStorkDriverNotImplemented(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("", fmt.Errorf("not supported"))
+	driver.EXPECT().String().Return("mock")
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkCM := &v1.ConfigMap{}
+	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkSA := &v1.ServiceAccount{}
+	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkSchedSA := &v1.ServiceAccount{}
+	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkCR := &rbacv1.ClusterRole{}
+	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	schedCR := &rbacv1.ClusterRole{}
+	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	storkCRB := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	schedCRB := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	storkService := &v1.Service{}
+	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	schedDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkSC := &storagev1.StorageClass{}
+	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	require.True(t, errors.IsNotFound(err))
+}
+
 func mockDriver(t *testing.T) *mock.MockDriver {
 	mockCtrl := gomock.NewController(t)
 	mockDriver := mock.NewMockDriver(mockCtrl)
@@ -802,13 +1064,6 @@ func getExpectedDeployment(t *testing.T, fileName string) *appsv1.Deployment {
 	deployment, ok := obj.(*appsv1.Deployment)
 	assert.True(t, ok, "Expected Deployment object")
 	return deployment
-}
-
-func getExpectedConfigMap(t *testing.T, fileName string) *v1.ConfigMap {
-	obj := getKubernetesObject(t, fileName)
-	configMap, ok := obj.(*v1.ConfigMap)
-	assert.True(t, ok, "Expected ConfigMap object")
-	return configMap
 }
 
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {

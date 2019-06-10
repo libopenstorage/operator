@@ -19,7 +19,7 @@ type Driver interface {
 	String() string
 
 	// GetStorkDriverName returns the string name of the driver in stork
-	GetStorkDriverName() string
+	GetStorkDriverName() (string, error)
 
 	// ClusterPluginInterface interface to manage storage cluster
 	ClusterPluginInterface

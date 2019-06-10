@@ -14,6 +14,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -551,6 +552,72 @@ func verifyPVCControllerDeployment(
 	require.Equal(t, expectedDeployment.Labels, actualDeployment.Labels)
 	require.Equal(t, expectedDeployment.Annotations, actualDeployment.Annotations)
 	require.Equal(t, expectedDeployment.Spec, actualDeployment.Spec)
+}
+
+func TestPVCControllerCustomCPU(t *testing.T) {
+	// Set fake kubernetes client for k8s version
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity := resource.MustParse(defaultPVCControllerCPU)
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Change the CPU resource required for PVC controller deployment
+	expectedCPU := "300m"
+	cluster.Annotations[annotationPVCControllerCPU] = expectedCPU
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity = resource.MustParse(expectedCPU)
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+}
+
+func TestPVCControllerInvalidCPU(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController:    "true",
+				annotationPVCControllerCPU: "invalid-cpu",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.Error(t, err)
 }
 
 func TestLighthouseInstall(t *testing.T) {

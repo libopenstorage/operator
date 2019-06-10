@@ -74,10 +74,11 @@ func (mr *MockDriverMockRecorder) GetStoragePodSpec(arg0 interface{}) *gomock.Ca
 }
 
 // GetStorkDriverName mocks base method
-func (m *MockDriver) GetStorkDriverName() string {
+func (m *MockDriver) GetStorkDriverName() (string, error) {
 	ret := m.ctrl.Call(m, "GetStorkDriverName")
 	ret0, _ := ret[0].(string)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetStorkDriverName indicates an expected call of GetStorkDriverName

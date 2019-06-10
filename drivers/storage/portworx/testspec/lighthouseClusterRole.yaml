@@ -14,5 +14,5 @@ rules:
     resources: ["nodes", "services"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["stork.libopenstorage.org"]
-    resources: ["clusterpairs","migrations"]
+    resources: ["*"]
     verbs: ["get", "list", "create", "delete", "update"]

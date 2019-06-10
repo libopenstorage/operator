@@ -14,19 +14,20 @@ import (
 )
 
 const (
-	pxContainerName         = "portworx"
-	pxAnnotationPrefix      = "portworx.io"
-	annotationIsPKS         = pxAnnotationPrefix + "/is-pks"
-	annotationIsGKE         = pxAnnotationPrefix + "/is-gke"
-	annotationIsAKS         = pxAnnotationPrefix + "/is-aks"
-	annotationIsEKS         = pxAnnotationPrefix + "/is-eks"
-	annotationIsOpenshift   = pxAnnotationPrefix + "/is-openshift"
-	annotationPVCController = pxAnnotationPrefix + "/pvc-controller"
-	annotationLogFile       = pxAnnotationPrefix + "/log-file"
-	annotationCSIVersion    = pxAnnotationPrefix + "/csi-version"
-	annotationMiscArgs      = pxAnnotationPrefix + "/misc-args"
-	templateVersion         = "v4"
-	csiBasePath             = "/var/lib/kubelet/plugins/com.openstorage.pxd"
+	pxContainerName            = "portworx"
+	pxAnnotationPrefix         = "portworx.io"
+	annotationIsPKS            = pxAnnotationPrefix + "/is-pks"
+	annotationIsGKE            = pxAnnotationPrefix + "/is-gke"
+	annotationIsAKS            = pxAnnotationPrefix + "/is-aks"
+	annotationIsEKS            = pxAnnotationPrefix + "/is-eks"
+	annotationIsOpenshift      = pxAnnotationPrefix + "/is-openshift"
+	annotationPVCController    = pxAnnotationPrefix + "/pvc-controller"
+	annotationLogFile          = pxAnnotationPrefix + "/log-file"
+	annotationCSIVersion       = pxAnnotationPrefix + "/csi-version"
+	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
+	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
+	templateVersion            = "v4"
+	csiBasePath                = "/var/lib/kubelet/plugins/com.openstorage.pxd"
 )
 
 type volumeInfo struct {
