@@ -2,6 +2,7 @@ package storagecluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
+	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -20,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
 )
 
 const (
@@ -35,14 +38,25 @@ const (
 	storkSchedClusterRoleName        = "stork-scheduler"
 	storkSchedClusterRoleBindingName = "stork-scheduler"
 	storkSchedDeploymentName         = "stork-scheduler"
+	storkSchedContainerName          = "stork-scheduler"
 	storkServicePort                 = 8099
+)
+
+const (
+	defaultStorkCPU         = "0.1"
+	annotationStorkCPU      = operatorPrefix + "/stork-cpu"
+	annotationStorkSchedCPU = operatorPrefix + "/stork-scheduler-cpu"
 )
 
 func (c *Controller) syncStork(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
-		return c.setupStork(cluster)
+		_, err := c.Driver.GetStorkDriverName()
+		if err == nil {
+			return c.setupStork(cluster)
+		}
+		logrus.Warnf("Cannot install Stork for %s driver: %v", c.Driver.String(), err)
 	}
 	return c.removeStork(cluster.Namespace)
 }
@@ -87,11 +101,8 @@ func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) e
 	if err := c.createStorkSchedClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if !c.isStorkSchedDeploymentCreated {
-		if err := c.createStorkSchedDeployment(cluster, ownerRef); err != nil {
-			return err
-		}
-		c.isStorkSchedDeploymentCreated = true
+	if err := c.createStorkSchedDeployment(cluster, ownerRef); err != nil {
+		return err
 	}
 	return nil
 }
@@ -144,21 +155,25 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	policyConfig := fmt.Sprintf(`{
-  "kind": "Policy",
-  "apiVersion": "v1",
-  "extenders": [
-    {
-      "urlPrefix": "http://%s.%s:%d",
-      "apiVersion": "v1beta1",
-      "filterVerb": "filter",
-      "prioritizeVerb": "prioritize",
-      "weight": 5,
-      "enableHttps": false,
-      "nodeCacheCapable": false
-    }
-  ]
-}`, storkServiceName, clusterNamespace, storkServicePort)
+	policy := schedulerv1.Policy{
+		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+			{
+				URLPrefix: fmt.Sprintf(
+					"http://%s.%s:%d",
+					storkServiceName, clusterNamespace, storkServicePort,
+				),
+				FilterVerb:       "filter",
+				PrioritizeVerb:   "prioritize",
+				Weight:           5,
+				EnableHTTPS:      false,
+				NodeCacheCapable: false,
+			},
+		},
+	}
+	policyConfig, err := json.Marshal(policy)
+	if err != nil {
+		return err
+	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
 		c.client,
@@ -169,7 +184,7 @@ func (c *Controller) createStorkConfigMap(
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: map[string]string{
-				"policy.cfg": policyConfig,
+				"policy.cfg": string(policyConfig),
 			},
 		},
 		ownerRef,
@@ -485,12 +500,16 @@ func (c *Controller) createStorkDeployment(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	storkDriverName, err := c.Driver.GetStorkDriverName()
+	if err != nil {
+		return err
+	}
 	if cluster.Spec.Stork.Image == "" {
 		return fmt.Errorf("stork image cannot be empty")
 	}
 
 	existingDeployment := &apps.Deployment{}
-	err := c.client.Get(
+	err = c.client.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      storkDeploymentName,
@@ -499,6 +518,15 @@ func (c *Controller) createStorkDeployment(
 		existingDeployment,
 	)
 	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	targetCPU := defaultStorkCPU
+	if cpuStr, ok := cluster.Annotations[annotationStorkCPU]; ok {
+		targetCPU = cpuStr
+	}
+	targetCPUQuantity, err := resource.ParseQuantity(targetCPU)
+	if err != nil {
 		return err
 	}
 
@@ -513,7 +541,7 @@ func (c *Controller) createStorkDeployment(
 			args[key] = v
 		}
 	}
-	args["driver"] = c.Driver.GetStorkDriverName()
+	args["driver"] = storkDriverName
 
 	argList := make([]string, 0)
 	for k, v := range args {
@@ -524,10 +552,12 @@ func (c *Controller) createStorkDeployment(
 
 	var existingImage string
 	var existingCommand []string
+	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
+			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
@@ -538,13 +568,12 @@ func (c *Controller) createStorkDeployment(
 	)
 
 	// Check if image or args are modified
-	modified := existingImage != imageName || !reflect.DeepEqual(existingCommand, command)
+	modified := existingImage != imageName ||
+		!reflect.DeepEqual(existingCommand, command) ||
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
 
 	if !c.isStorkDeploymentCreated || modified {
-		deployment, err := getStorkDeploymentSpec(cluster, ownerRef, imageName, command)
-		if err != nil {
-			return err
-		}
+		deployment := getStorkDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -558,16 +587,12 @@ func getStorkDeploymentSpec(
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
-) (*apps.Deployment, error) {
+	cpuQuantity resource.Quantity,
+) *apps.Deployment {
 	imagePullPolicy := v1.PullAlways
 	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
 		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
 		imagePullPolicy = cluster.Spec.ImagePullPolicy
-	}
-
-	cpuQuantity, err := resource.ParseQuantity("0.1")
-	if err != nil {
-		return nil, err
 	}
 
 	deploymentLabels := map[string]string{
@@ -660,18 +685,62 @@ func getStorkDeploymentSpec(
 		)
 	}
 
-	return deployment, nil
+	return deployment
 }
 
 func (c *Controller) createStorkSchedDeployment(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	cpuQuantity, err := resource.ParseQuantity("0.1")
+	targetCPU := defaultStorkCPU
+	if cpuStr, ok := cluster.Annotations[annotationStorkSchedCPU]; ok {
+		targetCPU = cpuStr
+	}
+	targetCPUQuantity, err := resource.ParseQuantity(targetCPU)
 	if err != nil {
 		return err
 	}
 
+	existingDeployment := &apps.Deployment{}
+	err = c.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      storkSchedDeploymentName,
+			Namespace: cluster.Namespace,
+		},
+		existingDeployment,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	var existingCPUQuantity resource.Quantity
+	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
+		if c.Name == storkSchedContainerName {
+			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
+		}
+	}
+
+	modified := existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+
+	if !c.isStorkSchedDeploymentCreated || modified {
+		deployment, err := getStorkSchedDeploymentSpec(cluster, ownerRef, targetCPUQuantity)
+		if err != nil {
+			return err
+		}
+		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
+			return err
+		}
+	}
+	c.isStorkSchedDeploymentCreated = true
+	return nil
+}
+
+func getStorkSchedDeploymentSpec(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	cpuQuantity resource.Quantity,
+) (*apps.Deployment, error) {
 	templateLabels := map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
@@ -685,11 +754,11 @@ func (c *Controller) createStorkSchedDeployment(
 
 	k8sVersion, err := k8s.Instance().GetVersion()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
 	if len(matches) < 2 {
-		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
 	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
 		"gcr.io/google_containers/kube-scheduler-amd64:"+matches[1])
@@ -717,7 +786,7 @@ func (c *Controller) createStorkSchedDeployment(
 					ServiceAccountName: storkSchedServiceAccountName,
 					Containers: []v1.Container{
 						{
-							Name:  "stork-scheduler",
+							Name:  storkSchedDeploymentName,
 							Image: imageName,
 							Command: []string{
 								"/usr/local/bin/kube-scheduler",
@@ -786,7 +855,7 @@ func (c *Controller) createStorkSchedDeployment(
 		)
 	}
 
-	return k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef)
+	return deployment, nil
 }
 
 func getStorkServiceLabels() map[string]string {

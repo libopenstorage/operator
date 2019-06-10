@@ -48,8 +48,8 @@ func (p *portworx) Init(k8sClient client.Client) error {
 	return nil
 }
 
-func (p *portworx) GetStorkDriverName() string {
-	return storkDriverName
+func (p *portworx) GetStorkDriverName() (string, error) {
+	return storkDriverName, nil
 }
 
 func (p *portworx) GetSelectorLabels() map[string]string {

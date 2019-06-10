@@ -35,12 +35,17 @@ const (
 	pvcClusterRoleName        = "portworx-pvc-controller"
 	pvcClusterRoleBindingName = "portworx-pvc-controller"
 	pvcDeploymentName         = "portworx-pvc-controller"
+	pvcContainerName          = "portworx-pvc-controller-manager"
 	lhServiceAccountName      = "px-lighthouse"
 	lhClusterRoleName         = "px-lighthouse"
 	lhClusterRoleBindingName  = "px-lighthouse"
 	lhServiceName             = "px-lighthouse"
 	lhDeploymentName          = "px-lighthouse"
 	lhContainerName           = "px-lighthouse"
+)
+
+const (
+	defaultPVCControllerCPU = "200m"
 )
 
 var (
@@ -148,11 +153,8 @@ func (p *portworx) setupPVCController(t *template) error {
 	if err := p.createPVCControllerClusterRoleBinding(t.cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if !p.pvcControllerDeploymentCreated {
-		if err := p.createPVCControllerDeployment(t, ownerRef); err != nil {
-			return err
-		}
-		p.pvcControllerDeploymentCreated = true
+	if err := p.createPVCControllerDeployment(t, ownerRef); err != nil {
+		return err
 	}
 	return nil
 }
@@ -510,7 +512,7 @@ func (p *portworx) createLighthouseClusterRole(ownerRef *metav1.OwnerReference) 
 				},
 				{
 					APIGroups: []string{"stork.libopenstorage.org"},
-					Resources: []string{"clusterpairs", "migrations"},
+					Resources: []string{"*"},
 					Verbs:     []string{"get", "list", "create", "delete", "update"},
 				},
 			},
@@ -740,10 +742,55 @@ func (p *portworx) createPVCControllerDeployment(
 	t *template,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	cpuQuantity, err := resource.ParseQuantity("200m")
+	targetCPU := defaultPVCControllerCPU
+	if cpuStr, ok := t.cluster.Annotations[annotationPVCControllerCPU]; ok {
+		targetCPU = cpuStr
+	}
+	targetCPUQuantity, err := resource.ParseQuantity(targetCPU)
 	if err != nil {
 		return err
 	}
+
+	existingDeployment := &appsv1.Deployment{}
+	err = p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      pvcDeploymentName,
+			Namespace: t.cluster.Namespace,
+		},
+		existingDeployment,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	var existingCPUQuantity resource.Quantity
+	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
+		if c.Name == pvcContainerName {
+			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
+		}
+	}
+
+	modified := existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+
+	if !p.pvcControllerDeploymentCreated || modified {
+		deployment, err := getPVCControllerDeploymentSpec(t, ownerRef, targetCPUQuantity)
+		if err != nil {
+			return err
+		}
+		if err = k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef); err != nil {
+			return err
+		}
+	}
+	p.pvcControllerDeploymentCreated = true
+	return nil
+}
+
+func getPVCControllerDeploymentSpec(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+	cpuQuantity resource.Quantity,
+) (*appsv1.Deployment, error) {
 	containerArgs := []string{
 		"kube-controller-manager",
 		"--leader-elect=true",
@@ -763,11 +810,11 @@ func (p *portworx) createPVCControllerDeployment(
 
 	k8sVersion, err := k8s.Instance().GetVersion()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
 	if len(matches) < 2 {
-		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
 	imageName := util.GetImageURN(t.cluster.Spec.CustomImageRegistry,
 		"gcr.io/google_containers/kube-controller-manager-amd64:"+matches[1])
@@ -777,7 +824,7 @@ func (p *portworx) createPVCControllerDeployment(
 		"tier": "control-plane",
 	}
 
-	newDeployment := &appsv1.Deployment{
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pvcDeploymentName,
 			Namespace:       t.cluster.Namespace,
@@ -813,7 +860,7 @@ func (p *portworx) createPVCControllerDeployment(
 					HostNetwork:        true,
 					Containers: []v1.Container{
 						{
-							Name:    "portworx-pvc-controller-manager",
+							Name:    pvcContainerName,
 							Image:   imageName,
 							Command: containerArgs,
 							LivenessProbe: &v1.Probe{
@@ -859,9 +906,7 @@ func (p *portworx) createPVCControllerDeployment(
 				},
 			},
 		},
-	}
-
-	return k8sutil.CreateOrUpdateDeployment(p.k8sClient, newDeployment, ownerRef)
+	}, nil
 }
 
 func (p *portworx) createLighthouseDeployment(
