@@ -1186,7 +1186,7 @@
   revision = "0317810137be915b9cf888946c6e115c1bfac693"
 
 [[projects]]
-  digest = "1:a3c1ad9ff738c540513bed415e25eb8450116c8f2d39c74f6656411a5776d57a"
+  digest = "1:00d6b09a0e7ac881b6a387b012794baf26f728ccc870054554ecb5bebbcaeb7c"
   name = "k8s.io/kubernetes"
   packages = [
     "pkg/api/legacyscheme",
@@ -1218,6 +1218,7 @@
     "pkg/scheduler/algorithm/predicates",
     "pkg/scheduler/algorithm/priorities/util",
     "pkg/scheduler/api",
+    "pkg/scheduler/api/v1",
     "pkg/scheduler/cache",
     "pkg/scheduler/util",
     "pkg/scheduler/volumebinder",
@@ -1362,6 +1363,7 @@
     "k8s.io/kubernetes/pkg/scheduler/algorithm",
     "k8s.io/kubernetes/pkg/scheduler/algorithm/predicates",
     "k8s.io/kubernetes/pkg/scheduler/api",
+    "k8s.io/kubernetes/pkg/scheduler/api/v1",
     "k8s.io/kubernetes/pkg/scheduler/cache",
     "k8s.io/kubernetes/pkg/util/hash",
     "k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals",
