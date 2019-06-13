@@ -448,27 +448,69 @@ func CreateOrUpdateService(
 		return err
 	}
 
-	ownerRefPresent := false
-	for _, o := range existingService.OwnerReferences {
-		if o.UID == ownerRef.UID {
-			ownerRefPresent = true
-			break
+	ownerRefs := make([]metav1.OwnerReference, 0)
+	if ownerRef != nil {
+		ownerRefs = append(ownerRefs, *ownerRef)
+		for _, o := range existingService.OwnerReferences {
+			if o.UID != ownerRef.UID {
+				ownerRefs = append(ownerRefs, o)
+			}
 		}
 	}
-	if !ownerRefPresent {
-		if existingService.OwnerReferences == nil {
-			existingService.OwnerReferences = make([]metav1.OwnerReference, 0)
-		}
-		existingService.OwnerReferences = append(existingService.OwnerReferences, *ownerRef)
+
+	modified := existingService.Spec.Type != service.Spec.Type ||
+		!reflect.DeepEqual(existingService.Labels, service.Labels) ||
+		!reflect.DeepEqual(existingService.Spec.Selector, service.Spec.Selector)
+
+	portMapping := make(map[string]v1.ServicePort)
+	for _, port := range service.Spec.Ports {
+		portMapping[port.Name] = port
 	}
 
-	existingService.Labels = service.Labels
-	existingService.Spec.Selector = service.Spec.Selector
-	existingService.Spec.Type = service.Spec.Type
-	existingService.Spec.Ports = service.Spec.Ports
+	servicePorts := make([]v1.ServicePort, 0)
+	for _, existingPort := range existingService.Spec.Ports {
+		newPort, exists := portMapping[existingPort.Name]
+		if !exists {
+			// The port is no longer present in the new ports list
+			modified = true
+			continue
+		}
+		if existingPort.Protocol == "" {
+			existingPort.Protocol = v1.ProtocolTCP
+		}
+		if newPort.Protocol == "" {
+			newPort.Protocol = v1.ProtocolTCP
+		}
+		if existingPort.Port != newPort.Port ||
+			!reflect.DeepEqual(existingPort.TargetPort, newPort.TargetPort) ||
+			existingPort.Protocol != newPort.Protocol {
+			modified = true
+		}
+		toUpdate := existingPort.DeepCopy()
+		toUpdate.Port = newPort.Port
+		toUpdate.TargetPort = newPort.TargetPort
+		toUpdate.Protocol = newPort.Protocol
+		servicePorts = append(servicePorts, *toUpdate)
+		delete(portMapping, newPort.Name)
+	}
 
-	logrus.Debugf("Updating %s service", service.Name)
-	return k8sClient.Update(context.TODO(), existingService)
+	// Copy new ports that were not present in the service before
+	for _, port := range portMapping {
+		modified = true
+		toUpdate := port.DeepCopy()
+		servicePorts = append(servicePorts, *toUpdate)
+	}
+
+	if modified || len(ownerRefs) > len(existingService.OwnerReferences) {
+		existingService.OwnerReferences = ownerRefs
+		existingService.Labels = service.Labels
+		existingService.Spec.Selector = service.Spec.Selector
+		existingService.Spec.Type = service.Spec.Type
+		existingService.Spec.Ports = servicePorts
+		logrus.Debugf("Updating %s service", service.Name)
+		return k8sClient.Update(context.TODO(), existingService)
+	}
+	return nil
 }
 
 // DeleteService deletes a service if present

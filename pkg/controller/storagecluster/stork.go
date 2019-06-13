@@ -75,11 +75,8 @@ func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createStorkClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if !c.isStorkServiceCreated {
-		if err := c.createStorkService(cluster.Namespace, ownerRef); err != nil {
-			return err
-		}
-		c.isStorkServiceCreated = true
+	if err := c.createStorkService(cluster.Namespace, ownerRef); err != nil {
+		return err
 	}
 	if err := c.createStorkDeployment(cluster, ownerRef); err != nil {
 		return err
@@ -123,7 +120,6 @@ func (c *Controller) removeStork(namespace string) error {
 	if err := k8sutil.DeleteService(c.client, storkServiceName, namespace); err != nil {
 		return err
 	}
-	c.isStorkServiceCreated = false
 	if err := k8sutil.DeleteDeployment(c.client, storkDeploymentName, namespace); err != nil {
 		return err
 	}
@@ -550,6 +546,11 @@ func (c *Controller) createStorkDeployment(
 	sort.Strings(argList)
 	command := append([]string{"/stork"}, argList...)
 
+	imageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		cluster.Spec.Stork.Image,
+	)
+
 	var existingImage string
 	var existingCommand []string
 	var existingCPUQuantity resource.Quantity
@@ -561,11 +562,6 @@ func (c *Controller) createStorkDeployment(
 			break
 		}
 	}
-
-	imageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
-		cluster.Spec.Stork.Image,
-	)
 
 	// Check if image or args are modified
 	modified := existingImage != imageName ||
@@ -701,6 +697,27 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return err
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
+		"gcr.io/google_containers/kube-scheduler-amd64:"+matches[1])
+
+	command := []string{
+		"/usr/local/bin/kube-scheduler",
+		"--address=0.0.0.0",
+		"--leader-elect=true",
+		"--scheduler-name=stork",
+		"--policy-configmap=stork-config",
+		"--policy-configmap-namespace=kube-system",
+		"--lock-object-name=stork-scheduler",
+	}
+
 	existingDeployment := &apps.Deployment{}
 	err = c.client.Get(
 		context.TODO(),
@@ -714,20 +731,23 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
+	var existingImage string
+	var existingCommand []string
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkSchedContainerName {
+			existingImage = c.Image
+			existingCommand = c.Command
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 		}
 	}
 
-	modified := existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+	modified := existingImage != imageName ||
+		!reflect.DeepEqual(existingCommand, command) ||
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
 
 	if !c.isStorkSchedDeploymentCreated || modified {
-		deployment, err := getStorkSchedDeploymentSpec(cluster, ownerRef, targetCPUQuantity)
-		if err != nil {
-			return err
-		}
+		deployment := getStorkSchedDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -739,8 +759,10 @@ func (c *Controller) createStorkSchedDeployment(
 func getStorkSchedDeploymentSpec(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	imageName string,
+	command []string,
 	cpuQuantity resource.Quantity,
-) (*apps.Deployment, error) {
+) *apps.Deployment {
 	templateLabels := map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
@@ -751,17 +773,6 @@ func getStorkSchedDeploymentSpec(
 	for k, v := range templateLabels {
 		deploymentLabels[k] = v
 	}
-
-	k8sVersion, err := k8s.Instance().GetVersion()
-	if err != nil {
-		return nil, err
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-scheduler-amd64:"+matches[1])
 
 	replicas := int32(3)
 
@@ -786,17 +797,9 @@ func getStorkSchedDeploymentSpec(
 					ServiceAccountName: storkSchedServiceAccountName,
 					Containers: []v1.Container{
 						{
-							Name:  storkSchedDeploymentName,
-							Image: imageName,
-							Command: []string{
-								"/usr/local/bin/kube-scheduler",
-								"--address=0.0.0.0",
-								"--leader-elect=true",
-								"--scheduler-name=stork",
-								"--policy-configmap=stork-config",
-								"--policy-configmap-namespace=kube-system",
-								"--lock-object-name=stork-scheduler",
-							},
+							Name:    storkSchedDeploymentName,
+							Image:   imageName,
+							Command: command,
 							LivenessProbe: &v1.Probe{
 								InitialDelaySeconds: 15,
 								Handler: v1.Handler{
@@ -855,7 +858,7 @@ func getStorkSchedDeploymentSpec(
 		)
 	}
 
-	return deployment, nil
+	return deployment
 }
 
 func getStorkServiceLabels() map[string]string {

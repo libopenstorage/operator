@@ -531,6 +531,117 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestStorkSchedulerRollbackImageChange(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Change the image of stork scheduler deployment
+	deployment.Spec.Template.Spec.Containers[0].Image = "foo/bar:v1"
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedCommand := deployment.Spec.Template.Spec.Containers[0].Command
+
+	// Change the command of stork scheduler deployment
+	deployment.Spec.Template.Spec.Containers[0].Command = append(
+		deployment.Spec.Template.Spec.Containers[0].Command,
+		"--new-arg=test",
+	)
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
+}
+
 func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1alpha1.StorageCluster{

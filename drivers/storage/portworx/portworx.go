@@ -27,12 +27,9 @@ const (
 
 type portworx struct {
 	k8sClient                         client.Client
-	portworxServiceCreated            bool
-	pxAPIServiceCreated               bool
 	pxAPIDaemonSetCreated             bool
 	volumePlacementStrategyCRDCreated bool
 	pvcControllerDeploymentCreated    bool
-	lhServiceCreated                  bool
 	lhDeploymentCreated               bool
 }
 

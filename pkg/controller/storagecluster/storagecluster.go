@@ -99,7 +99,6 @@ type Controller struct {
 	podControl                    k8scontroller.PodControlInterface
 	crControl                     k8scontroller.ControllerRevisionControlInterface
 	Driver                        storage.Driver
-	isStorkServiceCreated         bool
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 }
@@ -344,7 +343,6 @@ func (c *Controller) deleteStorageCluster(
 		}
 	}
 
-	c.isStorkServiceCreated = false
 	c.isStorkDeploymentCreated = false
 	c.isStorkSchedDeploymentCreated = false
 

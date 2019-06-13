@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"time"
 
@@ -116,22 +117,13 @@ func (p *portworx) setupPortworxRBAC(cluster *corev1alpha1.StorageCluster) error
 
 func (p *portworx) setupPortworxService(t *template) error {
 	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
-	if !p.portworxServiceCreated {
-		if err := p.createPortworxService(t, ownerRef); err != nil {
-			return err
-		}
-		p.portworxServiceCreated = true
-	}
-	return nil
+	return p.createPortworxService(t, ownerRef)
 }
 
 func (p *portworx) setupPortworxAPI(t *template) error {
 	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
-	if !p.pxAPIServiceCreated {
-		if err := p.createPortworxAPIService(t, ownerRef); err != nil {
-			return err
-		}
-		p.pxAPIServiceCreated = true
+	if err := p.createPortworxAPIService(t, ownerRef); err != nil {
+		return err
 	}
 	if !p.pxAPIDaemonSetCreated {
 		if err := p.createPortworxAPIDaemonSet(t, ownerRef); err != nil {
@@ -170,11 +162,8 @@ func (p *portworx) setupLighthouse(t *template) error {
 	if err := p.createLighthouseClusterRoleBinding(t.cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if !p.lhServiceCreated {
-		if err := p.createLighthouseService(t, ownerRef); err != nil {
-			return err
-		}
-		p.lhServiceCreated = true
+	if err := p.createLighthouseService(t, ownerRef); err != nil {
+		return err
 	}
 	if err := p.createLighthouseDeployment(t, ownerRef); err != nil {
 		return err
@@ -222,7 +211,6 @@ func (p *portworx) removeLighthouse(namespace string) error {
 	if err := k8sutil.DeleteService(p.k8sClient, lhServiceName, namespace); err != nil {
 		return err
 	}
-	p.lhServiceCreated = false
 	if err := k8sutil.DeleteDeployment(p.k8sClient, lhDeploymentName, namespace); err != nil {
 		return err
 	}
@@ -231,12 +219,9 @@ func (p *portworx) removeLighthouse(namespace string) error {
 }
 
 func (p *portworx) unsetInstallParams() {
-	p.portworxServiceCreated = false
-	p.pxAPIServiceCreated = false
 	p.pxAPIDaemonSetCreated = false
 	p.volumePlacementStrategyCRDCreated = false
 	p.pvcControllerDeploymentCreated = false
-	p.lhServiceCreated = false
 	p.lhDeploymentCreated = false
 }
 
@@ -751,6 +736,30 @@ func (p *portworx) createPVCControllerDeployment(
 		return err
 	}
 
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return err
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	imageName := util.GetImageURN(t.cluster.Spec.CustomImageRegistry,
+		"gcr.io/google_containers/kube-controller-manager-amd64:"+matches[1])
+
+	command := []string{
+		"kube-controller-manager",
+		"--leader-elect=true",
+		"--address=0.0.0.0",
+		"--controllers=persistentvolume-binder,persistentvolume-expander",
+		"--use-service-account-credentials=true",
+	}
+	if t.isOpenshift {
+		command = append(command, "--leader-elect-resource-lock=endpoints")
+	} else {
+		command = append(command, "--leader-elect-resource-lock=configmaps")
+	}
+
 	existingDeployment := &appsv1.Deployment{}
 	err = p.k8sClient.Get(
 		context.TODO(),
@@ -764,20 +773,23 @@ func (p *portworx) createPVCControllerDeployment(
 		return err
 	}
 
+	var existingImage string
+	var existingCommand []string
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == pvcContainerName {
+			existingImage = c.Image
+			existingCommand = c.Command
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 		}
 	}
 
-	modified := existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+	modified := existingImage != imageName ||
+		!reflect.DeepEqual(existingCommand, command) ||
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
 
 	if !p.pvcControllerDeploymentCreated || modified {
-		deployment, err := getPVCControllerDeploymentSpec(t, ownerRef, targetCPUQuantity)
-		if err != nil {
-			return err
-		}
+		deployment := getPVCControllerDeploymentSpec(t, ownerRef, imageName, command, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -789,35 +801,13 @@ func (p *portworx) createPVCControllerDeployment(
 func getPVCControllerDeploymentSpec(
 	t *template,
 	ownerRef *metav1.OwnerReference,
+	imageName string,
+	command []string,
 	cpuQuantity resource.Quantity,
-) (*appsv1.Deployment, error) {
-	containerArgs := []string{
-		"kube-controller-manager",
-		"--leader-elect=true",
-		"--address=0.0.0.0",
-		"--controllers=persistentvolume-binder,persistentvolume-expander",
-		"--use-service-account-credentials=true",
-	}
-	if t.isOpenshift {
-		containerArgs = append(containerArgs, "--leader-elect-resource-lock=endpoints")
-	} else {
-		containerArgs = append(containerArgs, "--leader-elect-resource-lock=configmaps")
-	}
-
+) *appsv1.Deployment {
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
-
-	k8sVersion, err := k8s.Instance().GetVersion()
-	if err != nil {
-		return nil, err
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
-	imageName := util.GetImageURN(t.cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-controller-manager-amd64:"+matches[1])
 
 	labels := map[string]string{
 		"name": pvcDeploymentName,
@@ -862,7 +852,7 @@ func getPVCControllerDeploymentSpec(
 						{
 							Name:    pvcContainerName,
 							Image:   imageName,
-							Command: containerArgs,
+							Command: command,
 							LivenessProbe: &v1.Probe{
 								FailureThreshold:    8,
 								TimeoutSeconds:      15,
@@ -906,7 +896,7 @@ func getPVCControllerDeploymentSpec(
 				},
 			},
 		},
-	}, nil
+	}
 }
 
 func (p *portworx) createLighthouseDeployment(

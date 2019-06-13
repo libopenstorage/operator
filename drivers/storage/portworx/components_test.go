@@ -620,6 +620,101 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestPVCControllerRollbackImageChanges(t *testing.T) {
+	// Set fake kubernetes client for k8s version
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Change the image of pvc controller deployment
+	deployment.Spec.Template.Spec.Containers[0].Image = "foo/bar:v1"
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestPVCControllerRollbackCommandChanges(t *testing.T) {
+	// Set fake kubernetes client for k8s version
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedCommand := deployment.Spec.Template.Spec.Containers[0].Command
+
+	// Change the command of pvc controller deployment
+	deployment.Spec.Template.Spec.Containers[0].Command = append(
+		deployment.Spec.Template.Spec.Containers[0].Command,
+		"--new-arg=test",
+	)
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
+}
+
 func TestLighthouseInstall(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
