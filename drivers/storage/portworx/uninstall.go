@@ -44,8 +44,6 @@ const (
 type UninstallPortworx interface {
 	// RunNodeWiper runs the node-wiper daemonset
 	RunNodeWiper(wiperImage, wiperTag string, removeData bool) error
-	// DeleteNodeWiper deletes the node-wiper daemonset if it exists
-	DeleteNodeWiper() error
 	// GetNodeWiperStatus returns the status of the node-wiper daemonset
 	// returns the no. of completed, in progress and total pods
 	GetNodeWiperStatus() (int32, int32, int32, error)
@@ -154,11 +152,15 @@ func (u *uninstallPortworx) RunNodeWiper(
 	if removeData {
 		args = append(args, "-r")
 	}
+
+	ownerRef := metav1.NewControllerRef(u.cluster, controllerKind)
+
 	ds := &apps_api.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxNodeWiperDaemonSetName,
-			Namespace: u.cluster.Namespace,
-			Labels:    labels,
+			Name:            pxNodeWiperDaemonSetName,
+			Namespace:       u.cluster.Namespace,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: apps_api.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{

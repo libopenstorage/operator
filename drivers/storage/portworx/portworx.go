@@ -20,9 +20,9 @@ const (
 	defaultSecretsProvider            = "k8s"
 	defaultNodeWiperImage             = "portworx/px-node-wiper"
 	defaultNodeWiperTag               = "2.1.2-rc1"
-	storageClusterDeleteMsg           = "StorageCluster deleted. Portworx service and Portworx drives and data NOT wiped."
-	storageClusterUninstallMsg        = "StorageCluster deleted. Portworx service removed. Portworx drives and data NOT wiped."
-	storageClusterUninstallAndWipeMsg = "StorageCluster deleted. Portworx service removed. Portworx drives and data wiped."
+	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
+	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
+	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 )
 
 type portworx struct {
@@ -102,8 +102,9 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 			Reason: storageClusterDeleteMsg,
 		}
 		return status, nil
-	} // else portworx needs to be removed
+	}
 
+	// Portworx needs to be removed if DeleteStrategy is specified
 	removeData := false
 	completeMsg := storageClusterUninstallMsg
 	if storageCluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
@@ -117,47 +118,44 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		// Run the node wiper
 		// TODO: Add capability to change the node wiper image
 		if err := u.RunNodeWiper(defaultNodeWiperImage, defaultNodeWiperTag, removeData); err != nil {
-			status := &corev1alpha1.ClusterCondition{
+			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
 				Status: corev1alpha1.ClusterOperationFailed,
 				Reason: "Failed to run node wiper: " + err.Error(),
-			}
-			return status, nil
+			}, nil
 		}
-		status := &corev1alpha1.ClusterCondition{
+		return &corev1alpha1.ClusterCondition{
 			Type:   corev1alpha1.ClusterConditionTypeDelete,
 			Status: corev1alpha1.ClusterOperationInProgress,
 			Reason: "Started node wiper daemonset",
-		}
-		return status, nil
+		}, nil
 	} else if err != nil {
 		// We could not get the node wiper status and it does exist
-		// retry?
 		return nil, err
-	} // else err == nil
+	}
 
 	if completed != 0 && total != 0 && completed == total {
 		// all the nodes are wiped
-		status := &corev1alpha1.ClusterCondition{
+		if err := u.WipeMetadata(); err != nil {
+			logrus.Errorf("Failed to delete portworx metadata: %v", err)
+			return &corev1alpha1.ClusterCondition{
+				Type:   corev1alpha1.ClusterConditionTypeDelete,
+				Status: corev1alpha1.ClusterOperationFailed,
+				Reason: "Failed to wipe metadata: " + err.Error(),
+			}, nil
+		}
+		return &corev1alpha1.ClusterCondition{
 			Type:   corev1alpha1.ClusterConditionTypeDelete,
 			Status: corev1alpha1.ClusterOperationCompleted,
 			Reason: completeMsg,
-		}
-		if err := u.DeleteNodeWiper(); err != nil {
-			logrus.Errorf("Failed to delete node wiper daemonset: %v", err)
-		}
-		if err := u.WipeMetadata(); err != nil {
-			logrus.Errorf("Failed to delete portworx metadata: %v", err)
-		}
-		return status, nil
+		}, nil
 	}
 
-	status := &corev1alpha1.ClusterCondition{
+	return &corev1alpha1.ClusterCondition{
 		Type:   corev1alpha1.ClusterConditionTypeDelete,
 		Status: corev1alpha1.ClusterOperationInProgress,
 		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
-	}
-	return status, nil
+	}, nil
 }
 
 func init() {
