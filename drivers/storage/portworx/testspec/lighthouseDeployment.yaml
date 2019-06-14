@@ -26,6 +26,9 @@ spec:
         imagePullPolicy: Always
         args:
         - "init"
+        env:
+        - name: PX_NAMESPACE
+          value: kube-test
         volumeMounts:
         - name: config
           mountPath: /config/lh
@@ -45,6 +48,9 @@ spec:
         imagePullPolicy: Always
         args:
         - "sync"
+        env:
+        - name: PX_NAMESPACE
+          value: kube-test
         volumeMounts:
         - name: config
           mountPath: /config/lh

@@ -1199,9 +1199,10 @@ func TestRemovePVCController(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
 	err = get(k8sClient, cr, pvcClusterRoleName, "")
@@ -1263,9 +1264,10 @@ func TestDisablePVCController(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
 	err = get(k8sClient, cr, pvcClusterRoleName, "")
@@ -1330,9 +1332,10 @@ func TestRemoveLighthouse(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
 	err = get(k8sClient, cr, lhClusterRoleName, "")
@@ -1401,9 +1404,10 @@ func TestDisableLighthouse(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
 	err = get(k8sClient, cr, lhClusterRoleName, "")
