@@ -90,7 +90,7 @@ deploy:
 	docker push $(STORAGE_OPERATOR_IMG)
 
 olm-verify:
-	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx/$(RELEASE_VER):/portworx \
+	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx:/portworx \
 		python:3 bash -c "pip3 install operator-courier && operator-courier --verbose verify --ui_validate_io /portworx"
 
 clean:
