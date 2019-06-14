@@ -4,7 +4,7 @@ language: go
 go:
   - 1.11.2
 script:
-  - make && make test
+  - make && make test && make olm-verify
 notifications:
   email:
     on_success: always
