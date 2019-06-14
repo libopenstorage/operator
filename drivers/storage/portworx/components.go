@@ -47,6 +47,7 @@ const (
 
 const (
 	defaultPVCControllerCPU = "200m"
+	envKeyPortworxNamespace = "PX_NAMESPACE"
 )
 
 var (
@@ -182,9 +183,8 @@ func (p *portworx) createCustomResourceDefinitions() error {
 }
 
 func (p *portworx) removePVCController(namespace string) error {
-	if err := k8sutil.DeleteServiceAccount(p.k8sClient, pvcServiceAccountName, namespace); err != nil {
-		return err
-	}
+	// We don't delete the service account for PVC controller because it is part of CSV. If
+	// we disable PVC controller then the CSV upgrades would fail as requirements are not met.
 	if err := k8sutil.DeleteClusterRole(p.k8sClient, pvcClusterRoleName); err != nil {
 		return err
 	}
@@ -199,9 +199,8 @@ func (p *portworx) removePVCController(namespace string) error {
 }
 
 func (p *portworx) removeLighthouse(namespace string) error {
-	if err := k8sutil.DeleteServiceAccount(p.k8sClient, lhServiceAccountName, namespace); err != nil {
-		return err
-	}
+	// We don't delete the service account for Lighthouse because it is part of CSV. If
+	// we disable Lighthouse then the CSV upgrades would fail as requirements are not met.
 	if err := k8sutil.DeleteClusterRole(p.k8sClient, lhClusterRoleName); err != nil {
 		return err
 	}
@@ -982,6 +981,12 @@ func getLighthouseDeploymentSpec(
 							Image:           configSyncImageName,
 							ImagePullPolicy: t.imagePullPolicy,
 							Args:            []string{"init"},
+							Env: []v1.EnvVar{
+								{
+									Name:  envKeyPortworxNamespace,
+									Value: t.cluster.Namespace,
+								},
+							},
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "config",
@@ -1016,6 +1021,12 @@ func getLighthouseDeploymentSpec(
 							Image:           configSyncImageName,
 							ImagePullPolicy: t.imagePullPolicy,
 							Args:            []string{"sync"},
+							Env: []v1.EnvVar{
+								{
+									Name:  envKeyPortworxNamespace,
+									Value: t.cluster.Namespace,
+								},
+							},
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "config",
