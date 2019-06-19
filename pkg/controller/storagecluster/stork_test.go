@@ -57,6 +57,9 @@ func TestStorkInstallation(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 
@@ -279,6 +282,9 @@ func TestStorkImageChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -328,6 +334,9 @@ func TestStorkArgumentsChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -390,6 +399,9 @@ func TestStorkCPUChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -442,6 +454,9 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -526,6 +541,9 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.Error(t, err)
@@ -560,6 +578,9 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -617,6 +638,9 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -670,6 +694,9 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -720,6 +747,9 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -773,6 +803,9 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -822,6 +855,9 @@ func TestDisableStork(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 
@@ -947,6 +983,9 @@ func TestRemoveStork(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
 
 	err := controller.syncStork(cluster)
 

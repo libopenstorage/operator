@@ -38,15 +38,13 @@ func CreateOrUpdateServiceAccount(
 		return err
 	}
 
-	modified := !reflect.DeepEqual(sa.ImagePullSecrets, existingSA.ImagePullSecrets)
-
 	for _, o := range existingSA.OwnerReferences {
 		if o.UID != ownerRef.UID {
 			sa.OwnerReferences = append(sa.OwnerReferences, o)
 		}
 	}
 
-	if modified || len(sa.OwnerReferences) > len(existingSA.OwnerReferences) {
+	if len(sa.OwnerReferences) > len(existingSA.OwnerReferences) {
 		logrus.Debugf("Updating %s service account", sa.Name)
 		return k8sClient.Update(context.TODO(), sa)
 	}

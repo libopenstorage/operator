@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -329,7 +330,8 @@ func (c *Controller) deleteStorageCluster(
 		} else {
 			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
-		if toDelete, err = k8s.Instance().UpdateStorageClusterStatus(toDelete); err != nil {
+
+		if err := c.client.Status().Update(context.TODO(), toDelete); err != nil {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}
@@ -718,6 +720,11 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 
 	if toUpdate.Spec.ImagePullPolicy == "" {
 		toUpdate.Spec.ImagePullPolicy = v1.PullAlways
+	}
+
+	partitions := strings.Split(toUpdate.Spec.Image, ":")
+	if len(partitions) > 1 {
+		toUpdate.Spec.Version = partitions[len(partitions)-1]
 	}
 
 	foundDeleteFinalizer := false

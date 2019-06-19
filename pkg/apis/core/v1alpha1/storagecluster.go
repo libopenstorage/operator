@@ -50,6 +50,8 @@ type StorageClusterSpec struct {
 	Placement *PlacementSpec `json:"placement,omitempty"`
 	// Image is docker image of the storage driver
 	Image string `json:"image,omitempty"`
+	// Version is the version of storage driver
+	Version string `json:"version,omitempty"`
 	// ImagePullPolicy is the image pull policy.
 	// One of Always, Never, IfNotPresent. Defaults to Always.
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
@@ -285,16 +287,16 @@ type StorageClusterStatus struct {
 	ClusterUUID string `json:"clusterUuid,omitempty"`
 	// CreatedAt timestamp at which the storage cluster was created
 	CreatedAt *meta.Time `json:"createdAt,omitempty"`
-	// Reason is human readable message indicating the status of the cluster
-	Reason string `json:"reason,omitempty"`
+	// Phase is current status of the storage cluster
+	Phase string `json:"phase,omitempty"`
 	// NodeStatuses list of statuses for all the nodes in the storage cluster
-	// NodeStatuses []NodeStatus `json:"nodes"`
+	NodeStatuses []NodeStatus `json:"nodes"`
 	// Count of hash collisions for the StorageCluster. The StorageCluster
 	// controller uses this field as a collision avoidance mechanism when it
 	// needs to create the name of the newest ControllerRevision.
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 	// Conditions describes the current conditions of the cluster
-	Conditions []ClusterCondition `json:"condition,omitempty"`
+	Conditions []ClusterCondition `json:"conditions,omitempty"`
 }
 
 // ClusterCondition contains condition information for the cluster
@@ -325,12 +327,14 @@ type ClusterConditionStatus string
 
 // These are valid cluster statuses.
 const (
-	// ClusterOK means the cluster is up and healthy
-	ClusterOk ClusterConditionStatus = "Ok"
+	// ClusterRunning means the cluster is up and running
+	ClusterRunning ClusterConditionStatus = "Running"
 	// ClusterOffline means the cluster is offline
 	ClusterOffline ClusterConditionStatus = "Offline"
 	// ClusterNotInQuorum means the cluster is out of quorum
 	ClusterNotInQuorum ClusterConditionStatus = "NotInQuorum"
+	// ClusterDegraded means the cluster is up but not in working state
+	ClusterDegraded ClusterConditionStatus = "Degraded"
 	// ClusterUnknown means the cluser status is not known
 	ClusterUnknown ClusterConditionStatus = "Unknown"
 	// ClusterOperationInProgress means the cluster operation is in progress
@@ -400,6 +404,8 @@ const (
 	NodeMaintenance ConditionStatus = "Maintenance"
 	// NodeDecommissioned means the node condition is in decommissioned state
 	NodeDecommissioned ConditionStatus = "Decommissioned"
+	// NodeDegraded means the node condition is in degraded state
+	NodeDegraded ConditionStatus = "Degraded"
 	// NodeOffline means the node condition is in offline state
 	NodeOffline ConditionStatus = "Offline"
 	// NodeUnknown means the node condition is not known
