@@ -14,15 +14,20 @@ import (
 type Driver interface {
 	// Init initializes the storage driver
 	Init(client.Client) error
-
 	// String returns the string name of the driver
 	String() string
-
-	// GetStorkDriverName returns the string name of the driver in stork
-	GetStorkDriverName() (string, error)
-
 	// ClusterPluginInterface interface to manage storage cluster
 	ClusterPluginInterface
+	// StorkInterface interface to manage Stork related operations
+	StorkInterface
+}
+
+// StorkInterface interface to manage Stork related operations
+type StorkInterface interface {
+	// GetStorkDriverName returns the string name of the driver in Stork
+	GetStorkDriverName() (string, error)
+	// GetStorkEnvList returns a list of env vars that need to be passed to Stork
+	GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar
 }
 
 // ClusterPluginInterface interface to manage storage cluster

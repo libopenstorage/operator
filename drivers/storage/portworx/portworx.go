@@ -49,6 +49,15 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
+func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
+	return []v1.EnvVar{
+		{
+			Name:  envKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+}
+
 func (p *portworx) GetSelectorLabels() map[string]string {
 	return map[string]string{
 		labelKeyName: driverName,

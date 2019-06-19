@@ -496,6 +496,13 @@ func (in *StorageClusterStatus) DeepCopyInto(out *StorageClusterStatus) {
 		in, out := &in.CreatedAt, &out.CreatedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.NodeStatuses != nil {
+		in, out := &in.NodeStatuses, &out.NodeStatuses
+		*out = make([]NodeStatus, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.CollisionCount != nil {
 		in, out := &in.CollisionCount, &out.CollisionCount
 		*out = new(int32)

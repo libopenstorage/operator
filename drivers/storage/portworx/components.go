@@ -43,6 +43,7 @@ const (
 	lhServiceName             = "px-lighthouse"
 	lhDeploymentName          = "px-lighthouse"
 	lhContainerName           = "px-lighthouse"
+	pxRESTPortName            = "px-api"
 )
 
 const (
@@ -607,7 +608,7 @@ func (p *portworx) createPortworxService(
 			Type:     v1.ServiceTypeLoadBalancer,
 			Ports: []v1.ServicePort{
 				{
-					Name:       "px-api",
+					Name:       pxRESTPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9001),
 					TargetPort: intstr.FromInt(t.startPort),
@@ -658,7 +659,7 @@ func (p *portworx) createPortworxAPIService(
 			Type:     v1.ServiceTypeLoadBalancer,
 			Ports: []v1.ServicePort{
 				{
-					Name:       "px-api",
+					Name:       pxRESTPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9001),
 					TargetPort: intstr.FromInt(t.startPort),

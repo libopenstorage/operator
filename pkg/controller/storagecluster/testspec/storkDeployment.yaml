@@ -35,6 +35,9 @@ spec:
         - --verbose=true
         imagePullPolicy: Always
         image: osd/stork:test
+        env:
+        - name: PX_NAMESPACE
+          value: kube-test
         resources:
           requests:
             cpu: '0.1'

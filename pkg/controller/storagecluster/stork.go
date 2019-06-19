@@ -569,7 +569,7 @@ func (c *Controller) createStorkDeployment(
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
 
 	if !c.isStorkDeploymentCreated || modified {
-		deployment := getStorkDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
+		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -578,7 +578,7 @@ func (c *Controller) createStorkDeployment(
 	return nil
 }
 
-func getStorkDeploymentSpec(
+func (c *Controller) getStorkDeploymentSpec(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
@@ -598,6 +598,8 @@ func getStorkDeploymentSpec(
 	for k, v := range deploymentLabels {
 		templateLabels[k] = v
 	}
+
+	envVars := c.Driver.GetStorkEnvList(cluster)
 
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
@@ -640,6 +642,7 @@ func getStorkDeploymentSpec(
 							Image:           imageName,
 							ImagePullPolicy: imagePullPolicy,
 							Command:         command,
+							Env:             envVars,
 							Resources: v1.ResourceRequirements{
 								Requests: map[v1.ResourceName]resource.Quantity{
 									v1.ResourceCPU: cpuQuantity,
