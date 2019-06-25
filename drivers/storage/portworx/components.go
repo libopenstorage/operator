@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	version "github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -24,26 +25,35 @@ import (
 )
 
 const (
-	pxServiceAccountName      = "portworx"
-	pxClusterRoleName         = "portworx"
-	pxClusterRoleBindingName  = "portworx"
-	pxRoleName                = "portworx"
-	pxRoleBindingName         = "portworx"
-	pxServiceName             = "portworx-service"
-	pxAPIServiceName          = "portworx-api"
-	pxAPIDaemonSetName        = "portworx-api"
-	pvcServiceAccountName     = "portworx-pvc-controller"
-	pvcClusterRoleName        = "portworx-pvc-controller"
-	pvcClusterRoleBindingName = "portworx-pvc-controller"
-	pvcDeploymentName         = "portworx-pvc-controller"
-	pvcContainerName          = "portworx-pvc-controller-manager"
-	lhServiceAccountName      = "px-lighthouse"
-	lhClusterRoleName         = "px-lighthouse"
-	lhClusterRoleBindingName  = "px-lighthouse"
-	lhServiceName             = "px-lighthouse"
-	lhDeploymentName          = "px-lighthouse"
-	lhContainerName           = "px-lighthouse"
-	pxRESTPortName            = "px-api"
+	pxServiceAccountName             = "portworx"
+	pxClusterRoleName                = "portworx"
+	pxClusterRoleBindingName         = "portworx"
+	pxRoleName                       = "portworx"
+	pxRoleBindingName                = "portworx"
+	pxServiceName                    = "portworx-service"
+	pxAPIServiceName                 = "portworx-api"
+	pxAPIDaemonSetName               = "portworx-api"
+	pvcServiceAccountName            = "portworx-pvc-controller"
+	pvcClusterRoleName               = "portworx-pvc-controller"
+	pvcClusterRoleBindingName        = "portworx-pvc-controller"
+	pvcDeploymentName                = "portworx-pvc-controller"
+	pvcContainerName                 = "portworx-pvc-controller-manager"
+	lhServiceAccountName             = "px-lighthouse"
+	lhClusterRoleName                = "px-lighthouse"
+	lhClusterRoleBindingName         = "px-lighthouse"
+	lhServiceName                    = "px-lighthouse"
+	lhDeploymentName                 = "px-lighthouse"
+	lhContainerName                  = "px-lighthouse"
+	csiServiceAccountName            = "px-csi"
+	csiClusterRoleName               = "px-csi"
+	csiClusterRoleBindingName        = "px-csi"
+	csiServiceName                   = "px-csi-service"
+	csiStatefulSetName               = "px-csi-ext"
+	csiProvisionerContainerName      = "csi-external-provisioner"
+	csiAttacherContainerName         = "csi-attacher"
+	csiClusterRegistrarContainerName = "csi-cluster-registrar"
+	csiSnapshotterContainerName      = "csi-snapshotter"
+	pxRESTPortName                   = "px-api"
 )
 
 const (
@@ -94,6 +104,17 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 			return err
 		}
 	}
+
+	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
+		if err = p.setupCSI(t); err != nil {
+			return err
+		}
+	} else {
+		if err = p.removeCSI(t.cluster.Namespace); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -173,6 +194,26 @@ func (p *portworx) setupLighthouse(t *template) error {
 	return nil
 }
 
+func (p *portworx) setupCSI(t *template) error {
+	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
+	if err := p.createCSIServiceAccount(t.cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if err := p.createCSIClusterRole(t, ownerRef); err != nil {
+		return err
+	}
+	if err := p.createCSIClusterRoleBinding(t.cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	if err := p.createCSIService(t, ownerRef); err != nil {
+		return err
+	}
+	if err := p.createCSIStatefulSet(t, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *portworx) createCustomResourceDefinitions() error {
 	if !p.volumePlacementStrategyCRDCreated {
 		if err := createVolumePlacementStrategyCRD(); err != nil {
@@ -218,11 +259,31 @@ func (p *portworx) removeLighthouse(namespace string) error {
 	return nil
 }
 
+func (p *portworx) removeCSI(namespace string) error {
+	// We don't delete the service account for CSI because it is part of CSV. If
+	// we disable CSI then the CSV upgrades would fail as requirements are not met.
+	if err := k8sutil.DeleteClusterRole(p.k8sClient, csiClusterRoleName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, csiClusterRoleBindingName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteService(p.k8sClient, csiServiceName, namespace); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiStatefulSetName, namespace); err != nil {
+		return err
+	}
+	p.csiStatefulSetCreated = false
+	return nil
+}
+
 func (p *portworx) unsetInstallParams() {
 	p.pxAPIDaemonSetCreated = false
 	p.volumePlacementStrategyCRDCreated = false
 	p.pvcControllerDeploymentCreated = false
 	p.lhDeploymentCreated = false
+	p.csiStatefulSetCreated = false
 }
 
 func createVolumePlacementStrategyCRD() error {
@@ -287,6 +348,23 @@ func (p *portworx) createLighthouseServiceAccount(
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            lhServiceAccountName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (p *portworx) createCSIServiceAccount(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		p.k8sClient,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            csiServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -506,6 +584,102 @@ func (p *portworx) createLighthouseClusterRole(ownerRef *metav1.OwnerReference) 
 	)
 }
 
+func (p *portworx) createCSIClusterRole(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+) error {
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            csiClusterRoleName,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"extensions"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{"privileged"},
+				Verbs:         []string{"use"},
+			},
+			{
+				APIGroups: []string{"apiextensions.k8s.io"},
+				Resources: []string{"customresourcedefinitions"},
+				Verbs:     []string{"*"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumes"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumeclaims"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+			{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"storageclasses"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"volumeattachments"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"events"},
+				Verbs:     []string{"list", "watch", "create", "update", "patch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"snapshot.storage.k8s.io"},
+				Resources: []string{"volumesnapshots", "volumesnapshotcontents"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"csi.storage.k8s.io"},
+				Resources: []string{"csidrivers"},
+				Verbs:     []string{"create", "delete"},
+			},
+		},
+	}
+
+	k8sVer1_14, err := version.NewVersion("1.14")
+	if err != nil {
+		return err
+	}
+
+	if t.csiVersions.createCsiNodeCrd {
+		clusterRole.Rules = append(
+			clusterRole.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"csi.storage.k8s.io"},
+				Resources: []string{"csinodeinfos"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+		)
+	} else if t.k8sVersion.GreaterThan(k8sVer1_14) || t.k8sVersion.Equal(k8sVer1_14) {
+		clusterRole.Rules = append(
+			clusterRole.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"csinodes"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+		)
+	}
+	return k8sutil.CreateOrUpdateClusterRole(p.k8sClient, clusterRole, ownerRef)
+}
+
 func (p *portworx) createClusterRoleBinding(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
@@ -583,6 +757,34 @@ func (p *portworx) createLighthouseClusterRoleBinding(
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
 				Name:     lhClusterRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (p *portworx) createCSIClusterRoleBinding(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		p.k8sClient,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            csiClusterRoleBindingName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      csiServiceAccountName,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     csiClusterRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
@@ -723,6 +925,26 @@ func (p *portworx) createLighthouseService(
 	return k8sutil.CreateOrUpdateService(p.k8sClient, newService, ownerRef)
 }
 
+func (p *portworx) createCSIService(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateService(
+		p.k8sClient,
+		&v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            csiServiceName,
+				Namespace:       t.cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "None",
+			},
+		},
+		ownerRef,
+	)
+}
+
 func (p *portworx) createPVCControllerDeployment(
 	t *template,
 	ownerRef *metav1.OwnerReference,
@@ -736,16 +958,8 @@ func (p *portworx) createPVCControllerDeployment(
 		return err
 	}
 
-	k8sVersion, err := k8s.Instance().GetVersion()
-	if err != nil {
-		return err
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
 	imageName := util.GetImageURN(t.cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-controller-manager-amd64:"+matches[1])
+		"gcr.io/google_containers/kube-controller-manager-amd64:v"+t.k8sVersion.String())
 
 	command := []string{
 		"kube-controller-manager",
@@ -1055,6 +1269,231 @@ func getLighthouseDeploymentSpec(
 	}
 }
 
+func (p *portworx) createCSIStatefulSet(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingSS := &appsv1.StatefulSet{}
+	err := p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      csiStatefulSetName,
+			Namespace: t.cluster.Namespace,
+		},
+		existingSS,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	var (
+		existingProvisionerImage = getImageFromStatefulSet(existingSS, csiProvisionerContainerName)
+		existingAttacherImage    = getImageFromStatefulSet(existingSS, csiAttacherContainerName)
+		existingRegistrarImage   = getImageFromStatefulSet(existingSS, csiClusterRegistrarContainerName)
+		existingSnapshotterImage = getImageFromStatefulSet(existingSS, csiSnapshotterContainerName)
+		provisionerImage         string
+		attacherImage            string
+		registrarImage           string
+		snapshotterImage         string
+	)
+
+	provisionerImage = util.GetImageURN(
+		t.cluster.Spec.CustomImageRegistry,
+		"quay.io/k8scsi/csi-provisioner:v"+t.csiVersions.provisionerImage,
+	)
+	attacherImage = util.GetImageURN(
+		t.cluster.Spec.CustomImageRegistry,
+		"quay.io/k8scsi/csi-attacher:v"+t.csiVersions.attacher,
+	)
+	if t.csiVersions.clusterRegistrar != "" {
+		registrarImage = util.GetImageURN(
+			t.cluster.Spec.CustomImageRegistry,
+			"quay.io/k8scsi/csi-cluster-driver-registrar:v"+t.csiVersions.clusterRegistrar,
+		)
+	}
+	if t.csiVersions.snapshotter != "" {
+		snapshotterImage = util.GetImageURN(
+			t.cluster.Spec.CustomImageRegistry,
+			"quay.io/k8scsi/csi-snapshotter:v"+t.csiVersions.snapshotter,
+		)
+	}
+
+	if !p.csiStatefulSetCreated ||
+		provisionerImage != existingProvisionerImage ||
+		attacherImage != existingAttacherImage ||
+		registrarImage != existingRegistrarImage ||
+		snapshotterImage != existingSnapshotterImage {
+		statefulSet := getCSIStatefulSetSpec(t, ownerRef,
+			provisionerImage, attacherImage, registrarImage, snapshotterImage)
+		if err = k8sutil.CreateOrUpdateStatefulSet(p.k8sClient, statefulSet, ownerRef); err != nil {
+			return err
+		}
+	}
+	p.csiStatefulSetCreated = true
+	return nil
+}
+
+func getCSIStatefulSetSpec(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+	provisionerImage, attacherImage string,
+	registrarImage, snapshotterImage string,
+) *appsv1.StatefulSet {
+	replicas := int32(1)
+	labels := map[string]string{
+		"app": "px-csi-driver",
+	}
+
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            csiStatefulSetName,
+			Namespace:       t.cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Labels:          labels,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: csiServiceName,
+			Replicas:    &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: v1.PodSpec{
+					ServiceAccountName: csiServiceAccountName,
+					Containers: []v1.Container{
+						{
+							Name:            csiProvisionerContainerName,
+							Image:           provisionerImage,
+							ImagePullPolicy: t.imagePullPolicy,
+							Args: []string{
+								"--v=5",
+								"--provisioner=com.openstorage.pxd",
+								"--csi-address=$(ADDRESS)",
+							},
+							Env: []v1.EnvVar{
+								{
+									Name:  "ADDRESS",
+									Value: "/csi/csi.sock",
+								},
+							},
+							SecurityContext: &v1.SecurityContext{
+								Privileged: boolPtr(true),
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									Name:      "socket-dir",
+									MountPath: "/csi",
+								},
+							},
+						},
+						{
+							Name:            csiAttacherContainerName,
+							Image:           attacherImage,
+							ImagePullPolicy: t.imagePullPolicy,
+							Args: []string{
+								"--v=5",
+								"--csi-address=$(ADDRESS)",
+							},
+							Env: []v1.EnvVar{
+								{
+									Name:  "ADDRESS",
+									Value: "/csi/csi.sock",
+								},
+							},
+							SecurityContext: &v1.SecurityContext{
+								Privileged: boolPtr(true),
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									Name:      "socket-dir",
+									MountPath: "/csi",
+								},
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "socket-dir",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: "/var/lib/kubelet/plugins/com.openstorage.pxd",
+									Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if registrarImage != "" {
+		statefulSet.Spec.Template.Spec.Containers = append(
+			statefulSet.Spec.Template.Spec.Containers,
+			v1.Container{
+				Name:            csiClusterRegistrarContainerName,
+				Image:           registrarImage,
+				ImagePullPolicy: t.imagePullPolicy,
+				Args: []string{
+					"--v=5",
+					"--csi-address=$(ADDRESS)",
+					"--pod-info-mount-version=v1",
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "ADDRESS",
+						Value: "/csi/csi.sock",
+					},
+				},
+				SecurityContext: &v1.SecurityContext{
+					Privileged: boolPtr(true),
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "socket-dir",
+						MountPath: "/csi",
+					},
+				},
+			},
+		)
+	}
+
+	if snapshotterImage != "" {
+		statefulSet.Spec.Template.Spec.Containers = append(
+			statefulSet.Spec.Template.Spec.Containers,
+			v1.Container{
+				Name:            csiSnapshotterContainerName,
+				Image:           snapshotterImage,
+				ImagePullPolicy: t.imagePullPolicy,
+				Args: []string{
+					"--v=5",
+					"--csi-address=$(ADDRESS)",
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "ADDRESS",
+						Value: "/csi/csi.sock",
+					},
+				},
+				SecurityContext: &v1.SecurityContext{
+					Privileged: boolPtr(true),
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "socket-dir",
+						MountPath: "/csi",
+					},
+				},
+			},
+		)
+	}
+
+	return statefulSet
+}
+
 func (p *portworx) createPortworxAPIDaemonSet(
 	t *template,
 	ownerRef *metav1.OwnerReference,
@@ -1132,6 +1571,15 @@ func getLighthouseLabels() map[string]string {
 func getLighthouseImage(deployment *appsv1.Deployment) string {
 	for _, c := range deployment.Spec.Template.Spec.Containers {
 		if c.Name == lhContainerName {
+			return c.Image
+		}
+	}
+	return ""
+}
+
+func getImageFromStatefulSet(ss *appsv1.StatefulSet, containerName string) string {
+	for _, c := range ss.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
 			return c.Image
 		}
 	}

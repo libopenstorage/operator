@@ -2,12 +2,14 @@ package portworx
 
 import (
 	"fmt"
-	"path"
 	"strconv"
 	"strings"
 
 	"github.com/google/shlex"
+	version "github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -23,7 +25,6 @@ const (
 	annotationIsOpenshift      = pxAnnotationPrefix + "/is-openshift"
 	annotationPVCController    = pxAnnotationPrefix + "/pvc-controller"
 	annotationLogFile          = pxAnnotationPrefix + "/log-file"
-	annotationCSIVersion       = pxAnnotationPrefix + "/csi-version"
 	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
 	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
 	templateVersion            = "v4"
@@ -46,14 +47,6 @@ type pksVolumeInfo struct {
 }
 
 var (
-	// commonDockerRegistries is a map of commonly used Docker registries
-	commonDockerRegistries = map[string]bool{
-		"docker.io":                   true,
-		"index.docker.io":             true,
-		"registry-1.docker.io":        true,
-		"registry.connect.redhat.com": true,
-	}
-
 	// defaultVolumeInfoList is a list of volumes across all options
 	defaultVolumeInfoList = []volumeInfo{
 		{
@@ -95,6 +88,7 @@ var (
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/etc/crictl.yaml",
 			},
+			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
 		},
 		{
 			name:      "etcpwx",
@@ -158,6 +152,7 @@ var (
 		{
 			name:         "csi-driver-path",
 			hostPath:     "/var/lib/kubelet/plugins/com.openstorage.pxd",
+			mountPath:    csiBasePath,
 			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 		},
 	}
@@ -173,6 +168,8 @@ type template struct {
 	needsPVCController bool
 	imagePullPolicy    v1.PullPolicy
 	startPort          int
+	k8sVersion         *version.Version
+	csiVersions        csiVersions
 }
 
 func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
@@ -181,6 +178,29 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	}
 
 	t := &template{cluster: cluster}
+
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+
+	numericVersion := strings.TrimLeft(matches[1], "v")
+	t.k8sVersion, err = version.NewVersion(numericVersion)
+	if err != nil {
+		return nil, fmt.Errorf("invalid kubernetes version %v: %v", numericVersion, err)
+	}
+
+	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
+		csiGenerator := newCSIGenerator(*t.k8sVersion)
+		t.csiVersions, err = csiGenerator.getSidecarContainerVersions()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
 	t.isPKS = err == nil && enabled
@@ -233,6 +253,13 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 		Volumes:            t.getVolumes(),
 	}
 
+	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
+		csiRegistrar := t.csiRegistrarContainer()
+		if csiRegistrar != nil {
+			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
+		}
+	}
+
 	if t.cluster.Spec.Placement != nil && t.cluster.Spec.Placement.NodeAffinity != nil {
 		podSpec.Affinity = &v1.Affinity{
 			NodeAffinity: t.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
@@ -252,7 +279,7 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 }
 
 func (t *template) portworxContainer() v1.Container {
-	pxImage := getImageURN(t.cluster.Spec.CustomImageRegistry, t.cluster.Spec.Image)
+	pxImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, t.cluster.Spec.Image)
 	return v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
@@ -286,6 +313,69 @@ func (t *template) portworxContainer() v1.Container {
 		},
 		VolumeMounts: t.getVolumeMounts(),
 	}
+}
+
+func (t *template) csiRegistrarContainer() *v1.Container {
+	container := v1.Container{
+		ImagePullPolicy: t.imagePullPolicy,
+		Env: []v1.EnvVar{
+			{
+				Name:  "ADDRESS",
+				Value: "/csi/csi.sock",
+			},
+			{
+				Name: "KUBE_NODE_NAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			},
+		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: boolPtr(true),
+		},
+		VolumeMounts: []v1.VolumeMount{
+			{
+				Name:      "csi-driver-path",
+				MountPath: "/csi",
+			},
+			{
+				Name:      "registration-dir",
+				MountPath: "/registration",
+			},
+		},
+	}
+
+	if t.csiVersions.nodeRegistrar != "" {
+		container.Name = "csi-node-driver-registrar"
+		container.Image = util.GetImageURN(
+			t.cluster.Spec.CustomImageRegistry,
+			"quay.io/k8scsi/csi-node-driver-registrar:v"+t.csiVersions.nodeRegistrar,
+		)
+		container.Args = []string{
+			"--v=5",
+			"--csi-address=$(ADDRESS)",
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiBasePath),
+		}
+	} else if t.csiVersions.registrar != "" {
+		container.Name = "csi-driver-registrar"
+		container.Image = util.GetImageURN(
+			t.cluster.Spec.CustomImageRegistry,
+			"quay.io/k8scsi/driver-registrar:v"+t.csiVersions.registrar,
+		)
+		container.Args = []string{
+			"--v=5",
+			"--csi-address=$(ADDRESS)",
+			"--mode=node-register",
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiBasePath),
+		}
+	}
+
+	if container.Name == "" {
+		return nil
+	}
+	return &container
 }
 
 func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
@@ -407,10 +497,6 @@ func (t *template) getArguments() []string {
 		args = append(args, "--pull", string(t.imagePullPolicy))
 	}
 
-	if t.cluster.Annotations[annotationCSIVersion] != "" {
-		args = append(args, "--csiversion", t.cluster.Annotations[annotationCSIVersion])
-	}
-
 	// --keep-px-up is default on from px-enterprise from 2.1
 	if t.isPKS {
 		args = append(args, "--keep-px-up")
@@ -465,20 +551,30 @@ func (t *template) getEnvList() []v1.EnvVar {
 		},
 	}
 
-	preExecEnv := v1.EnvVar{
-		Name:  "PRE-EXEC",
-		Value: "if grep -q 'Red Hat Enterprise Linux CoreOS' /etc/os-release && /bin/ls -dZ /var/opt/ | grep -q :object_r:var_t: ; then semanage fcontext -a -t usr_t '/var/opt(/.*)?' ; restorecon -Rv /var/opt/ ; fi",
-	}
 	if t.isPKS {
-		preExecEnv.Value = "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+		envList = append(envList,
+			v1.EnvVar{
+				Name:  "PRE-EXEC",
+				Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
+			},
+		)
 	}
-	envList = append(envList, preExecEnv)
 
 	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
-		envList = append(envList, v1.EnvVar{
-			Name:  "CSI_ENDPOINT",
-			Value: "unix://" + csiBasePath + "/csi.sock",
-		})
+		envList = append(envList,
+			v1.EnvVar{
+				Name:  "CSI_ENDPOINT",
+				Value: "unix://" + csiBasePath + "/csi.sock",
+			},
+		)
+		if t.csiVersions.version != "" {
+			envList = append(envList,
+				v1.EnvVar{
+					Name:  "PORTWORX_CSIVERSION",
+					Value: t.csiVersions.version,
+				},
+			)
+		}
 	}
 
 	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
@@ -486,7 +582,6 @@ func (t *template) getEnvList() []v1.EnvVar {
 			Name: "REGISTRY_CONFIG",
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
-					// TODO: for older versions of k8s it could be .dockercfg
 					Key: ".dockerconfigjson",
 					LocalObjectReference: v1.LocalObjectReference{
 						Name: *t.cluster.Spec.ImagePullSecret,
@@ -535,7 +630,7 @@ func (t *template) getVolumes() []v1.Volume {
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
 
 	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
-		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
+		volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
 	}
 
 	volumes := make([]v1.Volume, 0)
@@ -559,33 +654,26 @@ func (t *template) getVolumes() []v1.Volume {
 	return volumes
 }
 
-// getImageURN returns the docker image URN depending on a given registryAndRepo and given image
-func getImageURN(registryAndRepo, image string) string {
-	if image == "" {
-		return ""
+func (t *template) getCSIVolumeInfoList() []volumeInfo {
+	registrationVol := volumeInfo{
+		name:         "registration-dir",
+		hostPath:     "/var/lib/kubelet/plugins_registry",
+		hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+	}
+	if t.csiVersions.useOlderPluginsDirAsRegistration {
+		registrationVol.hostPath = "/var/lib/kubelet/plugins"
 	}
 
-	registryAndRepo = strings.TrimRight(registryAndRepo, "/")
-	if registryAndRepo == "" {
-		// no registry/repository specifed, return image
-		return image
-	}
-
-	imgParts := strings.Split(image, "/")
-	if len(imgParts) > 1 {
-		// advance imgParts to swallow the common registry
-		if _, present := commonDockerRegistries[imgParts[0]]; present {
-			imgParts = imgParts[1:]
-		}
-	}
-
-	// if we have '/' in the registryAndRepo, return <registry/repository/><only-image>
-	// else (registry only) -- return <registry/><image-with-repository>
-	if strings.Contains(registryAndRepo, "/") && len(imgParts) > 1 {
-		// advance to the last element, skipping image's repository
-		imgParts = imgParts[len(imgParts)-1:]
-	}
-	return registryAndRepo + "/" + path.Join(imgParts...)
+	volumeInfoList := []volumeInfo{registrationVol}
+	volumeInfoList = append(volumeInfoList,
+		volumeInfo{
+			name:         "csi-driver-path",
+			hostPath:     "/var/lib/kubelet/plugins/com.openstorage.pxd",
+			mountPath:    csiBasePath,
+			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+		},
+	)
+	return volumeInfoList
 }
 
 func stringPtr(val string) *string {

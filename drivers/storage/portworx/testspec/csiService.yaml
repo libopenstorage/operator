@@ -1,0 +1,7 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: px-csi-service
+  namespace: kube-test
+spec:
+  clusterIP: None

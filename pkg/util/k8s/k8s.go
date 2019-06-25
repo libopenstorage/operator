@@ -456,6 +456,10 @@ func CreateOrUpdateService(
 		}
 	}
 
+	if service.Spec.Type == "" {
+		service.Spec.Type = v1.ServiceTypeClusterIP
+	}
+
 	modified := existingService.Spec.Type != service.Spec.Type ||
 		!reflect.DeepEqual(existingService.Labels, service.Labels) ||
 		!reflect.DeepEqual(existingService.Spec.Selector, service.Spec.Selector)
@@ -585,6 +589,60 @@ func DeleteDeployment(
 
 	logrus.Debugf("Deleting %s deployment", name)
 	return k8sClient.Delete(context.TODO(), deployment)
+}
+
+// CreateOrUpdateStatefulSet creates a stateful set if not present, else updates it
+func CreateOrUpdateStatefulSet(
+	k8sClient client.Client,
+	ss *appsv1.StatefulSet,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingSS := &appsv1.StatefulSet{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      ss.Name,
+			Namespace: ss.Namespace,
+		},
+		existingSS,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating %s stateful set", ss.Name)
+		return k8sClient.Create(context.TODO(), ss)
+	} else if err != nil {
+		return err
+	}
+
+	for _, o := range existingSS.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			ss.OwnerReferences = append(ss.OwnerReferences, o)
+		}
+	}
+
+	logrus.Debugf("Updating %s stateful set", ss.Name)
+	return k8sClient.Update(context.TODO(), ss)
+}
+
+// DeleteStatefulSet deletes a stateful set if present
+func DeleteStatefulSet(
+	k8sClient client.Client,
+	name, namespace string,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	ss := &appsv1.StatefulSet{}
+	err := k8sClient.Get(context.TODO(), resource, ss)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	logrus.Debugf("Deleting %s stateful set", name)
+	return k8sClient.Delete(context.TODO(), ss)
 }
 
 // CreateOrUpdateDaemonSet creates a daemon set if not present, else updates it

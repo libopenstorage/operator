@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -59,6 +61,7 @@ func TestGetStorkEnvList(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil)
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -131,6 +134,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil)
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
