@@ -18,6 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +27,10 @@ import (
 )
 
 func TestBasicComponentsInstall(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -1426,6 +1432,525 @@ func TestDisableLighthouse(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCSIInstall(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.11.4",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI ServiceAccount
+	serviceAccountList := &v1.ServiceAccountList{}
+	err = list(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.Len(t, serviceAccountList.Items, 2)
+
+	sa := &v1.ServiceAccount{}
+	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// CSI ClusterRole
+	clusterRoleList := &rbacv1.ClusterRoleList{}
+	err = list(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.Len(t, clusterRoleList.Items, 2)
+
+	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// CSI ClusterRoleBinding
+	crbList := &rbacv1.ClusterRoleBindingList{}
+	err = list(k8sClient, crbList)
+	require.NoError(t, err)
+	require.Len(t, crbList.Items, 2)
+
+	expectedCRB := getExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// CSI Service
+	serviceList := &v1.ServiceList{}
+	err = list(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.Len(t, serviceList.Items, 3)
+
+	expectedService := getExpectedService(t, "csiService.yaml")
+	service := &v1.Service{}
+	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Name, service.Name)
+	require.Equal(t, expectedService.Namespace, service.Namespace)
+	require.Len(t, service.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, service.OwnerReferences[0].Name)
+	require.Equal(t, expectedService.Labels, service.Labels)
+	require.Equal(t, expectedService.Spec, service.Spec)
+
+	// CSI StatefulSet
+	statefulSetList := &appsv1.StatefulSetList{}
+	err = list(k8sClient, statefulSetList)
+	require.NoError(t, err)
+	require.Len(t, statefulSetList.Items, 1)
+
+	expectedStatefulSet := getExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
+	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
+	require.Len(t, statefulSet.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
+	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
+}
+
+func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	expectedStatefulSet := getExpectedStatefulSet(t, "csiStatefulSet_1.0.yaml")
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
+	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
+	require.Len(t, statefulSet.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
+	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
+}
+
+func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+}
+
+func TestCSIChangeImageVersions(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
+		statefulSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.1.1",
+		statefulSet.Spec.Template.Spec.Containers[1].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1",
+		statefulSet.Spec.Template.Spec.Containers[2].Image)
+
+	// Change provisioner image
+	statefulSet.Spec.Template.Spec.Containers[0].Image = "my-csi-provisioner:test"
+	err = k8sClient.Update(context.TODO(), statefulSet)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
+		statefulSet.Spec.Template.Spec.Containers[0].Image)
+
+	// Change attacher image
+	statefulSet.Spec.Template.Spec.Containers[0].Image = "my-csi-attacher:test"
+	err = k8sClient.Update(context.TODO(), statefulSet)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.1.1",
+		statefulSet.Spec.Template.Spec.Containers[1].Image)
+
+	// Change cluster registrar image
+	statefulSet.Spec.Template.Spec.Containers[0].Image = "my-csi-cluster-registrar:test"
+	err = k8sClient.Update(context.TODO(), statefulSet)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1",
+		statefulSet.Spec.Template.Spec.Containers[2].Image)
+}
+
+func TestCSIChangeKubernetesVersions(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
+		statefulSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.1.1",
+		statefulSet.Spec.Template.Spec.Containers[1].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1",
+		statefulSet.Spec.Template.Spec.Containers[2].Image)
+
+	// Use older kubernetes version. Cluster registrar sidecar should not run.
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.2",
+		statefulSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
+		statefulSet.Spec.Template.Spec.Containers[1].Image)
+}
+
+func TestCSIInstallWithCustomRegistry(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+	customRegistry := "test-registry:1111"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRegistry,
+			ImagePullPolicy:     v1.PullIfNotPresent,
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/quay.io/k8scsi/csi-provisioner:v1.1.0",
+		statefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/quay.io/k8scsi/csi-attacher:v1.1.1",
+		statefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1",
+		statefulSet.Spec.Template.Spec.Containers[2].Image,
+	)
+}
+
+func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+	customRepo := "test-registry:1111/test-repo"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRepo,
+			ImagePullPolicy:     v1.PullIfNotPresent,
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v1.1.0",
+		statefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v1.1.1",
+		statefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-cluster-driver-registrar:v1.0.1",
+		statefulSet.Spec.Template.Spec.Containers[2].Image,
+	)
+}
+
+func TestDisableCSI(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.11.4",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, csiClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	service := &v1.Service{}
+	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable CSI
+	cluster.Spec.FeatureGates[string(FeatureCSI)] = "false"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Keep the service account
+	sa = &v1.ServiceAccount{}
+	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr = &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, csiClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	service = &v1.Service{}
+	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	statefulSet = &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Remove CSI flag. Default should be disabled.
+	delete(cluster.Spec.FeatureGates, string(FeatureCSI))
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Keep the service account
+	sa = &v1.ServiceAccount{}
+	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr = &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, csiClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	service = &v1.Service{}
+	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	statefulSet = &appsv1.StatefulSet{}
+	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func list(k8sClient client.Client, obj runtime.Object) error {
 	return k8sClient.List(context.TODO(), &client.ListOptions{}, obj)
 }
@@ -1481,6 +2006,13 @@ func getExpectedDeployment(t *testing.T, fileName string) *appsv1.Deployment {
 	deployment, ok := obj.(*appsv1.Deployment)
 	assert.True(t, ok, "Expected Deployment object")
 	return deployment
+}
+
+func getExpectedStatefulSet(t *testing.T, fileName string) *appsv1.StatefulSet {
+	obj := getKubernetesObject(t, fileName)
+	statefulSet, ok := obj.(*appsv1.StatefulSet)
+	assert.True(t, ok, "Expected StatefulSet object")
+	return statefulSet
 }
 
 func getExpectedDaemonSet(t *testing.T, fileName string) *appsv1.DaemonSet {

@@ -31,6 +31,7 @@ type portworx struct {
 	volumePlacementStrategyCRDCreated bool
 	pvcControllerDeploymentCreated    bool
 	lhDeploymentCreated               bool
+	csiStatefulSetCreated             bool
 }
 
 func (p *portworx) String() string {

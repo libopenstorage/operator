@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: px-csi
+subjects:
+- kind: ServiceAccount
+  name: px-csi
+  namespace: kube-test
+roleRef:
+  kind: ClusterRole
+  name: px-csi
+  apiGroup: rbac.authorization.k8s.io

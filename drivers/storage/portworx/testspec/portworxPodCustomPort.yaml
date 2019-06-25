@@ -4,7 +4,7 @@ metadata:
   name: portworx
   namespace: kube-system
   annotations:
-    portworx.com/install-source: "https://install.portworx.com/?mc=false&kbver=1.12.3&b=true&c=px-cluster&st=k8s&pks=true"
+    portworx.com/install-source: "https://edge-install.portworx.com/2.1?mc=false&kbver=1.13.0&b=true&c=px-cluster-96bfaab8-c821-43de-99f6-41fe55e9dbe7&stork=true&lh=true&st=k8s&r=10001"
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -16,48 +16,36 @@ spec:
       labels:
         name: portworx
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: px/enabled
-                operator: NotIn
-                values:
-                - "false"
-              - key: node-role.kubernetes.io/master
-                operator: DoesNotExist
       hostNetwork: true
       hostPID: false
       containers:
         - name: portworx
-          image: portworx/oci-monitor:2.0.3.4
+          image: portworx/oci-monitor:2.1.1
           imagePullPolicy: Always
           args:
-            ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b", "--keep-px-up",
+            ["-c", "px-cluster",
+             "-r", "10001",
              "-x", "kubernetes"]
           env:
-            - name: "PX_SECRETS_NAMESPACE"
-              value: "kube-system"
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
-            - name: "PRE-EXEC"
-              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+            - name: "PX_SECRETS_NAMESPACE"
+              value: "kube-system"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
             httpGet:
               host: 127.0.0.1
               path: /status
-              port: 9001
+              port: 10001
           readinessProbe:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 9015
+              port: 10015
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
             privileged: true
@@ -66,12 +54,12 @@ spec:
               mountPath: /var/cores
             - name: dockersock
               mountPath: /var/run/docker.sock
+            - name: containerdsock
+              mountPath: /run/containerd
             - name: criosock
               mountPath: /var/run/crio
             - name: crioconf
               mountPath: /etc/crictl.yaml
-            - name: containerdsock
-              mountPath: /run/containerd
             - name: etcpwx
               mountPath: /etc/pwx
             - name: optpwx
@@ -88,33 +76,31 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-            - name: pxlogs
-              mountPath: /var/lib/osd/log
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
         - name: diagsdump
           hostPath:
-            path: /var/vcap/store/cores
+            path: /var/cores
         - name: dockersock
           hostPath:
-            path: /var/vcap/sys/run/docker/docker.sock
-        - name: criosock
-          hostPath:
-            path: /var/vcap/sys/run/crio
-        - name: crioconf
-          hostPath:
-            path: /var/vcap/store/etc/crictl.yaml
-            type: FileOrCreate
+            path: /var/run/docker.sock
         - name: containerdsock
           hostPath:
-            path: /var/vcap/sys/run/containerd
+            path: /run/containerd
+        - name: criosock
+          hostPath:
+            path: /var/run/crio
+        - name: crioconf
+          hostPath:
+            path: /etc/crictl.yaml
+            type: FileOrCreate
         - name: etcpwx
           hostPath:
-            path: /var/vcap/store/etc/pwx
+            path: /etc/pwx
         - name: optpwx
           hostPath:
-            path: /var/vcap/store/opt/pwx
+            path: /opt/pwx
         - name: procmount
           hostPath:
             path: /proc
@@ -130,6 +116,3 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
-        - name: pxlogs
-          hostPath:
-            path: /var/vcap/store/lib/osd/log
