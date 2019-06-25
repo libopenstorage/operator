@@ -330,9 +330,12 @@
   source = "github.com/libopenstorage/external-storage"
 
 [[projects]]
-  digest = "1:5f323570b6a12f7878c745d1622bb40153fa3e33212e65e787ec67c2566816e4"
+  digest = "1:caba34f55aafb55534b51c4e39ad2b9357284ea5befe10b69f4e76b207862976"
   name = "github.com/libopenstorage/openstorage"
-  packages = ["api"]
+  packages = [
+    "api",
+    "pkg/grpcserver",
+  ]
   pruneopts = "UT"
   revision = "af610b3afb95d5a4999446aa28c050da93022c35"
   version = "v6.0.0"
@@ -731,7 +734,7 @@
   revision = "42f80515abfed431577ebeded4ab86390ce0a5cd"
 
 [[projects]]
-  digest = "1:c713dfe4945e9b372d4e881e2e6742ad361f326ecfee66b807a2c582402c3a63"
+  digest = "1:e0530a91daaa2ada05b0146d06b137016bd8054f00b340d28c09177f7667a2f7"
   name = "google.golang.org/grpc"
   packages = [
     ".",
@@ -761,6 +764,8 @@
     "metadata",
     "naming",
     "peer",
+    "reflection",
+    "reflection/grpc_reflection_v1alpha",
     "resolver",
     "resolver/dns",
     "resolver/passthrough",
@@ -1318,6 +1323,8 @@
     "github.com/golang/mock/gomock",
     "github.com/google/shlex",
     "github.com/hashicorp/go-version",
+    "github.com/libopenstorage/openstorage/api",
+    "github.com/libopenstorage/openstorage/pkg/grpcserver",
     "github.com/portworx/kvdb",
     "github.com/portworx/kvdb/consul",
     "github.com/portworx/kvdb/etcd/v2",
@@ -1327,6 +1334,9 @@
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "github.com/urfave/cli",
+    "google.golang.org/grpc",
+    "google.golang.org/grpc/credentials",
+    "google.golang.org/grpc/reflection",
     "k8s.io/api/apps/v1",
     "k8s.io/api/apps/v1beta2",
     "k8s.io/api/core/v1",
