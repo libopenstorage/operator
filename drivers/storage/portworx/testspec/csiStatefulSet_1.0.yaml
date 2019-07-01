@@ -6,6 +6,9 @@ metadata:
 spec:
   serviceName: "px-csi-service"
   replicas: 1
+  selector:
+    matchLabels:
+      app: px-csi-driver
   template:
     metadata:
       labels:

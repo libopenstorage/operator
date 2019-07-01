@@ -227,6 +227,7 @@ func TestServicePortEmptyExistingProtocol(t *testing.T) {
 			Namespace: "test-ns",
 		},
 		Spec: v1.ServiceSpec{
+			Type: v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				{
 					Name: "p1",
