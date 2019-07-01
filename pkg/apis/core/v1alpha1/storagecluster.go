@@ -283,14 +283,12 @@ type StorkSpec struct {
 type StorageClusterStatus struct {
 	// ClusterName name of the storage cluster
 	ClusterName string `json:"clusterName,omitempty"`
-	// ClusterUUID uuid for the storage cluster
-	ClusterUUID string `json:"clusterUuid,omitempty"`
+	// ClusterUID unique ID for the storage cluster
+	ClusterUID string `json:"clusterUid,omitempty"`
 	// CreatedAt timestamp at which the storage cluster was created
 	CreatedAt *meta.Time `json:"createdAt,omitempty"`
 	// Phase is current status of the storage cluster
 	Phase string `json:"phase,omitempty"`
-	// NodeStatuses list of statuses for all the nodes in the storage cluster
-	NodeStatuses []NodeStatus `json:"nodes"`
 	// Count of hash collisions for the StorageCluster. The StorageCluster
 	// controller uses this field as a collision avoidance mechanism when it
 	// needs to create the name of the newest ControllerRevision.
@@ -345,71 +343,6 @@ const (
 	ClusterOperationFailed ClusterConditionStatus = "Failed"
 	// ClusterOperationTimeout means the cluster operation timedout
 	ClusterOperationTimeout ClusterConditionStatus = "Timeout"
-)
-
-// NodeStatus status of the storage cluster node
-type NodeStatus struct {
-	// NodeName name of the node
-	NodeName string `json:"nodeName,omitempty"`
-	// NodeUID unique identifier for the node
-	NodeUID string `json:"nodeUID,omitempty"`
-	// Network details used by the storage driver
-	Network NetworkStatus `json:"network,omitempty"`
-	// Geo topology information for a node
-	Geo Geography `json:"geography,omitempty"`
-	// Conditions is an array of current node conditions
-	Conditions []NodeCondition `json:"conditions,omitempty"`
-}
-
-// NetworkStatus network status of the node
-type NetworkStatus struct {
-	// DataIP is the IP address used by storage driver for data traffic
-	DataIP string `json:"dataIP,omitempty"`
-	// MgmtIP is the IP address used by storage driver for management traffic
-	MgmtIP string `json:"mgmtIP,omitempty"`
-}
-
-// NodeCondition contains condition information for a node
-type NodeCondition struct {
-	// Type of the node condition
-	Type NodeConditionType `json:"type,omitempty"`
-	// Status of the condition
-	Status ConditionStatus `json:"status,omitempty"`
-	// Reason is human readable message indicating details about the condition status
-	Reason string `json:"reason,omitempty"`
-}
-
-// NodeConditionType is the enum type for different node conditions
-type NodeConditionType string
-
-// These are valid conditions of the storage node. They correspond to different
-// components in the storage cluster node.
-const (
-	// NodeState is used for overall state of the node
-	NodeState NodeConditionType = "NodeState"
-	// StorageState is used for the state of storage in the node
-	StorageState NodeConditionType = "StorageState"
-)
-
-// ConditionStatus is the enum type for node condition statuses
-type ConditionStatus string
-
-// These are valid statuses of different node conditions.
-const (
-	// NodeOnline means the node condition is online and healthy
-	NodeOnline ConditionStatus = "Online"
-	// NodeInit means the node condition is in intializing state
-	NodeInit ConditionStatus = "Intializing"
-	// NodeMaintenance means the node condition is in maintenance state
-	NodeMaintenance ConditionStatus = "Maintenance"
-	// NodeDecommissioned means the node condition is in decommissioned state
-	NodeDecommissioned ConditionStatus = "Decommissioned"
-	// NodeDegraded means the node condition is in degraded state
-	NodeDegraded ConditionStatus = "Degraded"
-	// NodeOffline means the node condition is in offline state
-	NodeOffline ConditionStatus = "Offline"
-	// NodeUnknown means the node condition is not known
-	NodeUnknown ConditionStatus = "Unknown"
 )
 
 func init() {

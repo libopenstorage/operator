@@ -25,3 +25,11 @@ type StorageClusterListerExpansion interface{}
 // StorageClusterNamespaceListerExpansion allows custom methods to be added to
 // StorageClusterNamespaceLister.
 type StorageClusterNamespaceListerExpansion interface{}
+
+// StorageNodeStatusListerExpansion allows custom methods to be added to
+// StorageNodeStatusLister.
+type StorageNodeStatusListerExpansion interface{}
+
+// StorageNodeStatusNamespaceListerExpansion allows custom methods to be added to
+// StorageNodeStatusNamespaceLister.
+type StorageNodeStatusNamespaceListerExpansion interface{}
