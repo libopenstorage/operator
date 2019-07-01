@@ -28,6 +28,7 @@ import (
 type CoreV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	StorageClustersGetter
+	StorageNodeStatusesGetter
 }
 
 // CoreV1alpha1Client is used to interact with features provided by the core.libopenstorage.org group.
@@ -37,6 +38,10 @@ type CoreV1alpha1Client struct {
 
 func (c *CoreV1alpha1Client) StorageClusters(namespace string) StorageClusterInterface {
 	return newStorageClusters(c, namespace)
+}
+
+func (c *CoreV1alpha1Client) StorageNodeStatuses(namespace string) StorageNodeStatusInterface {
+	return newStorageNodeStatuses(c, namespace)
 }
 
 // NewForConfig creates a new CoreV1alpha1Client for the given config.
