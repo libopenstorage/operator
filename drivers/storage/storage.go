@@ -43,6 +43,8 @@ type ClusterPluginInterface interface {
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage
 	// cluster spec if they are not set
 	SetDefaultsOnStorageCluster(*corev1alpha1.StorageCluster)
+	// UpdateStorageClusterStatus update the status of storage cluster
+	UpdateStorageClusterStatus(*corev1alpha1.StorageCluster) error
 	// DeleteStorage is going to uninstall and delete the storage service based on
 	// StorageClusterDeleteStrategy. DeleteStorage should provide idempotent behavior
 	// and subsequent calls should result in the same result.

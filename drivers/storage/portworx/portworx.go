@@ -1,13 +1,25 @@
 package portworx
 
 import (
+	"context"
+	"crypto/x509"
 	"fmt"
+	"os"
+	"strconv"
 
+	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	storage "github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -17,6 +29,7 @@ const (
 	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
 	defaultStartPort                  = 9001
+	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
 	defaultNodeWiperImage             = "portworx/px-node-wiper"
 	defaultNodeWiperTag               = "2.1.2-rc1"
@@ -32,6 +45,7 @@ type portworx struct {
 	pvcControllerDeploymentCreated    bool
 	lhDeploymentCreated               bool
 	csiStatefulSetCreated             bool
+	sdkConn                           *grpc.ClientConn
 }
 
 func (p *portworx) String() string {
@@ -167,6 +181,239 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		Status: corev1alpha1.ClusterOperationInProgress,
 		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
+}
+
+func (p *portworx) UpdateStorageClusterStatus(
+	cluster *corev1alpha1.StorageCluster,
+) error {
+	clientConn, err := p.getPortworxClient(cluster)
+	if err != nil {
+		return err
+	}
+
+	clusterClient := api.NewOpenStorageClusterClient(clientConn)
+	pxCluster, err := clusterClient.InspectCurrent(context.TODO(), &api.SdkClusterInspectCurrentRequest{})
+	if err != nil {
+		p.sdkConn = nil
+		return fmt.Errorf("failed to inspect cluster: %v", err)
+	} else if pxCluster.Cluster == nil {
+		return fmt.Errorf("empty ClusterInspect response")
+	}
+
+	cluster.Status.Phase = string(mapClusterStatus(pxCluster.Cluster.Status))
+	cluster.Status.ClusterName = pxCluster.Cluster.Name
+	cluster.Status.ClusterUID = pxCluster.Cluster.Id
+
+	return p.updateNodeStatuses(clientConn, cluster)
+}
+
+func (p *portworx) updateNodeStatuses(
+	clientConn *grpc.ClientConn,
+	cluster *corev1alpha1.StorageCluster,
+) error {
+	nodeClient := api.NewOpenStorageNodeClient(clientConn)
+	nodeEnumerateResponse, err := nodeClient.Enumerate(context.TODO(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	for _, nodeID := range nodeEnumerateResponse.NodeIds {
+		nodeResp, err := nodeClient.Inspect(context.TODO(), &api.SdkNodeInspectRequest{NodeId: nodeID})
+		if err != nil {
+			logrus.Warnf("Failed to inspect node %v: %v", nodeID, err)
+			continue
+		} else if nodeResp.Node == nil {
+			logrus.Warnf("Empty NodeInspect response for nodeID %v: %v", nodeID, err)
+			continue
+		}
+
+		if nodeResp.Node.SchedulerNodeName == "" {
+			k8sNode, err := k8s.Instance().SearchNodeByAddresses(
+				[]string{nodeResp.Node.DataIp, nodeResp.Node.MgmtIp, nodeResp.Node.Hostname},
+			)
+			if err != nil {
+				logrus.Warnf("Unable to find the k8s node name for nodeID %v: %v", nodeID, err)
+				continue
+			}
+			nodeResp.Node.SchedulerNodeName = k8sNode.Name
+		}
+
+		nodeStatus := &corev1alpha1.StorageNodeStatus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            nodeResp.Node.SchedulerNodeName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Labels:          p.GetSelectorLabels(),
+			},
+			Status: corev1alpha1.NodeStatus{
+				NodeUID: nodeResp.Node.Id,
+				Network: corev1alpha1.NetworkStatus{
+					DataIP: nodeResp.Node.DataIp,
+					MgmtIP: nodeResp.Node.MgmtIp,
+				},
+				// TODO: Add a human readable reason with the status
+				Conditions: []corev1alpha1.NodeCondition{
+					{
+						Type:   corev1alpha1.NodeState,
+						Status: mapNodeStatus(nodeResp.Node.Status),
+					},
+				},
+			},
+		}
+
+		err = k8sutil.CreateOrUpdateStorageNodeStatus(p.k8sClient, nodeStatus, ownerRef)
+		if err != nil {
+			logrus.Warnf("Failed to update status for nodeID %v: %v", nodeID, err)
+		}
+	}
+	return nil
+}
+
+func (p *portworx) getPortworxClient(
+	cluster *corev1alpha1.StorageCluster,
+) (*grpc.ClientConn, error) {
+	if p.sdkConn != nil {
+		return p.sdkConn, nil
+	}
+
+	pxService := &v1.Service{}
+	err := p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      pxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		pxService,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get k8s service spec: %v", err)
+	} else if len(pxService.Spec.ClusterIP) == 0 {
+		return nil, fmt.Errorf("failed to get endpoint for portworx volume driver")
+	}
+
+	endpoint := pxService.Spec.ClusterIP
+	sdkPort := defaultSDKPort
+
+	// Get the ports from service
+	for _, pxServicePort := range pxService.Spec.Ports {
+		if pxServicePort.Name == pxSDKPortName && pxServicePort.Port != 0 {
+			sdkPort = int(pxServicePort.Port)
+		}
+	}
+
+	endpoint = fmt.Sprintf("%s:%d", endpoint, sdkPort)
+	return p.getGrpcConn(endpoint)
+}
+
+func (p *portworx) getGrpcConn(endpoint string) (*grpc.ClientConn, error) {
+	dialOptions, err := getDialOptions(isTLSEnabled())
+	if err != nil {
+		return nil, err
+	}
+	p.sdkConn, err = grpcserver.Connect(endpoint, dialOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to GRPC server [%s]: %v", endpoint, err)
+	}
+	return p.sdkConn, nil
+}
+
+func getDialOptions(tls bool) ([]grpc.DialOption, error) {
+	if !tls {
+		return []grpc.DialOption{grpc.WithInsecure()}, nil
+	}
+	capool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load CA system certs: %v", err)
+	}
+	return []grpc.DialOption{grpc.WithTransportCredentials(
+		credentials.NewClientTLSFromCert(capool, ""),
+	)}, nil
+}
+
+func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
+	switch status {
+	case api.Status_STATUS_NONE:
+		fallthrough
+	case api.Status_STATUS_INIT:
+		fallthrough
+	case api.Status_STATUS_OFFLINE:
+		fallthrough
+	case api.Status_STATUS_ERROR:
+		fallthrough
+	case api.Status_STATUS_DECOMMISSION:
+		fallthrough
+	case api.Status_STATUS_MAINTENANCE:
+		fallthrough
+	case api.Status_STATUS_NEEDS_REBOOT:
+		return corev1alpha1.ClusterOffline
+
+	case api.Status_STATUS_NOT_IN_QUORUM:
+		fallthrough
+	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
+		return corev1alpha1.ClusterNotInQuorum
+
+	case api.Status_STATUS_OK:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DOWN:
+		return corev1alpha1.ClusterRunning
+
+	case api.Status_STATUS_STORAGE_DEGRADED:
+		fallthrough
+	case api.Status_STATUS_STORAGE_REBALANCE:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
+		return corev1alpha1.ClusterDegraded
+
+	default:
+		return corev1alpha1.ClusterUnknown
+	}
+}
+
+func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
+	switch status {
+	case api.Status_STATUS_NONE:
+		fallthrough
+	case api.Status_STATUS_OFFLINE:
+		fallthrough
+	case api.Status_STATUS_ERROR:
+		fallthrough
+	case api.Status_STATUS_NOT_IN_QUORUM:
+		fallthrough
+	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
+		fallthrough
+	case api.Status_STATUS_NEEDS_REBOOT:
+		return corev1alpha1.NodeOffline
+
+	case api.Status_STATUS_INIT:
+		return corev1alpha1.NodeInit
+
+	case api.Status_STATUS_MAINTENANCE:
+		return corev1alpha1.NodeMaintenance
+
+	case api.Status_STATUS_OK:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DOWN:
+		return corev1alpha1.NodeOnline
+
+	case api.Status_STATUS_DECOMMISSION:
+		return corev1alpha1.NodeDecommissioned
+
+	case api.Status_STATUS_STORAGE_DEGRADED:
+		fallthrough
+	case api.Status_STATUS_STORAGE_REBALANCE:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
+		return corev1alpha1.NodeDegraded
+
+	default:
+		return corev1alpha1.NodeUnknown
+	}
+}
+
+func isTLSEnabled() bool {
+	enabled, err := strconv.ParseBool(os.Getenv(envKeyPortworxEnableTLS))
+	return err == nil && enabled
 }
 
 func init() {

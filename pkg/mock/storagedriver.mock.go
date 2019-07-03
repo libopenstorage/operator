@@ -143,3 +143,15 @@ func (m *MockDriver) String() string {
 func (mr *MockDriverMockRecorder) String() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockDriver)(nil).String))
 }
+
+// UpdateStorageClusterStatus mocks base method
+func (m *MockDriver) UpdateStorageClusterStatus(arg0 *v1alpha1.StorageCluster) error {
+	ret := m.ctrl.Call(m, "UpdateStorageClusterStatus", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateStorageClusterStatus indicates an expected call of UpdateStorageClusterStatus
+func (mr *MockDriverMockRecorder) UpdateStorageClusterStatus(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStorageClusterStatus", reflect.TypeOf((*MockDriver)(nil).UpdateStorageClusterStatus), arg0)
+}

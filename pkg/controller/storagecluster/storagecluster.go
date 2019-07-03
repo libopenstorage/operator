@@ -229,6 +229,25 @@ func (c *Controller) createCRD() error {
 		return err
 	}
 
+	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	if err != nil {
+		return err
+	}
+
+	resource = k8s.CustomResource{
+		Name:       corev1alpha1.StorageNodeStatusResourceName,
+		Plural:     corev1alpha1.StorageNodeStatusResourcePlural,
+		Group:      corev1alpha1.SchemeGroupVersion.Group,
+		Version:    corev1alpha1.SchemeGroupVersion.Version,
+		Scope:      apiextensionsv1beta1.NamespaceScoped,
+		Kind:       reflect.TypeOf(corev1alpha1.StorageNodeStatus{}).Name(),
+		ShortNames: []string{corev1alpha1.StorageNodeStatusShortName},
+	}
+	err = k8s.Instance().CreateCRD(resource)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
 	return k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 }
 
@@ -282,10 +301,7 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	// Update status of the cluster
-	// TODO: Update the complete status of the cluster even from the storage driver
-	cluster.Status.ClusterName = cluster.Name
-	_, err = k8s.Instance().UpdateStorageClusterStatus(cluster)
-	return err
+	return c.updateStorageClusterStatus(cluster)
 }
 
 func (c *Controller) deleteStorageCluster(
@@ -349,6 +365,16 @@ func (c *Controller) deleteStorageCluster(
 	c.isStorkSchedDeploymentCreated = false
 
 	return nil
+}
+
+func (c *Controller) updateStorageClusterStatus(
+	cluster *corev1alpha1.StorageCluster,
+) error {
+	toUpdate := cluster.DeepCopy()
+	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
+		return fmt.Errorf("failed to get updated status from the driver: %v", err)
+	}
+	return c.client.Status().Update(context.TODO(), toUpdate)
 }
 
 func (c *Controller) manage(

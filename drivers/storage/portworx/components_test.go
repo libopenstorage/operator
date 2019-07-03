@@ -1966,6 +1966,10 @@ func get(k8sClient client.Client, obj runtime.Object, name, namespace string) er
 	)
 }
 
+func deleteObj(k8sClient client.Client, obj runtime.Object) error {
+	return k8sClient.Delete(context.TODO(), obj)
+}
+
 func getExpectedClusterRole(t *testing.T, fileName string) *rbacv1.ClusterRole {
 	obj := getKubernetesObject(t, fileName)
 	clusterRole, ok := obj.(*rbacv1.ClusterRole)
