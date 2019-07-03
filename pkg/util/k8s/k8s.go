@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 
+	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -686,4 +687,46 @@ func CreateOrUpdateDaemonSet(
 
 	logrus.Debugf("Updating %s daemon set", ds.Name)
 	return k8sClient.Update(context.TODO(), existingDS)
+}
+
+// CreateOrUpdateStorageNodeStatus creates a StorageNodeStatus if not present, else updates it
+func CreateOrUpdateStorageNodeStatus(
+	k8sClient client.Client,
+	sns *corev1alpha1.StorageNodeStatus,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingSNS := &corev1alpha1.StorageNodeStatus{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      sns.Name,
+			Namespace: sns.Namespace,
+		},
+		existingSNS,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating StorageNodeStatus %s/%s", sns.Namespace, sns.Name)
+		return k8sClient.Create(context.TODO(), sns)
+	} else if err != nil {
+		return err
+	}
+
+	ownerRefs := make([]metav1.OwnerReference, 0)
+	if ownerRef != nil {
+		ownerRefs = append(ownerRefs, *ownerRef)
+		for _, o := range existingSNS.OwnerReferences {
+			if o.UID != ownerRef.UID {
+				ownerRefs = append(ownerRefs, o)
+			}
+		}
+	}
+
+	modified := !reflect.DeepEqual(sns.Status, existingSNS.Status)
+
+	if modified || len(ownerRefs) > len(existingSNS.OwnerReferences) {
+		existingSNS.Status = sns.Status
+		logrus.Debugf("Updating StorageNodeStatus %s/%s", sns.Namespace, sns.Name)
+		return k8sClient.Status().Update(context.TODO(), existingSNS)
+	}
+	return nil
 }

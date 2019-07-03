@@ -244,17 +244,9 @@ spec:
         - apiGroups:
           - core.libopenstorage.org
           resources:
-          - storageclusters
-          - storageclusters/finalizers
-          - storageclusters/status
+          - "*"
           verbs:
-          - get
-          - list
-          - watch
-          - create
-          - delete
-          - update
-          - patch
+          - "*"
         - apiGroups:
           - stork.libopenstorage.org
           resources:

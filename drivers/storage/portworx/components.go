@@ -54,11 +54,13 @@ const (
 	csiClusterRegistrarContainerName = "csi-cluster-registrar"
 	csiSnapshotterContainerName      = "csi-snapshotter"
 	pxRESTPortName                   = "px-api"
+	pxSDKPortName                    = "px-sdk"
 )
 
 const (
 	defaultPVCControllerCPU = "200m"
 	envKeyPortworxNamespace = "PX_NAMESPACE"
+	envKeyPortworxEnableTLS = "PX_ENABLE_TLS"
 )
 
 var (
@@ -822,7 +824,7 @@ func (p *portworx) createPortworxService(
 					TargetPort: intstr.FromInt(t.startPort + 18),
 				},
 				{
-					Name:       "px-sdk",
+					Name:       pxSDKPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9020),
 					TargetPort: intstr.FromInt(t.startPort + 19),
@@ -867,7 +869,7 @@ func (p *portworx) createPortworxAPIService(
 					TargetPort: intstr.FromInt(t.startPort),
 				},
 				{
-					Name:       "px-sdk",
+					Name:       pxSDKPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9020),
 					TargetPort: intstr.FromInt(t.startPort + 19),

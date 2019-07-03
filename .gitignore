@@ -2,3 +2,4 @@ bin/
 *.swp
 *.test
 coverage.txt
+profile.out
