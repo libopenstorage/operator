@@ -1167,6 +1167,239 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 	assertPodSpecEqual(t, &v1.PodSpec{}, &actual)
 }
 
+func TestPodSpecForKvdbAuthCerts(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
+				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs.yaml")
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Endpoints:  []string{"ep1", "ep2", "ep3"},
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
+func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_ca.yaml")
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Endpoints:  []string{"ep1", "ep2", "ep3"},
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
+func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_key.yaml")
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Endpoints:  []string{"ep1", "ep2", "ep3"},
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
+func TestPodSpecForKvdbAclToken(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-acltoken", "kvdb-acl-token",
+	}
+
+	assert.ElementsMatch(t, expected.Volumes, actual.Volumes)
+	assert.ElementsMatch(t, expected.Containers[0].VolumeMounts, actual.Containers[0].VolumeMounts)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
+func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-userpwd", "kvdb-username:kvdb-password",
+	}
+
+	assert.ElementsMatch(t, expected.Volumes, actual.Volumes)
+	assert.ElementsMatch(t, expected.Containers[0].VolumeMounts, actual.Containers[0].VolumeMounts)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
+func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
+	// Create fake client without kvdb auth secret
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
+
+	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1alpha1.KvdbSpec{
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
 func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)

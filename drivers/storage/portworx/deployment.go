@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,12 @@ const (
 	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
 	templateVersion            = "v4"
 	csiBasePath                = "/var/lib/kubelet/plugins/com.openstorage.pxd"
+	secretKeyKvdbCA            = "kvdb-ca.crt"
+	secretKeyKvdbCert          = "kvdb.crt"
+	secretKeyKvdbCertKey       = "kvdb.key"
+	secretKeyKvdbUsername      = "username"
+	secretKeyKvdbPassword      = "password"
+	secretKeyKvdbACLToken      = "acl-token"
 )
 
 type volumeInfo struct {
@@ -156,6 +163,12 @@ var (
 			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 		},
 	}
+
+	// kvdbVolumeInfo has information of the volume needed for kvdb certs
+	kvdbVolumeInfo = volumeInfo{
+		name:      "kvdbcerts",
+		mountPath: "/etc/pwx/kvdbcerts",
+	}
 )
 
 type template struct {
@@ -170,6 +183,7 @@ type template struct {
 	startPort          int
 	k8sVersion         *version.Version
 	csiVersions        csiVersions
+	kvdb               map[string]string
 }
 
 func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
@@ -420,6 +434,22 @@ func (t *template) getArguments() []string {
 		if len(t.cluster.Spec.Kvdb.Endpoints) != 0 {
 			args = append(args, "-k", strings.Join(t.cluster.Spec.Kvdb.Endpoints, ","))
 		}
+
+		auth := t.loadKvdbAuth()
+		if auth[secretKeyKvdbCert] != "" {
+			args = append(args, "-cert", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCert))
+			if auth[secretKeyKvdbCA] != "" {
+				args = append(args, "-ca", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCA))
+			}
+			if auth[secretKeyKvdbCertKey] != "" {
+				args = append(args, "-key", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCertKey))
+			}
+		} else if auth[secretKeyKvdbACLToken] != "" {
+			args = append(args, "-acltoken", auth[secretKeyKvdbACLToken])
+		} else if auth[secretKeyKvdbUsername] != "" && auth[secretKeyKvdbPassword] != "" {
+			args = append(args, "-userpwd",
+				fmt.Sprintf("%s:%s", auth[secretKeyKvdbUsername], auth[secretKeyKvdbPassword]))
+		}
 	}
 
 	if t.cluster.Spec.Network != nil {
@@ -622,6 +652,15 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 			volumeMounts = append(volumeMounts, volMount)
 		}
 	}
+
+	kvdbAuth := t.loadKvdbAuth()
+	if kvdbAuth[secretKeyKvdbCert] != "" {
+		volumeMounts = append(volumeMounts, v1.VolumeMount{
+			Name:      kvdbVolumeInfo.name,
+			MountPath: kvdbVolumeInfo.mountPath,
+		})
+	}
+
 	return volumeMounts
 }
 
@@ -651,6 +690,44 @@ func (t *template) getVolumes() []v1.Volume {
 			volumes = append(volumes, volume)
 		}
 	}
+
+	kvdbAuth := t.loadKvdbAuth()
+	if kvdbAuth[secretKeyKvdbCert] != "" {
+		kvdbVolume := v1.Volume{
+			Name: kvdbVolumeInfo.name,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: t.cluster.Spec.Kvdb.AuthSecret,
+					Items: []v1.KeyToPath{
+						{
+							Key:  secretKeyKvdbCert,
+							Path: secretKeyKvdbCert,
+						},
+					},
+				},
+			},
+		}
+		if kvdbAuth[secretKeyKvdbCA] != "" {
+			kvdbVolume.VolumeSource.Secret.Items = append(
+				kvdbVolume.VolumeSource.Secret.Items,
+				v1.KeyToPath{
+					Key:  secretKeyKvdbCA,
+					Path: secretKeyKvdbCA,
+				},
+			)
+		}
+		if kvdbAuth[secretKeyKvdbCertKey] != "" {
+			kvdbVolume.VolumeSource.Secret.Items = append(
+				kvdbVolume.VolumeSource.Secret.Items,
+				v1.KeyToPath{
+					Key:  secretKeyKvdbCertKey,
+					Path: secretKeyKvdbCertKey,
+				},
+			)
+		}
+		volumes = append(volumes, kvdbVolume)
+	}
+
 	return volumes
 }
 
@@ -674,6 +751,30 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		},
 	)
 	return volumeInfoList
+}
+
+func (t *template) loadKvdbAuth() map[string]string {
+	if len(t.kvdb) > 0 {
+		return t.kvdb
+	}
+	if t.cluster.Spec.Kvdb == nil {
+		return nil
+	}
+	secretName := t.cluster.Spec.Kvdb.AuthSecret
+	if secretName == "" {
+		return nil
+	}
+	auth, err := k8s.Instance().GetSecret(secretName, t.cluster.Namespace)
+	if err != nil {
+		logrus.Warnf("Could not get kvdb auth secret %v/%v: %v",
+			secretName, t.cluster.Namespace, err)
+		return nil
+	}
+	t.kvdb = make(map[string]string)
+	for k, v := range auth.Data {
+		t.kvdb[k] = string(v)
+	}
+	return t.kvdb
 }
 
 func stringPtr(val string) *string {

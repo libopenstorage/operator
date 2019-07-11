@@ -104,6 +104,14 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 
+	// Should not overwrite complete kvdb spec if endpoints are empty
+	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{
+		AuthSecret: "test-secret",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, cluster.Spec.Kvdb.Internal)
+	require.Equal(t, "test-secret", cluster.Spec.Kvdb.AuthSecret)
+
 	// If endpoints are set don't set internal kvdb
 	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{
 		Endpoints: []string{"endpoint1"},
