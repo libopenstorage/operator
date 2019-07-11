@@ -67,10 +67,11 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
 	startPort := uint32(defaultStartPort)
-	if toUpdate.Spec.Kvdb == nil || len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
-		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{
-			Internal: true,
-		}
+	if toUpdate.Spec.Kvdb == nil {
+		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
+	}
+	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
+		toUpdate.Spec.Kvdb.Internal = true
 	}
 	if toUpdate.Spec.SecretsProvider == nil {
 		toUpdate.Spec.SecretsProvider = stringPtr(defaultSecretsProvider)
