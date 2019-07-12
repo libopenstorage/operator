@@ -557,7 +557,7 @@ func matchSelectedFields(
 		return false, err
 	}
 
-	oldSpec := cluster.Spec.DeepCopy()
+	oldSpec := &corev1alpha1.StorageClusterSpec{}
 	err = json.Unmarshal(rawHistory, oldSpec)
 	if err != nil {
 		return false, err
