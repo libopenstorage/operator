@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -29,12 +30,17 @@ func TestInit(t *testing.T) {
 	driver := portworx{}
 
 	// Nil k8s client
-	err := driver.Init(nil)
+	recorder := record.NewFakeRecorder(0)
+	err := driver.Init(nil, recorder)
 	require.EqualError(t, err, "kubernetes client cannot be nil")
 
-	// Valid k8s client
+	// Nil k8s event recorder
 	k8sClient := fake.NewFakeClient()
-	err = driver.Init(k8sClient)
+	err = driver.Init(k8sClient, nil)
+	require.EqualError(t, err, "event recorder cannot be nil")
+
+	// Valid k8s client
+	err = driver.Init(k8sClient, recorder)
 	require.NoError(t, err)
 	require.Equal(t, k8sClient, driver.k8sClient)
 }
@@ -244,9 +250,9 @@ func TestUpdateClusterStatus(t *testing.T) {
 		},
 	}
 
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -310,7 +316,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, "Unknown", cluster.Status.Phase)
 
 	// Status Maintenance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_MAINTENANCE
@@ -321,7 +327,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status NeedsReboot
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NEEDS_REBOOT
@@ -332,7 +338,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status NotInQuorum
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM
@@ -365,7 +371,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Running", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status StorageDown
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DOWN
@@ -376,7 +382,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Running", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status StorageDegraded
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -387,7 +393,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Degraded", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status StorageRebalance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_REBALANCE
@@ -398,7 +404,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Degraded", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status StorageDriveReplace
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
@@ -409,7 +415,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Degraded", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 
 	// Status Invalid
 	expectedClusterResp.Cluster.Status = api.Status(9999)
@@ -481,44 +487,29 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		AnyTimes()
 
 	// Mock node enumerate response
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{"node-1", "node-2"},
+	expectedNodeOne := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		DataIp:            "10.0.1.1",
+		MgmtIp:            "10.0.1.2",
+		Status:            api.Status_STATUS_NONE,
+	}
+	expectedNodeTwo := &api.StorageNode{
+		Id:                "node-2",
+		SchedulerNodeName: "node-two",
+		DataIp:            "10.0.2.1",
+		MgmtIp:            "10.0.2.2",
+		Status:            api.Status_STATUS_OK,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
 	}
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	// Status None
-	expectedNodeOneResp := &api.SdkNodeInspectResponse{
-		Node: &api.StorageNode{
-			Id:                "node-1",
-			SchedulerNodeName: "node-one",
-			DataIp:            "10.0.1.1",
-			MgmtIp:            "10.0.1.2",
-			Status:            api.Status_STATUS_NONE,
-		},
-	}
-	expectedNodeTwoResp := &api.SdkNodeInspectResponse{
-		Node: &api.StorageNode{
-			Id:                "node-2",
-			SchedulerNodeName: "node-two",
-			DataIp:            "10.0.2.1",
-			MgmtIp:            "10.0.2.2",
-			Status:            api.Status_STATUS_OK,
-		},
-	}
-	gomock.InOrder(
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-			Return(expectedNodeOneResp, nil).
-			Times(1),
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-2"}).
-			Return(expectedNodeTwoResp, nil).
-			Times(1),
-	)
-
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
@@ -553,20 +544,16 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
-	// Return only one node id in enumerate for future tests
-	expectedNodeEnumerateResp = &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{"node-1"},
+	// Return only one node in enumerate for future tests
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNodeOne},
 	}
-	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
 
 	// Status Init
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_INIT
+	expectedNodeOne.Status = api.Status_STATUS_INIT
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -578,10 +565,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeInit, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_OFFLINE
+	expectedNodeOne.Status = api.Status_STATUS_OFFLINE
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -593,10 +580,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Error
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_ERROR
+	expectedNodeOne.Status = api.Status_STATUS_ERROR
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -608,10 +595,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorum
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_NOT_IN_QUORUM
+	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -620,13 +607,13 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorumNoStorage
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
+	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -635,13 +622,13 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NeedsReboot
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_NEEDS_REBOOT
+	expectedNodeOne.Status = api.Status_STATUS_NEEDS_REBOOT
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -653,10 +640,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Decommission
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_DECOMMISSION
+	expectedNodeOne.Status = api.Status_STATUS_DECOMMISSION
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -668,10 +655,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Maintenance
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_MAINTENANCE
+	expectedNodeOne.Status = api.Status_STATUS_MAINTENANCE
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -683,10 +670,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Ok
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_OK
+	expectedNodeOne.Status = api.Status_STATUS_OK
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -698,10 +685,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDown
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_STORAGE_DOWN
+	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DOWN
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -713,10 +700,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_STORAGE_DEGRADED
+	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -728,10 +715,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageRebalance
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_STORAGE_REBALANCE
+	expectedNodeOne.Status = api.Status_STATUS_STORAGE_REBALANCE
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -743,10 +730,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDriveReplace
-	expectedNodeOneResp.Node.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
+	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -758,10 +745,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Invalid
-	expectedNodeOneResp.Node.Status = api.Status(9999)
+	expectedNodeOne.Status = api.Status(9999)
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeOneResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -986,7 +973,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 
 	// Error from node Enumerate API
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(nil, fmt.Errorf("node Enumerate error")).
 		Times(1)
 
@@ -996,7 +983,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 
 	// Nil response from node Enumerate API
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(nil, nil).
 		Times(1)
 
@@ -1004,12 +991,12 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to enumerate nodes")
 
-	// Empty list of node IDs should not create any StorageNodeStatus objects
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{},
+	// Empty list of nodes should not create any StorageNodeStatus objects
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -1021,10 +1008,10 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 
-	// Nil list of node IDs should not create any StorageNodeStatus objects
-	expectedNodeEnumerateResp.NodeIds = nil
+	// Nil list of nodes should not create any StorageNodeStatus objects
+	expectedNodeEnumerateResp.Nodes = nil
 	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -1035,146 +1022,6 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = list(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
-}
-
-func TestUpdateClusterStatusInspectNodeFailures(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	// Create the mock servers that can be used to mock SDK calls
-	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
-	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
-
-	// Start a sdk server that implements the mock servers
-	sdkServerIP := "127.0.0.1"
-	sdkServerPort := 21883
-	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Cluster: mockClusterServer,
-		Node:    mockNodeServer,
-	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
-	defer mockSdk.Stop()
-
-	// Create fake k8s client with fake service that will point the client
-	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
-			Namespace: "kube-test",
-		},
-		Spec: v1.ServiceSpec{
-			ClusterIP: sdkServerIP,
-			Ports: []v1.ServicePort{
-				{
-					Name: pxSDKPortName,
-					Port: int32(sdkServerPort),
-				},
-			},
-		},
-	})
-
-	// Create driver object with the fake k8s client
-	driver := portworx{
-		k8sClient: k8sClient,
-	}
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-	}
-
-	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
-		Cluster: &api.StorageCluster{},
-	}
-	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
-		Return(expectedClusterResp, nil).
-		AnyTimes()
-
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{"node-1", "node-2"},
-	}
-	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
-
-	// Error from node Inspect API should skip creating corresponding node status object
-	expectedNodeTwoResp := &api.SdkNodeInspectResponse{
-		Node: &api.StorageNode{
-			Id:                "node-2",
-			SchedulerNodeName: "node-two",
-			Status:            api.Status_STATUS_OK,
-		},
-	}
-	gomock.InOrder(
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-			Return(nil, fmt.Errorf("error")).
-			Times(1),
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-2"}).
-			Return(expectedNodeTwoResp, nil).
-			Times(1),
-	)
-
-	err := driver.UpdateStorageClusterStatus(cluster)
-	require.NoError(t, err)
-
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
-	require.NoError(t, err)
-	require.Len(t, nodeStatusList.Items, 1)
-	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatusList.Items[0].Status.Conditions[0].Status)
-
-	// Nil response from Inspect API should skip creating corresponding node status object
-	expectedNodeTwoResp.Node.Status = api.Status_STATUS_DECOMMISSION
-	gomock.InOrder(
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-			Return(nil, nil).
-			Times(1),
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-2"}).
-			Return(expectedNodeTwoResp, nil).
-			Times(1),
-	)
-
-	err = driver.UpdateStorageClusterStatus(cluster)
-	require.NoError(t, err)
-
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
-	require.NoError(t, err)
-	require.Len(t, nodeStatusList.Items, 1)
-	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatusList.Items[0].Status.Conditions[0].Status)
-
-	// Nil node object from Inspect API should skip creating corresponding node status object
-	expectedNodeTwoResp.Node.Status = api.Status_STATUS_MAINTENANCE
-	gomock.InOrder(
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-			Return(&api.SdkNodeInspectResponse{Node: nil}, nil).
-			Times(1),
-		mockNodeServer.EXPECT().
-			Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-2"}).
-			Return(expectedNodeTwoResp, nil).
-			Times(1),
-	)
-
-	err = driver.UpdateStorageClusterStatus(cluster)
-	require.NoError(t, err)
-
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
-	require.NoError(t, err)
-	require.Len(t, nodeStatusList.Items, 1)
-	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatusList.Items[0].Status.Conditions[0].Status)
 }
 
 func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
@@ -1225,17 +1072,9 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		},
 	}
 
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{"node-1"},
-	}
-	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
-
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
 		Cluster: &api.StorageCluster{
-			Status: api.Status_STATUS_MAINTENANCE,
+			Status: api.Status_STATUS_ERROR,
 		},
 	}
 	mockClusterServer.EXPECT().
@@ -1243,17 +1082,18 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	expectedNodeResp := &api.SdkNodeInspectResponse{
-		Node: &api.StorageNode{
-			Id:                "node-1",
-			SchedulerNodeName: "node-one",
-			DataIp:            "1.1.1.1",
-			Status:            api.Status_STATUS_MAINTENANCE,
-		},
+	expectedNode := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		DataIp:            "1.1.1.1",
+		Status:            api.Status_STATUS_MAINTENANCE,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNode},
 	}
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -1270,21 +1110,21 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 
 	// Update status based on the latest object
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OK
-	expectedNodeResp.Node.Status = api.Status_STATUS_OK
-	expectedNodeResp.Node.DataIp = "2.2.2.2"
+	expectedNode.Status = api.Status_STATUS_OK
+	expectedNode.DataIp = "2.2.2.2"
 	mockClusterServer.EXPECT().
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
 		Return(expectedClusterResp, nil).
 		Times(1)
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-1"}).
-		Return(expectedNodeResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, "Running", cluster.Status.Phase)
+	require.Equal(t, "Online", cluster.Status.Phase)
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
 	err = list(k8sClient, nodeStatusList)
 	require.NoError(t, err)
@@ -1333,6 +1173,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	// Create driver object with the fake k8s client
 	driver := portworx{
 		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1350,25 +1191,19 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
-	expectedNodeEnumerateResp := &api.SdkNodeEnumerateResponse{
-		NodeIds: []string{"node-uid"},
-	}
-	mockNodeServer.EXPECT().
-		Enumerate(gomock.Any(), &api.SdkNodeEnumerateRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
-
-	expectedNodeResp := &api.SdkNodeInspectResponse{
-		Node: &api.StorageNode{
-			Id:       "node-uid",
-			DataIp:   "1.1.1.1",
-			MgmtIp:   "2.2.2.2",
-			Hostname: "node-hostname",
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:       "node-uid",
+				DataIp:   "1.1.1.1",
+				MgmtIp:   "2.2.2.2",
+				Hostname: "node-hostname",
+			},
 		},
 	}
 	mockNodeServer.EXPECT().
-		Inspect(gomock.Any(), &api.SdkNodeInspectRequest{NodeId: "node-uid"}).
-		Return(expectedNodeResp, nil).
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
 	// Fake a node object without matching ip address or hostname to storage node
@@ -1494,6 +1329,251 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
+}
+
+func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := fakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-1",
+				SchedulerNodeName: "node-one",
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	// Node got removed from storage driver
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 1)
+	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
+}
+
+func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *testing.T) {
+	// Create fake k8s client without any nodes to lookup
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil)
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := fakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-1",
+				SchedulerNodeName: "node-one",
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	// Scheduler node name missing for storage node
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id: "node-1",
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 1)
+	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
+
+	// Deleting already deleted StorageNodeStatus should not throw error
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 1)
+	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
 }
 
 func fakeK8sClient(initObjects ...runtime.Object) client.Client {

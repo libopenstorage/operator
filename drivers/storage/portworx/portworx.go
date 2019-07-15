@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -36,10 +37,12 @@ const (
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
+	failedSyncReason                  = "FailedSync"
 )
 
 type portworx struct {
 	k8sClient                         client.Client
+	recorder                          record.EventRecorder
 	pxAPIDaemonSetCreated             bool
 	volumePlacementStrategyCRDCreated bool
 	pvcControllerDeploymentCreated    bool
@@ -52,11 +55,15 @@ func (p *portworx) String() string {
 	return driverName
 }
 
-func (p *portworx) Init(k8sClient client.Client) error {
+func (p *portworx) Init(k8sClient client.Client, recorder record.EventRecorder) error {
 	if k8sClient == nil {
 		return fmt.Errorf("kubernetes client cannot be nil")
 	}
 	p.k8sClient = k8sClient
+	if recorder == nil {
+		return fmt.Errorf("event recorder cannot be nil")
+	}
+	p.recorder = recorder
 	return nil
 }
 
@@ -194,6 +201,9 @@ func (p *portworx) UpdateStorageClusterStatus(
 	clusterClient := api.NewOpenStorageClusterClient(clientConn)
 	pxCluster, err := clusterClient.InspectCurrent(context.TODO(), &api.SdkClusterInspectCurrentRequest{})
 	if err != nil {
+		if closeErr := p.sdkConn.Close(); closeErr != nil {
+			logrus.Warnf("Failed to close grpc connection. %v", closeErr)
+		}
 		p.sdkConn = nil
 		return fmt.Errorf("failed to inspect cluster: %v", err)
 	} else if pxCluster.Cluster == nil {
@@ -212,51 +222,50 @@ func (p *portworx) updateNodeStatuses(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(clientConn)
-	nodeEnumerateResponse, err := nodeClient.Enumerate(context.TODO(), &api.SdkNodeEnumerateRequest{})
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		context.TODO(),
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
-	for _, nodeID := range nodeEnumerateResponse.NodeIds {
-		nodeResp, err := nodeClient.Inspect(context.TODO(), &api.SdkNodeInspectRequest{NodeId: nodeID})
-		if err != nil {
-			logrus.Warnf("Failed to inspect node %v: %v", nodeID, err)
-			continue
-		} else if nodeResp.Node == nil {
-			logrus.Warnf("Empty NodeInspect response for nodeID %v: %v", nodeID, err)
-			continue
-		}
+	currentNodes := make(map[string]bool)
 
-		if nodeResp.Node.SchedulerNodeName == "" {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.SchedulerNodeName == "" {
 			k8sNode, err := k8s.Instance().SearchNodeByAddresses(
-				[]string{nodeResp.Node.DataIp, nodeResp.Node.MgmtIp, nodeResp.Node.Hostname},
+				[]string{node.DataIp, node.MgmtIp, node.Hostname},
 			)
 			if err != nil {
-				logrus.Warnf("Unable to find the k8s node name for nodeID %v: %v", nodeID, err)
+				msg := fmt.Sprintf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
+				p.warningEvent(cluster, failedSyncReason, msg)
 				continue
 			}
-			nodeResp.Node.SchedulerNodeName = k8sNode.Name
+			node.SchedulerNodeName = k8sNode.Name
 		}
+
+		currentNodes[node.SchedulerNodeName] = true
 
 		nodeStatus := &corev1alpha1.StorageNodeStatus{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            nodeResp.Node.SchedulerNodeName,
+				Name:            node.SchedulerNodeName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				Labels:          p.GetSelectorLabels(),
 			},
 			Status: corev1alpha1.NodeStatus{
-				NodeUID: nodeResp.Node.Id,
+				NodeUID: node.Id,
 				Network: corev1alpha1.NetworkStatus{
-					DataIP: nodeResp.Node.DataIp,
-					MgmtIP: nodeResp.Node.MgmtIp,
+					DataIP: node.DataIp,
+					MgmtIP: node.MgmtIp,
 				},
 				// TODO: Add a human readable reason with the status
 				Conditions: []corev1alpha1.NodeCondition{
 					{
 						Type:   corev1alpha1.NodeState,
-						Status: mapNodeStatus(nodeResp.Node.Status),
+						Status: mapNodeStatus(node.Status),
 					},
 				},
 			},
@@ -264,7 +273,26 @@ func (p *portworx) updateNodeStatuses(
 
 		err = k8sutil.CreateOrUpdateStorageNodeStatus(p.k8sClient, nodeStatus, ownerRef)
 		if err != nil {
-			logrus.Warnf("Failed to update status for nodeID %v: %v", nodeID, err)
+			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
+			p.warningEvent(cluster, failedSyncReason, msg)
+		}
+	}
+
+	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	if err = p.k8sClient.List(context.TODO(), &client.ListOptions{}, nodeStatusList); err != nil {
+		return fmt.Errorf("failed to get a list of StorageNodeStatus: %v", err)
+	}
+
+	for _, nodeStatus := range nodeStatusList.Items {
+		if _, exists := currentNodes[nodeStatus.Name]; !exists {
+			logrus.Debugf("Deleting orphan StorageNodeStatus %v/%v",
+				nodeStatus.Namespace, nodeStatus.Name)
+			err = p.k8sClient.Delete(context.TODO(), nodeStatus.DeepCopy())
+			if err != nil && !errors.IsNotFound(err) {
+				msg := fmt.Sprintf("Failed to delete StorageNodeStatus %v/%v: %v",
+					nodeStatus.Namespace, nodeStatus.Name, err)
+				p.warningEvent(cluster, failedSyncReason, msg)
+			}
 		}
 	}
 	return nil
@@ -306,6 +334,14 @@ func (p *portworx) getPortworxClient(
 	return p.getGrpcConn(endpoint)
 }
 
+func (p *portworx) warningEvent(
+	cluster *corev1alpha1.StorageCluster,
+	reason, message string,
+) {
+	logrus.Warn(message)
+	p.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+}
+
 func (p *portworx) getGrpcConn(endpoint string) (*grpc.ClientConn, error) {
 	dialOptions, err := getDialOptions(isTLSEnabled())
 	if err != nil {
@@ -340,12 +376,6 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	case api.Status_STATUS_OFFLINE:
 		fallthrough
 	case api.Status_STATUS_ERROR:
-		fallthrough
-	case api.Status_STATUS_DECOMMISSION:
-		fallthrough
-	case api.Status_STATUS_MAINTENANCE:
-		fallthrough
-	case api.Status_STATUS_NEEDS_REBOOT:
 		return corev1alpha1.ClusterOffline
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
@@ -355,16 +385,21 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 
 	case api.Status_STATUS_OK:
 		fallthrough
+	case api.Status_STATUS_MAINTENANCE:
+		fallthrough
+	case api.Status_STATUS_NEEDS_REBOOT:
+		fallthrough
 	case api.Status_STATUS_STORAGE_DOWN:
-		return corev1alpha1.ClusterRunning
-
+		fallthrough
 	case api.Status_STATUS_STORAGE_DEGRADED:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.ClusterDegraded
+		return corev1alpha1.ClusterOnline
 
+	case api.Status_STATUS_DECOMMISSION:
+		fallthrough
 	default:
 		return corev1alpha1.ClusterUnknown
 	}
@@ -378,15 +413,16 @@ func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
 		fallthrough
 	case api.Status_STATUS_ERROR:
 		fallthrough
-	case api.Status_STATUS_NOT_IN_QUORUM:
-		fallthrough
-	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		fallthrough
 	case api.Status_STATUS_NEEDS_REBOOT:
 		return corev1alpha1.NodeOffline
 
 	case api.Status_STATUS_INIT:
 		return corev1alpha1.NodeInit
+
+	case api.Status_STATUS_NOT_IN_QUORUM:
+		fallthrough
+	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
+		return corev1alpha1.NodeNotInQuorum
 
 	case api.Status_STATUS_MAINTENANCE:
 		return corev1alpha1.NodeMaintenance

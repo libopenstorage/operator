@@ -107,7 +107,7 @@ func run(c *cli.Context) {
 		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
 	}
 
-	if err = d.Init(mgr.GetClient()); err != nil {
+	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 

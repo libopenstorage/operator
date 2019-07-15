@@ -48,6 +48,19 @@ func (mr *MockOpenStorageNodeServerMockRecorder) Enumerate(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enumerate", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).Enumerate), arg0, arg1)
 }
 
+// EnumerateWithFilters mocks base method
+func (m *MockOpenStorageNodeServer) EnumerateWithFilters(arg0 context.Context, arg1 *api.SdkNodeEnumerateWithFiltersRequest) (*api.SdkNodeEnumerateWithFiltersResponse, error) {
+	ret := m.ctrl.Call(m, "EnumerateWithFilters", arg0, arg1)
+	ret0, _ := ret[0].(*api.SdkNodeEnumerateWithFiltersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EnumerateWithFilters indicates an expected call of EnumerateWithFilters
+func (mr *MockOpenStorageNodeServerMockRecorder) EnumerateWithFilters(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnumerateWithFilters", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).EnumerateWithFilters), arg0, arg1)
+}
+
 // Inspect mocks base method
 func (m *MockOpenStorageNodeServer) Inspect(arg0 context.Context, arg1 *api.SdkNodeInspectRequest) (*api.SdkNodeInspectResponse, error) {
 	ret := m.ctrl.Call(m, "Inspect", arg0, arg1)
