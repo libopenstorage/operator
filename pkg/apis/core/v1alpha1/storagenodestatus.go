@@ -83,6 +83,8 @@ const (
 	NodeOnline ConditionStatus = "Online"
 	// NodeInit means the node condition is in intializing state
 	NodeInit ConditionStatus = "Intializing"
+	// NodeNotInQuorum means the node is not in quorum
+	NodeNotInQuorum ConditionStatus = "NotInQuorum"
 	// NodeMaintenance means the node condition is in maintenance state
 	NodeMaintenance ConditionStatus = "Maintenance"
 	// NodeDecommissioned means the node condition is in decommissioned state

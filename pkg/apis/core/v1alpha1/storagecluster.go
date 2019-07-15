@@ -325,14 +325,12 @@ type ClusterConditionStatus string
 
 // These are valid cluster statuses.
 const (
-	// ClusterRunning means the cluster is up and running
-	ClusterRunning ClusterConditionStatus = "Running"
+	// ClusterOnline means the cluster is up and running
+	ClusterOnline ClusterConditionStatus = "Online"
 	// ClusterOffline means the cluster is offline
 	ClusterOffline ClusterConditionStatus = "Offline"
 	// ClusterNotInQuorum means the cluster is out of quorum
 	ClusterNotInQuorum ClusterConditionStatus = "NotInQuorum"
-	// ClusterDegraded means the cluster is up but not in working state
-	ClusterDegraded ClusterConditionStatus = "Degraded"
 	// ClusterUnknown means the cluser status is not known
 	ClusterUnknown ClusterConditionStatus = "Unknown"
 	// ClusterOperationInProgress means the cluster operation is in progress

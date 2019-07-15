@@ -59,10 +59,11 @@ import (
 )
 
 const (
+	// ControllerName is the name of the controller
+	ControllerName                      = "storagecluster-controller"
 	slowStartInitialBatchSize           = 1
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
-	controllerName                      = "storagecluster-controller"
 	operatorPrefix                      = "operator.libopenstorage.org"
 	labelKeyName                        = operatorPrefix + "/name"
 	labelKeyDriverName                  = operatorPrefix + "/driver"
@@ -113,10 +114,10 @@ func (c *Controller) Init(mgr manager.Manager) error {
 
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
-	c.recorder = mgr.GetRecorder(controllerName)
+	c.recorder = mgr.GetRecorder(ControllerName)
 
 	// Create a new controller
-	ctrl, err := controller.New(controllerName, mgr, controller.Options{Reconciler: c})
+	ctrl, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
 	if err != nil {
 		return err
 	}
@@ -372,7 +373,9 @@ func (c *Controller) updateStorageClusterStatus(
 ) error {
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
-		return fmt.Errorf("failed to get updated status from the driver: %v", err)
+		logrus.Error(err.Error())
+		c.recorder.Event(cluster, v1.EventTypeWarning, failedSyncReason, err.Error())
+		return nil
 	}
 	return c.client.Status().Update(context.TODO(), toUpdate)
 }

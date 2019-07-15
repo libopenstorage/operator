@@ -5,6 +5,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -13,7 +14,7 @@ import (
 // to implement these interfaces.
 type Driver interface {
 	// Init initializes the storage driver
-	Init(client.Client) error
+	Init(client.Client, record.EventRecorder) error
 	// String returns the string name of the driver
 	String() string
 	// ClusterPluginInterface interface to manage storage cluster
