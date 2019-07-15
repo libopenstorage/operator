@@ -4,7 +4,17 @@ language: go
 go:
   - 1.11.2
 script:
-  - make && make test && make olm-verify
+  - |
+    if [ "${TRAVIS_BRANCH}" == "master" ]; then
+      export DOCKER_HUB_STORAGE_OPERATOR_TAG=master
+    else
+      export DOCKER_HUB_STORAGE_OPERATOR_TAG=`git rev-parse --short HEAD`
+    fi
+    make && make test && make olm-verify && make container &&
+    if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
+      docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
+      make deploy;
+    fi
 notifications:
   email:
     on_success: always
