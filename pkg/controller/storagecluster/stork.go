@@ -716,8 +716,8 @@ func (c *Controller) createStorkSchedDeployment(
 		"--address=0.0.0.0",
 		"--leader-elect=true",
 		"--scheduler-name=stork",
-		"--policy-configmap=stork-config",
-		"--policy-configmap-namespace=kube-system",
+		"--policy-configmap=" + storkConfigMapName,
+		"--policy-configmap-namespace=" + cluster.Namespace,
 		"--lock-object-name=stork-scheduler",
 	}
 
