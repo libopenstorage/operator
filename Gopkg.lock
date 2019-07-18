@@ -26,6 +26,14 @@
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
+  digest = "1:c1100fc71e23b6a32b2c68a5202a848fd13811d5a10b12edb8019c3667d1cd9a"
+  name = "github.com/cenkalti/backoff"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4b4cebaf850ec58f1bb1fec5bdebdf8501c2bc3f"
+  version = "v3.0.0"
+
+[[projects]]
   digest = "1:806b74f524325e0a8a338ebaa354a67334ed0419cb294a6ac9b2a83df584d967"
   name = "github.com/coreos/etcd"
   packages = [
@@ -48,6 +56,14 @@
   version = "v3.3.13"
 
 [[projects]]
+  digest = "1:f6e5e1bc64c2908167e6aa9a1fe0c084d515132a1c63ad5b6c84036aa06dc0c1"
+  name = "github.com/coreos/go-oidc"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "1180514eaf4d9f38d0d19eef639a1d695e066e72"
+  version = "v2.0.0"
+
+[[projects]]
   digest = "1:05ffeeed3f0f05520de0679f6aa3219ffee69cfd6d9fb6c194879d4c818ad670"
   name = "github.com/coreos/go-semver"
   packages = ["semver"]
@@ -62,6 +78,14 @@
   pruneopts = "UT"
   revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
   version = "v1.1.1"
+
+[[projects]]
+  digest = "1:76dc72490af7174349349838f2fe118996381b31ea83243812a97e5a0fd5ed55"
+  name = "github.com/dgrijalva/jwt-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "06ea1031745cb8b3dab3f6a236daf2b0aa468b7e"
+  version = "v3.2.0"
 
 [[projects]]
   digest = "1:4ddc17aeaa82cb18c5f0a25d7c253a10682f518f4b2558a82869506eec223d76"
@@ -223,6 +247,14 @@
   revision = "3befbb6ad0cc97d4c25d851e9528915809e1a22f"
 
 [[projects]]
+  digest = "1:950942c08fb75a83a0dc9127bcfe53bd46972ddadcfcf4bd6eedd4081ed8dce5"
+  name = "github.com/grpc-ecosystem/go-grpc-middleware"
+  packages = ["util/metautils"]
+  pruneopts = "UT"
+  revision = "c250d6563d4d4c20252cd865923440e829844f4e"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:4cbbca3db0ff89197d000fb2fa0b90ca4516a7fbd4d8cd9fa4bebf17df484f6d"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = [
@@ -330,15 +362,18 @@
   source = "github.com/libopenstorage/external-storage"
 
 [[projects]]
-  digest = "1:caba34f55aafb55534b51c4e39ad2b9357284ea5befe10b69f4e76b207862976"
+  branch = "release-6.0"
+  digest = "1:84c69696ab84712ce74b813dc1222fc1206e49be015a8ecaa4b05f0fd07b3c0c"
   name = "github.com/libopenstorage/openstorage"
   packages = [
     "api",
+    "pkg/auth",
     "pkg/grpcserver",
+    "pkg/util",
+    "volume",
   ]
   pruneopts = "UT"
-  revision = "af610b3afb95d5a4999446aa28c050da93022c35"
-  version = "v6.0.0"
+  revision = "8d0fa3f1af89702ffe7ad3a99e070feb6600338b"
 
 [[projects]]
   branch = "master"
@@ -490,6 +525,17 @@
   ]
   pruneopts = "UT"
   revision = "fc8701b2e17436493a0dc0af0dd361c26bf0ec07"
+
+[[projects]]
+  branch = "master"
+  digest = "1:bd9efe4e0b0f768302a1e2f0c22458149278de533e521206e5ddc71848c269a0"
+  name = "github.com/pquerna/cachecontrol"
+  packages = [
+    ".",
+    "cacheobject",
+  ]
+  pruneopts = "UT"
+  revision = "1555304b9b35fdd2b425bccf1a5613677705e7d0"
 
 [[projects]]
   digest = "1:93a746f1060a8acbcf69344862b2ceced80f854170e1caae089b2834c5fbf7f4"
