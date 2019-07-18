@@ -41,6 +41,10 @@ required = [
   name = "github.com/portworx/sched-ops"
   branch = "kubernetes-1.13.1"
 
+[[constraint]]
+  name = "github.com/libopenstorage/openstorage"
+  branch = "release-6.0"
+
 [[override]]
   name = "github.com/libopenstorage/stork"
   branch = "master"

@@ -22,8 +22,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
+	"github.com/libopenstorage/openstorage/pkg/util"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/metadata"
 )
 
 // Connect address by grpc
@@ -37,19 +41,38 @@ func Connect(address string, dialOptions []grpc.DialOption) (*grpc.ClientConn, e
 				}))
 	}
 
+	dialOptions = append(dialOptions, grpc.WithBackoffMaxDelay(time.Second))
 	conn, err := grpc.Dial(address, dialOptions...)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	for {
-		if !conn.WaitForStateChange(ctx, conn.GetState()) {
-			return conn, fmt.Errorf("Connection timed out")
-		}
+	// We wait for 1 minute until conn.GetState() is READY.
+	// The interval for this check is 1 second.
+	if err := util.WaitFor(1*time.Minute, 10*time.Millisecond, func() (bool, error) {
 		if conn.GetState() == connectivity.Ready {
-			return conn, nil
+			return false, nil
 		}
+		return true, nil
+	}); err != nil {
+		// Clean up the connection
+		if err := conn.Close(); err != nil {
+			logrus.Warnf("Failed to close connection to %v: %v", address, err)
+		}
+		return nil, fmt.Errorf("Connection timed out")
 	}
+
+	return conn, nil
+}
+
+func AddMetadataToContext(ctx context.Context, k, v string) context.Context {
+	md, _ := metadata.FromOutgoingContext(ctx)
+	md = metadata.Join(md, metadata.New(map[string]string{
+		k: v,
+	}))
+	return metadata.NewOutgoingContext(ctx, md)
+}
+
+func GetMetadataValueFromKey(ctx context.Context, k string) string {
+	return metautils.ExtractIncoming(ctx).Get(k)
 }
