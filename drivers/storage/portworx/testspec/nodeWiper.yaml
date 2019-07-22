@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: px-node-wiper
+  namespace: kube-test
+  labels:
+    name: px-node-wiper
+spec:
+  selector:
+    matchLabels:
+      name: px-node-wiper
+  template:
+    metadata:
+      labels:
+        name: px-node-wiper
+    spec:
+      containers:
+      - name: px-node-wiper
+        image: portworx/px-node-wiper:2.1.2-rc1
+        imagePullPolicy: Always
+        args:
+        - -w
+        securityContext:
+          privileged: true
+        readinessProbe:
+          initialDelaySeconds: 30
+          exec:
+            command:
+            - cat
+            - /tmp/px-node-wipe-done
+        volumeMounts:
+        - name: etcpwx
+          mountPath: /etc/pwx
+        - name: hostproc
+          mountPath: /hostproc
+        - name: optpwx
+          mountPath: /opt/pwx
+        - name: dbus
+          mountPath: /var/run/dbus
+        - name: sysdmount
+          mountPath: /etc/systemd/system
+        - name: dev
+          mountPath: /dev
+        - name: lvm
+          mountPath: /run/lvm
+        - name: etc-multipath
+          mountPath: /etc/multipath
+        - name: run-udev-data
+          mountPath: /run/udev/data
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+      restartPolicy: Always
+      serviceAccountName: portworx
+      volumes:
+      - name: etcpwx
+        hostPath:
+          path: /etc/pwx
+      - name: hostproc
+        hostPath:
+          path: /proc
+      - name: optpwx
+        hostPath:
+          path: /opt/pwx
+      - name: dbus
+        hostPath:
+          path: /var/run/dbus
+      - name: sysdmount
+        hostPath:
+          path: /etc/systemd/system
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: etc-multipath
+        hostPath:
+          path: /etc/multipath
+          type: DirectoryOrCreate
+      - name: lvm
+        hostPath:
+          path: /run/lvm
+          type: DirectoryOrCreate
+      - name: run-udev-data
+        hostPath:
+          path: /run/udev/data
+      - name: sys
+        hostPath:
+          path: /sys

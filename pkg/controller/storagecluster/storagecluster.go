@@ -348,7 +348,7 @@ func (c *Controller) deleteStorageCluster(
 			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
 
-		if err := c.client.Status().Update(context.TODO(), toDelete); err != nil {
+		if err := c.client.Status().Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}

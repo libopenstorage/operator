@@ -1,38 +1,54 @@
 package portworx
 
 import (
+	"context"
 	"fmt"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
 	e2 "github.com/portworx/kvdb/etcd/v2"
 	e3 "github.com/portworx/kvdb/etcd/v3"
-	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
-	apps_api "k8s.io/api/apps/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
 	configMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
+	getKVDBVersion     = kvdb.Version
+	newKVDB            = kvdb.New
 )
 
 const (
 	dsOptPwxVolumeName           = "optpwx"
 	dsEtcPwxVolumeName           = "etcpwx"
+	dsHostProcVolumeName         = "hostproc"
 	dsDbusVolumeName             = "dbus"
 	dsSysdVolumeName             = "sysdmount"
+	dsDevVolumeName              = "dev"
+	dsMultipathVolumeName        = "etc-multipath"
+	dsLvmVolumeName              = "lvm"
+	dsSysVolumeName              = "sys"
+	dsUdevVolumeName             = "run-udev-data"
 	sysdmount                    = "/etc/systemd/system"
+	devMount                     = "/dev"
+	multipathMount               = "/etc/multipath"
+	lvmMount                     = "/run/lvm"
+	sysMount                     = "/sys"
+	udevMount                    = "/run/udev/data"
 	dbusPath                     = "/var/run/dbus"
 	pksPersistentStoreRoot       = "/var/vcap/store"
 	pxOptPwx                     = "/opt/pwx"
-	pxEtcdPwx                    = "/etc/pwx"
+	pxEtcPwx                     = "/etc/pwx"
 	pxNodeWiperDaemonSetName     = "px-node-wiper"
 	pxKvdbPrefix                 = "pwx/"
 	internalEtcdConfigMapPrefix  = "px-bootstrap-"
@@ -52,30 +68,36 @@ type UninstallPortworx interface {
 }
 
 // NewUninstaller returns an implementation of UninstallPortworx interface
-func NewUninstaller(cluster *corev1alpha1.StorageCluster) UninstallPortworx {
-	return &uninstallPortworx{cluster}
+func NewUninstaller(
+	cluster *corev1alpha1.StorageCluster,
+	k8sClient client.Client,
+) UninstallPortworx {
+	return &uninstallPortworx{
+		cluster:   cluster,
+		k8sClient: k8sClient,
+	}
 }
 
 type uninstallPortworx struct {
-	cluster *corev1alpha1.StorageCluster
-}
-
-func (u *uninstallPortworx) DeleteNodeWiper() error {
-	// Deleting the daemonset regardless of whether it is running or has completed
-	err := k8s.Instance().DeleteDaemonSet(pxNodeWiperDaemonSetName, u.cluster.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
-		logrus.Warnf("error while deleting daemonset: %v", err)
-		return err
-	}
-	return nil
+	cluster   *corev1alpha1.StorageCluster
+	k8sClient client.Client
 }
 
 func (u *uninstallPortworx) GetNodeWiperStatus() (int32, int32, int32, error) {
-	ds, err := k8s.Instance().GetDaemonSet(pxNodeWiperDaemonSetName, u.cluster.Namespace)
+	ds := &appsv1.DaemonSet{}
+	err := u.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: u.cluster.Namespace,
+		},
+		ds,
+	)
 	if err != nil {
 		return -1, -1, -1, err
 	}
-	pods, err := k8s.Instance().GetDaemonSetPods(ds)
+
+	pods, err := k8sutil.GetDaemonSetPods(u.k8sClient, ds)
 	if err != nil {
 		return -1, -1, -1, err
 	}
@@ -98,8 +120,8 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		fmt.Sprintf("%s%s", cloudDriveConfigMapPrefix, strippedClusterName),
 	}
 	for _, cm := range configMaps {
-		err := k8s.Instance().DeleteConfigMap(cm, bootstrapCloudDriveNamespace)
-		if err != nil && !errors.IsNotFound(err) {
+		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, bootstrapCloudDriveNamespace)
+		if err != nil {
 			return err
 		}
 	}
@@ -155,14 +177,14 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	ownerRef := metav1.NewControllerRef(u.cluster, controllerKind)
 
-	ds := &apps_api.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pxNodeWiperDaemonSetName,
 			Namespace:       u.cluster.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
-		Spec: apps_api.DaemonSetSpec{
+		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -191,10 +213,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      dsEtcPwxVolumeName,
-									MountPath: pxEtcdPwx,
+									MountPath: pxEtcPwx,
 								},
 								{
-									Name:      "hostproc",
+									Name:      dsHostProcVolumeName,
 									MountPath: "/hostproc",
 								},
 								{
@@ -209,6 +231,27 @@ func (u *uninstallPortworx) RunNodeWiper(
 									Name:      dsSysdVolumeName,
 									MountPath: sysdmount,
 								},
+								{
+									Name:      dsDevVolumeName,
+									MountPath: devMount,
+								},
+								{
+									Name:      dsLvmVolumeName,
+									MountPath: lvmMount,
+								},
+								{
+									Name:      dsMultipathVolumeName,
+									MountPath: multipathMount,
+								},
+								{
+									Name:      dsUdevVolumeName,
+									MountPath: udevMount,
+									ReadOnly:  true,
+								},
+								{
+									Name:      dsSysVolumeName,
+									MountPath: sysMount,
+								},
 							},
 						},
 					},
@@ -219,12 +262,12 @@ func (u *uninstallPortworx) RunNodeWiper(
 							Name: dsEtcPwxVolumeName,
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
-									Path: pwxHostPathRoot + pxEtcdPwx,
+									Path: path.Join(pwxHostPathRoot, pxEtcPwx),
 								},
 							},
 						},
 						{
-							Name: "hostproc",
+							Name: dsHostProcVolumeName,
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
 									Path: "/proc",
@@ -235,7 +278,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 							Name: dsOptPwxVolumeName,
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
-									Path: pwxHostPathRoot + pxOptPwx,
+									Path: path.Join(pwxHostPathRoot, pxOptPwx),
 								},
 							},
 						},
@@ -255,15 +298,61 @@ func (u *uninstallPortworx) RunNodeWiper(
 								},
 							},
 						},
+						{
+							Name: dsDevVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: devMount,
+								},
+							},
+						},
+						{
+							Name: dsMultipathVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: multipathMount,
+									Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+								},
+							},
+						},
+						{
+							Name: dsLvmVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: lvmMount,
+									Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+								},
+							},
+						},
+						{
+							Name: dsUdevVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: udevMount,
+								},
+							},
+						},
+						{
+							Name: dsSysVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: sysMount,
+								},
+							},
+						},
 					},
 				},
 			},
 		},
 	}
-	if _, err = k8s.Instance().CreateDaemonSet(ds); err != nil {
-		return err
+
+	if u.cluster.Spec.Placement != nil && u.cluster.Spec.Placement.NodeAffinity != nil {
+		ds.Spec.Template.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+		}
 	}
-	return nil
+
+	return u.k8sClient.Create(context.TODO(), ds)
 }
 
 func getKVDBClient(endpoints []string, opts map[string]string) (kvdb.Kvdb, error) {
@@ -306,7 +395,7 @@ func getKVDBClient(endpoints []string, opts map[string]string) (kvdb.Kvdb, error
 	var kvdbVersion string
 	var err error
 	for i, url := range endpoints {
-		kvdbVersion, err = kvdb.Version(kvdbType+"-kv", url, opts)
+		kvdbVersion, err = getKVDBVersion(kvdbType+"-kv", url, opts)
 		if err == nil {
 			break
 		} else if i == len(endpoints)-1 {
@@ -325,5 +414,5 @@ func getKVDBClient(endpoints []string, opts map[string]string) (kvdb.Kvdb, error
 		return nil, fmt.Errorf("unknown kvdb endpoint (%v) and version (%v) ", endpoints, kvdbVersion)
 	}
 
-	return kvdb.New(kvdbName, pxKvdbPrefix, endpoints, opts, nil)
+	return newKVDB(kvdbName, pxKvdbPrefix, endpoints, opts, nil)
 }
