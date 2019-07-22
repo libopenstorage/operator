@@ -123,7 +123,9 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 	return p.installComponents(cluster)
 }
 
-func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error) {
+func (p *portworx) DeleteStorage(
+	storageCluster *corev1alpha1.StorageCluster,
+) (*corev1alpha1.ClusterCondition, error) {
 	p.unsetInstallParams()
 
 	if storageCluster.Spec.DeleteStrategy == nil {
@@ -144,12 +146,12 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	u := NewUninstaller(storageCluster)
+	u := NewUninstaller(storageCluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
 		// TODO: Add capability to change the node wiper image
-		if err := u.RunNodeWiper(defaultNodeWiperImage, defaultNodeWiperTag, removeData); err != nil {
+		if err := u.RunNodeWiper("", "", removeData); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
 				Status: corev1alpha1.ClusterOperationFailed,
@@ -168,13 +170,16 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 
 	if completed != 0 && total != 0 && completed == total {
 		// all the nodes are wiped
-		if err := u.WipeMetadata(); err != nil {
-			logrus.Errorf("Failed to delete portworx metadata: %v", err)
-			return &corev1alpha1.ClusterCondition{
-				Type:   corev1alpha1.ClusterConditionTypeDelete,
-				Status: corev1alpha1.ClusterOperationFailed,
-				Reason: "Failed to wipe metadata: " + err.Error(),
-			}, nil
+		if removeData {
+			logrus.Debugf("Deleting portworx metadata")
+			if err := u.WipeMetadata(); err != nil {
+				logrus.Errorf("Failed to delete portworx metadata: %v", err)
+				return &corev1alpha1.ClusterCondition{
+					Type:   corev1alpha1.ClusterConditionTypeDelete,
+					Status: corev1alpha1.ClusterOperationFailed,
+					Reason: "Failed to wipe metadata: " + err.Error(),
+				}, nil
+			}
 		}
 		return &corev1alpha1.ClusterCondition{
 			Type:   corev1alpha1.ClusterConditionTypeDelete,

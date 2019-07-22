@@ -730,3 +730,40 @@ func CreateOrUpdateStorageNodeStatus(
 	}
 	return nil
 }
+
+// GetDaemonSetPods returns a list of pods for the given daemon set
+func GetDaemonSetPods(
+	k8sClient client.Client,
+	ds *appsv1.DaemonSet,
+) ([]*v1.Pod, error) {
+	return GetPodsByOwner(k8sClient, ds.UID, ds.Namespace)
+}
+
+// GetPodsByOwner returns pods for a given owner and namespace
+func GetPodsByOwner(
+	k8sClient client.Client,
+	ownerUID types.UID,
+	namespace string,
+) ([]*v1.Pod, error) {
+	podList := &v1.PodList{}
+	err := k8sClient.List(
+		context.TODO(),
+		&client.ListOptions{
+			Namespace: namespace,
+		},
+		podList,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*v1.Pod, 0)
+	for _, pod := range podList.Items {
+		for _, owner := range pod.OwnerReferences {
+			if owner.UID == ownerUID {
+				result = append(result, pod.DeepCopy())
+			}
+		}
+	}
+	return result, nil
+}

@@ -1,21 +1,28 @@
 package portworx
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/openstorage/pkg/dbg"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/consul"
+	e2 "github.com/portworx/kvdb/etcd/v2"
+	e3 "github.com/portworx/kvdb/etcd/v3"
+	"github.com/portworx/kvdb/mem"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1576,8 +1583,795 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
 }
 
-func fakeK8sClient(initObjects ...runtime.Object) client.Client {
-	s := scheme.Scheme
-	corev1alpha1.AddToScheme(s)
-	return fake.NewFakeClientWithScheme(s, initObjects...)
+func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
+	driver := portworx{
+		pxAPIDaemonSetCreated:             true,
+		volumePlacementStrategyCRDCreated: true,
+		pvcControllerDeploymentCreated:    true,
+		lhDeploymentCreated:               true,
+		csiStatefulSetCreated:             true,
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// If no delete strategy is provided, condition should be complete
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+
+	// All components should be marked as not created
+	require.False(t, driver.pxAPIDaemonSetCreated)
+	require.False(t, driver.volumePlacementStrategyCRDCreated)
+	require.False(t, driver.pvcControllerDeploymentCreated)
+	require.False(t, driver.lhDeploymentCreated)
+	require.False(t, driver.csiStatefulSetCreated)
+}
+
+func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient:                         k8sClient,
+		pxAPIDaemonSetCreated:             true,
+		volumePlacementStrategyCRDCreated: true,
+		pvcControllerDeploymentCreated:    true,
+		lhDeploymentCreated:               true,
+		csiStatefulSetCreated:             true,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// All components should be marked as not created
+	require.False(t, driver.pxAPIDaemonSetCreated)
+	require.False(t, driver.volumePlacementStrategyCRDCreated)
+	require.False(t, driver.pvcControllerDeploymentCreated)
+	require.False(t, driver.lhDeploymentCreated)
+	require.False(t, driver.csiStatefulSetCreated)
+
+	// Check condition
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+
+	// Check wiper daemonset
+	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiper.yaml")
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
+	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
+	require.Len(t, wiperDS.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperDS.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Spec, wiperDS.Spec)
+}
+
+func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient:                         k8sClient,
+		pxAPIDaemonSetCreated:             true,
+		volumePlacementStrategyCRDCreated: true,
+		pvcControllerDeploymentCreated:    true,
+		lhDeploymentCreated:               true,
+		csiStatefulSetCreated:             true,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationIsPKS: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// All components should be marked as not created
+	require.False(t, driver.pxAPIDaemonSetCreated)
+	require.False(t, driver.volumePlacementStrategyCRDCreated)
+	require.False(t, driver.pvcControllerDeploymentCreated)
+	require.False(t, driver.lhDeploymentCreated)
+	require.False(t, driver.csiStatefulSetCreated)
+
+	// Check condition
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+
+	// Check wiper daemonset
+	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiperPKS.yaml")
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
+	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
+	require.Len(t, wiperDS.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperDS.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Spec, wiperDS.Spec)
+}
+
+func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient:                         k8sClient,
+		pxAPIDaemonSetCreated:             true,
+		volumePlacementStrategyCRDCreated: true,
+		pvcControllerDeploymentCreated:    true,
+		lhDeploymentCreated:               true,
+		csiStatefulSetCreated:             true,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// All components should be marked as not created
+	require.False(t, driver.pxAPIDaemonSetCreated)
+	require.False(t, driver.volumePlacementStrategyCRDCreated)
+	require.False(t, driver.pvcControllerDeploymentCreated)
+	require.False(t, driver.lhDeploymentCreated)
+	require.False(t, driver.csiStatefulSetCreated)
+
+	// Check condition
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+
+	// Check wiper daemonset
+	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiperWithWipe.yaml")
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
+	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
+	require.Len(t, wiperDS.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperDS.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Spec, wiperDS.Spec)
+}
+
+func TestDeleteClusterWithNodeAffinity(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// Check wiper daemonset
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
+	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
+	require.NotNil(t, wiperDS.Spec.Template.Spec.Affinity)
+	require.NotNil(t, wiperDS.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Equal(t, cluster.Spec.Placement.NodeAffinity, wiperDS.Spec.Template.Spec.Affinity.NodeAffinity)
+}
+
+func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	// Check when daemon set's status is not even updated
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+	}
+	k8sClient := fake.NewFakeClient(wiperDS)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
+
+	// Check when daemon set's status is updated
+	wiperDS.Status.DesiredNumberScheduled = int32(2)
+	err = k8sClient.Status().Update(context.TODO(), wiperDS)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
+
+	// Check when only few pods are ready
+	wiperPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "wiper-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Ready: true,
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), wiperPod1)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
+
+	// Check when all pods are ready
+	wiperPod2 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "wiper-2",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Ready: true,
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), wiperPod2)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+}
+
+func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Internal: true,
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	// Check when daemon set's status is not even updated
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+	}
+	k8sClient := fake.NewFakeClient(wiperDS)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
+
+	// Check when daemon set's status is updated
+	wiperDS.Status.DesiredNumberScheduled = int32(2)
+	err = k8sClient.Status().Update(context.TODO(), wiperDS)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
+
+	// Check when only few pods are ready
+	wiperPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "wiper-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Ready: true,
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), wiperPod1)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Contains(t, condition.Reason,
+		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
+
+	// Check when all pods are ready
+	wiperPod2 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "wiper-2",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Ready: true,
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), wiperPod2)
+	require.NoError(t, err)
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+}
+
+func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Internal: true,
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 1,
+		},
+	}
+	wiperPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
+		},
+	}
+	etcdConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      internalEtcdConfigMapPrefix + "pxcluster",
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	cloudDriveConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cloudDriveConfigMapPrefix + "pxcluster",
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	k8sClient := fake.NewFakeClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	configMaps := &v1.ConfigMapList{}
+	err := list(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Len(t, configMaps.Items, 2)
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// Check condition
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	// Check config maps are deleted
+	configMaps = &v1.ConfigMapList{}
+	err = list(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Empty(t, configMaps.Items)
+}
+
+func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Endpoints: []string{
+					"etcd://kvdb1.com:2001",
+					"etcd://kvdb2.com:2001",
+				},
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	// Test etcd v3 without http/https
+	kvdbMem, err := kvdb.New(mem.Name, pxKvdbPrefix, nil, nil, dbg.Panicf)
+	require.NoError(t, err)
+	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.EtcdVersion3, nil
+	}
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, e3.Name, name)
+		require.ElementsMatch(t, []string{"http://kvdb1.com:2001", "http://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err := kvdbMem.Get(cluster.Name + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+
+	// Test etcd v3 with explicit http
+	cluster.Spec.Kvdb.Endpoints = []string{
+		"etcd:http://kvdb1.com:2001",
+		"etcd:http://kvdb2.com:2001",
+	}
+	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, e3.Name, name)
+		require.ElementsMatch(t, []string{"http://kvdb1.com:2001", "http://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+
+	// Test etcd v3 with explicit https
+	cluster.Spec.Kvdb.Endpoints = []string{
+		"etcd:https://kvdb1.com:2001",
+		"etcd:https://kvdb2.com:2001",
+	}
+	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, e3.Name, name)
+		require.ElementsMatch(t, []string{"https://kvdb1.com:2001", "https://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+
+	// Test etcd base version
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.EtcdBaseVersion, nil
+	}
+	cluster.Spec.Kvdb.Endpoints = []string{
+		"etcd:https://kvdb1.com:2001",
+		"etcd:https://kvdb2.com:2001",
+	}
+	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, e2.Name, name)
+		require.ElementsMatch(t, []string{"https://kvdb1.com:2001", "https://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+
+	// Test consul
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.ConsulVersion1, nil
+	}
+	cluster.Spec.Kvdb.Endpoints = []string{
+		"consul:http://kvdb1.com:2001",
+		"consul:http://kvdb2.com:2001",
+	}
+	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, consul.Name, name)
+		require.ElementsMatch(t, []string{"http://kvdb1.com:2001", "http://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+}
+
+func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Endpoints: []string{},
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	// Fail if no kvdb endpoints given
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.EtcdVersion3, nil
+	}
+	newKVDB = func(_, prefix string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		return kvdb.New(mem.Name, prefix, machines, opts, dbg.Panicf)
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+
+	// Fail if unknown kvdb type given in url
+	cluster.Spec.Kvdb.Endpoints = []string{"zookeeper://kvdb.com:2001"}
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+
+	// Fail if unknown kvdb version found
+	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return "zookeeper1", nil
+	}
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+
+	// Fail if error getting kvdb version
+	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return "", fmt.Errorf("kvdb version error")
+	}
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+	require.Contains(t, condition.Reason, "kvdb version error")
+
+	// Fail if error initializing kvdb
+	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.EtcdVersion3, nil
+	}
+	newKVDB = func(_, prefix string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		return nil, fmt.Errorf("kvdb initialize error")
+	}
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+	require.Contains(t, condition.Reason, "kvdb initialize error")
+}
+
+func fakeClientWithWiperPod(namespace string) client.Client {
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 1,
+		},
+	}
+	wiperPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
+		},
+	}
+	return fake.NewFakeClient(wiperDS, wiperPod)
 }
