@@ -363,11 +363,12 @@
 
 [[projects]]
   branch = "release-6.0"
-  digest = "1:84c69696ab84712ce74b813dc1222fc1206e49be015a8ecaa4b05f0fd07b3c0c"
+  digest = "1:84bdb388ad5babcefc31f5e553ff8e2e8f3dc4b0453e382da0e36b2f010f6400"
   name = "github.com/libopenstorage/openstorage"
   packages = [
     "api",
     "pkg/auth",
+    "pkg/dbg",
     "pkg/grpcserver",
     "pkg/util",
     "volume",
@@ -1370,11 +1371,13 @@
     "github.com/google/shlex",
     "github.com/hashicorp/go-version",
     "github.com/libopenstorage/openstorage/api",
+    "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
     "github.com/portworx/kvdb",
     "github.com/portworx/kvdb/consul",
     "github.com/portworx/kvdb/etcd/v2",
     "github.com/portworx/kvdb/etcd/v3",
+    "github.com/portworx/kvdb/mem",
     "github.com/portworx/sched-ops/k8s",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
@@ -1384,7 +1387,6 @@
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/reflection",
     "k8s.io/api/apps/v1",
-    "k8s.io/api/apps/v1beta2",
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
     "k8s.io/api/rbac/v1",
