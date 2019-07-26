@@ -101,15 +101,6 @@ func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	return obj
 }
 
-func getImageForContainer(deployment *appsv1.Deployment, containerName string) string {
-	for _, c := range deployment.Spec.Template.Spec.Containers {
-		if c.Name == containerName {
-			return c.Image
-		}
-	}
-	return ""
-}
-
 func getPullPolicyForContainer(deployment *appsv1.Deployment, containerName string) v1.PullPolicy {
 	for _, c := range deployment.Spec.Template.Spec.Containers {
 		if c.Name == containerName {

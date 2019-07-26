@@ -284,7 +284,6 @@ func TestPortworxServiceTypeForEKS(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
-
 	require.NoError(t, err)
 
 	pxService := &v1.Service{}
@@ -325,11 +324,52 @@ func TestPVCControllerInstall(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
-
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+}
+
+func TestPVCControllerWithInvalidValue(t *testing.T) {
+	// Set fake kubernetes client for k8s version
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "invalid",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr := &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPVCControllerInstallForOpenshift(t *testing.T) {
@@ -355,11 +395,63 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
-
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
+
+	// Despite invalid pvc controller annotation, install for openshift
+	cluster.Annotations[annotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
+}
+
+func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
+	// Set fake kubernetes client for k8s version
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				annotationIsOpenshift: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// PVC controller should not get installed if running in kube-system
+	// namespace in openshift
+	sa := &v1.ServiceAccount{}
+	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr := &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPVCControllerInstallForPKS(t *testing.T) {
@@ -385,7 +477,15 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
 
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	// Despite invalid pvc controller annotation, install for PKS
+	cluster.Annotations[annotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -415,7 +515,15 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
 
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	// Despite invalid pvc controller annotation, install for EKS
+	cluster.Annotations[annotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -445,7 +553,15 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
 
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	// Despite invalid pvc controller annotation, install for GKE
+	cluster.Annotations[annotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -475,11 +591,65 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
-
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	// Despite invalid pvc controller annotation, install for AKS
+	cluster.Annotations[annotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+}
+
+func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+				annotationIsPKS:         "true",
+				annotationIsEKS:         "true",
+				annotationIsGKE:         "true",
+				annotationIsAKS:         "true",
+				annotationIsOpenshift:   "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr := &rbacv1.ClusterRole{}
+	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
+	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func verifyPVCControllerInstall(
@@ -601,6 +771,10 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 }
 
 func TestPVCControllerInvalidCPU(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -718,6 +892,10 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 }
 
 func TestLighthouseInstall(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -735,7 +913,7 @@ func TestLighthouseInstall(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
+				Image:   "portworx/px-lighthouse:2.1.1",
 			},
 		},
 	}
@@ -943,6 +1121,10 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 }
 
 func TestLighthouseWithoutImage(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -970,6 +1152,10 @@ func TestLighthouseWithoutImage(t *testing.T) {
 }
 
 func TestLighthouseImageChange(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -995,7 +1181,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	lhDeployment := &appsv1.Deployment{}
 	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	image := getLighthouseImage(lhDeployment)
+	image := getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse:v1", image)
 
 	// Change the lighthouse image
@@ -1006,8 +1192,202 @@ func TestLighthouseImageChange(t *testing.T) {
 
 	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	image = getLighthouseImage(lhDeployment)
+	image = getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse:v2", image)
+}
+
+func TestLighthouseConfigInitImageChange(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := getLighthouseImage(lhDeployment, lhConfigInitContainerName)
+	require.Equal(t, "portworx/lh-config-sync:v1", image)
+
+	// Change the lighthouse config init container image
+	cluster.Spec.UserInterface.Env = []v1.EnvVar{
+		{
+			Name:  envKeyLhConfigSyncImage,
+			Value: "test/config-sync:v2",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image = getLighthouseImage(lhDeployment, lhConfigInitContainerName)
+	require.Equal(t, "test/config-sync:v2", image)
+}
+
+func TestLighthouseStorkConnectorImageChange(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
+	require.Equal(t, "portworx/lh-stork-connector:v1", image)
+
+	// Change the lighthouse config sync container image
+	cluster.Spec.UserInterface.Env = []v1.EnvVar{
+		{
+			Name:  envKeyLhStorkConnectorImage,
+			Value: "test/stork-connector:v2",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image = getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
+	require.Equal(t, "test/stork-connector:v2", image)
+}
+
+func TestLighthouseWithoutImageTag(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Lighthouse image should remain unchanged but sidecar container images
+	// should use the default image tag
+	lhDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := getLighthouseImage(lhDeployment, lhContainerName)
+	require.Equal(t, "portworx/px-lighthouse", image)
+	image = getLighthouseImage(lhDeployment, lhConfigInitContainerName)
+	require.Equal(t, "portworx/lh-config-sync:"+defaultLighthouseImageTag, image)
+	image = getLighthouseImage(lhDeployment, lhConfigSyncContainerName)
+	require.Equal(t, "portworx/lh-config-sync:"+defaultLighthouseImageTag, image)
+	image = getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
+	require.Equal(t, "portworx/lh-stork-connector:"+defaultLighthouseImageTag, image)
+}
+
+func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse",
+				Env: []v1.EnvVar{
+					{
+						Name:  envKeyLhConfigSyncImage,
+						Value: "test/config-sync:t1",
+					},
+					{
+						Name:  envKeyLhStorkConnectorImage,
+						Value: "test/stork-connector:t2",
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Lighthouse image should remain unchanged but sidecar container images
+	// should use the default image tag
+	lhDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := getLighthouseImage(lhDeployment, lhContainerName)
+	require.Equal(t, "portworx/px-lighthouse", image)
+	image = getLighthouseImage(lhDeployment, lhConfigInitContainerName)
+	require.Equal(t, "test/config-sync:t1", image)
+	image = getLighthouseImage(lhDeployment, lhConfigSyncContainerName)
+	require.Equal(t, "test/config-sync:t1", image)
+	image = getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
+	require.Equal(t, "test/stork-connector:t2", image)
 }
 
 func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
@@ -1062,19 +1442,19 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/px-lighthouse:test",
-		getLighthouseImage(lhDeployment),
+		getLighthouseImage(lhDeployment, lhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:0.3",
-		getImageForContainer(lhDeployment, "config-sync"),
+		customRepo+"/lh-config-sync:test",
+		getLighthouseImage(lhDeployment, lhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:0.1",
-		getImageForContainer(lhDeployment, "stork-connector"),
+		customRepo+"/lh-stork-connector:test",
+		getLighthouseImage(lhDeployment, lhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:0.3",
-		lhDeployment.Spec.Template.Spec.InitContainers[0].Image,
+		customRepo+"/lh-config-sync:test",
+		getLighthouseImage(lhDeployment, lhConfigInitContainerName),
 	)
 }
 
@@ -1134,19 +1514,19 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/portworx/px-lighthouse:test",
-		getLighthouseImage(lhDeployment),
+		getLighthouseImage(lhDeployment, lhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:0.3",
-		getImageForContainer(lhDeployment, "config-sync"),
+		customRegistry+"/portworx/lh-config-sync:test",
+		getLighthouseImage(lhDeployment, lhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:0.1",
-		getImageForContainer(lhDeployment, "stork-connector"),
+		customRegistry+"/portworx/lh-stork-connector:test",
+		getLighthouseImage(lhDeployment, lhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:0.3",
-		lhDeployment.Spec.Template.Spec.InitContainers[0].Image,
+		customRegistry+"/portworx/lh-config-sync:test",
+		getLighthouseImage(lhDeployment, lhConfigInitContainerName),
 	)
 	require.Equal(t, v1.PullIfNotPresent, getPullPolicyForContainer(lhDeployment, lhContainerName))
 	require.Equal(t, v1.PullIfNotPresent, getPullPolicyForContainer(lhDeployment, "config-sync"))

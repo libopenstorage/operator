@@ -231,11 +231,19 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsOpenshift])
 	t.isOpenshift = err == nil && enabled
 
+	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
+	// only if Portworx service is not deployed in kube-system namespace.
 	enabled, err = strconv.ParseBool(cluster.Annotations[annotationPVCController])
-	t.needsPVCController = err == nil && enabled
-
-	if t.isOpenshift || t.isPKS || t.isEKS || t.isGKE || t.isAKS {
+	if err != nil {
+		t.needsPVCController = false
+	}
+	if enabled || t.isPKS || t.isEKS || t.isGKE || t.isAKS ||
+		(t.isOpenshift && cluster.Namespace != "kube-system") {
 		t.needsPVCController = true
+	}
+	// Do not run PVC controller if explicitly disabled
+	if err == nil && !enabled {
+		t.needsPVCController = false
 	}
 
 	t.imagePullPolicy = v1.PullAlways

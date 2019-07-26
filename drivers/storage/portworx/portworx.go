@@ -32,8 +32,8 @@ const (
 	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
-	defaultNodeWiperImage             = "portworx/px-node-wiper"
-	defaultNodeWiperTag               = "2.1.2-rc1"
+	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.2-rc1"
+	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
@@ -124,11 +124,11 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 }
 
 func (p *portworx) DeleteStorage(
-	storageCluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha1.StorageCluster,
 ) (*corev1alpha1.ClusterCondition, error) {
 	p.unsetInstallParams()
 
-	if storageCluster.Spec.DeleteStrategy == nil {
+	if cluster.Spec.DeleteStrategy == nil {
 		// No Delete strategy provided. Do not wipe portworx
 		status := &corev1alpha1.ClusterCondition{
 			Type:   corev1alpha1.ClusterConditionTypeDelete,
@@ -141,17 +141,17 @@ func (p *portworx) DeleteStorage(
 	// Portworx needs to be removed if DeleteStrategy is specified
 	removeData := false
 	completeMsg := storageClusterUninstallMsg
-	if storageCluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
+	if cluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
 		removeData = true
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	u := NewUninstaller(storageCluster, p.k8sClient)
+	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
-		// TODO: Add capability to change the node wiper image
-		if err := u.RunNodeWiper("", "", removeData); err != nil {
+		nodeWiperImage := getImageFromEnv(envKeyNodeWiperImage, cluster.Spec.Env)
+		if err := u.RunNodeWiper(nodeWiperImage, removeData); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
 				Status: corev1alpha1.ClusterOperationFailed,

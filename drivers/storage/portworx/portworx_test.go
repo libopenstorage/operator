@@ -1664,6 +1664,104 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.Equal(t, expectedDaemonSet.Spec, wiperDS.Spec)
 }
 
+func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	customRepo := "test-registry:1111/test-repo"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRepo,
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/px-node-wiper:2.1.2-rc1",
+		wiperDS.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestDeleteClusterWithCustomRegistry(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	customRegistry := "test-registry:1111"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRegistry,
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRegistry+"/portworx/px-node-wiper:2.1.2-rc1",
+		wiperDS.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	customRegistry := "test-registry:1111"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRegistry,
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  envKeyNodeWiperImage,
+						Value: "test/node-wiper:v1",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRegistry+"/test/node-wiper:v1",
+		wiperDS.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
 func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
