@@ -34,7 +34,7 @@ metadata:
             },
             "stork": {
               "enabled": true,
-              "image": "openstorage/stork:2.2.2"
+              "image": "openstorage/stork:2.2.4"
             },
             "userInterface": {
               "enabled": true,

@@ -38,6 +38,13 @@ spec:
         env:
         - name: PX_NAMESPACE
           value: kube-test
+        - name: SECRET_ENV
+          valueFrom:
+            secretKeyRef:
+              name: secret-name
+              key: secret-key
+        - name: TEST
+          value: test-value
         resources:
           requests:
             cpu: '0.1'

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	version "github.com/hashicorp/go-version"
@@ -44,6 +45,9 @@ const (
 	lhServiceName                    = "px-lighthouse"
 	lhDeploymentName                 = "px-lighthouse"
 	lhContainerName                  = "px-lighthouse"
+	lhConfigInitContainerName        = "config-init"
+	lhConfigSyncContainerName        = "config-sync"
+	lhStorkConnectorContainerName    = "stork-connector"
 	csiServiceAccountName            = "px-csi"
 	csiClusterRoleName               = "px-csi"
 	csiClusterRoleBindingName        = "px-csi"
@@ -58,9 +62,14 @@ const (
 )
 
 const (
-	defaultPVCControllerCPU = "200m"
-	envKeyPortworxNamespace = "PX_NAMESPACE"
-	envKeyPortworxEnableTLS = "PX_ENABLE_TLS"
+	defaultPVCControllerCPU      = "200m"
+	defaultLighthouseImageTag    = "2.0.4"
+	envKeyPortworxNamespace      = "PX_NAMESPACE"
+	envKeyPortworxEnableTLS      = "PX_ENABLE_TLS"
+	defaultLhConfigSyncImage     = "portworx/lh-config-sync"
+	defaultLhStorkConnectorImage = "portworx/lh-stork-connector"
+	envKeyLhConfigSyncImage      = "LIGHTHOUSE_CONFIG_SYNC_IMAGE"
+	envKeyLhStorkConnectorImage  = "LIGHTHOUSE_STORK_CONNECTOR_IMAGE"
 )
 
 var (
@@ -1136,14 +1145,38 @@ func (p *portworx) createLighthouseDeployment(
 		return err
 	}
 
-	existingImage := getLighthouseImage(existingDeployment)
-	lhImageName := util.GetImageURN(
-		t.cluster.Spec.CustomImageRegistry,
-		t.cluster.Spec.UserInterface.Image,
-	)
+	existingLhImage := getLighthouseImage(existingDeployment, lhContainerName)
+	existingConfigInitImage := getLighthouseImage(existingDeployment, lhConfigInitContainerName)
+	existingConfigSyncImage := getLighthouseImage(existingDeployment, lhConfigSyncContainerName)
+	existingStorkConnectorImage := getLighthouseImage(existingDeployment, lhStorkConnectorContainerName)
 
-	if !p.lhDeploymentCreated || lhImageName != existingImage {
-		deployment := getLighthouseDeploymentSpec(t, ownerRef, lhImageName)
+	imageTag := defaultLighthouseImageTag
+	partitions := strings.Split(t.cluster.Spec.UserInterface.Image, ":")
+	if len(partitions) > 1 {
+		imageTag = partitions[len(partitions)-1]
+	}
+
+	configSyncImage := getImageFromEnv(envKeyLhConfigSyncImage, t.cluster.Spec.UserInterface.Env)
+	if len(configSyncImage) == 0 {
+		configSyncImage = fmt.Sprintf("%s:%s", defaultLhConfigSyncImage, imageTag)
+	}
+	storkConnectorImage := getImageFromEnv(envKeyLhStorkConnectorImage, t.cluster.Spec.UserInterface.Env)
+	if len(storkConnectorImage) == 0 {
+		storkConnectorImage = fmt.Sprintf("%s:%s", defaultLhStorkConnectorImage, imageTag)
+	}
+
+	imageRegistry := t.cluster.Spec.CustomImageRegistry
+	lhImage := util.GetImageURN(imageRegistry, t.cluster.Spec.UserInterface.Image)
+	configSyncImage = util.GetImageURN(imageRegistry, configSyncImage)
+	storkConnectorImage = util.GetImageURN(imageRegistry, storkConnectorImage)
+
+	modified := lhImage != existingLhImage ||
+		configSyncImage != existingConfigInitImage ||
+		configSyncImage != existingConfigSyncImage ||
+		storkConnectorImage != existingStorkConnectorImage
+
+	if !p.lhDeploymentCreated || modified {
+		deployment := getLighthouseDeploymentSpec(t, ownerRef, lhImage, configSyncImage, storkConnectorImage)
 		if err = k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -1156,16 +1189,13 @@ func getLighthouseDeploymentSpec(
 	t *template,
 	ownerRef *metav1.OwnerReference,
 	lhImageName string,
+	configSyncImageName string,
+	storkConnectorImageName string,
 ) *appsv1.Deployment {
 	labels := getLighthouseLabels()
 	replicas := int32(1)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
-
-	imageRegistry := t.cluster.Spec.CustomImageRegistry
-	// TODO: We should probably map these to the lighthouse version
-	configSyncImageName := util.GetImageURN(imageRegistry, "portworx/lh-config-sync:0.3")
-	storkConnectorImageName := util.GetImageURN(imageRegistry, "portworx/lh-stork-connector:0.1")
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1194,7 +1224,7 @@ func getLighthouseDeploymentSpec(
 					ServiceAccountName: lhServiceAccountName,
 					InitContainers: []v1.Container{
 						{
-							Name:            "config-init",
+							Name:            lhConfigInitContainerName,
 							Image:           configSyncImageName,
 							ImagePullPolicy: t.imagePullPolicy,
 							Args:            []string{"init"},
@@ -1234,7 +1264,7 @@ func getLighthouseDeploymentSpec(
 							},
 						},
 						{
-							Name:            "config-sync",
+							Name:            lhConfigSyncContainerName,
 							Image:           configSyncImageName,
 							ImagePullPolicy: t.imagePullPolicy,
 							Args:            []string{"sync"},
@@ -1252,7 +1282,7 @@ func getLighthouseDeploymentSpec(
 							},
 						},
 						{
-							Name:            "stork-connector",
+							Name:            lhStorkConnectorContainerName,
 							Image:           storkConnectorImageName,
 							ImagePullPolicy: t.imagePullPolicy,
 						},
@@ -1570,9 +1600,14 @@ func getLighthouseLabels() map[string]string {
 	}
 }
 
-func getLighthouseImage(deployment *appsv1.Deployment) string {
+func getLighthouseImage(deployment *appsv1.Deployment, containerName string) string {
 	for _, c := range deployment.Spec.Template.Spec.Containers {
-		if c.Name == lhContainerName {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	for _, c := range deployment.Spec.Template.Spec.InitContainers {
+		if c.Name == containerName {
 			return c.Image
 		}
 	}
@@ -1583,6 +1618,15 @@ func getImageFromStatefulSet(ss *appsv1.StatefulSet, containerName string) strin
 	for _, c := range ss.Spec.Template.Spec.Containers {
 		if c.Name == containerName {
 			return c.Image
+		}
+	}
+	return ""
+}
+
+func getImageFromEnv(imageKey string, envs []v1.EnvVar) string {
+	for _, env := range envs {
+		if env.Name == imageKey {
+			return env.Value
 		}
 	}
 	return ""

@@ -267,6 +267,8 @@ type UserInterfaceSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Image is the docker image of the user interface container
 	Image string `json:"image,omitempty"`
+	// Env is a list of environment variables used by UI component
+	Env []v1.EnvVar `json:"env,omitempty"`
 }
 
 // StorkSpec contains STORK related spec
@@ -277,6 +279,8 @@ type StorkSpec struct {
 	Image string `json:"image,omitempty"`
 	// Args is a map of arguments given to STORK
 	Args map[string]string `json:"args,omitempty"`
+	// Env is a list of environment variables used by stork
+	Env []v1.EnvVar `json:"env,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster

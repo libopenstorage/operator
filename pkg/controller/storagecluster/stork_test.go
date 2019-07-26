@@ -41,6 +41,23 @@ func TestStorkInstallation(t *testing.T) {
 			Stork: &corev1alpha1.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  "TEST",
+						Value: "test-value",
+					},
+					{
+						Name: "SECRET_ENV",
+						ValueFrom: &v1.EnvVarSource{
+							SecretKeyRef: &v1.SecretKeySelector{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: "secret-name",
+								},
+								Key: "secret-key",
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -368,6 +385,77 @@ func TestStorkArgumentsChange(t *testing.T) {
 		storkDeployment.Spec.Template.Spec.Containers[0].Command,
 		"--verbose=false",
 	)
+}
+
+func TestStorkEnvVarsChange(t *testing.T) {
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  "FOO",
+						Value: "foo",
+					},
+				},
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil,
+	)
+	driver := mockDriver(t)
+	k8sClient := fakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	// Check envs are passed to deployment
+	expectedEnvs := append(driverEnvs, cluster.Spec.Stork.Env...)
+	storkDeployment := &appsv1.Deployment{}
+	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
+
+	// Overwrite existing envs
+	cluster.Spec.Stork.Env[0].Value = "bar"
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedEnvs[1].Value = "bar"
+	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
+
+	// Add new env vars
+	newEnv := v1.EnvVar{Name: "BAZ", Value: "baz"}
+	cluster.Spec.Stork.Env = append(cluster.Spec.Stork.Env, newEnv)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedEnvs = append(expectedEnvs, newEnv)
+	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 }
 
 func TestStorkCPUChange(t *testing.T) {

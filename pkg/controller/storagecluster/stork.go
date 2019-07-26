@@ -551,25 +551,37 @@ func (c *Controller) createStorkDeployment(
 		cluster.Spec.Stork.Image,
 	)
 
+	envVars := c.Driver.GetStorkEnvList(cluster)
+	for _, env := range cluster.Spec.Stork.Env {
+		envCopy := env.DeepCopy()
+		envVars = append(envVars, *envCopy)
+	}
+	sort.Sort(envByName(envVars))
+
 	var existingImage string
 	var existingCommand []string
+	var existingEnvs []v1.EnvVar
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
+			existingEnvs = c.Env
+			sort.Sort(envByName(existingEnvs))
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
 
-	// Check if image or args are modified
+	// Check if image, envs, cpu or args are modified
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
+		!reflect.DeepEqual(existingEnvs, envVars) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
 
 	if !c.isStorkDeploymentCreated || modified {
-		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
+		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
+			command, envVars, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -583,6 +595,7 @@ func (c *Controller) getStorkDeploymentSpec(
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
+	envVars []v1.EnvVar,
 	cpuQuantity resource.Quantity,
 ) *apps.Deployment {
 	imagePullPolicy := v1.PullAlways
@@ -598,8 +611,6 @@ func (c *Controller) getStorkDeploymentSpec(
 	for k, v := range deploymentLabels {
 		templateLabels[k] = v
 	}
-
-	envVars := c.Driver.GetStorkEnvList(cluster)
 
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
@@ -868,4 +879,12 @@ func getStorkServiceLabels() map[string]string {
 	return map[string]string{
 		"name": "stork",
 	}
+}
+
+type envByName []v1.EnvVar
+
+func (e envByName) Len() int      { return len(e) }
+func (e envByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e envByName) Less(i, j int) bool {
+	return e[i].Name < e[j].Name
 }

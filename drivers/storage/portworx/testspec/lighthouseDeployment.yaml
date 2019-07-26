@@ -22,7 +22,7 @@ spec:
     spec:
       initContainers:
       - name: config-init
-        image: portworx/lh-config-sync:0.3
+        image: portworx/lh-config-sync:2.1.1
         imagePullPolicy: Always
         args:
         - "init"
@@ -34,7 +34,7 @@ spec:
           mountPath: /config/lh
       containers:
       - name: px-lighthouse
-        image: portworx/px-lighthouse:test
+        image: portworx/px-lighthouse:2.1.1
         imagePullPolicy: Always
         args: [ "-kubernetes", "true" ]
         ports:
@@ -44,7 +44,7 @@ spec:
         - name: config
           mountPath: /config/lh
       - name: config-sync
-        image: portworx/lh-config-sync:0.3
+        image: portworx/lh-config-sync:2.1.1
         imagePullPolicy: Always
         args:
         - "sync"
@@ -55,7 +55,7 @@ spec:
         - name: config
           mountPath: /config/lh
       - name: stork-connector
-        image: portworx/lh-stork-connector:0.1
+        image: portworx/lh-stork-connector:2.1.1
         imagePullPolicy: Always
       serviceAccountName: px-lighthouse
       volumes:

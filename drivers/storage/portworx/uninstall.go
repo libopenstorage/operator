@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
@@ -59,7 +60,7 @@ const (
 // UninstallPortworx provides a set of APIs to uninstall portworx
 type UninstallPortworx interface {
 	// RunNodeWiper runs the node-wiper daemonset
-	RunNodeWiper(wiperImage, wiperTag string, removeData bool) error
+	RunNodeWiper(wiperImage string, removeData bool) error
 	// GetNodeWiperStatus returns the status of the node-wiper daemonset
 	// returns the no. of completed, in progress and total pods
 	GetNodeWiperStatus() (int32, int32, int32, error)
@@ -145,7 +146,6 @@ func (u *uninstallPortworx) WipeMetadata() error {
 
 func (u *uninstallPortworx) RunNodeWiper(
 	wiperImage string,
-	wiperTag string,
 	removeData bool,
 ) error {
 	pwxHostPathRoot := "/"
@@ -165,10 +165,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 	if len(wiperImage) == 0 {
 		wiperImage = defaultNodeWiperImage
 	}
-
-	if len(wiperTag) == 0 {
-		wiperTag = defaultNodeWiperTag
-	}
+	wiperImage = util.GetImageURN(u.cluster.Spec.CustomImageRegistry, wiperImage)
 
 	args := []string{"-w"}
 	if removeData {
@@ -196,7 +193,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 					Containers: []v1.Container{
 						{
 							Name:            pxNodeWiperDaemonSetName,
-							Image:           fmt.Sprintf("%s:%s", wiperImage, wiperTag),
+							Image:           wiperImage,
 							ImagePullPolicy: v1.PullAlways,
 							Args:            args,
 							SecurityContext: &v1.SecurityContext{
