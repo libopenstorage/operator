@@ -1432,6 +1432,7 @@
     "k8s.io/kubernetes/pkg/scheduler/api/v1",
     "k8s.io/kubernetes/pkg/scheduler/cache",
     "k8s.io/kubernetes/pkg/util/hash",
+    "k8s.io/kubernetes/pkg/volume/util",
     "k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals",
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/fake",
