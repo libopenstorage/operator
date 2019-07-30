@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
 	e2 "github.com/portworx/kvdb/etcd/v2"
@@ -52,12 +52,12 @@ type UninstallPortworx interface {
 }
 
 // NewUninstaller returns an implementation of UninstallPortworx interface
-func NewUninstaller(cluster *corev1alpha1.StorageCluster) UninstallPortworx {
+func NewUninstaller(cluster *corev1alpha2.StorageCluster) UninstallPortworx {
 	return &uninstallPortworx{cluster}
 }
 
 type uninstallPortworx struct {
-	cluster *corev1alpha1.StorageCluster
+	cluster *corev1alpha2.StorageCluster
 }
 
 func (u *uninstallPortworx) DeleteNodeWiper() error {

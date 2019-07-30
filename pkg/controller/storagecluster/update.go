@@ -25,11 +25,11 @@ import (
 	"reflect"
 	"sort"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -43,7 +43,7 @@ import (
 
 // rollingUpdate deletes old storage cluster pods making sure that no more than
 // cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable pods are unavailable
-func (c *Controller) rollingUpdate(cluster *corev1alpha1.StorageCluster, hash string) error {
+func (c *Controller) rollingUpdate(cluster *corev1alpha2.StorageCluster, hash string) error {
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
 	if err != nil {
 		return fmt.Errorf("couldn't get node to storage pod mapping for storage cluster %v: %v",
@@ -87,7 +87,7 @@ func (c *Controller) rollingUpdate(cluster *corev1alpha1.StorageCluster, hash st
 // update current history revision number, or create current history if needed to.
 // It also deduplicates current history, and adds missing unique labels to existing histories.
 func (c *Controller) constructHistory(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) (cur *apps.ControllerRevision, old []*apps.ControllerRevision, err error) {
 	var histories []*apps.ControllerRevision
 	var currentHistories []*apps.ControllerRevision
@@ -152,7 +152,7 @@ func (c *Controller) constructHistory(
 // controlledHistories returns all ControllerRevisions controlled by the given StorageCluster.
 // This also reconciles ControllerRef by adopting/orphaning.
 func (c *Controller) controlledHistories(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) ([]*apps.ControllerRevision, error) {
 	// List all histories to include those that don't match the selector anymore
 	// but have a ControllerRef pointing to the controller.
@@ -197,7 +197,7 @@ func (c *Controller) controlledHistories(
 }
 
 func (c *Controller) snapshot(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	revision int64,
 ) (*apps.ControllerRevision, error) {
 	patch, err := getPatch(cluster)
@@ -279,7 +279,7 @@ func (c *Controller) snapshot(
 }
 
 func (c *Controller) dedupCurHistories(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	curHistories []*apps.ControllerRevision,
 ) (*apps.ControllerRevision, error) {
 	if len(curHistories) == 1 {
@@ -329,7 +329,7 @@ func (c *Controller) dedupCurHistories(
 }
 
 func (c *Controller) getAllStorageClusterPods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	nodeToStoragePods map[string][]*v1.Pod,
 	hash string,
 ) ([]*v1.Pod, []*v1.Pod) {
@@ -351,7 +351,7 @@ func (c *Controller) getAllStorageClusterPods(
 }
 
 func (c *Controller) getUnavailableNumbers(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	nodeToStoragePods map[string][]*v1.Pod,
 ) (int, int, error) {
 	logrus.Debugf("Getting unavailable numbers")
@@ -405,7 +405,7 @@ func (c *Controller) getUnavailableNumbers(
 }
 
 func (c *Controller) cleanupHistory(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	old []*apps.ControllerRevision,
 ) error {
 	nodesToStoragePods, err := c.getNodeToStoragePods(cluster)
@@ -462,7 +462,7 @@ func (c *Controller) cleanupHistory(
 // We consider the pod to be really updated if certain fields (that need
 // pod restart) have changed, else we consider the pod to be updated.
 func (c *Controller) isPodUpdated(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	pod *v1.Pod,
 	hash string,
 ) bool {
@@ -526,7 +526,7 @@ func maxRevision(histories []*apps.ControllerRevision) int64 {
 // match checks if the given StorageCluster's template matches the template
 // stored in the given history.
 func match(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	history *apps.ControllerRevision,
 ) (bool, error) {
 	patch, err := getPatch(cluster)
@@ -540,7 +540,7 @@ func match(
 // The pod does not need to restart on changes to fields like UpdateStrategy or
 // ImagePullPolicy. So only match fields that affect the storage pods.
 func matchSelectedFields(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	history *apps.ControllerRevision,
 ) (bool, error) {
 	var raw map[string]interface{}
@@ -557,7 +557,7 @@ func matchSelectedFields(
 		return false, err
 	}
 
-	oldSpec := &corev1alpha1.StorageClusterSpec{}
+	oldSpec := &corev1alpha2.StorageClusterSpec{}
 	err = json.Unmarshal(rawHistory, oldSpec)
 	if err != nil {
 		return false, err
@@ -583,7 +583,7 @@ func matchSelectedFields(
 
 // getPatch returns a strategic merge patch that can be applied to restore a StorageCluster
 // to a previous version. If the returned error is nil the patch is valid.
-func getPatch(cluster *corev1alpha1.StorageCluster) ([]byte, error) {
+func getPatch(cluster *corev1alpha2.StorageCluster) ([]byte, error) {
 	clusterBytes, err := json.Marshal(cluster)
 	if err != nil {
 		return nil, err

@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,7 +49,7 @@ const (
 )
 
 func (c *Controller) syncStork(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		_, err := c.Driver.GetStorkDriverName()
@@ -61,7 +61,7 @@ func (c *Controller) syncStork(
 	return c.removeStork(cluster.Namespace)
 }
 
-func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setupStork(cluster *corev1alpha2.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := c.createStorkConfigMap(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -87,7 +87,7 @@ func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
 	return c.setupStorkScheduler(cluster)
 }
 
-func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setupStorkScheduler(cluster *corev1alpha2.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := c.createStorkSchedServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -493,7 +493,7 @@ func (c *Controller) createStorkService(
 }
 
 func (c *Controller) createStorkDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	storkDriverName, err := c.Driver.GetStorkDriverName()
@@ -579,7 +579,7 @@ func (c *Controller) createStorkDeployment(
 }
 
 func (c *Controller) getStorkDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
@@ -688,7 +688,7 @@ func (c *Controller) getStorkDeploymentSpec(
 }
 
 func (c *Controller) createStorkSchedDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	targetCPU := defaultStorkCPU
@@ -760,7 +760,7 @@ func (c *Controller) createStorkSchedDeployment(
 }
 
 func getStorkSchedDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,

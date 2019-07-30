@@ -10,7 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/assert"
@@ -32,13 +32,13 @@ import (
 )
 
 func TestStorkInstallation(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -228,13 +228,13 @@ func TestStorkInstallation(t *testing.T) {
 }
 
 func TestStorkWithoutImage(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 			},
 		},
@@ -257,13 +257,13 @@ func TestStorkWithoutImage(t *testing.T) {
 }
 
 func TestStorkImageChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:v1",
 			},
@@ -306,13 +306,13 @@ func TestStorkImageChange(t *testing.T) {
 }
 
 func TestStorkArgumentsChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -371,13 +371,13 @@ func TestStorkArgumentsChange(t *testing.T) {
 }
 
 func TestStorkCPUChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -426,13 +426,13 @@ func TestStorkCPUChange(t *testing.T) {
 }
 
 func TestStorkSchedulerCPUChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -481,7 +481,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 }
 
 func TestStorkInvalidCPU(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -489,8 +489,8 @@ func TestStorkInvalidCPU(t *testing.T) {
 				annotationStorkCPU: "invalid-cpu",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -514,7 +514,7 @@ func TestStorkInvalidCPU(t *testing.T) {
 }
 
 func TestStorkSchedulerInvalidCPU(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -522,8 +522,8 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 				annotationStorkSchedCPU: "invalid-cpu",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -550,13 +550,13 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 }
 
 func TestStorkSchedulerRollbackImageChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -610,13 +610,13 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 }
 
 func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 				Args: map[string]string{
@@ -668,14 +668,14 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 
 func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	customRepo := "test-registry:1111/test-repo"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			CustomImageRegistry: customRepo,
-			Stork: &corev1alpha1.StorkSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -720,15 +720,15 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 
 func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			CustomImageRegistry: customRegistry,
 			ImagePullPolicy:     v1.PullIfNotPresent,
-			Stork: &corev1alpha1.StorkSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -777,14 +777,14 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 
 func TestStorkInstallWithImagePullSecret(t *testing.T) {
 	imagePullSecret := "registry-secret"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			ImagePullSecret: &imagePullSecret,
-			Stork: &corev1alpha1.StorkSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -830,13 +830,13 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 }
 
 func TestDisableStork(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -958,13 +958,13 @@ func TestDisableStork(t *testing.T) {
 }
 
 func TestRemoveStork(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -1086,13 +1086,13 @@ func TestRemoveStork(t *testing.T) {
 }
 
 func TestStorkDriverNotImplemented(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
+			Stork: &corev1alpha2.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -1167,9 +1167,9 @@ func mockDriver(t *testing.T) *mock.MockDriver {
 	return mockDriver
 }
 
-func fakeK8sClient(cluster *corev1alpha1.StorageCluster) client.Client {
+func fakeK8sClient(cluster *corev1alpha2.StorageCluster) client.Client {
 	s := scheme.Scheme
-	corev1alpha1.AddToScheme(s)
+	corev1alpha2.AddToScheme(s)
 	return fake.NewFakeClientWithScheme(s, cluster)
 }
 

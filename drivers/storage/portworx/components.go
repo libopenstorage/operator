@@ -8,7 +8,7 @@ import (
 	"time"
 
 	version "github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
@@ -65,10 +65,10 @@ const (
 
 var (
 	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
-	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind = corev1alpha2.SchemeGroupVersion.WithKind("StorageCluster")
 )
 
-func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error {
+func (p *portworx) installComponents(cluster *corev1alpha2.StorageCluster) error {
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 	return nil
 }
 
-func (p *portworx) setupPortworxRBAC(cluster *corev1alpha1.StorageCluster) error {
+func (p *portworx) setupPortworxRBAC(cluster *corev1alpha2.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := p.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err

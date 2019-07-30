@@ -10,7 +10,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	storage "github.com/libopenstorage/operator/drivers/storage"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
@@ -71,7 +71,7 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
-func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
+func (p *portworx) GetStorkEnvList(cluster *corev1alpha2.StorageCluster) []v1.EnvVar {
 	return []v1.EnvVar{
 		{
 			Name:  envKeyPortworxNamespace,
@@ -86,10 +86,10 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 	}
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
+func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha2.StorageCluster) {
 	startPort := uint32(defaultStartPort)
 	if toUpdate.Spec.Kvdb == nil {
-		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
+		toUpdate.Spec.Kvdb = &corev1alpha2.KvdbSpec{}
 	}
 	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
 		toUpdate.Spec.Kvdb.Internal = true
@@ -105,7 +105,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		if err != nil {
 			return
 		}
-		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
+		toUpdate.Spec.Placement = &corev1alpha2.PlacementSpec{
 			NodeAffinity: &v1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 					NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -119,18 +119,18 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	}
 }
 
-func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
+func (p *portworx) PreInstall(cluster *corev1alpha2.StorageCluster) error {
 	return p.installComponents(cluster)
 }
 
-func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error) {
+func (p *portworx) DeleteStorage(storageCluster *corev1alpha2.StorageCluster) (*corev1alpha2.ClusterCondition, error) {
 	p.unsetInstallParams()
 
 	if storageCluster.Spec.DeleteStrategy == nil {
 		// No Delete strategy provided. Do not wipe portworx
-		status := &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationCompleted,
+		status := &corev1alpha2.ClusterCondition{
+			Type:   corev1alpha2.ClusterConditionTypeDelete,
+			Status: corev1alpha2.ClusterOperationCompleted,
 			Reason: storageClusterDeleteMsg,
 		}
 		return status, nil
@@ -139,7 +139,7 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 	// Portworx needs to be removed if DeleteStrategy is specified
 	removeData := false
 	completeMsg := storageClusterUninstallMsg
-	if storageCluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
+	if storageCluster.Spec.DeleteStrategy.Type == corev1alpha2.UninstallAndWipeStorageClusterStrategyType {
 		removeData = true
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
@@ -150,15 +150,15 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		// Run the node wiper
 		// TODO: Add capability to change the node wiper image
 		if err := u.RunNodeWiper(defaultNodeWiperImage, defaultNodeWiperTag, removeData); err != nil {
-			return &corev1alpha1.ClusterCondition{
-				Type:   corev1alpha1.ClusterConditionTypeDelete,
-				Status: corev1alpha1.ClusterOperationFailed,
+			return &corev1alpha2.ClusterCondition{
+				Type:   corev1alpha2.ClusterConditionTypeDelete,
+				Status: corev1alpha2.ClusterOperationFailed,
 				Reason: "Failed to run node wiper: " + err.Error(),
 			}, nil
 		}
-		return &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationInProgress,
+		return &corev1alpha2.ClusterCondition{
+			Type:   corev1alpha2.ClusterConditionTypeDelete,
+			Status: corev1alpha2.ClusterOperationInProgress,
 			Reason: "Started node wiper daemonset",
 		}, nil
 	} else if err != nil {
@@ -170,28 +170,28 @@ func (p *portworx) DeleteStorage(storageCluster *corev1alpha1.StorageCluster) (*
 		// all the nodes are wiped
 		if err := u.WipeMetadata(); err != nil {
 			logrus.Errorf("Failed to delete portworx metadata: %v", err)
-			return &corev1alpha1.ClusterCondition{
-				Type:   corev1alpha1.ClusterConditionTypeDelete,
-				Status: corev1alpha1.ClusterOperationFailed,
+			return &corev1alpha2.ClusterCondition{
+				Type:   corev1alpha2.ClusterConditionTypeDelete,
+				Status: corev1alpha2.ClusterOperationFailed,
 				Reason: "Failed to wipe metadata: " + err.Error(),
 			}, nil
 		}
-		return &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationCompleted,
+		return &corev1alpha2.ClusterCondition{
+			Type:   corev1alpha2.ClusterConditionTypeDelete,
+			Status: corev1alpha2.ClusterOperationCompleted,
 			Reason: completeMsg,
 		}, nil
 	}
 
-	return &corev1alpha1.ClusterCondition{
-		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationInProgress,
+	return &corev1alpha2.ClusterCondition{
+		Type:   corev1alpha2.ClusterConditionTypeDelete,
+		Status: corev1alpha2.ClusterOperationInProgress,
 		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
 }
 
 func (p *portworx) UpdateStorageClusterStatus(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	clientConn, err := p.getPortworxClient(cluster)
 	if err != nil {
@@ -219,7 +219,7 @@ func (p *portworx) UpdateStorageClusterStatus(
 
 func (p *portworx) updateNodeStatuses(
 	clientConn *grpc.ClientConn,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(clientConn)
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
@@ -248,23 +248,23 @@ func (p *portworx) updateNodeStatuses(
 
 		currentNodes[node.SchedulerNodeName] = true
 
-		nodeStatus := &corev1alpha1.StorageNodeStatus{
+		nodeStatus := &corev1alpha2.StorageNodeStatus{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            node.SchedulerNodeName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				Labels:          p.GetSelectorLabels(),
 			},
-			Status: corev1alpha1.NodeStatus{
+			Status: corev1alpha2.NodeStatus{
 				NodeUID: node.Id,
-				Network: corev1alpha1.NetworkStatus{
+				Network: corev1alpha2.NetworkStatus{
 					DataIP: node.DataIp,
 					MgmtIP: node.MgmtIp,
 				},
 				// TODO: Add a human readable reason with the status
-				Conditions: []corev1alpha1.NodeCondition{
+				Conditions: []corev1alpha2.NodeCondition{
 					{
-						Type:   corev1alpha1.NodeState,
+						Type:   corev1alpha2.NodeState,
 						Status: mapNodeStatus(node.Status),
 					},
 				},
@@ -278,7 +278,7 @@ func (p *portworx) updateNodeStatuses(
 		}
 	}
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha2.StorageNodeStatusList{}
 	if err = p.k8sClient.List(context.TODO(), &client.ListOptions{}, nodeStatusList); err != nil {
 		return fmt.Errorf("failed to get a list of StorageNodeStatus: %v", err)
 	}
@@ -299,7 +299,7 @@ func (p *portworx) updateNodeStatuses(
 }
 
 func (p *portworx) getPortworxClient(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) (*grpc.ClientConn, error) {
 	if p.sdkConn != nil {
 		return p.sdkConn, nil
@@ -335,7 +335,7 @@ func (p *portworx) getPortworxClient(
 }
 
 func (p *portworx) warningEvent(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	reason, message string,
 ) {
 	logrus.Warn(message)
@@ -367,7 +367,7 @@ func getDialOptions(tls bool) ([]grpc.DialOption, error) {
 	)}, nil
 }
 
-func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
+func mapClusterStatus(status api.Status) corev1alpha2.ClusterConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -376,12 +376,12 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	case api.Status_STATUS_OFFLINE:
 		fallthrough
 	case api.Status_STATUS_ERROR:
-		return corev1alpha1.ClusterOffline
+		return corev1alpha2.ClusterOffline
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.ClusterNotInQuorum
+		return corev1alpha2.ClusterNotInQuorum
 
 	case api.Status_STATUS_OK:
 		fallthrough
@@ -396,16 +396,16 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.ClusterOnline
+		return corev1alpha2.ClusterOnline
 
 	case api.Status_STATUS_DECOMMISSION:
 		fallthrough
 	default:
-		return corev1alpha1.ClusterUnknown
+		return corev1alpha2.ClusterUnknown
 	}
 }
 
-func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
+func mapNodeStatus(status api.Status) corev1alpha2.ConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -414,36 +414,36 @@ func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
 	case api.Status_STATUS_ERROR:
 		fallthrough
 	case api.Status_STATUS_NEEDS_REBOOT:
-		return corev1alpha1.NodeOffline
+		return corev1alpha2.NodeOffline
 
 	case api.Status_STATUS_INIT:
-		return corev1alpha1.NodeInit
+		return corev1alpha2.NodeInit
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.NodeNotInQuorum
+		return corev1alpha2.NodeNotInQuorum
 
 	case api.Status_STATUS_MAINTENANCE:
-		return corev1alpha1.NodeMaintenance
+		return corev1alpha2.NodeMaintenance
 
 	case api.Status_STATUS_OK:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DOWN:
-		return corev1alpha1.NodeOnline
+		return corev1alpha2.NodeOnline
 
 	case api.Status_STATUS_DECOMMISSION:
-		return corev1alpha1.NodeDecommissioned
+		return corev1alpha2.NodeDecommissioned
 
 	case api.Status_STATUS_STORAGE_DEGRADED:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.NodeDegraded
+		return corev1alpha2.NodeDegraded
 
 	default:
-		return corev1alpha1.NodeUnknown
+		return corev1alpha2.NodeUnknown
 	}
 }
 
