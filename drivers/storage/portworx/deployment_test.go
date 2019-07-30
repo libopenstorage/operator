@@ -4,11 +4,12 @@ import (
 	"io/ioutil"
 	"testing"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -23,14 +24,14 @@ func TestBasicRuncPodSpec(t *testing.T) {
 	)
 	expected := getExpectedPodSpec(t, "testspec/runc.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1alpha2.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -51,12 +52,12 @@ func TestBasicRuncPodSpec(t *testing.T) {
 					},
 				},
 			},
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Internal: true,
 			},
 			SecretsProvider: stringPtr("k8s"),
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Storage: &corev1alpha2.StorageSpec{
 					UseAll:        boolPtr(true),
 					ForceUseDisks: boolPtr(true),
 				},
@@ -84,12 +85,12 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image:           "portworx/oci-monitor:2.0.3.4",
 			ImagePullSecret: stringPtr("px-secret"),
 		},
@@ -124,14 +125,14 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Endpoints: []string{
 					"endpoint-1",
 					"endpoint-2",
@@ -190,15 +191,15 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			CommonConfig: corev1alpha1.CommonConfig{
-				Network: &corev1alpha1.NetworkSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Network: &corev1alpha2.NetworkSpec{
 					DataInterface: stringPtr("data-intf"),
 					MgmtInterface: stringPtr("mgmt-intf"),
 				},
@@ -219,7 +220,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Only data interface is given
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{
 		DataInterface: stringPtr("data-intf"),
 	}
 	expectedArgs = []string{
@@ -233,7 +234,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Mgmt interface given but empty
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{
 		DataInterface: stringPtr("data-intf"),
 		MgmtInterface: stringPtr(""),
 	}
@@ -243,7 +244,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Only management interface is given
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{
 		MgmtInterface: stringPtr("mgmt-intf"),
 	}
 	expectedArgs = []string{
@@ -257,7 +258,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Data interface given but empty
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{
 		DataInterface: stringPtr(""),
 		MgmtInterface: stringPtr("mgmt-intf"),
 	}
@@ -267,7 +268,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Both data and mgmt interfaces are empty
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{
 		DataInterface: stringPtr(""),
 		MgmtInterface: stringPtr(""),
 	}
@@ -281,14 +282,14 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Both data and mgmt interfaces are nil
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{}
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{}
 
 	actual = driver.GetStoragePodSpec(cluster)
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Network spec is nil
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{}
+	cluster.Spec.Network = &corev1alpha2.NetworkSpec{}
 
 	actual = driver.GetStoragePodSpec(cluster)
 
@@ -300,15 +301,15 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Storage: &corev1alpha2.StorageSpec{
 					UseAll: boolPtr(true),
 				},
 			},
@@ -326,7 +327,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// UseAllWithPartitions
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		UseAllWithPartitions: boolPtr(true),
 	}
 	expectedArgs = []string{
@@ -339,7 +340,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// UseAll with UseAllWithPartitions
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		UseAll:               boolPtr(true),
 		UseAllWithPartitions: boolPtr(true),
 	}
@@ -348,7 +349,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// ForceUseDisks
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		ForceUseDisks: boolPtr(true),
 	}
 	expectedArgs = []string{
@@ -361,7 +362,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Journal device
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		JournalDevice: stringPtr("/dev/journal"),
 	}
 	expectedArgs = []string{
@@ -374,7 +375,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// No journal device if empty
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		JournalDevice: stringPtr(""),
 	}
 	expectedArgs = []string{
@@ -386,7 +387,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Metadata device
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		SystemMdDevice: stringPtr("/dev/metadata"),
 	}
 	expectedArgs = []string{
@@ -399,7 +400,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// No metadata device if empty
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		SystemMdDevice: stringPtr(""),
 	}
 	expectedArgs = []string{
@@ -412,7 +413,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	// Storage devices
 	devices := []string{"/dev/one", "/dev/two", "/dev/three"}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		Devices: &devices,
 	}
 	expectedArgs = []string{
@@ -428,7 +429,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	// Storage devices empty
 	devices = []string{}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		Devices: &devices,
 	}
 	expectedArgs = []string{
@@ -441,7 +442,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	// Explicit storage devices get priority over UseAll
 	devices = []string{"/dev/one"}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		UseAll:  boolPtr(true),
 		Devices: &devices,
 	}
@@ -456,7 +457,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	// Explicit storage devices get priority over UseAllWithPartition
 	devices = []string{"/dev/one"}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{
 		UseAllWithPartitions: boolPtr(true),
 		Devices:              &devices,
 	}
@@ -470,7 +471,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty storage config
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{}
+	cluster.Spec.Storage = &corev1alpha2.StorageSpec{}
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
@@ -491,15 +492,19 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	minQuantity, _ := resource.ParseQuantity("20G")
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			CloudStorage: &corev1alpha1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal"),
+			CloudStorage: &corev1alpha2.CloudStorageSpec{
+				JournalDeviceSpec: &corev1alpha2.CloudDeviceSpec{
+					Type:        stringPtr("journal"),
+					MinCapacity: minQuantity,
+				},
 			},
 		},
 	}
@@ -508,15 +513,15 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-j", "type=journal",
+		"-j", "type=journal,size=20",
 	}
 
 	actual := driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty journal device
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		JournalDeviceSpec: stringPtr(""),
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		JournalDeviceSpec: nil,
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -527,21 +532,24 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Metadata device
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		SystemMdDeviceSpec: stringPtr("type=metadata"),
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		SystemMdDeviceSpec: &corev1alpha2.CloudDeviceSpec{
+			Type:        stringPtr("metadata"),
+			MinCapacity: minQuantity,
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-metadata", "type=metadata",
+		"-metadata", "type=metadata,size=20",
 	}
 
 	actual = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty metadata device
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		SystemMdDeviceSpec: stringPtr(""),
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		SystemMdDeviceSpec: nil,
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -553,7 +561,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Max storage nodes
 	maxNodes := uint32(3)
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
 		MaxStorageNodes: &maxNodes,
 	}
 	expectedArgs = []string{
@@ -567,7 +575,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Max storage nodes per zone
 	maxNodesPerZone := uint32(1)
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
 		MaxStorageNodesPerZone: &maxNodesPerZone,
 	}
 	expectedArgs = []string{
@@ -580,24 +588,63 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Storage devices
-	devices := []string{"type=one", "type=two"}
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		DeviceSpecs: &devices,
+	minQuantityDevice1, _ := resource.ParseQuantity("10G")
+	minQuantityDevice2, _ := resource.ParseQuantity("20G")
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		DeviceSpecs: []*corev1alpha2.CloudDeviceSpec{
+			{
+				Type:        stringPtr("one"),
+				MinCapacity: minQuantityDevice1,
+			},
+			{
+				Type:        stringPtr("two"),
+				MinCapacity: minQuantityDevice2,
+			},
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-s", "type=one",
-		"-s", "type=two",
+		"-s", "type=one,size=10",
+		"-s", "type=two,size=20",
+	}
+
+	actual = driver.GetStoragePodSpec(cluster)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Storage devices with options
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		DeviceSpecs: []*corev1alpha2.CloudDeviceSpec{
+			{
+				Type:        stringPtr("one"),
+				MinCapacity: minQuantityDevice1,
+				Options: map[string]string{
+					"foo":  "bar",
+					"tags": "k1:v1;k2:v2",
+				},
+			},
+			{
+				Type:        stringPtr("two"),
+				MinCapacity: minQuantityDevice2,
+				Options: map[string]string{
+					"foo": "bar",
+				},
+			},
+		},
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-s", "type=one,size=10,foo=bar,tags=k1:v1;k2:v2",
+		"-s", "type=two,size=20,foo=bar",
 	}
 
 	actual = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Storage devices empty
-	devices = []string{}
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		DeviceSpecs: &devices,
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{
+		DeviceSpecs: []*corev1alpha2.CloudDeviceSpec{},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -608,7 +655,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty storage config
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage = &corev1alpha2.CloudStorageSpec{}
 
 	actual = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
@@ -625,20 +672,24 @@ func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	minQuantity, _ := resource.ParseQuantity("10G")
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Storage: &corev1alpha2.StorageSpec{
 					JournalDevice: stringPtr("/dev/journal"),
 				},
 			},
-			CloudStorage: &corev1alpha1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal"),
+			CloudStorage: &corev1alpha2.CloudStorageSpec{
+				JournalDeviceSpec: &corev1alpha2.CloudDeviceSpec{
+					Type:        stringPtr("journal"),
+					MinCapacity: minQuantity,
+				},
 			},
 		},
 	}
@@ -660,12 +711,12 @@ func TestPodSpecWithSecretsProvider(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil,
 	)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			SecretsProvider: stringPtr("k8s"),
 		},
 	}
@@ -705,12 +756,12 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 	}
 
 	startPort := uint32(10001)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image:     "portworx/oci-monitor:2.1.1",
 			StartPort: &startPort,
 		},
@@ -748,7 +799,7 @@ func TestPodSpecWithLogAnnotation(t *testing.T) {
 		GitVersion: "v1.12.8",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -777,13 +828,13 @@ func TestPodSpecWithRuntimeOptions(t *testing.T) {
 		GitVersion: "v1.12.8",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			CommonConfig: corev1alpha1.CommonConfig{
+		Spec: corev1alpha2.StorageClusterSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
 				RuntimeOpts: map[string]string{
 					"key": "10",
 				},
@@ -831,7 +882,7 @@ func TestPodSpecWithMiscArgs(t *testing.T) {
 		GitVersion: "v1.12.8",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -860,7 +911,7 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 		GitVersion: "v1.12.8",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -887,12 +938,12 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			ImagePullPolicy: v1.PullIfNotPresent,
 			FeatureGates: map[string]string{
 				string(FeatureCSI): "True",
@@ -916,7 +967,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 }
 
 func TestPodSpecWithNilStorageCluster(t *testing.T) {
-	var cluster *corev1alpha1.StorageCluster
+	var cluster *corev1alpha2.StorageCluster
 	driver := portworx{}
 
 	actual := driver.GetStoragePodSpec(cluster)
@@ -929,7 +980,7 @@ func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "invalid-version",
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -948,7 +999,7 @@ func TestPKSPodSpec(t *testing.T) {
 	)
 	expected := getExpectedPodSpec(t, "testspec/pks.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -956,9 +1007,9 @@ func TestPKSPodSpec(t *testing.T) {
 				annotationIsPKS: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1alpha2.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -979,12 +1030,12 @@ func TestPKSPodSpec(t *testing.T) {
 					},
 				},
 			},
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Internal: true,
 			},
 			SecretsProvider: stringPtr("k8s"),
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Storage: &corev1alpha2.StorageSpec{
 					UseAll: boolPtr(true),
 				},
 			},
@@ -1004,7 +1055,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	)
 	expected := getExpectedPodSpec(t, "testspec/openshift_runc.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1012,9 +1063,9 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 				annotationIsOpenshift: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1alpha2.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -1039,12 +1090,12 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 					},
 				},
 			},
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Internal: true,
 			},
 			SecretsProvider: stringPtr("k8s"),
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1alpha2.CommonConfig{
+				Storage: &corev1alpha2.StorageSpec{
 					UseAll: boolPtr(true),
 				},
 			},
@@ -1064,12 +1115,12 @@ func TestPodSpecForCSIWithKubernetesVersionLessThan_1_11(t *testing.T) {
 		GitVersion: "v1.10.9",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
 				string(FeatureCSI): "true",
@@ -1093,12 +1144,12 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	}
 	expected := getExpectedPodSpec(t, "testspec/px_csi_0.3.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
 				string(FeatureCSI): "true",
@@ -1121,12 +1172,12 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	}
 	expected := getExpectedPodSpec(t, "testspec/px_csi_1.0.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
 				string(FeatureCSI): "true",
@@ -1147,12 +1198,12 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 		GitVersion: "invalid-version",
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
 				string(FeatureCSI): "true",
@@ -1188,14 +1239,14 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Endpoints:  []string{"ep1", "ep2", "ep3"},
 				AuthSecret: "kvdb-auth-secret",
 			},
@@ -1228,14 +1279,14 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_ca.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Endpoints:  []string{"ep1", "ep2", "ep3"},
 				AuthSecret: "kvdb-auth-secret",
 			},
@@ -1267,14 +1318,14 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_key.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				Endpoints:  []string{"ep1", "ep2", "ep3"},
 				AuthSecret: "kvdb-auth-secret",
 			},
@@ -1303,14 +1354,14 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 	)
 	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				AuthSecret: "kvdb-auth-secret",
 			},
 		},
@@ -1346,14 +1397,14 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 	)
 	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				AuthSecret: "kvdb-auth-secret",
 			},
 		},
@@ -1381,14 +1432,14 @@ func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1alpha2.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1alpha2.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1alpha2.KvdbSpec{
 				AuthSecret: "kvdb-auth-secret",
 			},
 		},
