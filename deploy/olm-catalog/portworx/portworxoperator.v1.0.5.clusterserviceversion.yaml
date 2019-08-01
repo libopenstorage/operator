@@ -1,15 +1,15 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v1.0.4
+  name: portworx-operator.v1.0.5
   namespace: placeholder
   annotations:
     capabilities: Full Lifecycle
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: registry.connect.redhat.com/portworx/openstorage-operator:1.0.4
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2019-04-28T08:00:00Z
+    createdAt: 2019-06-10T08:00:00Z
     support: Portworx, Inc
     certified: "true"
     alm-examples: |-
@@ -31,16 +31,24 @@ metadata:
             },
             "storage": {
               "useAll": true
+            },
+            "stork": {
+              "enabled": true,
+              "image": "openstorage/stork:2.2.4"
+            },
+            "userInterface": {
+              "enabled": true,
+              "image": "portworx/px-lighthouse:2.0.4"
             }
           }
         }
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 1.0.4
+  version: 1.0.5
   minKubeVersion: "1.10.0"
   maturity: alpha
-  replaces: portworx-operator.v1.0.3
+  replaces: portworx-operator.v1.0.4
   maintainers:
   - name: Portworx
     email: support@portworx.com
@@ -79,17 +87,6 @@ spec:
     to manage data in containers now has an operator which simplifies the
     install, configuration, upgrades and manages the Portworx Enterprise cluster
     lifecycle.
-
-    ## Prerequisite
-
-    Portworx runs as a privileged pod. Hence you need to add the Portworx service accounts to the privileged security context.
-
-    ```
-    oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:px-lh-account
-    oc adm policy add-scc-to-user anyuid system:serviceaccount:kube-system:px-lh-account
-    oc adm policy add-scc-to-user anyuid system:serviceaccount:default:default
-    oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:px-csi-account
-    ```
 
     ## Uninstall
 
@@ -146,6 +143,38 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - pods/exec
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods/status
+          verbs:
+          - update
+          - patch
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - bindings
+          - pods/binding
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
           - events
           verbs:
           - list
@@ -157,7 +186,6 @@ spec:
           - apps
           resources:
           - controllerrevisions
-          - deployments
           verbs:
           - get
           - list
@@ -166,20 +194,63 @@ spec:
           - delete
           - update
           - patch
+        - apiGroups:
+          - "*"
+          resources:
+          - deployments
+          - deployments/extensions
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+          - update
+          - patch
+          - initialize
+        - apiGroups:
+          - "*"
+          resources:
+          - statefulsets
+          - statefulsets/extensions
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+          - update
+          - patch
+          - initialize
+        - apiGroups:
+          - apps
+          - extensions
+          resources:
+          - replicasets
+          verbs:
+          - get
+          - list
+          - watch
         - apiGroups:
           - apps
           resources:
           - daemonsets
           verbs:
           - get
+          - watch
           - create
           - delete
+          - update
         - apiGroups:
           - core.libopenstorage.org
           resources:
-          - storageclusters
-          - storageclusters/finalizers
-          - storageclusters/status
+          - "*"
+          verbs:
+          - "*"
+        - apiGroups:
+          - stork.libopenstorage.org
+          resources:
+          - "*"
           verbs:
           - get
           - list
@@ -189,12 +260,32 @@ spec:
           - update
           - patch
         - apiGroups:
+          - volumesnapshot.external-storage.k8s.io
+          resources:
+          - volumesnapshots
+          - volumesnapshotdatas
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+          - update
+          - patch
+        - apiGroups:
+          - snapshot.storage.k8s.io
+          resources:
+          - volumesnapshots
+          - volumesnapshotcontents
+          verbs:
+          - get
+          - list
+        - apiGroups:
           - apiextensions.k8s.io
           resources:
           - customresourcedefinitions
           verbs:
-          - get
-          - create
+          - "*"
         - apiGroups:
           - ""
           resources:
@@ -216,15 +307,6 @@ spec:
           - watch
           - update
         - apiGroups:
-          - ""
-          resources:
-          - nodes
-          verbs:
-          - get
-          - list
-          - watch
-          - update
-        - apiGroups:
           - rbac.authorization.k8s.io
           resources:
           - roles
@@ -233,6 +315,8 @@ spec:
           - clusterrolebindings
           verbs:
           - get
+          - list
+          - watch
           - create
           - delete
           - update
@@ -242,6 +326,8 @@ spec:
           - serviceaccounts
           verbs:
           - get
+          - list
+          - watch
           - create
           - delete
           - update
@@ -249,9 +335,38 @@ spec:
           - ""
           resources:
           - endpoints
+          verbs:
+          - get
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - endpoints
+          resourceNames:
+          - kube-scheduler
+          verbs:
+          - get
+          - delete
+          - update
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - replicationcontrollers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
           - services
           verbs:
           - get
+          - list
+          - watch
           - create
           - delete
           - update
@@ -272,10 +387,10 @@ spec:
           verbs:
           - get
           - list
+          - watch
           - create
           - delete
           - update
-          - watch
         - apiGroups:
           - ""
           resources:
@@ -305,6 +420,43 @@ spec:
           - get
           - list
           - watch
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - volumeattachments
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+        - apiGroups:
+          - csi.storage.k8s.io
+          resources:
+          - csidrivers
+          verbs:
+          - create
+          - delete
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - csinodes
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+        - apiGroups:
+          - csi.storage.k8s.io
+          resources:
+          - csinodeinfos
+          verbs:
+          - get
+          - list
+          - watch
+          - update
         - apiGroups:
           - extensions
           resourceNames:
@@ -317,6 +469,13 @@ spec:
           - portworx.io
           resources:
           - volumeplacementstrategies
+          verbs:
+          - get
+          - list
+        - apiGroups:
+          - "*"
+          resources:
+          - "*"
           verbs:
           - get
           - list
@@ -345,6 +504,17 @@ spec:
           resources:
           - securitycontextconstraints
           resourceNames:
+          - privileged
+          verbs:
+          - use
+      - serviceAccountName: px-lighthouse
+        rules:
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          resourceNames:
+          - anyuid
           - privileged
           verbs:
           - use
@@ -381,7 +551,7 @@ spec:
                 - --verbose
                 - --driver=portworx
                 - --leader-elect=true
-                image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.4
+                image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5
                 imagePullPolicy: Always
                 name: portworx-operator
                 resources: {}
@@ -410,18 +580,45 @@ spec:
         displayName: Image Pull Secret
         description: It is a reference to secret in the kube-system namespace which
           is used for pulling images used by this storage cluster.
-      - path: kvdb
-        displayName: KeyValue Database
-        description: Configuration of KeyValue datastore that is needed by Portworx.
+      - path: customImageRegistry
+        displayName: Custom Image Registry
+        description: >-
+          CustomImageRegistry is a custom container registry server
+          (may include repository) that will be used instead of index.docker.io to
+          download Docker images. (Example: myregistry.net:5443 or myregistry.com/myrepository)
+      - path: kvdb.internal
+        displayName: Internal KeyValue Database
+        description: Flag indicating whether the cluster is using internal KVDB.
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
+      - path: stork.enabled
+        displayName: Stork Enabled
+        description: Flag indicating whether Stork is enabled.
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
+      - path: stork.image
+        displayName: Stork Image
+        description: The docker image name and version of Stork.
+      - path: userInterface.enabled
+        displayName: Lighthouse Enabled
+        description: Flag indicating whether Lighthouse is enabled.
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
+      - path: userInterface.image
+        displayName: Lighthouse Image
+        description: The docker image name and version of Lighthouse.
+      - path: kvdb.endpoints
+        displayName: External KeyValue Database Endpoints
+        description: List of endpoints of an external KVDB store.
       - path: storage
         displayName: Storage Configuration
         description: Configuration of storage that is to be used by Portworx.
       - path: cloudStorage
         displayName: Cloud Storage Configuration
         description: Configuration of storage in cloud enviroments. This supports
-          automatic drive creation and management by Portworx by just give a spec
-          for the drives to be used. You can specify either storage or cloudStorage,
-          not both.
+          automatic drive creation and management by Portworx by just give a
+          spec for the drives to be used. You can specify either storage or
+          cloudStorage, not both.
       - path: network
         displayName: Network Configuration
         description: Details of network interfaces to be used by Portworx.
@@ -432,53 +629,30 @@ spec:
       - path: startPort
         displayName: Start Port
         description: It is the starting port in the range of ports used by the cluster.
-      - path: env
-        displayName: Environment Variables
-        description: Extra enviroment variables that are needed by Portworx can be
-          passed through this list of envs.
       - path: featureGates
         displayName: Feature Gates
         description: A list of features that can be enabled or disabled in Porworx.
       - path: runtimeOptions
-        displayName: Runtime Options
         description: A list of extra configs that can be used to tweak Portworx
           according to specific use cases if needed.
-      - path: placement
-        displayName: Placement Rules
-        description: If you want to install Portworx selectively on certain nodes, you can
-          control that using the placement configuration.
-      - path: updateStrategy
-        displayName: Update Strategy
-        description: Specify an update strategy for the Portworx pods. You can either do
-          a OnDelete update or RollingUpdate with configurable max unavailable pods.
+        displayName: Runtime Options
       - path: revisionHistoryLimit
         displayName: Revision History Limit
         description: It is the number of old histories of storage cluster specs to retain
           to allow rollback.
       statusDescriptors:
-      - path: clusterName
-        displayName: Cluster Name
-        description: Unique name for the Portworx cluster.
+      - path: conditions
+        displayName: Cluster Conditions
+        description: Conditions describe the current state of the cluster
+        x-descriptors:
+        - 'urn:alm:descriptor:io.kubernetes.conditions'
+      - path: phase
+        displayName: Status
+        description: Status of the Portworx cluster.
+        x-descriptors:
+        - 'urn:alm:descriptor:io.kubernetes.phase'
       resources:
-      - kind: CustomResourceDefinition
-        name: ""
-        version: v1beta1
-      - kind: ServiceAccount
-        name: ""
-        version: v1
-      - kind: ClusterRole
-        name: ""
-        version: v1
-      - kind: ClusterRoleBinding
-        name: ""
-        version: v1
-      - kind: Role
-        name: ""
-        version: v1
-      - kind: RoleBinding
-        name: ""
-        version: v1
-      - kind: Namespace
+      - kind: Pod
         name: ""
         version: v1
       - kind: Service
@@ -488,5 +662,8 @@ spec:
         name: ""
         version: v1
       - kind: DaemonSet
+        name: ""
+        version: v1
+      - kind: ConfigMap
         name: ""
         version: v1
