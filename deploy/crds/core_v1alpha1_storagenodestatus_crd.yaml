@@ -28,6 +28,10 @@ spec:
     type: string
     description: The avalibility zone of the storage node
     JSONPath: .status.conditions[0].status
+  - name: Version
+    type: string
+    description: The version of the storage node
+    JSONPath: .spec.version
   - name: Age
     type: date
     JSONPath: .metadata.creationTimestamp
@@ -39,9 +43,15 @@ spec:
         kind:
           type: string
         metadata: {}
+        spec:
+          properties:
+            version:
+              type: string
         status:
           properties:
             nodeUid:
+              type: string
+            phase:
               type: string
             network:
               properties:
