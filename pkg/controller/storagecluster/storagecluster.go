@@ -106,12 +106,13 @@ type Controller struct {
 	isStorkSchedDeploymentCreated bool
 }
 
+// RegisterCRD is registering StorageCluster CRD
+func (c *Controller) RegisterCRD() error {
+	return c.createCRD()
+}
+
 // Init initialize the storage cluster controller
 func (c *Controller) Init(mgr manager.Manager) error {
-	err := c.createCRD()
-	if err != nil {
-		return err
-	}
 
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
