@@ -721,11 +721,16 @@ func CreateOrUpdateStorageNodeStatus(
 		}
 	}
 
-	modified := !reflect.DeepEqual(sns.Status, existingSNS.Status)
+	modified := !reflect.DeepEqual(sns.Status, existingSNS.Status) ||
+		!reflect.DeepEqual(sns.Spec, existingSNS.Spec)
 
 	if modified || len(ownerRefs) > len(existingSNS.OwnerReferences) {
+		existingSNS.Spec = sns.Spec
 		existingSNS.Status = sns.Status
 		logrus.Debugf("Updating StorageNodeStatus %s/%s", sns.Namespace, sns.Name)
+		if err := k8sClient.Update(context.TODO(), existingSNS); err != nil {
+			return err
+		}
 		return k8sClient.Status().Update(context.TODO(), existingSNS)
 	}
 	return nil

@@ -535,6 +535,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.1.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
+	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
@@ -548,6 +549,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.2.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
+	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
@@ -569,6 +571,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeInit, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
@@ -584,6 +587,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Error
@@ -599,6 +603,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorum
@@ -614,6 +619,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorumNoStorage
@@ -629,6 +635,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NeedsReboot
@@ -644,6 +651,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Decommission
@@ -659,6 +667,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Maintenance
@@ -674,6 +683,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Ok
@@ -689,6 +699,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDown
@@ -704,6 +715,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
@@ -719,6 +731,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageRebalance
@@ -734,6 +747,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDriveReplace
@@ -749,6 +763,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Invalid
@@ -764,7 +779,119 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
 	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeUnknown, nodeStatus.Status.Conditions[0].Status)
+}
+
+func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := fakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "test/image:1.2.3.4",
+		},
+	}
+
+	// Mock cluster inspect response
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	// Mock node enumerate response
+	expectedNodeOne := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		NodeLabels: map[string]string{
+			"PX Version": "5.6.7.8",
+		},
+	}
+	expectedNodeTwo := &api.StorageNode{
+		Id:                "node-2",
+		SchedulerNodeName: "node-two",
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	// Status None
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	err = list(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	nodeStatus := &corev1alpha1.StorageNodeStatus{}
+	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "5.6.7.8", nodeStatus.Spec.Version)
+
+	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	err = get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
+
+	// If the PX imgae does not have a tag then don't add version to status object
+	cluster.Spec.Image = "test/image"
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	err = get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, nodeStatus.Spec.Version)
 }
 
 func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
