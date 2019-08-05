@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
@@ -253,6 +254,7 @@ func (p *portworx) updateNodeStatuses(
 
 		currentNodes[node.SchedulerNodeName] = true
 
+		phase := mapNodeStatus(node.Status)
 		nodeStatus := &corev1alpha1.StorageNodeStatus{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            node.SchedulerNodeName,
@@ -266,14 +268,28 @@ func (p *portworx) updateNodeStatuses(
 					DataIP: node.DataIp,
 					MgmtIP: node.MgmtIp,
 				},
+				Phase: string(phase),
 				// TODO: Add a human readable reason with the status
 				Conditions: []corev1alpha1.NodeCondition{
 					{
 						Type:   corev1alpha1.NodeState,
-						Status: mapNodeStatus(node.Status),
+						Status: phase,
 					},
 				},
 			},
+		}
+
+		if version, ok := node.NodeLabels["PX Version"]; ok {
+			nodeStatus.Spec = corev1alpha1.StorageNodeStatusSpec{
+				Version: version,
+			}
+		} else {
+			partitions := strings.Split(cluster.Spec.Image, ":")
+			if len(partitions) > 1 {
+				nodeStatus.Spec = corev1alpha1.StorageNodeStatusSpec{
+					Version: partitions[len(partitions)-1],
+				}
+			}
 		}
 
 		err = k8sutil.CreateOrUpdateStorageNodeStatus(p.k8sClient, nodeStatus, ownerRef)
