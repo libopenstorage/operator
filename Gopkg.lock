@@ -378,7 +378,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ab84be9b091b7cf9f66bb79f78ecb56844ae56dd2c7101ec3646f67afb3802ac"
+  digest = "1:c55bc14c1fdd921b44f7dc4c6a55314c44c98b1110f902ffb9e56e1b79c0ba5c"
   name = "github.com/libopenstorage/stork"
   packages = [
     "pkg/apis/stork",
@@ -388,7 +388,7 @@
     "pkg/client/clientset/versioned/typed/stork/v1alpha1",
   ]
   pruneopts = "UT"
-  revision = "43cb1fd905460b6797e68684c96754cdf3dbcf36"
+  revision = "19da95bd7280434afa8455f027ffdd6b6ba7c6ca"
 
 [[projects]]
   digest = "1:ff5ebae34cfbf047d505ee150de27e60570e8c394b3b8fdbb720ff6ac71985fc"
@@ -445,6 +445,32 @@
   pruneopts = "UT"
   revision = "279bed98673dd5bef374d3b6e4b09e2af76183bf"
   version = "v1.0.0-rc1"
+
+[[projects]]
+  branch = "release-3.11"
+  digest = "1:9d9940dc42930d44ab32d69336bb12cf4711b8a0bbb04cb7f3b00c98f37951ba"
+  name = "github.com/openshift/api"
+  packages = [
+    "apps/v1",
+    "security/v1",
+  ]
+  pruneopts = "UT"
+  revision = "8741ff068a473be041d7bafb4502c12e4f10aab5"
+
+[[projects]]
+  branch = "release-3.11"
+  digest = "1:5c14cd12dc22716dfe17ef3f2e74b5d6f5ff290a2324c9850b7fc08b43486ee3"
+  name = "github.com/openshift/client-go"
+  packages = [
+    "apps/clientset/versioned",
+    "apps/clientset/versioned/scheme",
+    "apps/clientset/versioned/typed/apps/v1",
+    "security/clientset/versioned",
+    "security/clientset/versioned/scheme",
+    "security/clientset/versioned/typed/security/v1",
+  ]
+  pruneopts = "UT"
+  revision = "431ec9a26e5021f35fa41ee9a89842db9bfdb370"
 
 [[projects]]
   digest = "1:bde6c3a610bd01ea7e2c8d9c7fd1116531fb6619f46f73f4f2ea16adb70da6be"
@@ -504,28 +530,30 @@
 
 [[projects]]
   branch = "kubernetes-1.13.1"
-  digest = "1:e9bdacd39c3f8c9b323e14750f1782a3a53aaee083f54d68b3f972aa460ebb1c"
+  digest = "1:009db87596540320e7e01e2b38ae5de42627992aeab5cd7c8a7f43c9b7dfe297"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "0e26a82df23c4bf74d7c31c261a224cbe5c2f1af"
+  revision = "256b606f13bfde7cb631dd69c0f0378dceef2e60"
 
 [[projects]]
-  branch = "kubernetes-1.11"
-  digest = "1:cfe8d419eb553560ba1e297dc0430a161be3239372a9fd60111e63da3b75fdb8"
+  branch = "master"
+  digest = "1:5b1a5dd8d7969a4476afbc74b4418888185f2f82184cd3a9640b3af044dcbba3"
   name = "github.com/portworx/talisman"
   packages = [
     "pkg/apis/portworx",
     "pkg/apis/portworx/v1beta1",
+    "pkg/apis/portworx/v1beta2",
     "pkg/client/clientset/versioned",
     "pkg/client/clientset/versioned/scheme",
     "pkg/client/clientset/versioned/typed/portworx/v1beta1",
+    "pkg/client/clientset/versioned/typed/portworx/v1beta2",
   ]
   pruneopts = "UT"
-  revision = "fc8701b2e17436493a0dc0af0dd361c26bf0ec07"
+  revision = "421b4b009ce0445d14fdadd302878b6f783b7451"
 
 [[projects]]
   branch = "master"

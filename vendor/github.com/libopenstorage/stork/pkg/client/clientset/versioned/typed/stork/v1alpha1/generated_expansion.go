@@ -18,7 +18,15 @@ limitations under the License.
 
 package v1alpha1
 
+type ApplicationBackupExpansion interface{}
+
+type ApplicationBackupScheduleExpansion interface{}
+
 type ApplicationCloneExpansion interface{}
+
+type ApplicationRestoreExpansion interface{}
+
+type BackupLocationExpansion interface{}
 
 type ClusterDomainUpdateExpansion interface{}
 
@@ -36,6 +44,6 @@ type RuleExpansion interface{}
 
 type SchedulePolicyExpansion interface{}
 
-type StorageClusterExpansion interface{}
+type VolumeSnapshotRestoreExpansion interface{}
 
 type VolumeSnapshotScheduleExpansion interface{}
