@@ -27,7 +27,11 @@ import (
 
 type StorkV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	ApplicationBackupsGetter
+	ApplicationBackupSchedulesGetter
 	ApplicationClonesGetter
+	ApplicationRestoresGetter
+	BackupLocationsGetter
 	ClusterDomainUpdatesGetter
 	ClusterDomainsStatusesGetter
 	ClusterPairsGetter
@@ -36,7 +40,7 @@ type StorkV1alpha1Interface interface {
 	MigrationSchedulesGetter
 	RulesGetter
 	SchedulePoliciesGetter
-	StorageClustersGetter
+	VolumeSnapshotRestoresGetter
 	VolumeSnapshotSchedulesGetter
 }
 
@@ -45,8 +49,24 @@ type StorkV1alpha1Client struct {
 	restClient rest.Interface
 }
 
+func (c *StorkV1alpha1Client) ApplicationBackups(namespace string) ApplicationBackupInterface {
+	return newApplicationBackups(c, namespace)
+}
+
+func (c *StorkV1alpha1Client) ApplicationBackupSchedules(namespace string) ApplicationBackupScheduleInterface {
+	return newApplicationBackupSchedules(c, namespace)
+}
+
 func (c *StorkV1alpha1Client) ApplicationClones(namespace string) ApplicationCloneInterface {
 	return newApplicationClones(c, namespace)
+}
+
+func (c *StorkV1alpha1Client) ApplicationRestores(namespace string) ApplicationRestoreInterface {
+	return newApplicationRestores(c, namespace)
+}
+
+func (c *StorkV1alpha1Client) BackupLocations(namespace string) BackupLocationInterface {
+	return newBackupLocations(c, namespace)
 }
 
 func (c *StorkV1alpha1Client) ClusterDomainUpdates() ClusterDomainUpdateInterface {
@@ -81,8 +101,8 @@ func (c *StorkV1alpha1Client) SchedulePolicies() SchedulePolicyInterface {
 	return newSchedulePolicies(c)
 }
 
-func (c *StorkV1alpha1Client) StorageClusters(namespace string) StorageClusterInterface {
-	return newStorageClusters(c, namespace)
+func (c *StorkV1alpha1Client) VolumeSnapshotRestores(namespace string) VolumeSnapshotRestoreInterface {
+	return newVolumeSnapshotRestores(c, namespace)
 }
 
 func (c *StorkV1alpha1Client) VolumeSnapshotSchedules(namespace string) VolumeSnapshotScheduleInterface {
