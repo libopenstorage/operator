@@ -8,11 +8,13 @@ import (
 
 	"github.com/google/shlex"
 	version "github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -172,7 +174,7 @@ var (
 )
 
 type template struct {
-	cluster            *corev1alpha1.StorageCluster
+	cluster            *corev1alpha2.StorageCluster
 	isPKS              bool
 	isGKE              bool
 	isAKS              bool
@@ -184,9 +186,12 @@ type template struct {
 	k8sVersion         *version.Version
 	csiVersions        csiVersions
 	kvdb               map[string]string
+	cloudConfig        *cloudstorage.Config
 }
 
-func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
+func newTemplate(
+	cluster *corev1alpha2.StorageCluster,
+) (*template, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("storage cluster cannot be empty")
 	}
@@ -260,11 +265,39 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	return t, nil
 }
 
+func (p *portworx) generateCloudStorageSpecs(
+	cluster *corev1alpha2.StorageCluster,
+	nodeName string,
+) (*cloudstorage.Config, error) {
+	if p.cloudStorageManager == nil {
+		p.cloudStorageManager = &portworxCloudStorageManager{p.zoneCount, p.cloudProvider, p.k8sClient}
+
+	}
+	cloudConfig, err := p.cloudStorageManager.GetStorageNodeConfig(cluster.Spec.CloudStorage)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get cloud storage for node: %v", err)
+	}
+
+	return cloudConfig, nil
+}
+
 // TODO [Imp] Validate the cluster spec and return errors in the configuration
-func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.PodSpec {
+func (p *portworx) GetStoragePodSpec(
+	cluster *corev1alpha2.StorageCluster,
+	nodeName string,
+) (v1.PodSpec, error) {
 	t, err := newTemplate(cluster)
 	if err != nil {
-		return v1.PodSpec{}
+		return v1.PodSpec{}, err
+	}
+
+	if cluster.Spec.CloudStorage != nil && len(cluster.Spec.CloudStorage.CapacitySpecs) > 0 {
+		// Cloud Environment
+		cloudConfig, err := p.generateCloudStorageSpecs(cluster, nodeName)
+		if err != nil {
+			return v1.PodSpec{}, err
+		}
+		t.cloudConfig = cloudConfig
 	}
 
 	podSpec := v1.PodSpec{
@@ -297,7 +330,7 @@ func (p *portworx) GetStoragePodSpec(cluster *corev1alpha1.StorageCluster) v1.Po
 		)
 	}
 
-	return podSpec
+	return podSpec, nil
 }
 
 func (t *template) portworxContainer() v1.Container {
@@ -429,6 +462,27 @@ func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
 	return selectorRequirements
 }
 
+func (t *template) getCloudStorageArguments(cloudDeviceSpec cloudstorage.CloudDriveConfig) string {
+	devSpec := strings.Join(
+		[]string{
+			"type=" + cloudDeviceSpec.Type,
+			"size=" + strconv.FormatUint(cloudDeviceSpec.SizeInGiB, 10),
+			"iops=" + strconv.FormatUint(uint64(cloudDeviceSpec.IOPS), 10)},
+		",",
+	)
+	for k, v := range cloudDeviceSpec.Options {
+		devSpec = strings.Join(
+			[]string{
+				devSpec,
+				k + "=" + v,
+			},
+			",",
+		)
+	}
+	return devSpec
+
+}
+
 func (t *template) getArguments() []string {
 	args := []string{
 		"-c", t.cluster.Name,
@@ -499,26 +553,27 @@ func (t *template) getArguments() []string {
 		}
 
 	} else if t.cluster.Spec.CloudStorage != nil {
-		if t.cluster.Spec.CloudStorage.DeviceSpecs != nil {
-			for _, dev := range *t.cluster.Spec.CloudStorage.DeviceSpecs {
-				args = append(args, "-s", dev)
+		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
+			for _, cloudNodeSpec := range t.cloudConfig.CloudStorage {
+				args = append(args, "-s", t.getCloudStorageArguments(cloudNodeSpec))
 			}
 		}
 		if t.cluster.Spec.CloudStorage.JournalDeviceSpec != nil &&
-			*t.cluster.Spec.CloudStorage.JournalDeviceSpec != "" {
+			len(*t.cluster.Spec.CloudStorage.JournalDeviceSpec) > 0 {
 			args = append(args, "-j", *t.cluster.Spec.CloudStorage.JournalDeviceSpec)
 		}
 		if t.cluster.Spec.CloudStorage.SystemMdDeviceSpec != nil &&
-			*t.cluster.Spec.CloudStorage.SystemMdDeviceSpec != "" {
+			len(*t.cluster.Spec.CloudStorage.SystemMdDeviceSpec) > 0 {
 			args = append(args, "-metadata", *t.cluster.Spec.CloudStorage.SystemMdDeviceSpec)
 		}
-		if t.cluster.Spec.CloudStorage.MaxStorageNodes != nil {
+		if t.cluster.Spec.CloudStorage.MaxStorageNodes != nil &&
+			*t.cluster.Spec.CloudStorage.MaxStorageNodes > 0 {
 			args = append(args, "-max_drive_set_count",
 				strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodes)))
 		}
-		if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil {
+		if t.cloudConfig != nil && t.cloudConfig.StorageInstancesPerZone > 0 {
 			args = append(args, "-max_storage_nodes_per_zone",
-				strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone)))
+				strconv.Itoa(t.cloudConfig.StorageInstancesPerZone))
 		}
 	}
 

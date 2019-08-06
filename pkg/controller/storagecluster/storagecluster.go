@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/libopenstorage/operator/drivers/storage"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -87,7 +87,7 @@ const (
 var _ reconcile.Reconciler = &Controller{}
 
 var (
-	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind = corev1alpha2.SchemeGroupVersion.WithKind("StorageCluster")
 	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 )
 
@@ -124,7 +124,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 
 	// Watch for changes to primary resource StorageCluster
 	err = ctrl.Watch(
-		&source.Kind{Type: &corev1alpha1.StorageCluster{}},
+		&source.Kind{Type: &corev1alpha2.StorageCluster{}},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -136,7 +136,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 		&source.Kind{Type: &v1.Pod{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
+			OwnerType:    &corev1alpha2.StorageCluster{},
 		},
 	)
 	if err != nil {
@@ -148,7 +148,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 		&source.Kind{Type: &apps.ControllerRevision{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
+			OwnerType:    &corev1alpha2.StorageCluster{},
 		},
 	)
 	if err != nil {
@@ -192,7 +192,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	log.Infof("Reconciling StorageCluster")
 
 	// Fetch the StorageCluster instance
-	instance := &corev1alpha1.StorageCluster{}
+	instance := &corev1alpha2.StorageCluster{}
 	err := c.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -217,13 +217,13 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 // createCRD creates the CRD for StorageCluster object
 func (c *Controller) createCRD() error {
 	resource := k8s.CustomResource{
-		Name:       corev1alpha1.StorageClusterResourceName,
-		Plural:     corev1alpha1.StorageClusterResourcePlural,
-		Group:      corev1alpha1.SchemeGroupVersion.Group,
-		Version:    corev1alpha1.SchemeGroupVersion.Version,
+		Name:       corev1alpha2.StorageClusterResourceName,
+		Plural:     corev1alpha2.StorageClusterResourcePlural,
+		Group:      corev1alpha2.SchemeGroupVersion.Group,
+		Version:    corev1alpha2.SchemeGroupVersion.Version,
 		Scope:      apiextensionsv1beta1.NamespaceScoped,
-		Kind:       reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(),
-		ShortNames: []string{corev1alpha1.StorageClusterShortName},
+		Kind:       reflect.TypeOf(corev1alpha2.StorageCluster{}).Name(),
+		ShortNames: []string{corev1alpha2.StorageClusterShortName},
 	}
 	err := k8s.Instance().CreateCRD(resource)
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -236,13 +236,13 @@ func (c *Controller) createCRD() error {
 	}
 
 	resource = k8s.CustomResource{
-		Name:       corev1alpha1.StorageNodeStatusResourceName,
-		Plural:     corev1alpha1.StorageNodeStatusResourcePlural,
-		Group:      corev1alpha1.SchemeGroupVersion.Group,
-		Version:    corev1alpha1.SchemeGroupVersion.Version,
+		Name:       corev1alpha2.StorageNodeStatusResourceName,
+		Plural:     corev1alpha2.StorageNodeStatusResourcePlural,
+		Group:      corev1alpha2.SchemeGroupVersion.Group,
+		Version:    corev1alpha2.SchemeGroupVersion.Version,
 		Scope:      apiextensionsv1beta1.NamespaceScoped,
-		Kind:       reflect.TypeOf(corev1alpha1.StorageNodeStatus{}).Name(),
-		ShortNames: []string{corev1alpha1.StorageNodeStatusShortName},
+		Kind:       reflect.TypeOf(corev1alpha2.StorageNodeStatus{}).Name(),
+		ShortNames: []string{corev1alpha2.StorageNodeStatusShortName},
 	}
 	err = k8s.Instance().CreateCRD(resource)
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -253,7 +253,7 @@ func (c *Controller) createCRD() error {
 }
 
 func (c *Controller) syncStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	if cluster.DeletionTimestamp != nil {
 		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
@@ -288,8 +288,8 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	switch cluster.Spec.UpdateStrategy.Type {
-	case corev1alpha1.OnDeleteStorageClusterStrategyType:
-	case corev1alpha1.RollingUpdateStorageClusterStrategyType:
+	case corev1alpha2.OnDeleteStorageClusterStrategyType:
+	case corev1alpha2.RollingUpdateStorageClusterStrategyType:
 		if err := c.rollingUpdate(cluster, hash); err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ func (c *Controller) syncStorageCluster(
 }
 
 func (c *Controller) deleteStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	// get all the storage pods
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
@@ -337,7 +337,7 @@ func (c *Controller) deleteStorageCluster(
 		// Check if there is an existing delete condition and overwrite it
 		foundIndex := -1
 		for i, deleteCondition := range toDelete.Status.Conditions {
-			if deleteCondition.Type == corev1alpha1.ClusterConditionTypeDelete {
+			if deleteCondition.Type == corev1alpha2.ClusterConditionTypeDelete {
 				foundIndex = i
 				break
 			}
@@ -353,7 +353,7 @@ func (c *Controller) deleteStorageCluster(
 				toDelete.Namespace, toDelete.Name, err)
 		}
 
-		if deleteClusterCondition.Status == corev1alpha1.ClusterOperationCompleted {
+		if deleteClusterCondition.Status == corev1alpha2.ClusterOperationCompleted {
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
 			if err := c.client.Update(context.TODO(), toDelete); err != nil {
@@ -369,7 +369,7 @@ func (c *Controller) deleteStorageCluster(
 }
 
 func (c *Controller) updateStorageClusterStatus(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) error {
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
@@ -381,7 +381,7 @@ func (c *Controller) updateStorageClusterStatus(
 }
 
 func (c *Controller) manage(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	hash string,
 ) error {
 	// Run the pre install hook for the driver to ensure we are ready to create storage pods
@@ -427,7 +427,7 @@ func (c *Controller) manage(
 
 // syncNodes deletes given pods and creates new storage pods on the given nodes
 func (c *Controller) syncNodes(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	podsToDelete, nodesNeedingStoragePods []string,
 	hash string,
 ) error {
@@ -438,7 +438,10 @@ func (c *Controller) syncNodes(
 	// Make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
 
-	podTemplate := c.createPodTemplate(cluster, hash)
+	podTemplate, err := c.createPodTemplate(cluster, hash)
+	if err != nil {
+		return err
+	}
 	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
 
@@ -522,7 +525,7 @@ func (c *Controller) syncNodes(
 func (c *Controller) podsShouldBeOnNode(
 	node *v1.Node,
 	nodeToStoragePods map[string][]*v1.Pod,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) (nodesNeedingStoragePods, podsToDelete []string, err error) {
 	wantToRun, shouldSchedule, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
 	if err != nil {
@@ -578,9 +581,13 @@ func (c *Controller) podsShouldBeOnNode(
 // to be scheduled on the node, or to allow running if it is already running.
 func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
-	newPod := c.newPod(cluster, node.Name)
+	newPod, err := c.newPod(cluster, node.Name)
+	if err != nil {
+		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
+		return false, false, false, err
+	}
 	wantToRun, shouldSchedule, shouldContinueRunning = true, true, true
 
 	// TODO: We should get rid of simulate and let the scheduler try to deploy
@@ -664,10 +671,13 @@ func (c *Controller) nodeShouldRunStoragePod(
 }
 
 func (c *Controller) createPodTemplate(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	hash string,
-) v1.PodTemplateSpec {
-	pod := c.newPod(cluster, "")
+) (v1.PodTemplateSpec, error) {
+	pod, err := c.newPod(cluster, "")
+	if err != nil {
+		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
+	}
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: pod.ObjectMeta,
 		Spec:       pod.Spec,
@@ -676,28 +686,32 @@ func (c *Controller) createPodTemplate(
 	if len(hash) > 0 {
 		newTemplate.ObjectMeta.Labels[defaultStorageClusterUniqueLabelKey] = hash
 	}
-	return newTemplate
+	return newTemplate, nil
 }
 
-func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName string) *v1.Pod {
+func (c *Controller) newPod(cluster *corev1alpha2.StorageCluster, nodeName string) (*v1.Pod, error) {
+	podSpec, err := c.Driver.GetStoragePodSpec(cluster, nodeName)
+	if err != nil {
+		return nil, err
+	}
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
 			Labels:    c.storageClusterSelectorLabels(cluster),
 		},
 		// TODO: add node specific spec here for heterogeneous config
-		Spec: c.Driver.GetStoragePodSpec(cluster),
+		Spec: podSpec,
 	}
 	newPod.Spec.NodeName = nodeName
 	// Add default tolerations for StorageCluster pods
 	addOrUpdateStoragePodTolerations(newPod)
-	return newPod
+	return newPod, nil
 }
 
 func (c *Controller) simulate(
 	newPod *v1.Pod,
 	node *v1.Node,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) ([]algorithm.PredicateFailureReason, *schedulercache.NodeInfo, error) {
 	podList := &v1.PodList{}
 	fieldSelector := fields.SelectorFromSet(map[string]string{nodeNameIndex: node.Name})
@@ -724,16 +738,16 @@ func (c *Controller) simulate(
 	return reasons, nodeInfo, err
 }
 
-func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha2.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
 
 	updateStrategy := &toUpdate.Spec.UpdateStrategy
 	if updateStrategy.Type == "" {
-		updateStrategy.Type = corev1alpha1.RollingUpdateStorageClusterStrategyType
+		updateStrategy.Type = corev1alpha2.RollingUpdateStorageClusterStrategyType
 	}
-	if updateStrategy.Type == corev1alpha1.RollingUpdateStorageClusterStrategyType {
+	if updateStrategy.Type == corev1alpha2.RollingUpdateStorageClusterStrategyType {
 		if updateStrategy.RollingUpdate == nil {
-			updateStrategy.RollingUpdate = &corev1alpha1.RollingUpdateStorageCluster{}
+			updateStrategy.RollingUpdate = &corev1alpha2.RollingUpdateStorageCluster{}
 		}
 		if updateStrategy.RollingUpdate.MaxUnavailable == nil {
 			// Set default MaxUnavailable as 1 by default.
@@ -816,7 +830,7 @@ func checkPredicates(
 }
 
 func (c *Controller) getNodeToStoragePods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) (map[string][]*v1.Pod, error) {
 	claimedPods, err := c.getStoragePods(cluster)
 	if err != nil {
@@ -838,7 +852,7 @@ func (c *Controller) getNodeToStoragePods(
 }
 
 func (c *Controller) getStoragePods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 ) ([]*v1.Pod, error) {
 	// List all pods to include those that don't match the selector anymore but
 	// have a ControllerRef pointing to this controller.
@@ -882,7 +896,7 @@ func (c *Controller) getStoragePods(
 	return cm.ClaimPods(allPods)
 }
 
-func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
+func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha2.StorageCluster) map[string]string {
 	labels := c.Driver.GetSelectorLabels()
 	if labels == nil {
 		labels = make(map[string]string)
