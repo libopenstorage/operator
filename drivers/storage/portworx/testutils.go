@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -112,6 +112,6 @@ func getPullPolicyForContainer(deployment *appsv1.Deployment, containerName stri
 
 func fakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1alpha1.AddToScheme(s)
+	corev1alpha2.AddToScheme(s)
 	return fake.NewFakeClientWithScheme(s, initObjects...)
 }

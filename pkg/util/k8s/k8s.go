@@ -4,10 +4,10 @@ import (
 	"context"
 	"reflect"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -692,10 +692,10 @@ func CreateOrUpdateDaemonSet(
 // CreateOrUpdateStorageNodeStatus creates a StorageNodeStatus if not present, else updates it
 func CreateOrUpdateStorageNodeStatus(
 	k8sClient client.Client,
-	sns *corev1alpha1.StorageNodeStatus,
+	sns *corev1alpha2.StorageNodeStatus,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	existingSNS := &corev1alpha1.StorageNodeStatus{}
+	existingSNS := &corev1alpha2.StorageNodeStatus{}
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{

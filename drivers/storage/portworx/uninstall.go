@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/kvdb"
@@ -70,7 +70,7 @@ type UninstallPortworx interface {
 
 // NewUninstaller returns an implementation of UninstallPortworx interface
 func NewUninstaller(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha2.StorageCluster,
 	k8sClient client.Client,
 ) UninstallPortworx {
 	return &uninstallPortworx{
@@ -80,7 +80,7 @@ func NewUninstaller(
 }
 
 type uninstallPortworx struct {
-	cluster   *corev1alpha1.StorageCluster
+	cluster   *corev1alpha2.StorageCluster
 	k8sClient client.Client
 }
 
