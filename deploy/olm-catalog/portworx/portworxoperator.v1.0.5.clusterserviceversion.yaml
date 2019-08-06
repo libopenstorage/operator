@@ -38,6 +38,14 @@ metadata:
               "useAll": true
             }
           }
+        },
+        {
+          "apiVersion": "core.libopenstorage.org/v1alpha1",
+          "kind": "StorageNodeStatus",
+          "metadata": {
+            "name": "example",
+            "namespace": "test-operator"
+          }
         }
       ]
 spec:
