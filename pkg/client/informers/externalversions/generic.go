@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	v1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -57,6 +58,12 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha1().StorageClusters().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("storagenodestatuses"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha1().StorageNodeStatuses().Informer()}, nil
+
+		// Group=core.libopenstorage.org, Version=v1alpha2
+	case v1alpha2.SchemeGroupVersion.WithResource("storageclusters"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha2().StorageClusters().Informer()}, nil
+	case v1alpha2.SchemeGroupVersion.WithResource("storagenodestatuses"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha2().StorageNodeStatuses().Informer()}, nil
 
 	}
 

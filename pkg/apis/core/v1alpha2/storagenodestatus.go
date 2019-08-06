@@ -32,26 +32,6 @@ type StorageNodeStatusList struct {
 	Items         []StorageNodeStatus `json:"items"`
 }
 
-// CloudStorageConfig is the cloud storage configuration for this node
-type CloudStorageConfig struct {
-	// Type of cloud storage
-	Type string `json:"type,omitempty"`
-	// Size of cloud storage
-	SizeInGiB uint64 `json:"sizeInGiB,omitempty"`
-	// IOPS provided by cloud storage
-	IOPS uint32 `json:"iops,omitmepty"`
-	// Options are additional options to the storage
-	Options map[string]string `json:"options,omitempty"`
-}
-
-// NodeConfig is the current configuration for a node
-type NodeConfig struct {
-	// CloudStorage is the current cloud configuration
-	CloudStorage []CloudStorageConfig `json:"cloudStorage,omitempty"`
-	// StorageInstancesPerZone is the number of storage instances per zone
-	StorageInstancesPerZone int `json:"storageInstancesPerZone,omitempty"`
-}
-
 // NodeStatus contains the status of the storage node
 type NodeStatus struct {
 	// NodeUID unique identifier for the node
@@ -62,8 +42,6 @@ type NodeStatus struct {
 	Geo Geography `json:"geography,omitempty"`
 	// Conditions is an array of current node conditions
 	Conditions []NodeCondition `json:"conditions,omitempty"`
-	// Config is the configured spec for the node
-	Config NodeConfig `json:"nodeSpec,omitempty"`
 }
 
 // NetworkStatus network status of the storage node
