@@ -26,12 +26,6 @@ metadata:
           },
           "spec": {
             "image": "registry.connect.redhat.com/portworx/px-monitor:2.1.2",
-            "kvdb": {
-              "internal": true
-            },
-            "storage": {
-              "useAll": true
-            },
             "stork": {
               "enabled": true,
               "image": "openstorage/stork:2.2.4"
@@ -39,6 +33,9 @@ metadata:
             "userInterface": {
               "enabled": true,
               "image": "portworx/px-lighthouse:2.0.4"
+            },
+            "storage": {
+              "useAll": true
             }
           }
         }
@@ -88,7 +85,7 @@ spec:
     install, configuration, upgrades and manages the Portworx Enterprise cluster
     lifecycle.
 
-    ## Uninstall
+    ### Uninstall
 
     Deleting the StorageCluster object for Portworx cluster does not stop Portworx service running on the nodes to avoid application downtime.
     To uninstall Portworx completely without wiping the data, you should add the following delete strategy to the StorageCluster spec:
@@ -104,7 +101,7 @@ spec:
         type: UninstallAndWipe
     ```
 
-    ## Tutorials
+    ### Tutorials
 
     * [Portworx Enterprise on Openshift](https://portworx.com/openshift/)
 
@@ -241,60 +238,16 @@ spec:
           CustomImageRegistry is a custom container registry server
           (may include repository) that will be used instead of index.docker.io to
           download Docker images. (Example: myregistry.net:5443 or myregistry.com/myrepository)
-      - path: kvdb.internal
-        displayName: Internal KeyValue Database
-        description: Flag indicating whether the cluster is using internal KVDB.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-      - path: stork.enabled
-        displayName: Stork Enabled
-        description: Flag indicating whether Stork is enabled.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
       - path: stork.image
         displayName: Stork Image
         description: The docker image name and version of Stork.
-      - path: userInterface.enabled
-        displayName: Lighthouse Enabled
-        description: Flag indicating whether Lighthouse is enabled.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
       - path: userInterface.image
         displayName: Lighthouse Image
         description: The docker image name and version of Lighthouse.
-      - path: kvdb.endpoints
-        displayName: External KeyValue Database Endpoints
-        description: List of endpoints of an external KVDB store.
-      - path: storage
-        displayName: Storage Configuration
-        description: Configuration of storage that is to be used by Portworx.
-      - path: cloudStorage
-        displayName: Cloud Storage Configuration
-        description: Configuration of storage in cloud enviroments. This supports
-          automatic drive creation and management by Portworx by just give a
-          spec for the drives to be used. You can specify either storage or
-          cloudStorage, not both.
-      - path: network
-        displayName: Network Configuration
-        description: Details of network interfaces to be used by Portworx.
       - path: secretsProvider
         displayName: Secrets Provider
         description: The secret provider that Portworx should integrate with to
           provider features like volume encryption, security, cloud backup and migration.
-      - path: startPort
-        displayName: Start Port
-        description: It is the starting port in the range of ports used by the cluster.
-      - path: featureGates
-        displayName: Feature Gates
-        description: A list of features that can be enabled or disabled in Porworx.
-      - path: runtimeOptions
-        description: A list of extra configs that can be used to tweak Portworx
-          according to specific use cases if needed.
-        displayName: Runtime Options
-      - path: revisionHistoryLimit
-        displayName: Revision History Limit
-        description: It is the number of old histories of storage cluster specs to retain
-          to allow rollback.
       statusDescriptors:
       - path: conditions
         displayName: Cluster Conditions
