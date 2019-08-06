@@ -299,16 +299,41 @@ func (p *portworx) unsetInstallParams() {
 
 func createVolumePlacementStrategyCRD() error {
 	logrus.Debugf("Creating VolumePlacementStrategy CRD")
+
 	resource := k8s.CustomResource{
-		Name:       "volumeplacementstrategy",
-		Plural:     "volumeplacementstrategies",
-		Group:      "portworx.io",
-		Version:    "v1beta1",
-		Scope:      apiextensionsv1beta1.ClusterScoped,
-		Kind:       "VolumePlacementStrategy",
-		ShortNames: []string{"vps", "vp"},
+		Plural: "volumeplacementstrategies",
+		Group:  "portworx.io",
 	}
-	err := k8s.Instance().CreateCRD(resource)
+
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s.%s", resource.Plural, resource.Group),
+		},
+		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
+			Group: resource.Group,
+			Versions: []apiextensionsv1beta1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1beta2",
+					Served:  true,
+					Storage: true,
+				},
+				{
+					Name:    "v1beta1",
+					Served:  false,
+					Storage: false,
+				},
+			},
+			Scope: apiextensionsv1beta1.ClusterScoped,
+			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+				Singular:   "volumeplacementstrategy",
+				Plural:     resource.Plural,
+				Kind:       "VolumePlacementStrategy",
+				ShortNames: []string{"vps", "vp"},
+			},
+		},
+	}
+
+	err := k8s.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
