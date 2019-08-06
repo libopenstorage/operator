@@ -8,7 +8,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	storage "github.com/libopenstorage/operator/drivers/storage"
+	v1alpha2 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha2"
 	v1 "k8s.io/api/core/v1"
 	record "k8s.io/client-go/tools/record"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,9 +39,9 @@ func (m *MockDriver) EXPECT() *MockDriverMockRecorder {
 }
 
 // DeleteStorage mocks base method
-func (m *MockDriver) DeleteStorage(arg0 *v1alpha1.StorageCluster) (*v1alpha1.ClusterCondition, error) {
+func (m *MockDriver) DeleteStorage(arg0 *v1alpha2.StorageCluster) (*v1alpha2.ClusterCondition, error) {
 	ret := m.ctrl.Call(m, "DeleteStorage", arg0)
-	ret0, _ := ret[0].(*v1alpha1.ClusterCondition)
+	ret0, _ := ret[0].(*v1alpha2.ClusterCondition)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -63,15 +64,16 @@ func (mr *MockDriverMockRecorder) GetSelectorLabels() *gomock.Call {
 }
 
 // GetStoragePodSpec mocks base method
-func (m *MockDriver) GetStoragePodSpec(arg0 *v1alpha1.StorageCluster) v1.PodSpec {
-	ret := m.ctrl.Call(m, "GetStoragePodSpec", arg0)
+func (m *MockDriver) GetStoragePodSpec(arg0 *v1alpha2.StorageCluster, arg1 string) (v1.PodSpec, error) {
+	ret := m.ctrl.Call(m, "GetStoragePodSpec", arg0, arg1)
 	ret0, _ := ret[0].(v1.PodSpec)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetStoragePodSpec indicates an expected call of GetStoragePodSpec
-func (mr *MockDriverMockRecorder) GetStoragePodSpec(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStoragePodSpec", reflect.TypeOf((*MockDriver)(nil).GetStoragePodSpec), arg0)
+func (mr *MockDriverMockRecorder) GetStoragePodSpec(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStoragePodSpec", reflect.TypeOf((*MockDriver)(nil).GetStoragePodSpec), arg0, arg1)
 }
 
 // GetStorkDriverName mocks base method
@@ -88,7 +90,7 @@ func (mr *MockDriverMockRecorder) GetStorkDriverName() *gomock.Call {
 }
 
 // GetStorkEnvList mocks base method
-func (m *MockDriver) GetStorkEnvList(arg0 *v1alpha1.StorageCluster) []v1.EnvVar {
+func (m *MockDriver) GetStorkEnvList(arg0 *v1alpha2.StorageCluster) []v1.EnvVar {
 	ret := m.ctrl.Call(m, "GetStorkEnvList", arg0)
 	ret0, _ := ret[0].([]v1.EnvVar)
 	return ret0
@@ -112,7 +114,7 @@ func (mr *MockDriverMockRecorder) Init(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // PreInstall mocks base method
-func (m *MockDriver) PreInstall(arg0 *v1alpha1.StorageCluster) error {
+func (m *MockDriver) PreInstall(arg0 *v1alpha2.StorageCluster) error {
 	ret := m.ctrl.Call(m, "PreInstall", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -124,7 +126,7 @@ func (mr *MockDriverMockRecorder) PreInstall(arg0 interface{}) *gomock.Call {
 }
 
 // SetDefaultsOnStorageCluster mocks base method
-func (m *MockDriver) SetDefaultsOnStorageCluster(arg0 *v1alpha1.StorageCluster) {
+func (m *MockDriver) SetDefaultsOnStorageCluster(arg0 *v1alpha2.StorageCluster) {
 	m.ctrl.Call(m, "SetDefaultsOnStorageCluster", arg0)
 }
 
@@ -145,8 +147,20 @@ func (mr *MockDriverMockRecorder) String() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockDriver)(nil).String))
 }
 
+// UpdateDriver mocks base method
+func (m *MockDriver) UpdateDriver(arg0 *storage.UpdateDriverInfo) error {
+	ret := m.ctrl.Call(m, "UpdateDriver", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDriver indicates an expected call of UpdateDriver
+func (mr *MockDriverMockRecorder) UpdateDriver(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDriver", reflect.TypeOf((*MockDriver)(nil).UpdateDriver), arg0)
+}
+
 // UpdateStorageClusterStatus mocks base method
-func (m *MockDriver) UpdateStorageClusterStatus(arg0 *v1alpha1.StorageCluster) error {
+func (m *MockDriver) UpdateStorageClusterStatus(arg0 *v1alpha2.StorageCluster) error {
 	ret := m.ctrl.Call(m, "UpdateStorageClusterStatus", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
