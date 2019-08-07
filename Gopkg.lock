@@ -362,6 +362,18 @@
   source = "github.com/libopenstorage/external-storage"
 
 [[projects]]
+  branch = "master"
+  digest = "1:169f1e45aa87c8d2ccf7c34802806ba77985c99876e1a63cb8cf56f6af8ef57f"
+  name = "github.com/libopenstorage/cloudops"
+  packages = [
+    ".",
+    "mock",
+    "pkg/parser",
+  ]
+  pruneopts = "UT"
+  revision = "098cedcd38281fdaa1a85c7e4b8834e214e40f8f"
+
+[[projects]]
   branch = "release-6.0"
   digest = "1:84bdb388ad5babcefc31f5e553ff8e2e8f3dc4b0453e382da0e36b2f010f6400"
   name = "github.com/libopenstorage/openstorage"
@@ -1398,6 +1410,9 @@
     "github.com/golang/mock/gomock",
     "github.com/google/shlex",
     "github.com/hashicorp/go-version",
+    "github.com/libopenstorage/cloudops",
+    "github.com/libopenstorage/cloudops/mock",
+    "github.com/libopenstorage/cloudops/pkg/parser",
     "github.com/libopenstorage/openstorage/api",
     "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
