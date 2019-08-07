@@ -179,6 +179,88 @@ func TestServicePortNumberChange(t *testing.T) {
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
 
+func TestServiceRemoveNodePortsForClusterIP(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+
+	expectedService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: v1.ServiceSpec{
+			Type: v1.ServiceTypeLoadBalancer,
+			Ports: []v1.ServicePort{
+				{
+					Name:     "p1",
+					Port:     int32(1000),
+					Protocol: v1.ProtocolTCP,
+					NodePort: int32(11111),
+				},
+			},
+		},
+	}
+
+	err := CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService := &v1.Service{}
+	err = get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
+
+	// Changing to ClusterIP type should remove the node ports
+	expectedService.Spec.Type = v1.ServiceTypeClusterIP
+
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Empty(t, actualService.Spec.Ports[0].NodePort)
+}
+
+func TestServiceRemoveNodePortsForExternalNameType(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+
+	expectedService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: v1.ServiceSpec{
+			Type: v1.ServiceTypeNodePort,
+			Ports: []v1.ServicePort{
+				{
+					Name:     "p1",
+					Port:     int32(1000),
+					Protocol: v1.ProtocolTCP,
+					NodePort: int32(11111),
+				},
+			},
+		},
+	}
+
+	err := CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService := &v1.Service{}
+	err = get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
+
+	// Changing to ClusterIP type should remove the node ports
+	expectedService.Spec.Type = v1.ServiceTypeExternalName
+
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Empty(t, actualService.Spec.Ports[0].NodePort)
+}
+
 func TestServicePortProtocolChange(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 
