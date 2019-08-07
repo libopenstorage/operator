@@ -39,6 +39,7 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	failedSyncReason                  = "FailedSync"
+	labelPortworxVersion              = "PX Version"
 )
 
 type portworx struct {
@@ -279,7 +280,7 @@ func (p *portworx) updateNodeStatuses(
 			},
 		}
 
-		if version, ok := node.NodeLabels["PX Version"]; ok {
+		if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
 			nodeStatus.Spec = corev1alpha1.StorageNodeStatusSpec{
 				Version: version,
 			}
