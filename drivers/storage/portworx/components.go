@@ -872,7 +872,10 @@ func (p *portworx) createPortworxService(
 			},
 		},
 	}
-	if !t.isAKS && !t.isGKE && !t.isEKS {
+
+	if t.serviceType != "" {
+		newService.Spec.Type = t.serviceType
+	} else if !t.isAKS && !t.isGKE && !t.isEKS {
 		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 
@@ -917,7 +920,10 @@ func (p *portworx) createPortworxAPIService(
 			},
 		},
 	}
-	if !t.isAKS && !t.isGKE && !t.isEKS {
+
+	if t.serviceType != "" {
+		newService.Spec.Type = t.serviceType
+	} else if !t.isAKS && !t.isGKE && !t.isEKS {
 		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 
@@ -954,7 +960,10 @@ func (p *portworx) createLighthouseService(
 			},
 		},
 	}
-	if !t.isAKS && !t.isGKE && !t.isEKS {
+
+	if t.serviceType != "" {
+		newService.Spec.Type = t.serviceType
+	} else if !t.isAKS && !t.isGKE && !t.isEKS {
 		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 
