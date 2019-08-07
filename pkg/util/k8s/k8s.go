@@ -493,6 +493,10 @@ func CreateOrUpdateService(
 		toUpdate.Port = newPort.Port
 		toUpdate.TargetPort = newPort.TargetPort
 		toUpdate.Protocol = newPort.Protocol
+		if service.Spec.Type != v1.ServiceTypeLoadBalancer &&
+			service.Spec.Type != v1.ServiceTypeNodePort {
+			toUpdate.NodePort = int32(0)
+		}
 		servicePorts = append(servicePorts, *toUpdate)
 		delete(portMapping, newPort.Name)
 	}
