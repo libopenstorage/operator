@@ -182,125 +182,6 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 }
 
-func TestPortworxServiceTypeForAKS(t *testing.T) {
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
-	)
-	k8sClient := fake.NewFakeClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationIsAKS: "true",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-
-	require.NoError(t, err)
-
-	pxService := &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxServiceName, pxService.Name)
-	require.Equal(t, cluster.Namespace, pxService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
-
-	pxAPIService := &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxAPIServiceName, pxAPIService.Name)
-	require.Equal(t, cluster.Namespace, pxAPIService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
-}
-
-func TestPortworxServiceTypeForGKE(t *testing.T) {
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
-	)
-	k8sClient := fake.NewFakeClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationIsGKE: "true",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-
-	require.NoError(t, err)
-
-	pxService := &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxServiceName, pxService.Name)
-	require.Equal(t, cluster.Namespace, pxService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
-
-	pxAPIService := &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxAPIServiceName, pxAPIService.Name)
-	require.Equal(t, cluster.Namespace, pxAPIService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
-}
-
-func TestPortworxServiceTypeForEKS(t *testing.T) {
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
-	)
-	k8sClient := fake.NewFakeClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationIsEKS: "true",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	pxService := &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxServiceName, pxService.Name)
-	require.Equal(t, cluster.Namespace, pxService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
-
-	pxAPIService := &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, pxAPIServiceName, pxAPIService.Name)
-	require.Equal(t, cluster.Namespace, pxAPIService.Namespace)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
-}
-
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
@@ -379,12 +260,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	pxService = &v1.Service{}
 	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
 	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 }
 
 func TestPVCControllerInstall(t *testing.T) {
