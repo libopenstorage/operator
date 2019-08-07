@@ -233,6 +233,19 @@ type StorageSpec struct {
 	RaidLevel *string `json:"raidLevel,omitempty"`
 }
 
+// CloudStorageCapacitySpec details the minimum and maximum amount of storage
+// that will be provisioned in the cluster for a particular set of minimum IOPS.
+type CloudStorageCapacitySpec struct {
+	// MinIOPS minimum IOPS expected from the cloud drive
+	MinIOPS uint32 `json:"minIOPS"`
+	// MinCapacityInGiB minimum capacity for this cloud device spec
+	MinCapacityInGiB uint64 `json:"minCapacityInGiB"`
+	// MaxCapacityInGiB capacity for this cloud device spec should not go above this threshold
+	MaxCapacityInGiB uint64 `json:"maxCapacityInGiB,omitempty"`
+	// Options additional options required to provision the drive in cloud
+	Options map[string]string `json:"options,omitempty"`
+}
+
 // CloudStorageSpec details of storage in cloud environment
 type CloudStorageSpec struct {
 	// DeviceSpecs list of storage device specs. A cloud storage device will
@@ -240,6 +253,15 @@ type CloudStorageSpec struct {
 	// CloudStorageSpec is only at the cluster level, so the below specs
 	// be applied to all storage nodes in the cluster.
 	DeviceSpecs *[]string `json:"deviceSpecs,omitempty"`
+
+	// CapacitySpecs list of cluster wide storage types and their capacities.
+	// A single capacity spec identifies a storage pool with a set of minimum
+	// requested IOPS and size. Based on the cloud provider, the total storage
+	// capacity will get divided amongst the nodes. The nodes bearing storage
+	// themselves will get uniformly distributed across all the zones.
+	// CapacitySpecs is slated to replace DeviceSpecs in v1alpha2 version of StorageCluster.
+	// CapacitySpecs []CloudStorageCapacitySpec `json:"capacitySpecs,omitempty"`
+
 	// JournalDeviceSpec spec for the journal device
 	JournalDeviceSpec *string `json:"journalDeviceSpec,omitempty"`
 	// SystemMdDeviceSpec spec for the metadata device
