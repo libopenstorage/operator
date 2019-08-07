@@ -28,6 +28,7 @@ const (
 	annotationLogFile          = pxAnnotationPrefix + "/log-file"
 	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
 	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
+	annotationServiceType      = pxAnnotationPrefix + "/service-type"
 	templateVersion            = "v4"
 	csiBasePath                = "/var/lib/kubelet/plugins/com.openstorage.pxd"
 	secretKeyKvdbCA            = "kvdb-ca.crt"
@@ -180,6 +181,7 @@ type template struct {
 	isOpenshift        bool
 	needsPVCController bool
 	imagePullPolicy    v1.PullPolicy
+	serviceType        v1.ServiceType
 	startPort          int
 	k8sVersion         *version.Version
 	csiVersions        csiVersions
@@ -244,6 +246,15 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	// Do not run PVC controller if explicitly disabled
 	if err == nil && !enabled {
 		t.needsPVCController = false
+	}
+
+	if val, exists := cluster.Annotations[annotationServiceType]; exists {
+		serviceType := v1.ServiceType(val)
+		if serviceType == v1.ServiceTypeClusterIP ||
+			serviceType == v1.ServiceTypeNodePort ||
+			serviceType == v1.ServiceTypeLoadBalancer {
+			t.serviceType = serviceType
+		}
 	}
 
 	t.imagePullPolicy = v1.PullAlways
