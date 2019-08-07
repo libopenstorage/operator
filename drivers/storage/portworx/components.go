@@ -843,7 +843,7 @@ func (p *portworx) createPortworxService(
 		},
 		Spec: v1.ServiceSpec{
 			Selector: labels,
-			Type:     v1.ServiceTypeLoadBalancer,
+			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				{
 					Name:       pxRESTPortName,
@@ -875,8 +875,6 @@ func (p *portworx) createPortworxService(
 
 	if t.serviceType != "" {
 		newService.Spec.Type = t.serviceType
-	} else if !t.isAKS && !t.isGKE && !t.isEKS {
-		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 
 	return k8sutil.CreateOrUpdateService(p.k8sClient, newService, ownerRef)
@@ -897,7 +895,7 @@ func (p *portworx) createPortworxAPIService(
 		},
 		Spec: v1.ServiceSpec{
 			Selector: labels,
-			Type:     v1.ServiceTypeLoadBalancer,
+			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				{
 					Name:       pxRESTPortName,
@@ -923,8 +921,6 @@ func (p *portworx) createPortworxAPIService(
 
 	if t.serviceType != "" {
 		newService.Spec.Type = t.serviceType
-	} else if !t.isAKS && !t.isGKE && !t.isEKS {
-		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 
 	return k8sutil.CreateOrUpdateService(p.k8sClient, newService, ownerRef)
