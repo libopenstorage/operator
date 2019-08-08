@@ -375,7 +375,6 @@ func (c *Controller) updateStorageClusterStatus(
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
 		logrus.Error(err.Error())
 		c.recorder.Event(cluster, v1.EventTypeWarning, failedSyncReason, err.Error())
-		return nil
 	}
 	return c.client.Status().Update(context.TODO(), toUpdate)
 }

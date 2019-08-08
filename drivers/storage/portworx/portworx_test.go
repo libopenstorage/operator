@@ -209,6 +209,24 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
+func TestUpdateClusterStatusFirstTime(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	// Status should be set to initializing if not set
+	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
+	require.Equal(t, "Initializing", cluster.Status.Phase)
+}
+
 func TestUpdateClusterStatus(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -254,6 +272,9 @@ func TestUpdateClusterStatus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -481,6 +502,9 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -832,6 +856,9 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "test/image:1.2.3.4",
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
 	}
 
 	// Mock cluster inspect response
@@ -907,6 +934,9 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
 	}
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -935,6 +965,9 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
 	}
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -961,6 +994,9 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -1012,6 +1048,9 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -1094,6 +1133,9 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -1203,6 +1245,9 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -1314,6 +1359,9 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
@@ -1512,6 +1560,9 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
 	}
 
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
@@ -1622,6 +1673,9 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
 		},
 	}
 
