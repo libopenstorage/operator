@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	storage "github.com/libopenstorage/operator/drivers/storage"
 	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	record "k8s.io/client-go/tools/record"
@@ -143,6 +144,18 @@ func (m *MockDriver) String() string {
 // String indicates an expected call of String
 func (mr *MockDriverMockRecorder) String() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockDriver)(nil).String))
+}
+
+// UpdateDriver mocks base method
+func (m *MockDriver) UpdateDriver(arg0 *storage.UpdateDriverInfo) error {
+	ret := m.ctrl.Call(m, "UpdateDriver", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDriver indicates an expected call of UpdateDriver
+func (mr *MockDriverMockRecorder) UpdateDriver(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDriver", reflect.TypeOf((*MockDriver)(nil).UpdateDriver), arg0)
 }
 
 // UpdateStorageClusterStatus mocks base method
