@@ -72,6 +72,7 @@ const (
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
+	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
 )
 
 // Reasons for StorageCluster events
@@ -404,9 +405,24 @@ func (c *Controller) manage(
 		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
 			cluster, err)
 	}
+	var (
+		nodesNeedingStoragePods, podsToDelete []string
+		cloudProvider                         string
+	)
+	zoneMap := make(map[string]int)
 
-	var nodesNeedingStoragePods, podsToDelete []string
 	for _, node := range nodeList.Items {
+		if zone, ok := node.Labels[failureDomainZoneKey]; ok {
+			instancesCount := zoneMap[zone]
+			zoneMap[zone] = instancesCount + 1
+		}
+		if len(cloudProvider) == 0 && len(node.Spec.ProviderID) != 0 {
+			// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
+			tokens := strings.Split(node.Spec.ProviderID, "://")
+			if len(tokens) == 2 {
+				cloudProvider = tokens[0]
+			} // else provider id is invalid
+		}
 		nodesNeedingStoragePodsOnNode, podsToDeleteOnNode, err := c.podsShouldBeOnNode(&node, nodeToStoragePods, cluster)
 		if err != nil {
 			continue
@@ -414,6 +430,13 @@ func (c *Controller) manage(
 
 		nodesNeedingStoragePods = append(nodesNeedingStoragePods, nodesNeedingStoragePodsOnNode...)
 		podsToDelete = append(podsToDelete, podsToDeleteOnNode...)
+	}
+
+	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
+		ZoneToInstancesMap: zoneMap,
+		CloudProvider:      cloudProvider,
+	}); err != nil {
+		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
 	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods, hash); err != nil {
