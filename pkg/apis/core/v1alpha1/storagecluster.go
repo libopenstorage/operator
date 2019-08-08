@@ -329,6 +329,8 @@ type ClusterConditionStatus string
 
 // These are valid cluster statuses.
 const (
+	// ClusterInit means the cluster is initializing
+	ClusterInit ClusterConditionStatus = "Initializing"
 	// ClusterOnline means the cluster is up and running
 	ClusterOnline ClusterConditionStatus = "Online"
 	// ClusterOffline means the cluster is offline

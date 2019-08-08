@@ -200,6 +200,12 @@ func (p *portworx) DeleteStorage(
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
+	if cluster.Status.Phase == "" {
+		cluster.Status.ClusterName = cluster.Name
+		cluster.Status.Phase = string(corev1alpha1.ClusterInit)
+		return nil
+	}
+
 	clientConn, err := p.getPortworxClient(cluster)
 	if err != nil {
 		return err
