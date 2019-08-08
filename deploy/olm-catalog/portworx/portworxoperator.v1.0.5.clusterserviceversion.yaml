@@ -7,7 +7,7 @@ metadata:
     capabilities: Full Lifecycle
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5.1
     repository: https://github.com/libopenstorage/operator
     createdAt: 2019-06-10T08:00:00Z
     support: Portworx, Inc
@@ -217,7 +217,7 @@ spec:
                 - --verbose
                 - --driver=portworx
                 - --leader-elect=true
-                image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5
+                image: registry.connect.redhat.com/portworx/openstorage-operator:1.0.5.1
                 imagePullPolicy: Always
                 name: portworx-operator
                 resources: {}
