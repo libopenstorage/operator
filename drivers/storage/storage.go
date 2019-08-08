@@ -9,6 +9,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// UpdateDriverInfo consists of information that the controller
+// wants to convey to the Driver with regards to the cluster and node state.
+type UpdateDriverInfo struct {
+	// ZoneToInstancesMap is a map of zone to number of instances in that zone
+	ZoneToInstancesMap map[string]int
+	// CloudProvider cloud provider where this cluster is running
+	CloudProvider string
+}
+
 // Driver defines an external storage driver interface.
 // Any driver that wants to be used with openstorage operator needs
 // to implement these interfaces.
@@ -17,6 +26,10 @@ type Driver interface {
 	Init(client.Client, record.EventRecorder) error
 	// String returns the string name of the driver
 	String() string
+	// UpdateDriver updates the driver with the current cluster and node conditions.
+	// This API can be extended to provide information other than the StorageCluster
+	// to the drivers from the controller reconcile loop.
+	UpdateDriver(*UpdateDriverInfo) error
 	// ClusterPluginInterface interface to manage storage cluster
 	ClusterPluginInterface
 	// StorkInterface interface to manage Stork related operations

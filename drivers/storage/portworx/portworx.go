@@ -51,6 +51,8 @@ type portworx struct {
 	lhDeploymentCreated               bool
 	csiStatefulSetCreated             bool
 	sdkConn                           *grpc.ClientConn
+	zoneToInstancesMap                map[string]int
+	cloudProvider                     string
 }
 
 func (p *portworx) String() string {
@@ -66,6 +68,12 @@ func (p *portworx) Init(k8sClient client.Client, recorder record.EventRecorder) 
 		return fmt.Errorf("event recorder cannot be nil")
 	}
 	p.recorder = recorder
+	return nil
+}
+
+func (p *portworx) UpdateDriver(info *storage.UpdateDriverInfo) error {
+	p.zoneToInstancesMap = info.ZoneToInstancesMap
+	p.cloudProvider = info.CloudProvider
 	return nil
 }
 
