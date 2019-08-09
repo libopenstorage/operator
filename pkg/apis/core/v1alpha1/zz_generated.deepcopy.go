@@ -62,6 +62,13 @@ func (in *CloudStorageSpec) DeepCopyInto(out *CloudStorageSpec) {
 			copy(*out, *in)
 		}
 	}
+	if in.CapacitySpecs != nil {
+		in, out := &in.CapacitySpecs, &out.CapacitySpecs
+		*out = make([]CloudStorageCapacitySpec, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.JournalDeviceSpec != nil {
 		in, out := &in.JournalDeviceSpec, &out.JournalDeviceSpec
 		*out = new(string)

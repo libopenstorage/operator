@@ -252,6 +252,8 @@ type CloudStorageSpec struct {
 	// be created for every spec in the DeviceSpecs list. Currently,
 	// CloudStorageSpec is only at the cluster level, so the below specs
 	// be applied to all storage nodes in the cluster.
+	// (Deprecated) DeviceSpecs will be removed from StorageCluster in v1alpha2.
+	// Use CapacitySpecs instead
 	DeviceSpecs *[]string `json:"deviceSpecs,omitempty"`
 
 	// CapacitySpecs list of cluster wide storage types and their capacities.
@@ -260,7 +262,7 @@ type CloudStorageSpec struct {
 	// capacity will get divided amongst the nodes. The nodes bearing storage
 	// themselves will get uniformly distributed across all the zones.
 	// CapacitySpecs is slated to replace DeviceSpecs in v1alpha2 version of StorageCluster.
-	// CapacitySpecs []CloudStorageCapacitySpec `json:"capacitySpecs,omitempty"`
+	CapacitySpecs []CloudStorageCapacitySpec `json:"capacitySpecs,omitempty"`
 
 	// JournalDeviceSpec spec for the journal device
 	JournalDeviceSpec *string `json:"journalDeviceSpec,omitempty"`
