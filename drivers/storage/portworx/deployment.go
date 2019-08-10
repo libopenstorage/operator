@@ -575,8 +575,8 @@ func (t *template) getArguments() []string {
 	} else if t.cluster.Spec.CloudStorage != nil {
 		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
 			// CapacitySpecs have higher preference over DeviceSpecs
-			for _, cloudNodeSpec := range t.cloudConfig.CloudStorage {
-				args = append(args, "-s", t.getCloudStorageArguments(cloudNodeSpec))
+			for _, cloudDriveSpec := range t.cloudConfig.CloudStorage {
+				args = append(args, "-s", t.getCloudStorageArguments(cloudDriveSpec))
 			}
 		} else if t.cluster.Spec.CloudStorage.DeviceSpecs != nil {
 			for _, dev := range *t.cluster.Spec.CloudStorage.DeviceSpecs {
@@ -599,6 +599,12 @@ func (t *template) getArguments() []string {
 		if t.cloudConfig != nil && t.cloudConfig.StorageInstancesPerZone > 0 {
 			args = append(args, "-max_storage_nodes_per_zone",
 				strconv.Itoa(t.cloudConfig.StorageInstancesPerZone))
+		} else if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil &&
+			// cloudConfig is not generated use the max storage nodes per zone
+			// provided by the user
+			*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone > 0 {
+			args = append(args, "-max_storage_nodes_per_zone",
+				strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone)))
 		}
 	}
 

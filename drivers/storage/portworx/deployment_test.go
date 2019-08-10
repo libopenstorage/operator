@@ -780,17 +780,149 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	// Empty storage config
+	// Empty cloud config
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
 
 	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
-	// Nil storage config
+	// Nil cloud config
 	cluster.Spec.CloudStorage = nil
 
 	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Nil cloud config but max storage nodes per zone is set
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-max_storage_nodes_per_zone", "2",
+	}
+
+	// Empty cloud config
+	maxStorageNodesPerZone := uint32(2)
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		MaxStorageNodesPerZone: &maxStorageNodesPerZone,
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+}
+
+func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	setupMockStorageManager(mockCtrl)
+
+	_, yamlData := generateValidYamlData(t)
+
+	k8s.Instance().SetClient(
+		fakek8sclient.NewSimpleClientset(),
+		nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	k8sClient := fake.NewFakeClient(
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      storageDecisionMatrixCMName,
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{
+				storageDecisionMatrixCMKey: string(yamlData),
+			},
+		},
+	)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.0.3.4",
+		},
+	}
+
+	// Provide both devices specs and cloud capacity specs
+	deviceSpecs := []string{"type=one", "type=two"}
+
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		DeviceSpecs: &deviceSpecs,
+		CapacitySpecs: []corev1alpha1.CloudStorageCapacitySpec{
+			{
+				MinIOPS:          uint32(100),
+				MinCapacityInGiB: uint64(100),
+				MaxCapacityInGiB: uint64(200),
+				Options:          map[string]string{"foo1": "bar1"},
+			},
+			{
+				MinIOPS:          uint32(200),
+				MinCapacityInGiB: uint64(200),
+				MaxCapacityInGiB: uint64(500),
+				Options:          map[string]string{"foo3": "bar3"},
+			},
+		},
+	}
+
+	zoneToInstancesMap := map[string]int{"a": 3, "b": 3, "c": 2}
+	driver := portworx{
+		k8sClient:          k8sClient,
+		recorder:           record.NewFakeRecorder(0),
+		zoneToInstancesMap: zoneToInstancesMap,
+		cloudProvider:      "mock",
+	}
+
+	inputInstancesPerZone := 2
+	mockStorageManager.EXPECT().
+		GetStorageDistribution(&cloudops.StorageDistributionRequest{
+			ZoneCount:        len(zoneToInstancesMap),
+			InstancesPerZone: inputInstancesPerZone,
+			UserStorageSpec: []*cloudops.StorageSpec{
+				{
+					IOPS:        uint32(100),
+					MinCapacity: uint64(100),
+					MaxCapacity: uint64(200),
+				},
+				{
+					IOPS:        uint32(200),
+					MinCapacity: uint64(200),
+					MaxCapacity: uint64(500),
+				},
+			},
+		}).
+		Return(&cloudops.StorageDistributionResponse{
+			InstanceStorage: []*cloudops.StoragePoolSpec{
+				{
+					DriveCapacityGiB: uint64(120),
+					DriveType:        "foo",
+					DriveCount:       1,
+					InstancesPerZone: inputInstancesPerZone,
+					IOPS:             uint32(110),
+				},
+				{
+					DriveCapacityGiB: uint64(220),
+					DriveType:        "bar",
+					DriveCount:       1,
+					InstancesPerZone: inputInstancesPerZone,
+					IOPS:             uint32(210),
+				},
+			},
+		}, nil)
+
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-s", "type=foo,size=120,iops=110,foo1=bar1",
+		"-s", "type=bar,size=220,iops=210,foo3=bar3",
+		"-max_storage_nodes_per_zone", "2",
+	}
+
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
 }
 
 func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
