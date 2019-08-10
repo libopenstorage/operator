@@ -30,6 +30,8 @@ const (
 	driverName                        = "portworx"
 	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
+	defaultPortworxImage              = "portworx/oci-monitor:2.1.3"
+	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
 	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
@@ -97,7 +99,14 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
-	startPort := uint32(defaultStartPort)
+	if len(strings.TrimSpace(toUpdate.Spec.Image)) == 0 {
+		toUpdate.Spec.Image = defaultPortworxImage
+	}
+	if toUpdate.Spec.UserInterface != nil &&
+		toUpdate.Spec.UserInterface.Enabled &&
+		len(strings.TrimSpace(toUpdate.Spec.UserInterface.Image)) == 0 {
+		toUpdate.Spec.UserInterface.Image = defaultLighthouseImage
+	}
 	if toUpdate.Spec.Kvdb == nil {
 		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
 	}
@@ -107,6 +116,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	if toUpdate.Spec.SecretsProvider == nil {
 		toUpdate.Spec.SecretsProvider = stringPtr(defaultSecretsProvider)
 	}
+	startPort := uint32(defaultStartPort)
 	if toUpdate.Spec.StartPort == nil {
 		toUpdate.Spec.StartPort = &startPort
 	}

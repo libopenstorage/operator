@@ -32,6 +32,9 @@ import (
 )
 
 func TestStorkInstallation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -66,7 +69,7 @@ func TestStorkInstallation(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -245,6 +248,9 @@ func TestStorkInstallation(t *testing.T) {
 }
 
 func TestStorkWithoutImage(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -257,7 +263,7 @@ func TestStorkWithoutImage(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	controller := Controller{
 		client: fakeK8sClient(cluster),
 		Driver: driver,
@@ -274,6 +280,9 @@ func TestStorkWithoutImage(t *testing.T) {
 }
 
 func TestStorkImageChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -291,7 +300,7 @@ func TestStorkImageChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -323,6 +332,9 @@ func TestStorkImageChange(t *testing.T) {
 }
 
 func TestStorkArgumentsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -343,7 +355,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -388,6 +400,9 @@ func TestStorkArgumentsChange(t *testing.T) {
 }
 
 func TestStorkEnvVarsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -411,7 +426,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -459,6 +474,9 @@ func TestStorkEnvVarsChange(t *testing.T) {
 }
 
 func TestStorkCPUChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -479,7 +497,7 @@ func TestStorkCPUChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -514,6 +532,9 @@ func TestStorkCPUChange(t *testing.T) {
 }
 
 func TestStorkSchedulerCPUChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -534,7 +555,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -569,6 +590,9 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 }
 
 func TestStorkInvalidCPU(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -588,7 +612,7 @@ func TestStorkInvalidCPU(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -602,6 +626,9 @@ func TestStorkInvalidCPU(t *testing.T) {
 }
 
 func TestStorkSchedulerInvalidCPU(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -621,7 +648,7 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -638,6 +665,9 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 }
 
 func TestStorkSchedulerRollbackImageChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -658,7 +688,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -698,6 +728,9 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 }
 
 func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -718,7 +751,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -755,6 +788,9 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 }
 
 func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -774,7 +810,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -807,6 +843,9 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 }
 
 func TestStorkInstallWithCustomRegistry(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	customRegistry := "test-registry:1111"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -827,7 +866,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -864,6 +903,9 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 }
 
 func TestStorkInstallWithImagePullSecret(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	imagePullSecret := "registry-secret"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -883,7 +925,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -918,6 +960,9 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 }
 
 func TestDisableStork(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -935,7 +980,7 @@ func TestDisableStork(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -1046,6 +1091,9 @@ func TestDisableStork(t *testing.T) {
 }
 
 func TestRemoveStork(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1063,7 +1111,7 @@ func TestRemoveStork(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -1174,6 +1222,9 @@ func TestRemoveStork(t *testing.T) {
 }
 
 func TestStorkDriverNotImplemented(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1191,7 +1242,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(t)
+	driver := mockDriver(mockCtrl)
 	k8sClient := fakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
@@ -1249,8 +1300,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func mockDriver(t *testing.T) *mock.MockDriver {
-	mockCtrl := gomock.NewController(t)
+func mockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	mockDriver := mock.NewMockDriver(mockCtrl)
 	return mockDriver
 }

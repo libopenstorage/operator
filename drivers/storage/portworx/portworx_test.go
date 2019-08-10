@@ -115,10 +115,16 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
+	require.Equal(t, defaultPortworxImage, cluster.Spec.Image)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
 	require.Equal(t, uint32(defaultStartPort), *cluster.Spec.StartPort)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+
+	// Use default image when spec.image has empty value
+	cluster.Spec.Image = "  "
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultPortworxImage, cluster.Spec.Image)
 
 	// Empty kvdb spec should still set internal kvdb as default
 	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
@@ -160,6 +166,39 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+
+	// Don't enable lighthouse if nothing specified in the user interface spec
+	require.Empty(t, cluster.Spec.UserInterface)
+
+	// Use default Lighthouse image if it is enabled and no image present
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultLighthouseImage, cluster.Spec.UserInterface.Image)
+
+	// Use default Lighthouse image if it is enabled and empty image present
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+		Image:   "  ",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultLighthouseImage, cluster.Spec.UserInterface.Image)
+
+	// Don't use default Lighthouse image if disabled
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: false,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.UserInterface.Image)
+
+	// Don't use default Lighthouse image if already present in spec
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+		Image:   "testimage",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "testimage", cluster.Spec.UserInterface.Image)
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
