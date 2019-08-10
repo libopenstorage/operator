@@ -460,7 +460,10 @@ func (c *Controller) syncNodes(
 	// Make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
 
-	podTemplate := c.createPodTemplate(cluster, hash)
+	podTemplate, err := c.createPodTemplate(cluster, hash)
+	if err != nil {
+		return err
+	}
 	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
 
@@ -602,7 +605,11 @@ func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
-	newPod := c.newPod(cluster, node.Name)
+	newPod, err := c.newPod(cluster, node.Name)
+	if err != nil {
+		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
+		return false, false, false, err
+	}
 	wantToRun, shouldSchedule, shouldContinueRunning = true, true, true
 
 	// TODO: We should get rid of simulate and let the scheduler try to deploy
@@ -688,8 +695,11 @@ func (c *Controller) nodeShouldRunStoragePod(
 func (c *Controller) createPodTemplate(
 	cluster *corev1alpha1.StorageCluster,
 	hash string,
-) v1.PodTemplateSpec {
-	pod := c.newPod(cluster, "")
+) (v1.PodTemplateSpec, error) {
+	pod, err := c.newPod(cluster, "")
+	if err != nil {
+		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
+	}
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: pod.ObjectMeta,
 		Spec:       pod.Spec,
@@ -698,22 +708,26 @@ func (c *Controller) createPodTemplate(
 	if len(hash) > 0 {
 		newTemplate.ObjectMeta.Labels[defaultStorageClusterUniqueLabelKey] = hash
 	}
-	return newTemplate
+	return newTemplate, nil
 }
 
-func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName string) *v1.Pod {
+func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName string) (*v1.Pod, error) {
+	podSpec, err := c.Driver.GetStoragePodSpec(cluster)
+	if err != nil {
+		return nil, err
+	}
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
 			Labels:    c.storageClusterSelectorLabels(cluster),
 		},
 		// TODO: add node specific spec here for heterogeneous config
-		Spec: c.Driver.GetStoragePodSpec(cluster),
+		Spec: podSpec,
 	}
 	newPod.Spec.NodeName = nodeName
 	// Add default tolerations for StorageCluster pods
 	addOrUpdateStoragePodTolerations(newPod)
-	return newPod
+	return newPod, nil
 }
 
 func (c *Controller) simulate(
