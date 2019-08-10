@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	defaultStorkImage                = "openstorage/stork:2.2.4"
 	storkConfigMapName               = "stork-config"
 	storkServiceAccountName          = "stork"
 	storkClusterRoleName             = "stork"
