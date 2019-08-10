@@ -64,10 +64,11 @@ func (mr *MockDriverMockRecorder) GetSelectorLabels() *gomock.Call {
 }
 
 // GetStoragePodSpec mocks base method
-func (m *MockDriver) GetStoragePodSpec(arg0 *v1alpha1.StorageCluster) v1.PodSpec {
+func (m *MockDriver) GetStoragePodSpec(arg0 *v1alpha1.StorageCluster) (v1.PodSpec, error) {
 	ret := m.ctrl.Call(m, "GetStoragePodSpec", arg0)
 	ret0, _ := ret[0].(v1.PodSpec)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetStoragePodSpec indicates an expected call of GetStoragePodSpec
