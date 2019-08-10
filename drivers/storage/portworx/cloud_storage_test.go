@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	testProviderType = "mock"
+	testProviderType = cloudops.ProviderType("mock")
 	testNamespace    = "test-ns"
 )
 
@@ -117,13 +117,13 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 		},
 	)
 	p := &portworxCloudStorage{
-		cloudProvider: testProviderType,
-		namespace:     testNamespace,
-		zoneCount:     3,
-		k8sClient:     k8sClient,
+		cloudProvider:      testProviderType,
+		namespace:          testNamespace,
+		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []*corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -141,7 +141,7 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        p.zoneCount,
+			ZoneCount:        len(p.zoneToInstancesMap),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
@@ -216,13 +216,13 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 		},
 	)
 	p := &portworxCloudStorage{
-		cloudProvider: testProviderType,
-		namespace:     testNamespace,
-		zoneCount:     3,
-		k8sClient:     k8sClient,
+		cloudProvider:      testProviderType,
+		namespace:          testNamespace,
+		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []*corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -242,7 +242,7 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        p.zoneCount,
+			ZoneCount:        len(p.zoneToInstancesMap),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
@@ -318,13 +318,13 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 		},
 	)
 	p := &portworxCloudStorage{
-		cloudProvider: testProviderType,
-		namespace:     testNamespace,
-		zoneCount:     3,
-		k8sClient:     k8sClient,
+		cloudProvider:      testProviderType,
+		namespace:          testNamespace,
+		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []*corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -342,7 +342,7 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        p.zoneCount,
+			ZoneCount:        len(p.zoneToInstancesMap),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
@@ -436,13 +436,13 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 		},
 	)
 	p := &portworxCloudStorage{
-		cloudProvider: testProviderType,
-		namespace:     testNamespace,
-		zoneCount:     3,
-		k8sClient:     k8sClient,
+		cloudProvider:      testProviderType,
+		namespace:          testNamespace,
+		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []*corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -460,7 +460,7 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        p.zoneCount,
+			ZoneCount:        len(p.zoneToInstancesMap),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{

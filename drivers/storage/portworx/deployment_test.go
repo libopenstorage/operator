@@ -4,16 +4,21 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/cloudops"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
+	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
@@ -74,7 +79,8 @@ func TestBasicRuncPodSpec(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -111,7 +117,8 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
@@ -148,7 +155,8 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 		"-k", "endpoint-1,endpoint-2,endpoint-3",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -161,7 +169,8 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 		"-k", "endpoint-1,endpoint-2,endpoint-3",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -173,14 +182,16 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 		"-b",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Should take bootstrap only if endpoints are empty
 	cluster.Spec.Kvdb.Endpoints = []string{}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
@@ -214,7 +225,8 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		"-m", "mgmt-intf",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -228,7 +240,8 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		"-d", "data-intf",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -238,7 +251,8 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		MgmtInterface: stringPtr(""),
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -252,7 +266,8 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		"-m", "mgmt-intf",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -262,7 +277,8 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		MgmtInterface: stringPtr("mgmt-intf"),
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
@@ -276,21 +292,24 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Both data and mgmt interfaces are nil
 	cluster.Spec.Network = &corev1alpha1.NetworkSpec{}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Network spec is nil
 	cluster.Spec.Network = &corev1alpha1.NetworkSpec{}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
@@ -322,7 +341,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-a",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// UseAllWithPartitions
@@ -335,7 +356,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-A",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// UseAll with UseAllWithPartitions
@@ -344,7 +367,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		UseAllWithPartitions: boolPtr(true),
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// ForceUseDisks
@@ -357,7 +382,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-f",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Journal device
@@ -370,7 +397,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-j", "/dev/journal",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// No journal device if empty
@@ -382,7 +411,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Metadata device
@@ -395,7 +426,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-metadata", "/dev/metadata",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// No metadata device if empty
@@ -407,7 +440,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Storage devices
@@ -423,7 +458,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-s", "/dev/three",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Storage devices empty
@@ -436,7 +473,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Explicit storage devices get priority over UseAll
@@ -451,7 +490,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-s", "/dev/one",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Explicit storage devices get priority over UseAllWithPartition
@@ -466,7 +507,9 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-s", "/dev/one",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty storage config
@@ -476,21 +519,43 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Nil storage config
 	cluster.Spec.Storage = nil
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
 func TestPodSpecWithCloudStorageSpec(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	setupMockStorageManager(mockCtrl)
+
+	_, yamlData := generateValidYamlData(t)
+
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
+
+	k8sClient := fake.NewFakeClient(
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      storageDecisionMatrixCMName,
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{
+				storageDecisionMatrixCMKey: string(yamlData),
+			},
+		},
+	)
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -499,11 +564,17 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
 			CloudStorage: &corev1alpha1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal"),
-			},
+				JournalDeviceSpec: stringPtr("type=journal")},
 		},
 	}
-	driver := portworx{}
+
+	zoneToInstancesMap := map[string]int{"a": 3, "b": 3, "c": 2}
+	driver := portworx{
+		k8sClient:          k8sClient,
+		recorder:           record.NewFakeRecorder(0),
+		zoneToInstancesMap: zoneToInstancesMap,
+		cloudProvider:      "mock",
+	}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -511,7 +582,8 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-j", "type=journal",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty journal device
@@ -523,7 +595,8 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Metadata device
@@ -536,7 +609,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-metadata", "type=metadata",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty metadata device
@@ -548,7 +621,8 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Max storage nodes
@@ -562,61 +636,160 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-max_drive_set_count", "3",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
-	// Max storage nodes per zone
-	maxNodesPerZone := uint32(1)
+	// Storage devices and auto-compute max_storage_nodes_per_zone
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		MaxStorageNodesPerZone: &maxNodesPerZone,
+		CapacitySpecs: []corev1alpha1.CloudStorageCapacitySpec{
+			{
+				MinIOPS:          uint32(100),
+				MinCapacityInGiB: uint64(100),
+				MaxCapacityInGiB: uint64(200),
+				Options:          map[string]string{"foo1": "bar1"},
+			},
+			{
+				MinIOPS:          uint32(200),
+				MinCapacityInGiB: uint64(200),
+				MaxCapacityInGiB: uint64(500),
+				Options:          map[string]string{"foo3": "bar3"},
+			},
+		},
 	}
+
+	inputInstancesPerZone := 2
+	mockStorageManager.EXPECT().
+		GetStorageDistribution(&cloudops.StorageDistributionRequest{
+			ZoneCount:        len(zoneToInstancesMap),
+			InstancesPerZone: inputInstancesPerZone,
+			UserStorageSpec: []*cloudops.StorageSpec{
+				{
+					IOPS:        uint32(100),
+					MinCapacity: uint64(100),
+					MaxCapacity: uint64(200),
+				},
+				{
+					IOPS:        uint32(200),
+					MinCapacity: uint64(200),
+					MaxCapacity: uint64(500),
+				},
+			},
+		}).
+		Return(&cloudops.StorageDistributionResponse{
+			InstanceStorage: []*cloudops.StoragePoolSpec{
+				{
+					DriveCapacityGiB: uint64(120),
+					DriveType:        "foo",
+					DriveCount:       1,
+					InstancesPerZone: inputInstancesPerZone,
+					IOPS:             uint32(110),
+				},
+				{
+					DriveCapacityGiB: uint64(220),
+					DriveType:        "bar",
+					DriveCount:       1,
+					InstancesPerZone: inputInstancesPerZone,
+					IOPS:             uint32(210),
+				},
+			},
+		}, nil)
+
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-max_storage_nodes_per_zone", "1",
+		"-s", "type=foo,size=120,iops=110,foo1=bar1",
+		"-s", "type=bar,size=220,iops=210,foo3=bar3",
+		"-max_storage_nodes_per_zone", "2",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
-	// Storage devices
-	devices := []string{"type=one", "type=two"}
+	// Storage devices and use user provided max_storage_nodes_per_zone
+	userProvidedInstancesPerZone := 3
+	userProvidedInstancesPerZoneUint32 := uint32(userProvidedInstancesPerZone)
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		DeviceSpecs: &devices,
+		CapacitySpecs: []corev1alpha1.CloudStorageCapacitySpec{
+			{
+				MinIOPS:          uint32(100),
+				MinCapacityInGiB: uint64(100),
+				MaxCapacityInGiB: uint64(200),
+				Options:          map[string]string{"foo1": "bar1"},
+			},
+			{
+				MinIOPS:          uint32(200),
+				MinCapacityInGiB: uint64(200),
+				MaxCapacityInGiB: uint64(500),
+				Options:          map[string]string{"foo3": "bar3"},
+			},
+		},
+		MaxStorageNodesPerZone: &userProvidedInstancesPerZoneUint32,
 	}
+
+	mockStorageManager.EXPECT().
+		GetStorageDistribution(&cloudops.StorageDistributionRequest{
+			ZoneCount:        len(zoneToInstancesMap),
+			InstancesPerZone: userProvidedInstancesPerZone,
+			UserStorageSpec: []*cloudops.StorageSpec{
+				{
+					IOPS:        uint32(100),
+					MinCapacity: uint64(100),
+					MaxCapacity: uint64(200),
+				},
+				{
+					IOPS:        uint32(200),
+					MinCapacity: uint64(200),
+					MaxCapacity: uint64(500),
+				},
+			},
+		}).
+		Return(&cloudops.StorageDistributionResponse{
+			InstanceStorage: []*cloudops.StoragePoolSpec{
+				{
+					DriveCapacityGiB: uint64(120),
+					DriveType:        "foo",
+					DriveCount:       1,
+					InstancesPerZone: userProvidedInstancesPerZone,
+					IOPS:             uint32(110),
+				},
+				{
+					DriveCapacityGiB: uint64(220),
+					DriveType:        "bar",
+					DriveCount:       1,
+					InstancesPerZone: userProvidedInstancesPerZone,
+					IOPS:             uint32(210),
+				},
+			},
+		}, nil)
+
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-s", "type=one",
-		"-s", "type=two",
+		"-s", "type=foo,size=120,iops=110,foo1=bar1",
+		"-s", "type=bar,size=220,iops=210,foo3=bar3",
+		"-max_storage_nodes_per_zone", "3",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
-	// Storage devices empty
-	devices = []string{}
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
-		DeviceSpecs: &devices,
-	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
 	}
-
-	actual = driver.GetStoragePodSpec(cluster)
-	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty storage config
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Nil storage config
 	cluster.Spec.CloudStorage = nil
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -651,7 +824,8 @@ func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
 		"-j", "/dev/journal",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -677,7 +851,8 @@ func TestPodSpecWithSecretsProvider(t *testing.T) {
 		"-secret_type", "k8s",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Don't set the secrets provider if empty
@@ -687,13 +862,13 @@ func TestPodSpecWithSecretsProvider(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Don't set the secrets provider if nil
 	cluster.Spec.SecretsProvider = nil
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -719,7 +894,8 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 
 	expected := getExpectedPodSpec(t, "testspec/portworxPodCustomPort.yaml")
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 
@@ -731,13 +907,13 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Don't set the start port if nil
 	cluster.Spec.StartPort = nil
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -765,8 +941,8 @@ func TestPodSpecWithLogAnnotation(t *testing.T) {
 		"--log", "/tmp/log",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
-
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -798,13 +974,14 @@ func TestPodSpecWithRuntimeOptions(t *testing.T) {
 		"-rt_opts", "key=10",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// For invalid value key should not be added. Only numeric values are supported.
 	cluster.Spec.RuntimeOpts["invalid"] = "non-numeric"
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Empty runtime map should not add any options
@@ -814,13 +991,13 @@ func TestPodSpecWithRuntimeOptions(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Nil runtime map should not add any options
 	cluster.Spec.RuntimeOpts = nil
 
-	actual = driver.GetStoragePodSpec(cluster)
+	actual, _ = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -849,7 +1026,7 @@ func TestPodSpecWithMiscArgs(t *testing.T) {
 		"-person", "john",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, _ := driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -877,7 +1054,8 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 		"-x", "kubernetes",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
@@ -908,7 +1086,9 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 		"--pull", "IfNotPresent",
 	}
 
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 	assert.Len(t, actual.Containers, 2)
 	assert.Equal(t, v1.PullIfNotPresent, actual.Containers[0].ImagePullPolicy)
@@ -919,8 +1099,8 @@ func TestPodSpecWithNilStorageCluster(t *testing.T) {
 	var cluster *corev1alpha1.StorageCluster
 	driver := portworx{}
 
-	actual := driver.GetStoragePodSpec(cluster)
-	assert.Equal(t, v1.PodSpec{}, actual)
+	_, err := driver.GetStoragePodSpec(cluster)
+	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
 }
 
 func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
@@ -937,8 +1117,8 @@ func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 	}
 	driver := portworx{}
 
-	actual := driver.GetStoragePodSpec(cluster)
-	assert.Equal(t, v1.PodSpec{}, actual)
+	_, err := driver.GetStoragePodSpec(cluster)
+	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
 }
 
 func TestPKSPodSpec(t *testing.T) {
@@ -992,7 +1172,8 @@ func TestPKSPodSpec(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1052,7 +1233,8 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1078,10 +1260,8 @@ func TestPodSpecForCSIWithKubernetesVersionLessThan_1_11(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
-
-	// Spec should be empty
-	assertPodSpecEqual(t, &v1.PodSpec{}, &actual)
+	_, err := driver.GetStoragePodSpec(cluster)
+	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
 }
 
 func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
@@ -1107,7 +1287,8 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1135,7 +1316,8 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1161,10 +1343,8 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
-
-	// Spec should be empty
-	assertPodSpecEqual(t, &v1.PodSpec{}, &actual)
+	_, err := driver.GetStoragePodSpec(cluster)
+	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
 }
 
 func TestPodSpecForKvdbAuthCerts(t *testing.T) {
@@ -1203,7 +1383,8 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1243,7 +1424,8 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1282,7 +1464,8 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
@@ -1317,7 +1500,8 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
 	expectedArgs := []string{
@@ -1360,7 +1544,8 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
 	expectedArgs := []string{
@@ -1395,7 +1580,8 @@ func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
 	}
 
 	driver := portworx{}
-	actual := driver.GetStoragePodSpec(cluster)
+	actual, err := driver.GetStoragePodSpec(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
 }
