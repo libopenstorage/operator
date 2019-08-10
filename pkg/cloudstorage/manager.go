@@ -31,5 +31,5 @@ type Config struct {
 type Manager interface {
 	// GetStorageNodeConfig based on the cloud provider will return
 	// the storage configuration for a single node
-	GetStorageNodeConfig([]*corev1alpha1.CloudStorageCapacitySpec, int) (*Config, error)
+	GetStorageNodeConfig([]corev1alpha1.CloudStorageCapacitySpec, int) (*Config, error)
 }

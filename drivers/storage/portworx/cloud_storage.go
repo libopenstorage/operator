@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/cloudops/pkg/parser"
@@ -19,14 +20,14 @@ const (
 )
 
 type portworxCloudStorage struct {
-	zoneCount     int
-	cloudProvider string
-	namespace     string
-	k8sClient     client.Client
+	zoneToInstancesMap map[string]int
+	cloudProvider      cloudops.ProviderType
+	namespace          string
+	k8sClient          client.Client
 }
 
 func (p *portworxCloudStorage) GetStorageNodeConfig(
-	specs []*corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1alpha1.CloudStorageCapacitySpec,
 	instancesPerZone int,
 ) (*cloudstorage.Config, error) {
 	// Get the decision matrix config map
@@ -64,6 +65,17 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 		return nil, err
 	}
 
+	if instancesPerZone == 0 && len(p.zoneToInstancesMap) > 0 {
+		// Find out the minimum no. of instances out of all zones
+		minInstances := math.MaxInt32
+		for _, instances := range p.zoneToInstancesMap {
+			if minInstances > instances {
+				minInstances = instances
+			}
+		}
+		instancesPerZone = minInstances
+	}
+
 	distributionRequest := p.capacitySpecToStorageDistributionRequest(
 		specs,
 		instancesPerZone,
@@ -87,11 +99,11 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 }
 
 func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
-	specs []*corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1alpha1.CloudStorageCapacitySpec,
 	instancesPerZone int,
 ) *cloudops.StorageDistributionRequest {
 	request := &cloudops.StorageDistributionRequest{
-		ZoneCount:        p.zoneCount,
+		ZoneCount:        len(p.zoneToInstancesMap),
 		InstancesPerZone: instancesPerZone,
 	}
 	for _, spec := range specs {
@@ -108,7 +120,7 @@ func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
 }
 
 func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
-	specs []*corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1alpha1.CloudStorageCapacitySpec,
 	response *cloudops.StorageDistributionResponse,
 ) *cloudstorage.Config {
 	config := &cloudstorage.Config{}
