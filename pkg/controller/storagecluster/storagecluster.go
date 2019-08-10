@@ -793,6 +793,16 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 		toUpdate.Spec.Version = partitions[len(partitions)-1]
 	}
 
+	// Enable stork by default
+	if toUpdate.Spec.Stork == nil {
+		toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{
+			Enabled: true,
+			Image:   defaultStorkImage,
+		}
+	} else if toUpdate.Spec.Stork.Enabled && len(strings.TrimSpace(toUpdate.Spec.Stork.Image)) == 0 {
+		toUpdate.Spec.Stork.Image = defaultStorkImage
+	}
+
 	foundDeleteFinalizer := false
 	for _, finalizer := range toUpdate.Finalizers {
 		if finalizer == deleteFinalizerName {
@@ -813,6 +823,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 			return err
 		}
 		cluster.Spec = *toUpdate.Spec.DeepCopy()
+		cluster.Finalizers = append([]string{}, toUpdate.Finalizers...)
 	}
 	return nil
 }
