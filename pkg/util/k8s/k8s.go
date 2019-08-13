@@ -52,10 +52,11 @@ func CreateOrUpdateServiceAccount(
 	return nil
 }
 
-// DeleteServiceAccount deletes a service account if present
+// DeleteServiceAccount deletes a service account if present and owned
 func DeleteServiceAccount(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -70,8 +71,24 @@ func DeleteServiceAccount(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s service account", name)
-	return k8sClient.Delete(context.TODO(), serviceAccount)
+	newOwners := removeOwners(serviceAccount.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(serviceAccount.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(serviceAccount.OwnerReferences) > 0 && len(serviceAccount.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete ServiceAccount %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s ServiceAccount", namespace, name)
+		return k8sClient.Delete(context.TODO(), serviceAccount)
+	}
+	serviceAccount.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s ServiceAccount", namespace, name)
+	return k8sClient.Update(context.TODO(), serviceAccount)
 }
 
 // CreateOrUpdateRole creates a role if not present,
@@ -112,10 +129,11 @@ func CreateOrUpdateRole(
 	return nil
 }
 
-// DeleteRole deletes a role if present
+// DeleteRole deletes a role if present and owned
 func DeleteRole(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -130,8 +148,24 @@ func DeleteRole(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s role", name)
-	return k8sClient.Delete(context.TODO(), role)
+	newOwners := removeOwners(role.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(role.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(role.OwnerReferences) > 0 && len(role.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete Role %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s Role", namespace, name)
+		return k8sClient.Delete(context.TODO(), role)
+	}
+	role.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s Role", namespace, name)
+	return k8sClient.Update(context.TODO(), role)
 }
 
 // CreateOrUpdateRoleBinding creates a role binding if not present,
@@ -173,10 +207,11 @@ func CreateOrUpdateRoleBinding(
 	return nil
 }
 
-// DeleteRoleBinding deletes a role binding if present
+// DeleteRoleBinding deletes a role binding if present and owned
 func DeleteRoleBinding(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -191,8 +226,24 @@ func DeleteRoleBinding(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s role binding", name)
-	return k8sClient.Delete(context.TODO(), roleBinding)
+	newOwners := removeOwners(roleBinding.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(roleBinding.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(roleBinding.OwnerReferences) > 0 && len(roleBinding.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete RoleBinding %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s RoleBinding", namespace, name)
+		return k8sClient.Delete(context.TODO(), roleBinding)
+	}
+	roleBinding.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s RoleBinding", namespace, name)
+	return k8sClient.Update(context.TODO(), roleBinding)
 }
 
 // CreateOrUpdateClusterRole creates a cluster role if not present,
@@ -230,10 +281,11 @@ func CreateOrUpdateClusterRole(
 	return nil
 }
 
-// DeleteClusterRole deletes a cluster role if present
+// DeleteClusterRole deletes a cluster role if present and owned
 func DeleteClusterRole(
 	k8sClient client.Client,
 	name string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
@@ -247,8 +299,23 @@ func DeleteClusterRole(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s cluster role", name)
-	return k8sClient.Delete(context.TODO(), clusterRole)
+	newOwners := removeOwners(clusterRole.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(clusterRole.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(clusterRole.OwnerReferences) > 0 && len(clusterRole.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete ClusterRole %s as it is not owned", name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s ClusterRole", name)
+		return k8sClient.Delete(context.TODO(), clusterRole)
+	}
+	clusterRole.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s ClusterRole", name)
+	return k8sClient.Update(context.TODO(), clusterRole)
 }
 
 // CreateOrUpdateClusterRoleBinding creates a cluster role binding if not present,
@@ -287,25 +354,41 @@ func CreateOrUpdateClusterRoleBinding(
 	return nil
 }
 
-// DeleteClusterRoleBinding deletes a cluster role binding if present
+// DeleteClusterRoleBinding deletes a cluster role binding if present and owned
 func DeleteClusterRoleBinding(
 	k8sClient client.Client,
 	name string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
 	}
 
-	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
-	err := k8sClient.Get(context.TODO(), resource, clusterRoleBinding)
+	crb := &rbacv1.ClusterRoleBinding{}
+	err := k8sClient.Get(context.TODO(), resource, crb)
 	if errors.IsNotFound(err) {
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	logrus.Debugf("Deleting %s cluster role binding", name)
-	return k8sClient.Delete(context.TODO(), clusterRoleBinding)
+	newOwners := removeOwners(crb.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(crb.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(crb.OwnerReferences) > 0 && len(crb.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete ClusterRoleBinding %s as it is not owned", name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s ClusterRoleBinding", name)
+		return k8sClient.Delete(context.TODO(), crb)
+	}
+	crb.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s ClusterRoleBinding", name)
+	return k8sClient.Update(context.TODO(), crb)
 }
 
 // CreateOrUpdateConfigMap creates a config map if not present,
@@ -347,10 +430,11 @@ func CreateOrUpdateConfigMap(
 	return nil
 }
 
-// DeleteConfigMap deletes a config map if present
+// DeleteConfigMap deletes a config map if present and owned
 func DeleteConfigMap(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -365,8 +449,24 @@ func DeleteConfigMap(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s config map", name)
-	return k8sClient.Delete(context.TODO(), configMap)
+	newOwners := removeOwners(configMap.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(configMap.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(configMap.OwnerReferences) > 0 && len(configMap.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete ConfigMap %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s ConfigMap", namespace, name)
+		return k8sClient.Delete(context.TODO(), configMap)
+	}
+	configMap.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s ConfigMap", namespace, name)
+	return k8sClient.Update(context.TODO(), configMap)
 }
 
 // CreateOrUpdateStorageClass creates a storage class if not present,
@@ -404,10 +504,11 @@ func CreateOrUpdateStorageClass(
 	return nil
 }
 
-// DeleteStorageClass deletes a storage class if present
+// DeleteStorageClass deletes a storage class if present and owned
 func DeleteStorageClass(
 	k8sClient client.Client,
 	name string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
@@ -421,8 +522,23 @@ func DeleteStorageClass(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s storage class", name)
-	return k8sClient.Delete(context.TODO(), storageClass)
+	newOwners := removeOwners(storageClass.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(storageClass.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(storageClass.OwnerReferences) > 0 && len(storageClass.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete StorageClass %s as it is not owned", name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s StorageClass", name)
+		return k8sClient.Delete(context.TODO(), storageClass)
+	}
+	storageClass.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s StorageClass", name)
+	return k8sClient.Update(context.TODO(), storageClass)
 }
 
 // CreateOrUpdateService creates a service if not present, else updates it
@@ -520,10 +636,11 @@ func CreateOrUpdateService(
 	return nil
 }
 
-// DeleteService deletes a service if present
+// DeleteService deletes a service if present and owned
 func DeleteService(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -538,8 +655,24 @@ func DeleteService(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s service", name)
-	return k8sClient.Delete(context.TODO(), service)
+	newOwners := removeOwners(service.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(service.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(service.OwnerReferences) > 0 && len(service.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete Service %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s Service", namespace, name)
+		return k8sClient.Delete(context.TODO(), service)
+	}
+	service.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s Service", namespace, name)
+	return k8sClient.Update(context.TODO(), service)
 }
 
 // CreateOrUpdateDeployment creates a deployment if not present, else updates it
@@ -574,10 +707,11 @@ func CreateOrUpdateDeployment(
 	return k8sClient.Update(context.TODO(), deployment)
 }
 
-// DeleteDeployment deletes a deployment if present
+// DeleteDeployment deletes a deployment if present and owned
 func DeleteDeployment(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
@@ -592,8 +726,24 @@ func DeleteDeployment(
 		return err
 	}
 
-	logrus.Debugf("Deleting %s deployment", name)
-	return k8sClient.Delete(context.TODO(), deployment)
+	newOwners := removeOwners(deployment.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(deployment.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(deployment.OwnerReferences) > 0 && len(deployment.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete Deployment %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s Deployment", namespace, name)
+		return k8sClient.Delete(context.TODO(), deployment)
+	}
+	deployment.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s Deployment", namespace, name)
+	return k8sClient.Update(context.TODO(), deployment)
 }
 
 // CreateOrUpdateStatefulSet creates a stateful set if not present, else updates it
@@ -628,26 +778,43 @@ func CreateOrUpdateStatefulSet(
 	return k8sClient.Update(context.TODO(), ss)
 }
 
-// DeleteStatefulSet deletes a stateful set if present
+// DeleteStatefulSet deletes a stateful set if present and owned
 func DeleteStatefulSet(
 	k8sClient client.Client,
 	name, namespace string,
+	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	ss := &appsv1.StatefulSet{}
-	err := k8sClient.Get(context.TODO(), resource, ss)
+	statefulSet := &appsv1.StatefulSet{}
+	err := k8sClient.Get(context.TODO(), resource, statefulSet)
 	if errors.IsNotFound(err) {
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	logrus.Debugf("Deleting %s stateful set", name)
-	return k8sClient.Delete(context.TODO(), ss)
+	newOwners := removeOwners(statefulSet.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(statefulSet.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(statefulSet.OwnerReferences) > 0 && len(statefulSet.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete StatefulSet %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s StatefulSet", namespace, name)
+		return k8sClient.Delete(context.TODO(), statefulSet)
+	}
+	statefulSet.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s StatefulSet", namespace, name)
+	return k8sClient.Update(context.TODO(), statefulSet)
 }
 
 // CreateOrUpdateDaemonSet creates a daemon set if not present, else updates it
@@ -775,4 +942,18 @@ func GetPodsByOwner(
 		}
 	}
 	return result, nil
+}
+
+func removeOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
+	toBeDeletedOwnerMap := make(map[types.UID]bool)
+	for _, owner := range toBeDeleted {
+		toBeDeletedOwnerMap[owner.UID] = true
+	}
+	newOwners := make([]metav1.OwnerReference, 0)
+	for _, currOwner := range current {
+		if _, exists := toBeDeletedOwnerMap[currOwner.UID]; !exists {
+			newOwners = append(newOwners, currOwner)
+		}
+	}
+	return newOwners
 }
