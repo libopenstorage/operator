@@ -31,6 +31,7 @@ type portworxCloudStorage struct {
 	cloudProvider      cloudops.ProviderType
 	namespace          string
 	k8sClient          client.Client
+	ownerRef           *metav1.OwnerReference
 }
 
 func (p *portworxCloudStorage) GetStorageNodeConfig(
@@ -132,8 +133,9 @@ func (p *portworxCloudStorage) CreateStorageDistributionMatrix() error {
 
 	decisionMatrixCM := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      storageDecisionMatrixCMName,
-			Namespace: p.namespace,
+			Name:            storageDecisionMatrixCMName,
+			Namespace:       p.namespace,
+			OwnerReferences: []metav1.OwnerReference{*p.ownerRef},
 		},
 		Data: map[string]string{
 			storageDecisionMatrixCMKey: string(yamlBytes),

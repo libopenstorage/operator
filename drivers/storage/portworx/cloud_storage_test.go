@@ -529,6 +529,7 @@ func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
 		cloudProvider: cloudops.Azure,
 		namespace:     testNamespace,
 		k8sClient:     k8sClient,
+		ownerRef:      &metav1.OwnerReference{},
 	}
 	err := p.CreateStorageDistributionMatrix()
 	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
