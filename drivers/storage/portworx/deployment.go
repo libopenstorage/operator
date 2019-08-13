@@ -16,6 +16,7 @@ import (
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -285,6 +286,7 @@ func (p *portworx) generateCloudStorageSpecs(
 		cloudops.ProviderType(p.cloudProvider),
 		cluster.Namespace,
 		p.k8sClient,
+		metav1.NewControllerRef(cluster, controllerKind),
 	}
 
 	if err := cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
