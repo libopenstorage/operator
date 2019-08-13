@@ -1,6 +1,9 @@
 package portworx
 
 import (
+	"context"
+	"os"
+	"path"
 	"reflect"
 	"testing"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -490,6 +494,87 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 	_, err := p.GetStorageNodeConfig(inputSpecs, inputInstancesPerZone)
 	require.Error(t, err, "Expected an error on GetStorageNodeConfig")
 	require.Contains(t, err.Error(), "got an incorrect storage distribution", "Expected a different error")
+}
+
+func TestCreateStorageDistributionMatrixNotSupportedProviders(t *testing.T) {
+	matrixSetup(t)
+	defer matrixCleanup(t)
+
+	k8sClient := fakeK8sClient()
+	p := &portworxCloudStorage{
+		cloudProvider: cloudops.AWS,
+		namespace:     testNamespace,
+		k8sClient:     k8sClient,
+	}
+	err := p.CreateStorageDistributionMatrix()
+	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
+
+	p.cloudProvider = cloudops.GCE
+
+	err = p.CreateStorageDistributionMatrix()
+	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
+
+	p.cloudProvider = cloudops.Vsphere
+
+	err = p.CreateStorageDistributionMatrix()
+	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
+}
+
+func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
+	matrixSetup(t)
+	defer matrixCleanup(t)
+
+	k8sClient := fakeK8sClient()
+	p := &portworxCloudStorage{
+		cloudProvider: cloudops.Azure,
+		namespace:     testNamespace,
+		k8sClient:     k8sClient,
+	}
+	err := p.CreateStorageDistributionMatrix()
+	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
+
+	cm := &v1.ConfigMap{}
+	err = p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      storageDecisionMatrixCMName,
+			Namespace: p.namespace,
+		},
+		cm,
+	)
+	require.NoError(t, err, "Expected config map to be created")
+}
+
+func TestCreateStorageDistributionMatrixAlreadyExists(t *testing.T) {
+	// Not setting up the specs directory
+	// Faking a config map
+	k8sClient := fakeK8sClient(
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      storageDecisionMatrixCMName,
+				Namespace: testNamespace,
+			},
+		},
+	)
+	// We should not get any errors
+	p := &portworxCloudStorage{
+		cloudProvider: cloudops.Azure,
+		namespace:     testNamespace,
+		k8sClient:     k8sClient,
+	}
+	err := p.CreateStorageDistributionMatrix()
+	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
+}
+
+func matrixSetup(t *testing.T) {
+	linkPath := path.Join(os.Getenv("GOPATH"), "src/github.com/libopenstorage/operator/vendor/github.com/libopenstorage/cloudops/specs")
+	err := os.Symlink(linkPath, "specs")
+	require.NoError(t, err, "failed to create symlink")
+}
+
+func matrixCleanup(t *testing.T) {
+	err := os.RemoveAll("specs")
+	require.NoError(t, err, "failed to remove specs directory")
 }
 
 func generateValidYamlData(t *testing.T) (cloudops.StorageDecisionMatrix, []byte) {
