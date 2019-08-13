@@ -59,7 +59,7 @@ func (c *Controller) syncStork(
 		}
 		logrus.Warnf("Cannot install Stork for %s driver: %v", c.Driver.String(), err)
 	}
-	return c.removeStork(cluster.Namespace)
+	return c.removeStork(cluster)
 }
 
 func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
@@ -105,43 +105,48 @@ func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) e
 	return nil
 }
 
-func (c *Controller) removeStork(namespace string) error {
-	if err := k8sutil.DeleteConfigMap(c.client, storkConfigMapName, namespace); err != nil {
+func (c *Controller) removeStork(cluster *corev1alpha1.StorageCluster) error {
+	namespace := cluster.Namespace
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	if err := k8sutil.DeleteConfigMap(c.client, storkConfigMapName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteServiceAccount(c.client, storkServiceAccountName, namespace); err != nil {
+	if err := k8sutil.DeleteServiceAccount(c.client, storkServiceAccountName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.client, storkClusterRoleName); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.client, storkClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(c.client, storkServiceName, namespace); err != nil {
+	if err := k8sutil.DeleteService(c.client, storkServiceName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.client, storkDeploymentName, namespace); err != nil {
+	if err := k8sutil.DeleteDeployment(c.client, storkDeploymentName, namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isStorkDeploymentCreated = false
-	if err := k8sutil.DeleteStorageClass(c.client, storkSnapshotStorageClassName); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.client, storkSnapshotStorageClassName, *ownerRef); err != nil {
 		return err
 	}
-	return c.removeStorkScheduler(namespace)
+	return c.removeStorkScheduler(namespace, ownerRef)
 }
 
-func (c *Controller) removeStorkScheduler(namespace string) error {
-	if err := k8sutil.DeleteServiceAccount(c.client, storkSchedServiceAccountName, namespace); err != nil {
+func (c *Controller) removeStorkScheduler(
+	namespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteServiceAccount(c.client, storkSchedServiceAccountName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.client, storkSchedClusterRoleName); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.client, storkSchedClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkSchedClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkSchedClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.client, storkSchedDeploymentName, namespace); err != nil {
+	if err := k8sutil.DeleteDeployment(c.client, storkSchedDeploymentName, namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isStorkSchedDeploymentCreated = false

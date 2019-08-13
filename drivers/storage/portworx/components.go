@@ -101,7 +101,7 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 			return err
 		}
 	} else {
-		if err = p.removePVCController(t.cluster.Namespace); err != nil {
+		if err = p.removePVCController(t.cluster); err != nil {
 			return err
 		}
 	}
@@ -111,7 +111,7 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 			return err
 		}
 	} else {
-		if err = p.removeLighthouse(t.cluster.Namespace); err != nil {
+		if err = p.removeLighthouse(t.cluster); err != nil {
 			return err
 		}
 	}
@@ -121,7 +121,7 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 			return err
 		}
 	} else {
-		if err = p.removeCSI(t.cluster.Namespace); err != nil {
+		if err = p.removeCSI(t.cluster); err != nil {
 			return err
 		}
 	}
@@ -235,54 +235,57 @@ func (p *portworx) createCustomResourceDefinitions() error {
 	return nil
 }
 
-func (p *portworx) removePVCController(namespace string) error {
+func (p *portworx) removePVCController(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	// We don't delete the service account for PVC controller because it is part of CSV. If
 	// we disable PVC controller then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(p.k8sClient, pvcClusterRoleName); err != nil {
+	if err := k8sutil.DeleteClusterRole(p.k8sClient, pvcClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, pvcClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, pvcClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(p.k8sClient, pvcDeploymentName, namespace); err != nil {
+	if err := k8sutil.DeleteDeployment(p.k8sClient, pvcDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	p.pvcControllerDeploymentCreated = false
 	return nil
 }
 
-func (p *portworx) removeLighthouse(namespace string) error {
+func (p *portworx) removeLighthouse(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	// We don't delete the service account for Lighthouse because it is part of CSV. If
 	// we disable Lighthouse then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(p.k8sClient, lhClusterRoleName); err != nil {
+	if err := k8sutil.DeleteClusterRole(p.k8sClient, lhClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, lhClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, lhClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(p.k8sClient, lhServiceName, namespace); err != nil {
+	if err := k8sutil.DeleteService(p.k8sClient, lhServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(p.k8sClient, lhDeploymentName, namespace); err != nil {
+	if err := k8sutil.DeleteDeployment(p.k8sClient, lhDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	p.lhDeploymentCreated = false
 	return nil
 }
 
-func (p *portworx) removeCSI(namespace string) error {
+func (p *portworx) removeCSI(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	// We don't delete the service account for CSI because it is part of CSV. If
 	// we disable CSI then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(p.k8sClient, csiClusterRoleName); err != nil {
+	if err := k8sutil.DeleteClusterRole(p.k8sClient, csiClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, csiClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, csiClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(p.k8sClient, csiServiceName, namespace); err != nil {
+	if err := k8sutil.DeleteService(p.k8sClient, csiServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiStatefulSetName, namespace); err != nil {
+	if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiStatefulSetName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	p.csiStatefulSetCreated = false
