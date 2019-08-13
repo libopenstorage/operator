@@ -11,4 +11,6 @@ WORKDIR /
 
 COPY licenses /licenses
 
+COPY vendor/github.com/libopenstorage/cloudops/specs /specs
+
 COPY ./bin/operator /
