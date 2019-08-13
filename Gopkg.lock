@@ -363,15 +363,16 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:169f1e45aa87c8d2ccf7c34802806ba77985c99876e1a63cb8cf56f6af8ef57f"
+  digest = "1:957b7b7f17e0e00d5fcb9a2a117d58b842bec3de4960aef0791ca1e92a591824"
   name = "github.com/libopenstorage/cloudops"
   packages = [
     ".",
     "mock",
     "pkg/parser",
+    "specs/decisionmatrix",
   ]
   pruneopts = "UT"
-  revision = "098cedcd38281fdaa1a85c7e4b8834e214e40f8f"
+  revision = "b5029744a578ca1738fafd3ce1e67a643cab0216"
 
 [[projects]]
   branch = "release-6.0"
@@ -1413,6 +1414,7 @@
     "github.com/libopenstorage/cloudops",
     "github.com/libopenstorage/cloudops/mock",
     "github.com/libopenstorage/cloudops/pkg/parser",
+    "github.com/libopenstorage/cloudops/specs/decisionmatrix",
     "github.com/libopenstorage/openstorage/api",
     "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
