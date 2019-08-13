@@ -287,6 +287,10 @@ func (p *portworx) generateCloudStorageSpecs(
 		p.k8sClient,
 	}
 
+	if err := cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
+		logrus.Warnf("Failed to generate storage distribution matrix config map: %v", err)
+	}
+
 	instancesPerZone := 0
 	if cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil {
 		instancesPerZone = int(*cluster.Spec.CloudStorage.MaxStorageNodesPerZone)

@@ -29,6 +29,9 @@ type Config struct {
 // provisioner. It is an abstraction layer to interact with the APIs in
 // libopenstorage/cloudops repository
 type Manager interface {
+	// CreateStorageDistributionMatrix creates a config map which contains
+	// the cloud specific storage distribution matrix
+	CreateStorageDistributionMatrix() error
 	// GetStorageNodeConfig based on the cloud provider will return
 	// the storage configuration for a single node
 	GetStorageNodeConfig([]corev1alpha1.CloudStorageCapacitySpec, int) (*Config, error)

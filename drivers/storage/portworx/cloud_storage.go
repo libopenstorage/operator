@@ -4,12 +4,18 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path"
 
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/cloudops/pkg/parser"
+
+	// importing the decisionmatrix package from cloudops to vendor
+	// the cloud specific decision matrices
+	_ "github.com/libopenstorage/cloudops/specs/decisionmatrix"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -17,6 +23,7 @@ import (
 const (
 	storageDecisionMatrixCMName = "portworx-storage-decision-matrix"
 	storageDecisionMatrixCMKey  = "matrix"
+	specDir                     = "specs/decisionmatrix"
 )
 
 type portworxCloudStorage struct {
@@ -96,6 +103,46 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 		specs,
 		distributionResponse,
 	), nil
+}
+
+func (p *portworxCloudStorage) CreateStorageDistributionMatrix() error {
+	cm := &v1.ConfigMap{}
+	err := p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      storageDecisionMatrixCMName,
+			Namespace: p.namespace,
+		},
+		cm,
+	)
+	if err == nil {
+		// config map already exists
+		return nil
+	}
+	yamlParser := parser.NewStorageDecisionMatrixParser()
+	matrixFileName := path.Join(specDir, string(p.cloudProvider)+".yaml")
+	matrix, err := yamlParser.UnmarshalFromYaml(matrixFileName)
+	if err != nil {
+		return err
+	}
+	yamlBytes, err := yamlParser.MarshalToBytes(matrix)
+	if err != nil {
+		return err
+	}
+
+	decisionMatrixCM := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      storageDecisionMatrixCMName,
+			Namespace: p.namespace,
+		},
+		Data: map[string]string{
+			storageDecisionMatrixCMKey: string(yamlBytes),
+		},
+	}
+	return p.k8sClient.Create(
+		context.TODO(),
+		decisionMatrixCM,
+	)
 }
 
 func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
