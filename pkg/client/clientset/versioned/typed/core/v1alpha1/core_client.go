@@ -27,6 +27,7 @@ import (
 
 type CoreV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	ClusterOperationsGetter
 	StorageClustersGetter
 	StorageNodeStatusesGetter
 }
@@ -34,6 +35,10 @@ type CoreV1alpha1Interface interface {
 // CoreV1alpha1Client is used to interact with features provided by the core.libopenstorage.org group.
 type CoreV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *CoreV1alpha1Client) ClusterOperations(namespace string) ClusterOperationInterface {
+	return newClusterOperations(c, namespace)
 }
 
 func (c *CoreV1alpha1Client) StorageClusters(namespace string) StorageClusterInterface {

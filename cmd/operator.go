@@ -8,6 +8,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
+	"github.com/libopenstorage/operator/pkg/controller/clusteroperation"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/version"
 	log "github.com/sirupsen/logrus"
@@ -82,12 +83,66 @@ func run(c *cli.Context) {
 	} else {
 		log.SetLevel(log.InfoLevel)
 	}
+	log.SetReportCaller(true)
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("Error getting cluster config: %v", err)
 	}
 
+	// Register CRDs
+	log.Info("Registering components")
+
+	// Setup cluster operation controller
+	clusterOperationController := clusteroperation.Controller{}
+	err = clusterOperationController.RegisterCRD()
+	if err != nil {
+		log.Fatalf("Error registering CRD's for ClusterOperation controller : %v", err)
+	}
+
+	d, err := storage.Get(driverName)
+	if err != nil {
+		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
+	}
+
+	storageClusterController := storagecluster.Controller{Driver: d}
+	err = storageClusterController.RegisterCRD()
+	if err != nil {
+		log.Fatalf("Error registering CRD's for StorageCluster controller: %v", err)
+	}
+
+	//TODO: don't move createManager above register CRD section. This part will be refactored because of a bug,
+	// similar to https://github.com/kubernetes-sigs/controller-runtime/issues/321
+	mgr, err := createManager(c, config)
+	if err != nil {
+		log.Fatalf("Failed to create controller manager: %v", err)
+	}
+
+	// Setup Scheme for all resources
+	//TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
+	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add resources to the scheme: %v", err)
+	}
+
+	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
+		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
+	}
+
+	if err := clusterOperationController.Init(mgr); err != nil {
+		log.Fatalf("Error initializing  clusterOperationController : %v", err)
+	}
+
+	// Setup storage cluster controller
+	if err := storageClusterController.Init(mgr); err != nil {
+		log.Fatalf("Error initializing storage cluster controller: %v", err)
+	}
+
+	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+		log.Fatalf("Manager exited non-zero error: %v", err)
+	}
+}
+
+func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error) {
 	syncPeriod := defaultResyncPeriod
 	managerOpts := manager.Options{
 		SyncPeriod: &syncPeriod,
@@ -97,34 +152,5 @@ func run(c *cli.Context) {
 		managerOpts.LeaderElectionID = c.String("leader-elect-lock-name")
 		managerOpts.LeaderElectionNamespace = c.String("leader-elect-lock-namespace")
 	}
-	mgr, err := manager.New(config, managerOpts)
-	if err != nil {
-		log.Fatalf("Failed to create controller manager: %v", err)
-	}
-
-	d, err := storage.Get(driverName)
-	if err != nil {
-		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
-	}
-
-	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
-		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
-	}
-
-	log.Info("Registering components")
-
-	// Setup Scheme for all resources
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Fatalf("Failed to add resources to the scheme: %v", err)
-	}
-
-	// Setup storage cluster controller
-	clusterController := storagecluster.Controller{Driver: d}
-	if err := clusterController.Init(mgr); err != nil {
-		log.Fatalf("Error initializing storage cluster controller: %v", err)
-	}
-
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Fatalf("Manager exited non-zero error: %v", err)
-	}
+	return manager.New(config, managerOpts)
 }
