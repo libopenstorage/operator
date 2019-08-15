@@ -575,7 +575,7 @@ type CRDOps interface {
 	CreateCRD(resource CustomResource) error
 	// RegisterCRD creates the given custom resource
 	RegisterCRD(crdDefinition *apiextensionsv1beta1.CustomResourceDefinition) error
-
+	// ValidateCRD checks if the given CRD is registered
 	ValidateCRD(resource CustomResource, timeout, retryInterval time.Duration) error
 }
 
