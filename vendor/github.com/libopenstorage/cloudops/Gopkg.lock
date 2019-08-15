@@ -283,12 +283,12 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
+  branch = "kubernetes-1.13.1"
   digest = "1:eec9820cecf08159a15bf2e9f8d2f6df388558c06b961a0fda541d866863edc3"
   name = "github.com/portworx/sched-ops"
   packages = ["task"]
   pruneopts = "UT"
-  revision = "4fb6753680fea4e9b6c300ce9a4d46bf6ff90577"
+  revision = "93d74efcd2c481f7c5adcfaa6b4aa9e14b762a64"
 
 [[projects]]
   digest = "1:75d51eeab0df85a3cea9e1297ccd3183b20a10cb4b48c753d8ec8d113cc14250"
