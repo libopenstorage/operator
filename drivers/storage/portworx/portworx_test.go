@@ -11,6 +11,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/dbg"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
 	e2 "github.com/portworx/kvdb/etcd/v2"
@@ -286,7 +287,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -516,7 +517,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -584,12 +585,12 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
 	nodeStatus := &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
@@ -603,7 +604,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
@@ -632,7 +633,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeInit, nodeStatus.Status.Conditions[0].Status)
@@ -648,7 +649,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
@@ -664,7 +665,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
@@ -680,7 +681,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
@@ -696,7 +697,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
@@ -712,7 +713,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
@@ -728,7 +729,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatus.Status.Conditions[0].Status)
@@ -744,7 +745,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatus.Status.Conditions[0].Status)
@@ -760,7 +761,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
@@ -776,7 +777,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
@@ -792,7 +793,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
@@ -808,7 +809,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
@@ -824,7 +825,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
@@ -840,7 +841,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeUnknown, nodeStatus.Status.Conditions[0].Status)
@@ -866,7 +867,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -934,17 +935,17 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
 	nodeStatus := &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "5.6.7.8", nodeStatus.Spec.Version)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
 
@@ -955,14 +956,14 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatus = &corev1alpha1.StorageNodeStatus{}
-	err = get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatus.Spec.Version)
 }
 
 func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	// Fake client without service
-	k8sClient := fakeK8sClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	driver := portworx{
 		k8sClient: k8sClient,
@@ -985,7 +986,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 
 func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	// Fake client with a service that does not have cluster ip
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1015,7 +1016,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 }
 
 func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1062,7 +1063,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1147,7 +1148,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1219,7 +1220,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 
@@ -1234,7 +1235,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 }
@@ -1259,7 +1260,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1319,7 +1320,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 
 	require.Equal(t, "Offline", cluster.Status.Phase)
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
@@ -1344,7 +1345,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 
 	require.Equal(t, "Online", cluster.Status.Phase)
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
@@ -1372,7 +1373,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1441,7 +1442,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 
@@ -1467,13 +1468,13 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
 
 	// Fake a node object with matching mgmt ip address
-	deleteObj(k8sClient, &nodeStatusList.Items[0])
+	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1495,13 +1496,13 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
 
 	// Fake a node object with matching hostname
-	deleteObj(k8sClient, &nodeStatusList.Items[0])
+	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1523,13 +1524,13 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
 
 	// Fake a node object with matching hostname from labels
-	deleteObj(k8sClient, &nodeStatusList.Items[0])
+	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1546,7 +1547,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
@@ -1572,7 +1573,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1635,7 +1636,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
@@ -1657,7 +1658,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
@@ -1686,7 +1687,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
-	k8sClient := fakeK8sClient(&v1.Service{
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxServiceName,
 			Namespace: "kube-test",
@@ -1749,7 +1750,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
@@ -1774,7 +1775,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
@@ -1797,7 +1798,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
-	err = list(k8sClient, nodeStatusList)
+	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
@@ -1873,9 +1874,9 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper daemonset
-	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiper.yaml")
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiper.yaml")
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
 	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
@@ -1907,7 +1908,7 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, customRepo+"/px-node-wiper:2.1.2-rc1",
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
@@ -1937,7 +1938,7 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, customRegistry+"/portworx/px-node-wiper:2.1.2-rc1",
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
@@ -1975,7 +1976,7 @@ func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 	require.NoError(t, err)
 
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, customRegistry+"/test/node-wiper:v1",
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
@@ -2023,9 +2024,9 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper daemonset
-	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiperPKS.yaml")
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperPKS.yaml")
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
 	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
@@ -2072,9 +2073,9 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper daemonset
-	expectedDaemonSet := getExpectedDaemonSet(t, "nodeWiperWithWipe.yaml")
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperWithWipe.yaml")
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
 	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
@@ -2126,7 +2127,7 @@ func TestDeleteClusterWithNodeAffinity(t *testing.T) {
 
 	// Check wiper daemonset
 	wiperDS := &appsv1.DaemonSet{}
-	err = get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, pxNodeWiperDaemonSetName, wiperDS.Name)
 	require.Equal(t, cluster.Namespace, wiperDS.Namespace)
@@ -2389,7 +2390,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	}
 
 	configMaps := &v1.ConfigMapList{}
-	err := list(k8sClient, configMaps)
+	err := testutil.List(k8sClient, configMaps)
 	require.NoError(t, err)
 	require.Len(t, configMaps.Items, 2)
 
@@ -2403,7 +2404,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 
 	// Check config maps are deleted
 	configMaps = &v1.ConfigMapList{}
-	err = list(k8sClient, configMaps)
+	err = testutil.List(k8sClient, configMaps)
 	require.NoError(t, err)
 	require.Empty(t, configMaps.Items)
 }

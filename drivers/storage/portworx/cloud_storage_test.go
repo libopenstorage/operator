@@ -13,6 +13,7 @@ import (
 	"github.com/libopenstorage/cloudops/pkg/parser"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +30,7 @@ var (
 )
 
 func TestGetStorageNodeConfigNoConfigMap(t *testing.T) {
-	k8sClient := fakeK8sClient()
+	k8sClient := testutil.FakeK8sClient()
 	p := &portworxCloudStorage{
 		cloudProvider: testProviderType,
 		namespace:     testNamespace,
@@ -40,7 +41,7 @@ func TestGetStorageNodeConfigNoConfigMap(t *testing.T) {
 }
 
 func TestGetStorageNodeConfigEmptyConfigMap(t *testing.T) {
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -59,7 +60,7 @@ func TestGetStorageNodeConfigEmptyConfigMap(t *testing.T) {
 }
 
 func TestGetStorageNodeConfigInvalidConfigMapNoKey(t *testing.T) {
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -81,7 +82,7 @@ func TestGetStorageNodeConfigInvalidConfigMapNoKey(t *testing.T) {
 }
 
 func TestGetStorageNodeConfigInvalidConfigMapData(t *testing.T) {
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -109,7 +110,7 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -208,7 +209,7 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 	setupMockStorageManager(mockCtrl)
 	_, yamlData := generateValidYamlData(t)
 
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -310,7 +311,7 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -428,7 +429,7 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -500,7 +501,7 @@ func TestCreateStorageDistributionMatrixNotSupportedProviders(t *testing.T) {
 	matrixSetup(t)
 	defer matrixCleanup(t)
 
-	k8sClient := fakeK8sClient()
+	k8sClient := testutil.FakeK8sClient()
 	p := &portworxCloudStorage{
 		cloudProvider: cloudops.AWS,
 		namespace:     testNamespace,
@@ -524,7 +525,7 @@ func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
 	matrixSetup(t)
 	defer matrixCleanup(t)
 
-	k8sClient := fakeK8sClient()
+	k8sClient := testutil.FakeK8sClient()
 	p := &portworxCloudStorage{
 		cloudProvider: cloudops.Azure,
 		namespace:     testNamespace,
@@ -549,7 +550,7 @@ func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
 func TestCreateStorageDistributionMatrixAlreadyExists(t *testing.T) {
 	// Not setting up the specs directory
 	// Faking a config map
-	k8sClient := fakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
