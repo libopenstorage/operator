@@ -12,6 +12,9 @@ import (
 	// importing the decisionmatrix package from cloudops to vendor
 	// the cloud specific decision matrices
 	_ "github.com/libopenstorage/cloudops/specs/decisionmatrix"
+	// importing azure cloud provider so that it registers itself
+	// as a provider of the StorageManager interface
+	_ "github.com/libopenstorage/cloudops/azure/storagemanager"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	v1 "k8s.io/api/core/v1"
