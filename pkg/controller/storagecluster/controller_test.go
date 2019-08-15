@@ -5,10 +5,20 @@ import (
 
 	"github.com/golang/mock/gomock"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	fakeop "github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
+	k8scontroller "k8s.io/kubernetes/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestStorageClusterDefaults(t *testing.T) {
@@ -22,8 +32,8 @@ func TestStorageClusterDefaults(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -89,8 +99,8 @@ func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -158,8 +168,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -224,8 +234,8 @@ func TestStorageClusterDefaultsForFinalizer(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -266,8 +276,8 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -300,4 +310,108 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, corev1alpha1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Empty(t, cluster.Spec.UpdateStrategy.RollingUpdate)
+}
+
+func TestStoragePodGetsScheduled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-cluster",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{{UID: "test-uid"}},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: false,
+			},
+		},
+	}
+
+	// Kubernetes node with resources to create a pod
+	k8sNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "k8s-node-1",
+		},
+		Status: v1.NodeStatus{
+			Allocatable: map[v1.ResourceName]resource.Quantity{
+				v1.ResourcePods: resource.MustParse("1"),
+			},
+		},
+	}
+
+	k8s.Instance().SetClient(
+		fake.NewSimpleClientset(), nil, nil,
+		fakeop.NewSimpleClientset(cluster), nil, nil, nil, nil,
+	)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+
+	controller := Controller{
+		client:     k8sClient,
+		Driver:     driver,
+		podControl: podControl,
+		recorder:   recorder,
+	}
+
+	expectedPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				labelKeyName:       cluster.Name,
+				labelKeyDriverName: driverName,
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{{Name: "test"}},
+		},
+	}
+	addOrUpdateStoragePodTolerations(expectedPod)
+	expectedPodTemplate := &v1.PodTemplateSpec{
+		ObjectMeta: expectedPod.ObjectMeta,
+		Spec:       expectedPod.Spec,
+	}
+
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
+		Do(func(c *corev1alpha1.StorageCluster) {
+			hash := computeHash(&c.Spec, nil)
+			expectedPodTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
+		})
+	driver.EXPECT().GetStoragePodSpec(gomock.Any()).
+		Return(expectedPodTemplate.Spec, nil).
+		AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Verify there is no event raised
+	require.Empty(t, recorder.Events)
+
+	// Verify there is one revision for the new StorageCluster object
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+
+	// Verify a pod is created for the given node with correct owner ref
+	require.Len(t, podControl.Templates, 1)
+	require.Equal(t, expectedPodTemplate, &podControl.Templates[0])
+	require.Len(t, podControl.ControllerRefs, 1)
+	require.Equal(t, metav1.NewControllerRef(cluster, controllerKind), &podControl.ControllerRefs[0])
 }

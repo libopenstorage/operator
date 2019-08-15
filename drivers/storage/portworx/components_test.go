@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -71,7 +72,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = list(k8sClient, serviceAccountList)
+	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 1)
 
@@ -83,11 +84,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx ClusterRole
 	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = list(k8sClient, clusterRoleList)
+	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 1)
 
-	expectedCR := getExpectedClusterRole(t, "portworxClusterRole.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "portworxClusterRole.yaml")
 	actualCR := clusterRoleList.Items[0]
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -96,11 +97,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx ClusterRoleBinding
 	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = list(k8sClient, crbList)
+	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
 	require.Len(t, crbList.Items, 1)
 
-	expectedCRB := getExpectedClusterRoleBinding(t, "portworxClusterRoleBinding.yaml")
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "portworxClusterRoleBinding.yaml")
 	actualCRB := crbList.Items[0]
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -110,11 +111,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx Role
 	roleList := &rbacv1.RoleList{}
-	err = list(k8sClient, roleList)
+	err = testutil.List(k8sClient, roleList)
 	require.NoError(t, err)
 	require.Len(t, roleList.Items, 1)
 
-	expectedRole := getExpectedRole(t, "portworxRole.yaml")
+	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
 	actualRole := roleList.Items[0]
 	require.Equal(t, expectedRole.Name, actualRole.Name)
 	require.Equal(t, expectedRole.Namespace, actualRole.Namespace)
@@ -124,11 +125,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx RoleBinding
 	rbList := &rbacv1.RoleBindingList{}
-	err = list(k8sClient, rbList)
+	err = testutil.List(k8sClient, rbList)
 	require.NoError(t, err)
 	require.Len(t, rbList.Items, 1)
 
-	expectedRB := getExpectedRoleBinding(t, "portworxRoleBinding.yaml")
+	expectedRB := testutil.GetExpectedRoleBinding(t, "portworxRoleBinding.yaml")
 	actualRB := rbList.Items[0]
 	require.Equal(t, expectedRB.Name, actualRB.Name)
 	require.Equal(t, expectedRB.Namespace, actualRB.Namespace)
@@ -139,14 +140,14 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx Services
 	serviceList := &v1.ServiceList{}
-	err = list(k8sClient, serviceList)
+	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
 	require.Len(t, serviceList.Items, 2)
 
 	// Portworx Service
-	expectedPXService := getExpectedService(t, "portworxService.yaml")
+	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
 	pxService := &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedPXService.Name, pxService.Name)
 	require.Equal(t, expectedPXService.Namespace, pxService.Namespace)
@@ -156,9 +157,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPXService.Spec, pxService.Spec)
 
 	// Portworx API Service
-	expectedPxAPIService := getExpectedService(t, "portworxAPIService.yaml")
+	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService.yaml")
 	pxAPIService := &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedPxAPIService.Name, pxAPIService.Name)
 	require.Equal(t, expectedPxAPIService.Namespace, pxAPIService.Namespace)
@@ -169,11 +170,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx API DaemonSet
 	dsList := &appsv1.DaemonSetList{}
-	err = list(k8sClient, dsList)
+	err = testutil.List(k8sClient, dsList)
 	require.NoError(t, err)
 	require.Len(t, dsList.Items, 1)
 
-	expectedDaemonSet := getExpectedDaemonSet(t, "portworxAPIDaemonSet.yaml")
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "portworxAPIDaemonSet.yaml")
 	ds := dsList.Items[0]
 	require.Equal(t, expectedDaemonSet.Name, ds.Name)
 	require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
@@ -210,12 +211,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService := &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
 	pxAPIService := &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 
@@ -226,12 +227,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
 
@@ -242,12 +243,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, pxAPIService.Spec.Type)
 
@@ -258,12 +259,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 }
@@ -323,19 +324,19 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -405,19 +406,19 @@ func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	// PVC controller should not get installed if running in kube-system
 	// namespace in openshift
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -603,19 +604,19 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -626,12 +627,12 @@ func verifyPVCControllerInstall(
 ) {
 	// PVC Controller ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err := list(k8sClient, serviceAccountList)
+	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, pvcServiceAccountName, sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
@@ -640,13 +641,13 @@ func verifyPVCControllerInstall(
 
 	// PVC Controller ClusterRole
 	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = list(k8sClient, clusterRoleList)
+	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 2)
 
-	expectedCR := getExpectedClusterRole(t, "pvcControllerClusterRole.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "pvcControllerClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, actualCR, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, pvcClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -655,13 +656,13 @@ func verifyPVCControllerInstall(
 
 	// PVC Controller ClusterRoleBinding
 	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = list(k8sClient, crbList)
+	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
 	require.Len(t, crbList.Items, 2)
 
-	expectedCRB := getExpectedClusterRoleBinding(t, "pvcControllerClusterRoleBinding.yaml")
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "pvcControllerClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, actualCRB, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, pvcClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -678,11 +679,11 @@ func verifyPVCControllerDeployment(
 ) {
 	// PVC Controller Deployment
 	deploymentList := &appsv1.DeploymentList{}
-	err := list(k8sClient, deploymentList)
+	err := testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
 	require.Len(t, deploymentList.Items, 1)
 
-	expectedDeployment := getExpectedDeployment(t, specFileName)
+	expectedDeployment := testutil.GetExpectedDeployment(t, specFileName)
 	actualDeployment := deploymentList.Items[0]
 	require.Equal(t, expectedDeployment.Name, actualDeployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, actualDeployment.Namespace)
@@ -720,7 +721,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 
 	expectedCPUQuantity := resource.MustParse(defaultPVCControllerCPU)
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 
@@ -732,7 +733,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedCPUQuantity = resource.MustParse(expectedCPU)
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 }
@@ -789,7 +790,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -804,7 +805,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -838,7 +839,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	expectedCommand := deployment.Spec.Template.Spec.Containers[0].Command
 
@@ -853,7 +854,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
 }
@@ -891,12 +892,12 @@ func TestLighthouseInstall(t *testing.T) {
 
 	// Lighthouse ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = list(k8sClient, serviceAccountList)
+	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 3)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, lhServiceAccountName, sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
@@ -905,13 +906,13 @@ func TestLighthouseInstall(t *testing.T) {
 
 	// Lighthouse ClusterRole
 	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = list(k8sClient, clusterRoleList)
+	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 3)
 
-	expectedCR := getExpectedClusterRole(t, "lighthouseClusterRole.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "lighthouseClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, actualCR, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, lhClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -920,13 +921,13 @@ func TestLighthouseInstall(t *testing.T) {
 
 	// Lighthouse ClusterRoleBinding
 	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = list(k8sClient, crbList)
+	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
 	require.Len(t, crbList.Items, 3)
 
-	expectedCRB := getExpectedClusterRoleBinding(t, "lighthouseClusterRoleBinding.yaml")
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "lighthouseClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, actualCRB, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, lhClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -936,13 +937,13 @@ func TestLighthouseInstall(t *testing.T) {
 
 	// Lighthouse Service
 	serviceList := &v1.ServiceList{}
-	err = list(k8sClient, serviceList)
+	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
 	require.Len(t, serviceList.Items, 3)
 
-	expectedLhService := getExpectedService(t, "lighthouseService.yaml")
+	expectedLhService := testutil.GetExpectedService(t, "lighthouseService.yaml")
 	lhService := &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedLhService.Name, lhService.Name)
 	require.Equal(t, expectedLhService.Namespace, lhService.Namespace)
@@ -953,13 +954,13 @@ func TestLighthouseInstall(t *testing.T) {
 
 	// Lighthouse Deployment
 	deploymentList := &appsv1.DeploymentList{}
-	err = list(k8sClient, deploymentList)
+	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
 	require.Len(t, deploymentList.Items, 2)
 
-	expectedDeployment := getExpectedDeployment(t, "lighthouseDeployment.yaml")
+	expectedDeployment := testutil.GetExpectedDeployment(t, "lighthouseDeployment.yaml")
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, lhDeployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, lhDeployment.Namespace)
@@ -1002,7 +1003,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, lhServiceName, lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
@@ -1041,7 +1042,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, lhServiceName, lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
@@ -1080,7 +1081,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, lhServiceName, lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
@@ -1121,7 +1122,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, lhService.Spec.Type)
 
@@ -1131,7 +1132,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 
@@ -1141,7 +1142,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
 
@@ -1151,7 +1152,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 }
@@ -1215,7 +1216,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse:v1", image)
@@ -1226,7 +1227,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse:v2", image)
@@ -1260,7 +1261,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := getLighthouseImage(lhDeployment, lhConfigInitContainerName)
 	require.Equal(t, "portworx/lh-config-sync:v1", image)
@@ -1276,7 +1277,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = getLighthouseImage(lhDeployment, lhConfigInitContainerName)
 	require.Equal(t, "test/config-sync:v2", image)
@@ -1310,7 +1311,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
 	require.Equal(t, "portworx/lh-stork-connector:v1", image)
@@ -1326,7 +1327,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = getLighthouseImage(lhDeployment, lhStorkConnectorContainerName)
 	require.Equal(t, "test/stork-connector:v2", image)
@@ -1362,7 +1363,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	// Lighthouse image should remain unchanged but sidecar container images
 	// should use the default image tag
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse", image)
@@ -1414,7 +1415,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	// Lighthouse image should remain unchanged but sidecar container images
 	// should use the default image tag
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := getLighthouseImage(lhDeployment, lhContainerName)
 	require.Equal(t, "portworx/px-lighthouse", image)
@@ -1461,12 +1462,12 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pvcDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/kube-controller-manager-amd64:v0.0.0",
@@ -1474,7 +1475,7 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/px-lighthouse:test",
@@ -1530,7 +1531,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/k8s.gcr.io/pause:3.1",
@@ -1538,7 +1539,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	)
 
 	pvcDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -1546,7 +1547,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/portworx/px-lighthouse:test",
@@ -1564,10 +1565,14 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		customRegistry+"/portworx/lh-config-sync:test",
 		getLighthouseImage(lhDeployment, lhConfigInitContainerName),
 	)
-	require.Equal(t, v1.PullIfNotPresent, getPullPolicyForContainer(lhDeployment, lhContainerName))
-	require.Equal(t, v1.PullIfNotPresent, getPullPolicyForContainer(lhDeployment, "config-sync"))
-	require.Equal(t, v1.PullIfNotPresent, getPullPolicyForContainer(lhDeployment, "stork-connector"))
-	require.Equal(t, v1.PullIfNotPresent, lhDeployment.Spec.Template.Spec.InitContainers[0].ImagePullPolicy)
+	require.Equal(t, v1.PullIfNotPresent,
+		testutil.GetPullPolicyForContainer(lhDeployment, lhContainerName))
+	require.Equal(t, v1.PullIfNotPresent,
+		testutil.GetPullPolicyForContainer(lhDeployment, "config-sync"))
+	require.Equal(t, v1.PullIfNotPresent,
+		testutil.GetPullPolicyForContainer(lhDeployment, "stork-connector"))
+	require.Equal(t, v1.PullIfNotPresent,
+		lhDeployment.Spec.Template.Spec.InitContainers[0].ImagePullPolicy)
 }
 
 func TestRemovePVCController(t *testing.T) {
@@ -1597,19 +1602,19 @@ func TestRemovePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Remove PVC Controller
@@ -1619,19 +1624,19 @@ func TestRemovePVCController(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1662,19 +1667,19 @@ func TestDisablePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable PVC Controller
@@ -1684,19 +1689,19 @@ func TestDisablePVCController(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1726,23 +1731,23 @@ func TestRemoveLighthouse(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Remove lighthouse config
@@ -1752,23 +1757,23 @@ func TestRemoveLighthouse(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1798,23 +1803,23 @@ func TestDisableLighthouse(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable lighthouse
@@ -1824,23 +1829,23 @@ func TestDisableLighthouse(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1873,12 +1878,12 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSI ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = list(k8sClient, serviceAccountList)
+	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, csiServiceAccountName, sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
@@ -1887,13 +1892,13 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSI ClusterRole
 	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = list(k8sClient, clusterRoleList)
+	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 2)
 
-	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -1902,13 +1907,13 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSI ClusterRoleBinding
 	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = list(k8sClient, crbList)
+	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
 	require.Len(t, crbList.Items, 2)
 
-	expectedCRB := getExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -1918,13 +1923,13 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSI Service
 	serviceList := &v1.ServiceList{}
-	err = list(k8sClient, serviceList)
+	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
 	require.Len(t, serviceList.Items, 3)
 
-	expectedService := getExpectedService(t, "csiService.yaml")
+	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
 	service := &v1.Service{}
-	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Name, service.Name)
 	require.Equal(t, expectedService.Namespace, service.Namespace)
@@ -1935,13 +1940,13 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSI StatefulSet
 	statefulSetList := &appsv1.StatefulSetList{}
-	err = list(k8sClient, statefulSetList)
+	err = testutil.List(k8sClient, statefulSetList)
 	require.NoError(t, err)
 	require.Len(t, statefulSetList.Items, 1)
 
-	expectedStatefulSet := getExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
+	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
 	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
@@ -1977,18 +1982,18 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
-	expectedStatefulSet := getExpectedStatefulSet(t, "csiStatefulSet_1.0.yaml")
+	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_1.0.yaml")
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
 	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
@@ -2024,9 +2029,9 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedCR := getExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -2062,7 +2067,7 @@ func TestCSIChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
@@ -2080,7 +2085,7 @@ func TestCSIChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
@@ -2093,7 +2098,7 @@ func TestCSIChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.1.1",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
@@ -2106,7 +2111,7 @@ func TestCSIChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1",
 		statefulSet.Spec.Template.Spec.Containers[2].Image)
@@ -2140,7 +2145,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.1.0",
@@ -2158,7 +2163,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.2",
@@ -2198,7 +2203,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
@@ -2246,7 +2251,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
@@ -2291,23 +2296,23 @@ func TestDisableCSI(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable CSI
@@ -2317,23 +2322,23 @@ func TestDisableCSI(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Remove CSI flag. Default should be disabled.
@@ -2343,22 +2348,22 @@ func TestDisableCSI(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, csiStatefulSetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
