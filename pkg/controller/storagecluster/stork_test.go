@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"path"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/libopenstorage/operator/pkg/mock"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -22,13 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/kubernetes/scheme"
 	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestStorkInstallation(t *testing.T) {
@@ -69,8 +61,8 @@ func TestStorkInstallation(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -101,7 +93,7 @@ func TestStorkInstallation(t *testing.T) {
 		},
 	})
 	storkConfigMap := &v1.ConfigMap{}
-	err = get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, storkConfigMapName, storkConfigMap.Name)
 	require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
@@ -111,13 +103,13 @@ func TestStorkInstallation(t *testing.T) {
 
 	// ServiceAccounts
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = list(k8sClient, serviceAccountList)
+	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 2)
 
 	// Stork ServiceAccount
 	storkSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, storkServiceAccountName, storkSA.Name)
 	require.Equal(t, cluster.Namespace, storkSA.Namespace)
@@ -126,7 +118,7 @@ func TestStorkInstallation(t *testing.T) {
 
 	// Stork Scheduler ServiceAccount
 	storkSchedSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, storkSchedServiceAccountName, storkSchedSA.Name)
 	require.Equal(t, cluster.Namespace, storkSchedSA.Namespace)
@@ -135,14 +127,14 @@ func TestStorkInstallation(t *testing.T) {
 
 	// ClusterRoles
 	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = list(k8sClient, clusterRoleList)
+	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 2)
 
 	// Stork ClusterRole
-	expectedStorkCR := getExpectedClusterRole(t, "storkClusterRole.yaml")
+	expectedStorkCR := testutil.GetExpectedClusterRole(t, "storkClusterRole.yaml")
 	storkCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedStorkCR.Name, storkCR.Name)
 	require.Len(t, storkCR.OwnerReferences, 1)
@@ -150,9 +142,9 @@ func TestStorkInstallation(t *testing.T) {
 	require.ElementsMatch(t, expectedStorkCR.Rules, storkCR.Rules)
 
 	// Stork Scheduler ClusterRole
-	expectedSchedCR := getExpectedClusterRole(t, "storkSchedClusterRole.yaml")
+	expectedSchedCR := testutil.GetExpectedClusterRole(t, "storkSchedClusterRole.yaml")
 	schedCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchedCR.Name, schedCR.Name)
 	require.Len(t, schedCR.OwnerReferences, 1)
@@ -161,14 +153,14 @@ func TestStorkInstallation(t *testing.T) {
 
 	// ClusterRoleBindings
 	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = list(k8sClient, crbList)
+	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
 	require.Len(t, crbList.Items, 2)
 
 	// Stork ClusterRoleBinding
-	expectedStorkCRB := getExpectedClusterRoleBinding(t, "storkClusterRoleBinding.yaml")
+	expectedStorkCRB := testutil.GetExpectedClusterRoleBinding(t, "storkClusterRoleBinding.yaml")
 	storkCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedStorkCRB.Name, storkCRB.Name)
 	require.Len(t, storkCRB.OwnerReferences, 1)
@@ -177,9 +169,9 @@ func TestStorkInstallation(t *testing.T) {
 	require.Equal(t, expectedStorkCRB.RoleRef, storkCRB.RoleRef)
 
 	// Stork Scheduler ClusterRoleBinding
-	expectedSchedCRB := getExpectedClusterRoleBinding(t, "storkSchedClusterRoleBinding.yaml")
+	expectedSchedCRB := testutil.GetExpectedClusterRoleBinding(t, "storkSchedClusterRoleBinding.yaml")
 	schedCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchedCRB.Name, schedCRB.Name)
 	require.Len(t, schedCRB.OwnerReferences, 1)
@@ -189,13 +181,13 @@ func TestStorkInstallation(t *testing.T) {
 
 	// Stork Service
 	serviceList := &v1.ServiceList{}
-	err = list(k8sClient, serviceList)
+	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
 	require.Len(t, serviceList.Items, 1)
 
-	expectedService := getExpectedService(t, "storkService.yaml")
+	expectedService := testutil.GetExpectedService(t, "storkService.yaml")
 	storkService := &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Name, storkService.Name)
 	require.Equal(t, expectedService.Namespace, storkService.Namespace)
@@ -206,14 +198,14 @@ func TestStorkInstallation(t *testing.T) {
 
 	// Deployments
 	deploymentList := &appsv1.DeploymentList{}
-	err = list(k8sClient, deploymentList)
+	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
 	require.Len(t, deploymentList.Items, 2)
 
 	// Stork Deployment
-	expectedStorkDeployment := getExpectedDeployment(t, "storkDeployment.yaml")
+	expectedStorkDeployment := testutil.GetExpectedDeployment(t, "storkDeployment.yaml")
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedStorkDeployment.Name, storkDeployment.Name)
 	require.Equal(t, expectedStorkDeployment.Namespace, storkDeployment.Namespace)
@@ -227,9 +219,9 @@ func TestStorkInstallation(t *testing.T) {
 	require.Equal(t, expectedStorkDeployment.Spec, storkDeployment.Spec)
 
 	// Sched Scheduler Deployment
-	expectedSchedDeployment := getExpectedDeployment(t, "storkSchedDeployment.yaml")
+	expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedDeployment.yaml")
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
 	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
@@ -243,7 +235,7 @@ func TestStorkInstallation(t *testing.T) {
 
 	// Stork Snapshot StorageClass
 	storkStorageClass := &storagev1.StorageClass{}
-	err = get(k8sClient, storkStorageClass, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkStorageClass, storkSnapshotStorageClassName, "")
 	require.NoError(t, err)
 	require.Equal(t, storkSnapshotStorageClassName, storkStorageClass.Name)
 	require.Len(t, storkStorageClass.OwnerReferences, 1)
@@ -267,9 +259,9 @@ func TestStorkWithoutImage(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
+	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
-		client: fakeK8sClient(cluster),
+		client: testutil.FakeK8sClient(cluster),
 		Driver: driver,
 	}
 
@@ -304,8 +296,8 @@ func TestStorkImageChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -320,7 +312,7 @@ func TestStorkImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "osd/stork:v1", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 
@@ -330,7 +322,7 @@ func TestStorkImageChange(t *testing.T) {
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "osd/stork:v2", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 }
@@ -359,8 +351,8 @@ func TestStorkArgumentsChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -376,7 +368,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 
 	// Check custom new arg is present
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 6)
 	require.Contains(t,
@@ -394,7 +386,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 6)
 	require.Contains(t,
@@ -430,8 +422,8 @@ func TestStorkEnvVarsChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -449,7 +441,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	// Check envs are passed to deployment
 	expectedEnvs := append(driverEnvs, cluster.Spec.Stork.Env...)
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 
@@ -460,7 +452,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedEnvs[1].Value = "bar"
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 
@@ -472,7 +464,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedEnvs = append(expectedEnvs, newEnv)
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 }
@@ -501,8 +493,8 @@ func TestStorkCPUChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -518,7 +510,7 @@ func TestStorkCPUChange(t *testing.T) {
 
 	expectedCPUQuantity := resource.MustParse(defaultStorkCPU)
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 
@@ -530,7 +522,7 @@ func TestStorkCPUChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedCPUQuantity = resource.MustParse(expectedCPU)
-	err = get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 }
@@ -559,8 +551,8 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -576,7 +568,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 
 	expectedCPUQuantity := resource.MustParse(defaultStorkCPU)
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 
@@ -588,7 +580,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedCPUQuantity = resource.MustParse(expectedCPU)
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 }
@@ -616,8 +608,8 @@ func TestStorkInvalidCPU(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -652,8 +644,8 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		},
 	}
 
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -692,8 +684,8 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -708,7 +700,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
@@ -723,7 +715,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
@@ -755,8 +747,8 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -771,7 +763,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	expectedCommand := deployment.Spec.Template.Spec.Containers[0].Command
 
@@ -786,7 +778,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
 
-	err = get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
 }
@@ -814,8 +806,8 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -830,7 +822,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/stork:test",
@@ -838,7 +830,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	)
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/kube-scheduler-amd64:v0.0.0",
@@ -870,8 +862,8 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -886,7 +878,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/osd/stork:test",
@@ -898,7 +890,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	)
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
@@ -929,8 +921,8 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -945,7 +937,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t,
@@ -954,7 +946,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 	)
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t,
@@ -984,8 +976,8 @@ func TestDisableStork(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -1001,47 +993,47 @@ func TestDisableStork(t *testing.T) {
 	require.NoError(t, err)
 
 	storkCM := &v1.ConfigMap{}
-	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSchedSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.NoError(t, err)
 
 	schedCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.NoError(t, err)
 
 	storkCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	schedCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	storkService := &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSC := &storagev1.StorageClass{}
-	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.NoError(t, err)
 
 	// Disable Stork
@@ -1050,47 +1042,47 @@ func TestDisableStork(t *testing.T) {
 	require.NoError(t, err)
 
 	storkCM = &v1.ConfigMap{}
-	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSA = &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSchedSA = &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkCR = &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCR = &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkCRB = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCRB = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkService = &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkDeployment = &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	schedDeployment = &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSC = &storagev1.StorageClass{}
-	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1115,8 +1107,8 @@ func TestRemoveStork(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -1132,47 +1124,47 @@ func TestRemoveStork(t *testing.T) {
 	require.NoError(t, err)
 
 	storkCM := &v1.ConfigMap{}
-	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSchedSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.NoError(t, err)
 
 	schedCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.NoError(t, err)
 
 	storkCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	schedCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.NoError(t, err)
 
 	storkService := &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	storkSC := &storagev1.StorageClass{}
-	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.NoError(t, err)
 
 	// Remove Stork config
@@ -1181,47 +1173,47 @@ func TestRemoveStork(t *testing.T) {
 	require.NoError(t, err)
 
 	storkCM = &v1.ConfigMap{}
-	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSA = &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSchedSA = &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkCR = &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCR = &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkCRB = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCRB = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkService = &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkDeployment = &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	schedDeployment = &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSC = &storagev1.StorageClass{}
-	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -1246,8 +1238,8 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 		fakek8sclient.NewSimpleClientset(),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
-	driver := mockDriver(mockCtrl)
-	k8sClient := fakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
 		client: k8sClient,
 		Driver: driver,
@@ -1260,108 +1252,46 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 	require.NoError(t, err)
 
 	storkCM := &v1.ConfigMap{}
-	err = get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkCM, storkConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSA, storkServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSchedSA := &v1.ServiceAccount{}
-	err = get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkSchedSA, storkSchedServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, storkCR, storkClusterRoleName, "")
+	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCR := &rbacv1.ClusterRole{}
-	err = get(k8sClient, schedCR, storkSchedClusterRoleName, "")
+	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	schedCRB := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	storkService := &v1.Service{}
-	err = get(k8sClient, storkService, storkServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkService, storkServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	schedDeployment := &appsv1.Deployment{}
-	err = get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	storkSC := &storagev1.StorageClass{}
-	err = get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
+	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.True(t, errors.IsNotFound(err))
-}
-
-func mockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
-	mockDriver := mock.NewMockDriver(mockCtrl)
-	return mockDriver
-}
-
-func fakeK8sClient(cluster *corev1alpha1.StorageCluster) client.Client {
-	s := scheme.Scheme
-	corev1alpha1.AddToScheme(s)
-	return fake.NewFakeClientWithScheme(s, cluster)
-}
-
-func list(k8sClient client.Client, obj runtime.Object) error {
-	return k8sClient.List(context.TODO(), &client.ListOptions{}, obj)
-}
-
-func get(k8sClient client.Client, obj runtime.Object, name, namespace string) error {
-	return k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      name,
-			Namespace: namespace,
-		},
-		obj,
-	)
-}
-
-func getExpectedClusterRole(t *testing.T, fileName string) *rbacv1.ClusterRole {
-	obj := getKubernetesObject(t, fileName)
-	clusterRole, ok := obj.(*rbacv1.ClusterRole)
-	assert.True(t, ok, "Expected ClusterRole object")
-	return clusterRole
-}
-
-func getExpectedClusterRoleBinding(t *testing.T, fileName string) *rbacv1.ClusterRoleBinding {
-	obj := getKubernetesObject(t, fileName)
-	crb, ok := obj.(*rbacv1.ClusterRoleBinding)
-	assert.True(t, ok, "Expected ClusterRoleBinding object")
-	return crb
-}
-
-func getExpectedService(t *testing.T, fileName string) *v1.Service {
-	obj := getKubernetesObject(t, fileName)
-	service, ok := obj.(*v1.Service)
-	assert.True(t, ok, "Expected Service object")
-	return service
-}
-
-func getExpectedDeployment(t *testing.T, fileName string) *appsv1.Deployment {
-	obj := getKubernetesObject(t, fileName)
-	deployment, ok := obj.(*appsv1.Deployment)
-	assert.True(t, ok, "Expected Deployment object")
-	return deployment
-}
-
-func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
-	assert.NoError(t, err)
-	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
-	assert.NoError(t, err)
-	return obj
 }

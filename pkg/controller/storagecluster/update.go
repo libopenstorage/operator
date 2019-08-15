@@ -247,8 +247,8 @@ func (c *Controller) snapshot(
 			return existedHistory, nil
 		}
 
-		// Handle name collisions between different history. Get the latest DaemonSet from
-		// the API server to make sure collision count is only increased when necessary.
+		// Handle name collisions between different history. Get the latest StorageCluster
+		// from the API server to make sure collision count is only increased when necessary.
 		currSC, getErr := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if getErr != nil {
 			return nil, fmt.Errorf("error getting StorageCluster %v/%v to get the latest "+
