@@ -197,8 +197,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup
-			// logic use finalizers. Return and don't requeue.
+			// Owned objects are automatically garbage collected.
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -333,6 +332,9 @@ func (c *Controller) deleteStorageCluster(
 		if err != nil {
 			logrus.Errorf("Failed to delete storage: %v", err)
 			return fmt.Errorf("driver failed to delete storage: %v", err)
+		} else if deleteClusterCondition == nil {
+			// Return without error as the delete condition is not yet populated
+			return nil
 		}
 		// Check if there is an existing delete condition and overwrite it
 		foundIndex := -1
