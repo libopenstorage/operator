@@ -266,7 +266,7 @@ func (c *Controller) snapshot(
 			currSC.Status.CollisionCount = new(int32)
 		}
 		*currSC.Status.CollisionCount++
-		_, updateErr := k8s.Instance().UpdateStorageClusterStatus(currSC)
+		updateErr := c.client.Status().Update(context.TODO(), currSC)
 		if updateErr != nil {
 			return nil, updateErr
 		}
@@ -549,7 +549,10 @@ func matchSelectedFields(
 		return false, err
 	}
 
-	spec := raw["spec"].(map[string]interface{})
+	spec, ok := raw["spec"].(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
 	delete(spec, "$patch")
 
 	rawHistory, err := json.Marshal(spec)
