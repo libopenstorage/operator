@@ -29,6 +29,7 @@ import (
 
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -410,21 +411,27 @@ func (c *Controller) manage(
 	}
 	var (
 		nodesNeedingStoragePods, podsToDelete []string
-		cloudProvider                         string
+		cloudProviderName                     string
 	)
 	zoneMap := make(map[string]int)
 
+	// Get the cloud provider
 	for _, node := range nodeList.Items {
-		if zone, ok := node.Labels[failureDomainZoneKey]; ok {
-			instancesCount := zoneMap[zone]
-			zoneMap[zone] = instancesCount + 1
-		}
-		if len(cloudProvider) == 0 && len(node.Spec.ProviderID) != 0 {
+		if len(node.Spec.ProviderID) != 0 {
 			// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
 			tokens := strings.Split(node.Spec.ProviderID, "://")
 			if len(tokens) == 2 {
-				cloudProvider = tokens[0]
+				cloudProviderName = tokens[0]
+				break
 			} // else provider id is invalid
+		}
+	}
+	cloudProvider := cloudprovider.New(cloudProviderName)
+
+	for _, node := range nodeList.Items {
+		if zone, err := cloudProvider.GetZone(&node); err == nil {
+			instancesCount := zoneMap[zone]
+			zoneMap[zone] = instancesCount + 1
 		}
 		nodesNeedingStoragePodsOnNode, podsToDeleteOnNode, err := c.podsShouldBeOnNode(&node, nodeToStoragePods, cluster)
 		if err != nil {
@@ -437,7 +444,7 @@ func (c *Controller) manage(
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
 		ZoneToInstancesMap: zoneMap,
-		CloudProvider:      cloudProvider,
+		CloudProvider:      cloudProviderName,
 	}); err != nil {
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
