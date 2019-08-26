@@ -10,6 +10,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/libopenstorage/operator/pkg/controller/clusteroperation"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
