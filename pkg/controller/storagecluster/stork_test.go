@@ -84,6 +84,10 @@ func TestStorkInstallation(t *testing.T) {
 
 	// Stork ConfigMap
 	expectedPolicy, _ := json.Marshal(schedulerv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Policy",
+			APIVersion: "v1",
+		},
 		ExtenderConfigs: []schedulerv1.ExtenderConfig{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",

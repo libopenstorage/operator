@@ -152,6 +152,10 @@ func (c *Controller) createStorkConfigMap(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	policy := schedulerv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Policy",
+			APIVersion: "v1",
+		},
 		ExtenderConfigs: []schedulerv1.ExtenderConfig{
 			{
 				URLPrefix: fmt.Sprintf(
