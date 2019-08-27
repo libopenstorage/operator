@@ -251,7 +251,20 @@ func (c *Controller) createCRD() error {
 		return err
 	}
 
-	return k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	if err != nil {
+		return err
+	}
+
+	nodeStatusCRDName := fmt.Sprintf("%s.%s",
+		corev1alpha1.StorageNodeStatusResourcePlural,
+		corev1alpha1.SchemeGroupVersion.Group,
+	)
+	err = k8s.Instance().DeleteCRD(nodeStatusCRDName)
+	if err != nil && !errors.IsNotFound(err) {
+		logrus.Warnf("Failed to delete CRD %s: %v", nodeStatusCRDName, err)
+	}
+	return nil
 }
 
 func (c *Controller) syncStorageCluster(
