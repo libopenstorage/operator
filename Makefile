@@ -21,6 +21,7 @@ GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
 
 VERSION = $(RELEASE_VER)-$(GIT_SHA)
+OLM_VERSION = $(RELEASE_VER)-$(BUILD_VER)-$(GIT_SHA)
 
 LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VERSION)"
 BUILD_OPTIONS := -ldflags=$(LDFLAGS)
@@ -89,7 +90,12 @@ container:
 deploy:
 	docker push $(STORAGE_OPERATOR_IMG)
 
-olm-verify:
+deploy-catalog:
+	@echo "Pushing operator catalog $(QUAY_STORAGE_OPERATOR_REPO)/$(QUAY_STORAGE_OPERATOR_APP):$(OLM_VERSION)"
+	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx:/portworx \
+		python:3 bash -c "pip3 install operator-courier && operator-courier push /portworx $(QUAY_STORAGE_OPERATOR_REPO) $(QUAY_STORAGE_OPERATOR_APP) $(OLM_VERSION) \"$(QUAY_TOKEN)\""
+
+verify-catalog:
 	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx:/portworx \
 		python:3 bash -c "pip3 install operator-courier && operator-courier --verbose verify --ui_validate_io /portworx"
 
