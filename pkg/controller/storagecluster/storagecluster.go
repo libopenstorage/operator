@@ -238,13 +238,13 @@ func (c *Controller) createCRD() error {
 	}
 
 	resource = k8s.CustomResource{
-		Name:       corev1alpha1.StorageNodeStatusResourceName,
-		Plural:     corev1alpha1.StorageNodeStatusResourcePlural,
+		Name:       corev1alpha1.StorageNodeResourceName,
+		Plural:     corev1alpha1.StorageNodeResourcePlural,
 		Group:      corev1alpha1.SchemeGroupVersion.Group,
 		Version:    corev1alpha1.SchemeGroupVersion.Version,
 		Scope:      apiextensionsv1beta1.NamespaceScoped,
-		Kind:       reflect.TypeOf(corev1alpha1.StorageNodeStatus{}).Name(),
-		ShortNames: []string{corev1alpha1.StorageNodeStatusShortName},
+		Kind:       reflect.TypeOf(corev1alpha1.StorageNode{}).Name(),
+		ShortNames: []string{corev1alpha1.StorageNodeShortName},
 	}
 	err = k8s.Instance().CreateCRD(resource)
 	if err != nil && !errors.IsAlreadyExists(err) {

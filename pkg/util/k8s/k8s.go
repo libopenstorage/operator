@@ -860,24 +860,24 @@ func CreateOrUpdateDaemonSet(
 	return k8sClient.Update(context.TODO(), existingDS)
 }
 
-// CreateOrUpdateStorageNodeStatus creates a StorageNodeStatus if not present, else updates it
-func CreateOrUpdateStorageNodeStatus(
+// CreateOrUpdateStorageNode creates a StorageNode if not present, else updates it
+func CreateOrUpdateStorageNode(
 	k8sClient client.Client,
-	sns *corev1alpha1.StorageNodeStatus,
+	node *corev1alpha1.StorageNode,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	existingSNS := &corev1alpha1.StorageNodeStatus{}
+	existingNode := &corev1alpha1.StorageNode{}
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      sns.Name,
-			Namespace: sns.Namespace,
+			Name:      node.Name,
+			Namespace: node.Namespace,
 		},
-		existingSNS,
+		existingNode,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating StorageNodeStatus %s/%s", sns.Namespace, sns.Name)
-		return k8sClient.Create(context.TODO(), sns)
+		logrus.Debugf("Creating StorageNode %s/%s", node.Namespace, node.Name)
+		return k8sClient.Create(context.TODO(), node)
 	} else if err != nil {
 		return err
 	}
@@ -885,24 +885,24 @@ func CreateOrUpdateStorageNodeStatus(
 	ownerRefs := make([]metav1.OwnerReference, 0)
 	if ownerRef != nil {
 		ownerRefs = append(ownerRefs, *ownerRef)
-		for _, o := range existingSNS.OwnerReferences {
+		for _, o := range existingNode.OwnerReferences {
 			if o.UID != ownerRef.UID {
 				ownerRefs = append(ownerRefs, o)
 			}
 		}
 	}
 
-	modified := !reflect.DeepEqual(sns.Status, existingSNS.Status) ||
-		!reflect.DeepEqual(sns.Spec, existingSNS.Spec)
+	modified := !reflect.DeepEqual(node.Status, existingNode.Status) ||
+		!reflect.DeepEqual(node.Spec, existingNode.Spec)
 
-	if modified || len(ownerRefs) > len(existingSNS.OwnerReferences) {
-		existingSNS.Spec = sns.Spec
-		existingSNS.Status = sns.Status
-		logrus.Debugf("Updating StorageNodeStatus %s/%s", sns.Namespace, sns.Name)
-		if err := k8sClient.Update(context.TODO(), existingSNS); err != nil {
+	if modified || len(ownerRefs) > len(existingNode.OwnerReferences) {
+		existingNode.Spec = node.Spec
+		existingNode.Status = node.Status
+		logrus.Debugf("Updating StorageNode %s/%s", node.Namespace, node.Name)
+		if err := k8sClient.Update(context.TODO(), existingNode); err != nil {
 			return err
 		}
-		return k8sClient.Status().Update(context.TODO(), existingSNS)
+		return k8sClient.Status().Update(context.TODO(), existingNode)
 	}
 	return nil
 }
