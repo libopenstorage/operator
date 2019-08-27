@@ -83,7 +83,7 @@ func TestGetStorkEnvList(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil, nil)
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -203,7 +203,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil, nil)
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1435,7 +1435,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				Name: "node-name",
 			},
 		}),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -1461,7 +1461,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1489,7 +1489,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1517,7 +1517,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1540,7 +1540,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1666,7 +1666,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 
 func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *testing.T) {
 	// Create fake k8s client without any nodes to lookup
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil, nil, nil)
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
