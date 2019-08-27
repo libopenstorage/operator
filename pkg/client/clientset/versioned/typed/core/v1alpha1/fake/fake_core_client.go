@@ -36,6 +36,10 @@ func (c *FakeCoreV1alpha1) StorageClusters(namespace string) v1alpha1.StorageClu
 	return &FakeStorageClusters{c, namespace}
 }
 
+func (c *FakeCoreV1alpha1) StorageNodes(namespace string) v1alpha1.StorageNodeInterface {
+	return &FakeStorageNodes{c, namespace}
+}
+
 func (c *FakeCoreV1alpha1) StorageNodeStatuses(namespace string) v1alpha1.StorageNodeStatusInterface {
 	return &FakeStorageNodeStatuses{c, namespace}
 }

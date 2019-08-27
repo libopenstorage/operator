@@ -29,6 +29,7 @@ type CoreV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ClusterOperationsGetter
 	StorageClustersGetter
+	StorageNodesGetter
 	StorageNodeStatusesGetter
 }
 
@@ -43,6 +44,10 @@ func (c *CoreV1alpha1Client) ClusterOperations(namespace string) ClusterOperatio
 
 func (c *CoreV1alpha1Client) StorageClusters(namespace string) StorageClusterInterface {
 	return newStorageClusters(c, namespace)
+}
+
+func (c *CoreV1alpha1Client) StorageNodes(namespace string) StorageNodeInterface {
+	return newStorageNodes(c, namespace)
 }
 
 func (c *CoreV1alpha1Client) StorageNodeStatuses(namespace string) StorageNodeStatusInterface {
