@@ -27,7 +27,7 @@ LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VE
 BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 
 .DEFAULT_GOAL=all
-.PHONY: deploy clean vendor vendor-update
+.PHONY: operator deploy clean vendor vendor-update
 
 all: operator pretest
 

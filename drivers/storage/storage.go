@@ -50,8 +50,8 @@ type ClusterPluginInterface interface {
 	// start to make sure the cluster comes up correctly. This should be
 	// idempotent and subsequent calls should result in the same result.
 	PreInstall(*corev1alpha1.StorageCluster) error
-	// GetStoragePodSpec given the storage cluster spec it returns the pod spec for a node
-	GetStoragePodSpec(*corev1alpha1.StorageCluster) (v1.PodSpec, error)
+	// GetStoragePodSpec given the storage cluster spec and node name it returns the pod spec for a specific node
+	GetStoragePodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
 	GetSelectorLabels() map[string]string
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage

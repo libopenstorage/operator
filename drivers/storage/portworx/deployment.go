@@ -2,23 +2,25 @@ package portworx
 
 import (
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"math"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/google/shlex"
-	version "github.com/hashicorp/go-version"
-
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -274,57 +276,82 @@ func newTemplate(
 
 func (p *portworx) generateCloudStorageSpecs(
 	cluster *corev1alpha1.StorageCluster,
+	nodes []*corev1alpha1.StorageNode,
 ) (*cloudstorage.Config, error) {
-	cloudStorageManager := &portworxCloudStorage{
-		p.zoneToInstancesMap,
-		cloudops.ProviderType(p.cloudProvider),
-		cluster.Namespace,
-		p.k8sClient,
-		metav1.NewControllerRef(cluster, controllerKind),
-	}
 
-	if err := cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
-		logrus.Warnf("Failed to generate storage distribution matrix config map: %v", err)
-	}
+	var cloudConfig *cloudstorage.Config
+	var err error
 
-	instancesPerZone := 0
-	if cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil {
-		instancesPerZone = int(*cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-	}
-	cloudConfig, err := cloudStorageManager.GetStorageNodeConfig(
-		cluster.Spec.CloudStorage.CapacitySpecs,
-		instancesPerZone,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get cloud storage node config: %v", err)
-	}
+	cloudConfig = p.storageNodeToCloudSpec(nodes, cluster)
 
+	if cloudConfig == nil {
+		instancesPerZone := 0
+		if cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil {
+			instancesPerZone = int(*cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+		}
+
+		cloudStorageManager := &portworxCloudStorage{
+			p.zoneToInstancesMap,
+			cloudops.ProviderType(p.cloudProvider),
+			cluster.Namespace,
+			p.k8sClient,
+			metav1.NewControllerRef(cluster, controllerKind),
+		}
+
+		if err = cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
+			logrus.Warnf("Failed to generate storage distribution matrix config map: %v", err)
+		}
+
+		cloudConfig, err = cloudStorageManager.GetStorageNodeConfig(
+			cluster.Spec.CloudStorage.CapacitySpecs,
+			instancesPerZone,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get cloud storage node config: %v", err)
+		}
+		return cloudConfig, err
+	}
 	return cloudConfig, nil
 }
 
 // TODO [Imp] Validate the cluster spec and return errors in the configuration
 func (p *portworx) GetStoragePodSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1alpha1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
+
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return v1.PodSpec{}, err
 	}
 
 	if cluster.Spec.CloudStorage != nil && len(cluster.Spec.CloudStorage.CapacitySpecs) > 0 {
-		// Cloud Environment
-		cloudConfig, err := p.generateCloudStorageSpecs(cluster)
+
+		nodes, err := p.storageNodesList(cluster)
 		if err != nil {
 			return v1.PodSpec{}, err
+		}
+
+		cloudConfig, err := p.generateCloudStorageSpecs(cluster, nodes)
+		if err != nil {
+			return v1.PodSpec{}, err
+		}
+
+		if !storageNodeExists(nodeName, nodes) {
+			err = p.createStorageNode(cluster, nodeName, cloudConfig)
+			if err != nil {
+				msg := fmt.Sprintf("Failed to create node for nodeID %v: %v", nodeName, err)
+				p.warningEvent(cluster, failedSyncReason, msg)
+			}
 		}
 		t.cloudConfig = cloudConfig
 	}
 
+	containers := t.portworxContainer()
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
 		ServiceAccountName: pxServiceAccountName,
-		Containers:         []v1.Container{t.portworxContainer()},
+		Containers:         []v1.Container{containers},
 		Volumes:            t.getVolumes(),
 	}
 
@@ -351,6 +378,79 @@ func (p *portworx) GetStoragePodSpec(
 	}
 
 	return podSpec, nil
+}
+
+func (p *portworx) createStorageNode(cluster *corev1alpha1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            nodeName,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Labels:          p.GetSelectorLabels(),
+		},
+		Status: corev1alpha1.NodeStatus{},
+	}
+
+	configureStorageNodeSpec(storageNode, cloudConfig)
+	if cluster.Status.Storage.StorageNodesPerZone != cloudConfig.StorageInstancesPerZone {
+		cluster.Status.Storage.StorageNodesPerZone = cloudConfig.StorageInstancesPerZone
+		err := p.k8sClient.Status().Update(context.TODO(), cluster)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := p.k8sClient.Create(context.TODO(), storageNode)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
+func (p *portworx) storageNodesList(cluster *corev1alpha1.StorageCluster) ([]*corev1alpha1.StorageNode, error) {
+
+	nodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := make([]*corev1alpha1.StorageNode, 0)
+
+	err := p.k8sClient.List(context.TODO(), nodes,
+		&client.ListOptions{Namespace: cluster.Namespace})
+
+	if err != nil {
+		return storageNodes, err
+	}
+
+	for _, node := range nodes.Items {
+		controllerRef := metav1.GetControllerOf(&node)
+		if controllerRef != nil && controllerRef.UID == cluster.UID {
+			storageNodes = append(storageNodes, node.DeepCopy())
+		}
+	}
+
+	return storageNodes, nil
+}
+
+func storageNodeExists(nodeName string, nodes []*corev1alpha1.StorageNode) bool {
+	for _, node := range nodes {
+		if nodeName == node.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func configureStorageNodeSpec(node *corev1alpha1.StorageNode, config *cloudstorage.Config) {
+	node.Spec = corev1alpha1.StorageNodeSpec{CloudStorage: corev1alpha1.StorageNodeCloudDriveConfigs{}}
+	for _, conf := range config.CloudStorage {
+		sc := corev1alpha1.StorageNodeCloudDriveConfig{
+			Type:      conf.Type,
+			IOPS:      conf.IOPS,
+			SizeInGiB: conf.SizeInGiB,
+			Options:   conf.Options,
+		}
+		node.Spec.CloudStorage.DriveConfigs = append(node.Spec.CloudStorage.DriveConfigs, sc)
+	}
 }
 
 func (t *template) portworxContainer() v1.Container {
@@ -598,7 +698,7 @@ func (t *template) getArguments() []string {
 		}
 		if t.cloudConfig != nil && t.cloudConfig.StorageInstancesPerZone > 0 {
 			args = append(args, "-max_storage_nodes_per_zone",
-				strconv.Itoa(t.cloudConfig.StorageInstancesPerZone))
+				strconv.Itoa(int(t.cloudConfig.StorageInstancesPerZone)))
 		} else if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil &&
 			// cloudConfig is not generated use the max storage nodes per zone
 			// provided by the user

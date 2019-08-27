@@ -11,7 +11,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	fake "github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -515,7 +515,7 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -584,7 +584,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 			hash := computeHash(&c.Spec, nil)
 			expectedPodTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
 		})
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).
 		Return(expectedPodTemplate.Spec, nil).
 		AnyTimes()
 
@@ -644,7 +644,7 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -729,7 +729,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -827,7 +827,7 @@ func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
 		recorder:   recorder,
 	}
 
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -926,7 +926,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 			},
 		},
 	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(podSpec, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1005,7 +1005,7 @@ func TestStoragePodFailureDueToPodNotFitsHostPorts(t *testing.T) {
 			},
 		},
 	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(podSpec, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1084,7 +1084,7 @@ func TestStoragePodFailureDueToTaintsTolerationsNotMatch(t *testing.T) {
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).Times(6)
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).Times(5)
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -1143,7 +1143,7 @@ func TestStoragePodFailureDueToTaintsTolerationsNotMatch(t *testing.T) {
 			},
 		},
 	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(podSpec, nil).Times(6)
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).Times(4)
 
 	result, err = controller.Reconcile(request)
 	require.NoError(t, err)
@@ -1182,7 +1182,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -1249,7 +1249,7 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	// Kubernetes node with enough resources to create new pods
 	k8sNode := createK8sNode("k8s-node", 10)
@@ -1292,7 +1292,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1alpha1.StorageCluster) {
@@ -1339,7 +1339,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1alpha1.StorageCluster) {
@@ -1435,7 +1435,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	expectedDriverInfo := &storage.UpdateDriverInfo{
 		ZoneToInstancesMap: map[string]int{
 			"z1": 2,
@@ -1463,6 +1463,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 
 	expectedDriverInfo.CloudProvider = "testcloud"
 	driver.EXPECT().UpdateDriver(expectedDriverInfo).Return(nil)
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	result, err = controller.Reconcile(request)
 	require.NoError(t, err)
@@ -1506,7 +1507,6 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil)
 
 	// Kubernetes node with enough resources to create new pods
 	k8sNode1 := createK8sNode("k8s-node-1", 10)
@@ -1580,7 +1580,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	k8sNode := createK8sNode("k8s-node", 10)
 	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
@@ -1707,7 +1707,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode := createK8sNode("k8s-node", 10)
@@ -1831,7 +1831,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode1 := createK8sNode("k8s-node-1", 10)
@@ -2015,7 +2015,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode1 := createK8sNode("k8s-node-1", 10)
@@ -2154,7 +2154,7 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	// Reconcile should fail due to invalid maxUnavailable value in RollingUpdate strategy
 	maxUnavailable := intstr.FromString("invalid-value")
@@ -2208,7 +2208,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode := createK8sNode("k8s-node", 10)
@@ -2262,7 +2262,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2364,7 +2364,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2517,7 +2517,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2656,7 +2656,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2737,7 +2737,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2820,7 +2820,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2900,7 +2900,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -2979,7 +2979,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -3058,7 +3058,7 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -3138,7 +3138,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -3314,7 +3314,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
@@ -3387,7 +3387,7 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode := createK8sNode("k8s-node", 10)
@@ -3516,7 +3516,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	// TestCase: Simulate that the cluster got deleted while constructing history.
@@ -3662,7 +3662,7 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode := createK8sNode("k8s-node", 10)
@@ -3790,7 +3790,7 @@ func TestHistoryCleanup(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 
 	k8sNode1 := createK8sNode("k8s-node-1", 10)

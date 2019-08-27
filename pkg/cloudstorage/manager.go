@@ -17,12 +17,12 @@ type CloudDriveConfig struct {
 }
 
 // Config is the cloud storage configuration for a node
-// TODO: This struct should eventually move under StorageNodeStatus
+// TODO: This struct should eventually move under StorageNode
 type Config struct {
 	// CloudStorage is the current cloud configuration
 	CloudStorage []CloudDriveConfig `json:"cloudStorage,omitempty"`
-	// StorageInstancesPerZone is the number of storage instances per zone
-	StorageInstancesPerZone int `json:"storageInstancesPerZone,omitempty"`
+	// StorageNodesPerZone is the number of storage instances per zone
+	StorageInstancesPerZone int32 `json:"storageInstancesPerZone,omitempty"`
 }
 
 // Manager provides an interface to interact with cloud storage
@@ -35,4 +35,6 @@ type Manager interface {
 	// GetStorageNodeConfig based on the cloud provider will return
 	// the storage configuration for a single node
 	GetStorageNodeConfig([]corev1alpha1.CloudStorageCapacitySpec, int) (*Config, error)
+	// GetInstancesPerZoneNum calculates an amount of StorageNode instances per zone
+	GetInstancesPerZoneNum(int) int
 }

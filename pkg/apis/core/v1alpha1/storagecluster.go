@@ -323,6 +323,14 @@ type StorageClusterStatus struct {
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 	// Conditions describes the current conditions of the cluster
 	Conditions []ClusterCondition `json:"conditions,omitempty"`
+	// Storage represents cluster storage details
+	Storage Storage `json:"storage,omitempty"`
+}
+
+// Storage represents cluster storage details
+type Storage struct {
+	// StorageNodesPerZone describes the amount of instances per zone
+	StorageNodesPerZone int32 `json:"storageNodesPerZone,omitempty"`
 }
 
 // ClusterCondition contains condition information for the cluster
