@@ -93,7 +93,8 @@ deploy:
 deploy-catalog:
 	@echo "Pushing operator catalog $(QUAY_STORAGE_OPERATOR_REPO)/$(QUAY_STORAGE_OPERATOR_APP):$(OLM_VERSION)"
 	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx:/portworx \
-		python:3 bash -c "pip3 install operator-courier && operator-courier push /portworx $(QUAY_STORAGE_OPERATOR_REPO) $(QUAY_STORAGE_OPERATOR_APP) $(OLM_VERSION) \"$(QUAY_TOKEN)\""
+	  -e QUAY_TOKEN="$(QUAY_TOKEN)" \
+		python:3 bash -c "pip3 install operator-courier && operator-courier push /portworx $(QUAY_STORAGE_OPERATOR_REPO) $(QUAY_STORAGE_OPERATOR_APP) $(OLM_VERSION) \"$$QUAY_TOKEN\""
 
 verify-catalog:
 	docker run -it --rm -v $(BASE_DIR)/deploy/olm-catalog/portworx:/portworx \
