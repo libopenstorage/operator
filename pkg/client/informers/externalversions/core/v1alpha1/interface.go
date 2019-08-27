@@ -28,6 +28,8 @@ type Interface interface {
 	ClusterOperations() ClusterOperationInformer
 	// StorageClusters returns a StorageClusterInformer.
 	StorageClusters() StorageClusterInformer
+	// StorageNodes returns a StorageNodeInformer.
+	StorageNodes() StorageNodeInformer
 	// StorageNodeStatuses returns a StorageNodeStatusInformer.
 	StorageNodeStatuses() StorageNodeStatusInformer
 }
@@ -51,6 +53,11 @@ func (v *version) ClusterOperations() ClusterOperationInformer {
 // StorageClusters returns a StorageClusterInformer.
 func (v *version) StorageClusters() StorageClusterInformer {
 	return &storageClusterInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// StorageNodes returns a StorageNodeInformer.
+func (v *version) StorageNodes() StorageNodeInformer {
+	return &storageNodeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // StorageNodeStatuses returns a StorageNodeStatusInformer.
