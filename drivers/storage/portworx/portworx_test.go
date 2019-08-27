@@ -584,12 +584,12 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
-	nodeStatus := &corev1alpha1.StorageNodeStatus{}
+	nodeStatus := &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
@@ -603,7 +603,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
@@ -632,7 +632,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
@@ -648,7 +648,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
@@ -664,7 +664,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
@@ -680,7 +680,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
@@ -696,7 +696,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
@@ -712,7 +712,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
@@ -728,7 +728,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
@@ -744,7 +744,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
@@ -760,7 +760,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
@@ -776,7 +776,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
@@ -792,7 +792,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
@@ -808,7 +808,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
@@ -824,7 +824,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
@@ -840,7 +840,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
@@ -934,17 +934,17 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
-	nodeStatus := &corev1alpha1.StorageNodeStatus{}
+	nodeStatus := &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "5.6.7.8", nodeStatus.Spec.Version)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
@@ -955,7 +955,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNodeStatus{}
+	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatus.Spec.Version)
@@ -1207,7 +1207,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to enumerate nodes")
 
-	// Empty list of nodes should not create any StorageNodeStatus objects
+	// Empty list of nodes should not create any StorageNode objects
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{},
 	}
@@ -1219,12 +1219,12 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 
-	// Nil list of nodes should not create any StorageNodeStatus objects
+	// Nil list of nodes should not create any StorageNode objects
 	expectedNodeEnumerateResp.Nodes = nil
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
@@ -1234,7 +1234,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
@@ -1319,7 +1319,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "Offline", cluster.Status.Phase)
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1344,7 +1344,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "Online", cluster.Status.Phase)
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1441,7 +1441,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
@@ -1467,7 +1467,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1495,7 +1495,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1523,7 +1523,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1546,7 +1546,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1635,7 +1635,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
@@ -1657,7 +1657,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -1749,7 +1749,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
@@ -1774,13 +1774,13 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
 
-	// Deleting already deleted StorageNodeStatus should not throw error
+	// Deleting already deleted StorageNode should not throw error
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{
 			{
@@ -1797,7 +1797,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList = &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)

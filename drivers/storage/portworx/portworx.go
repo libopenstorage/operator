@@ -280,7 +280,7 @@ func (p *portworx) updateNodeStatuses(
 		currentNodes[node.SchedulerNodeName] = true
 
 		phase := mapNodeStatus(node.Status)
-		nodeStatus := &corev1alpha1.StorageNodeStatus{
+		nodeStatus := &corev1alpha1.StorageNode{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            node.SchedulerNodeName,
 				Namespace:       cluster.Namespace,
@@ -305,37 +305,37 @@ func (p *portworx) updateNodeStatuses(
 		}
 
 		if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
-			nodeStatus.Spec = corev1alpha1.StorageNodeStatusSpec{
+			nodeStatus.Spec = corev1alpha1.StorageNodeSpec{
 				Version: version,
 			}
 		} else {
 			partitions := strings.Split(cluster.Spec.Image, ":")
 			if len(partitions) > 1 {
-				nodeStatus.Spec = corev1alpha1.StorageNodeStatusSpec{
+				nodeStatus.Spec = corev1alpha1.StorageNodeSpec{
 					Version: partitions[len(partitions)-1],
 				}
 			}
 		}
 
-		err = k8sutil.CreateOrUpdateStorageNodeStatus(p.k8sClient, nodeStatus, ownerRef)
+		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, nodeStatus, ownerRef)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, failedSyncReason, msg)
 		}
 	}
 
-	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
+	nodeStatusList := &corev1alpha1.StorageNodeList{}
 	if err = p.k8sClient.List(context.TODO(), &client.ListOptions{}, nodeStatusList); err != nil {
-		return fmt.Errorf("failed to get a list of StorageNodeStatus: %v", err)
+		return fmt.Errorf("failed to get a list of StorageNode: %v", err)
 	}
 
 	for _, nodeStatus := range nodeStatusList.Items {
 		if _, exists := currentNodes[nodeStatus.Name]; !exists {
-			logrus.Debugf("Deleting orphan StorageNodeStatus %v/%v",
+			logrus.Debugf("Deleting orphan StorageNode %v/%v",
 				nodeStatus.Namespace, nodeStatus.Name)
 			err = p.k8sClient.Delete(context.TODO(), nodeStatus.DeepCopy())
 			if err != nil && !errors.IsNotFound(err) {
-				msg := fmt.Sprintf("Failed to delete StorageNodeStatus %v/%v: %v",
+				msg := fmt.Sprintf("Failed to delete StorageNode %v/%v: %v",
 					nodeStatus.Namespace, nodeStatus.Name, err)
 				p.warningEvent(cluster, failedSyncReason, msg)
 			}
