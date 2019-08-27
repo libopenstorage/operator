@@ -76,20 +76,9 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 		return nil, err
 	}
 
-	if instancesPerZone == 0 && len(p.zoneToInstancesMap) > 0 {
-		// Find out the minimum no. of instances out of all zones
-		minInstances := math.MaxInt32
-		for _, instances := range p.zoneToInstancesMap {
-			if minInstances > instances {
-				minInstances = instances
-			}
-		}
-		instancesPerZone = minInstances
-	}
-
 	distributionRequest := p.capacitySpecToStorageDistributionRequest(
 		specs,
-		instancesPerZone,
+		p.getInstancesPerZone(instancesPerZone),
 	)
 
 	distributionResponse, err := cloudopsStorageManager.GetStorageDistribution(distributionRequest)
@@ -107,6 +96,24 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 		specs,
 		distributionResponse,
 	), nil
+}
+
+func (p *portworxCloudStorage) GetInstancesPerZoneNum(instancesPerZone int) int {
+	return p.getInstancesPerZone(instancesPerZone)
+}
+
+func (p *portworxCloudStorage) getInstancesPerZone(instancesPerZone int) int {
+	if instancesPerZone == 0 && len(p.zoneToInstancesMap) > 0 {
+		// Find out the minimum no. of instances out of all zones
+		minInstances := math.MaxInt32
+		for _, instances := range p.zoneToInstancesMap {
+			if minInstances > instances {
+				minInstances = instances
+			}
+		}
+		instancesPerZone = minInstances
+	}
+	return instancesPerZone
 }
 
 func (p *portworxCloudStorage) CreateStorageDistributionMatrix() error {
@@ -195,6 +202,6 @@ func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
 			}
 		}
 	}
-	config.StorageInstancesPerZone = maxInstancesPerZone
+	config.StorageInstancesPerZone = int32(maxInstancesPerZone)
 	return config
 }

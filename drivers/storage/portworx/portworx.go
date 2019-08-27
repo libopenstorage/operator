@@ -10,8 +10,9 @@ import (
 
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
-	storage "github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
@@ -286,10 +287,10 @@ func (p *portworx) UpdateStorageClusterStatus(
 	cluster.Status.ClusterName = pxCluster.Cluster.Name
 	cluster.Status.ClusterUID = pxCluster.Cluster.Id
 
-	return p.updateNodeStatuses(clientConn, cluster)
+	return p.updateStorageNodes(clientConn, cluster)
 }
 
-func (p *portworx) updateNodeStatuses(
+func (p *portworx) updateStorageNodes(
 	clientConn *grpc.ClientConn,
 	cluster *corev1alpha1.StorageCluster,
 ) error {
@@ -321,7 +322,7 @@ func (p *portworx) updateNodeStatuses(
 		currentNodes[node.SchedulerNodeName] = true
 
 		phase := mapNodeStatus(node.Status)
-		nodeStatus := &corev1alpha1.StorageNode{
+		storageNode := &corev1alpha1.StorageNode{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            node.SchedulerNodeName,
 				Namespace:       cluster.Namespace,
@@ -346,19 +347,19 @@ func (p *portworx) updateNodeStatuses(
 		}
 
 		if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
-			nodeStatus.Spec = corev1alpha1.StorageNodeSpec{
+			storageNode.Spec = corev1alpha1.StorageNodeSpec{
 				Version: version,
 			}
 		} else {
 			partitions := strings.Split(cluster.Spec.Image, ":")
 			if len(partitions) > 1 {
-				nodeStatus.Spec = corev1alpha1.StorageNodeSpec{
+				storageNode.Spec = corev1alpha1.StorageNodeSpec{
 					Version: partitions[len(partitions)-1],
 				}
 			}
 		}
 
-		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, nodeStatus, ownerRef)
+		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, storageNode, ownerRef)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, failedSyncReason, msg)
@@ -439,6 +440,29 @@ func (p *portworx) getGrpcConn(endpoint string) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("error connecting to GRPC server [%s]: %v", endpoint, err)
 	}
 	return p.sdkConn, nil
+}
+
+func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNode, cluster *corev1alpha1.StorageCluster) *cloudstorage.Config {
+
+	res := &cloudstorage.Config{
+		CloudStorage:            []cloudstorage.CloudDriveConfig{},
+		StorageInstancesPerZone: cluster.Status.Storage.StorageNodesPerZone,
+	}
+	for _, storageNode := range storageNodes {
+		if storageNode.Spec.CloudStorage.DriveConfigs != nil {
+			for _, conf := range storageNode.Spec.CloudStorage.DriveConfigs {
+				c := cloudstorage.CloudDriveConfig{
+					Type:      conf.Type,
+					SizeInGiB: conf.SizeInGiB,
+					IOPS:      conf.IOPS,
+					Options:   conf.Options,
+				}
+				res.CloudStorage = append(res.CloudStorage, c)
+			}
+			return res
+		}
+	}
+	return nil
 }
 
 func getDialOptions(tls bool) ([]grpc.DialOption, error) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	version "github.com/hashicorp/go-version"
+	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"

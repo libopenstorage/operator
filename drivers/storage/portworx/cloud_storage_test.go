@@ -181,7 +181,7 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: inputInstancesPerZone,
+		StorageInstancesPerZone: int32(inputInstancesPerZone),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",
@@ -282,7 +282,7 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: outputInstancesPerZoneMax,
+		StorageInstancesPerZone: int32(outputInstancesPerZoneMax),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",
@@ -382,7 +382,7 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: inputInstancesPerZone,
+		StorageInstancesPerZone: int32(inputInstancesPerZone),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",

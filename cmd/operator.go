@@ -143,10 +143,15 @@ func run(c *cli.Context) {
 		},
 	}
 	metricsService, err := metrics.CreateMetricsService(context.TODO(), config, metricsServicePorts)
+
 	if err == nil {
-		_, err = metrics.CreateServiceMonitors(config, metricsService.Namespace, []*v1.Service{metricsService})
-		if err != nil && !errors.IsAlreadyExists(err) {
-			log.Warnf("Failed to create ServiceMonitor: %v", err)
+		if metricsService == nil {
+			log.Info("Skipping metrics Service creation; not running in a cluster.")
+		} else {
+			_, err = metrics.CreateServiceMonitors(config, metricsService.Namespace, []*v1.Service{metricsService})
+			if err != nil && !errors.IsAlreadyExists(err) {
+				log.Warnf("Failed to create ServiceMonitor: %v", err)
+			}
 		}
 	} else {
 		log.Warnf("Failed to expose metrics port: %v", err)

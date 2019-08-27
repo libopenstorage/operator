@@ -37,6 +37,25 @@ type StorageNodeList struct {
 type StorageNodeSpec struct {
 	// Version of the storage driver on the node
 	Version string `json:"version,omitempty"`
+	// CloudStorage used to create pods
+	CloudStorage StorageNodeCloudDriveConfigs `json:"cloudStorage"`
+}
+
+// StorageNodeCloudDriveConfigs is a config for storage node cloud drives
+type StorageNodeCloudDriveConfigs struct {
+	DriveConfigs []StorageNodeCloudDriveConfig `json:"driveConfigs"`
+}
+
+// StorageNodeCloudDriveConfig is a structure for storing a configuration for a single drive
+type StorageNodeCloudDriveConfig struct {
+	// Type of cloud storage
+	Type string `json:"type,omitempty"`
+	// Size of cloud storage
+	SizeInGiB uint64 `json:"sizeInGiB,omitempty"`
+	// IOPS provided by cloud storage
+	IOPS uint32 `json:"iops,omitempty"`
+	// Options are additional options to the storage
+	Options map[string]string `json:"options,omitempty"`
 }
 
 // NodeStatus contains the status of the storage node

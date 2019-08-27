@@ -328,6 +328,7 @@ func (c *Controller) deleteStorageCluster(
 ) error {
 	// get all the storage pods
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
+
 	if err != nil {
 		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
 			cluster.Name, err)
@@ -431,10 +432,10 @@ func (c *Controller) manage(
 	)
 	zoneMap := make(map[string]int)
 
-	// Get the cloud provider
 	for _, node := range nodeList.Items {
+		// Get the cloud provider
+		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
 		if len(node.Spec.ProviderID) != 0 {
-			// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
 			tokens := strings.Split(node.Spec.ProviderID, "://")
 			if len(tokens) == 2 {
 				cloudProviderName = tokens[0]
@@ -442,6 +443,7 @@ func (c *Controller) manage(
 			} // else provider id is invalid
 		}
 	}
+
 	cloudProvider := cloudprovider.New(cloudProviderName)
 
 	for _, node := range nodeList.Items {
@@ -449,13 +451,6 @@ func (c *Controller) manage(
 			instancesCount := zoneMap[zone]
 			zoneMap[zone] = instancesCount + 1
 		}
-		nodesNeedingStoragePodsOnNode, podsToDeleteOnNode, err := c.podsShouldBeOnNode(&node, nodeToStoragePods, cluster)
-		if err != nil {
-			continue
-		}
-
-		nodesNeedingStoragePods = append(nodesNeedingStoragePods, nodesNeedingStoragePodsOnNode...)
-		podsToDelete = append(podsToDelete, podsToDeleteOnNode...)
 	}
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
@@ -463,6 +458,16 @@ func (c *Controller) manage(
 		CloudProvider:      cloudProviderName,
 	}); err != nil {
 		logrus.Debugf("Failed to update driver: %v", err)
+	}
+
+	for _, node := range nodeList.Items {
+		nodesNeedingStoragePodsOnNode, podsToDeleteOnNode, err := c.podsShouldBeOnNode(&node, nodeToStoragePods, cluster)
+		if err != nil {
+			continue
+		}
+
+		nodesNeedingStoragePods = append(nodesNeedingStoragePods, nodesNeedingStoragePodsOnNode...)
+		podsToDelete = append(podsToDelete, podsToDeleteOnNode...)
 	}
 
 	if err := c.syncNodes(cluster, podsToDelete, nodesNeedingStoragePods, hash); err != nil {
@@ -486,9 +491,14 @@ func (c *Controller) syncNodes(
 	// Make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
 
-	podTemplate, err := c.createPodTemplate(cluster, hash)
-	if err != nil {
-		return err
+	var podTemplate v1.PodTemplateSpec
+	var err error
+
+	if createDiff > 0 {
+		podTemplate, err = c.createPodTemplate(cluster, hash)
+		if err != nil {
+			return err
+		}
 	}
 	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
@@ -738,7 +748,7 @@ func (c *Controller) createPodTemplate(
 }
 
 func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName string) (*v1.Pod, error) {
-	podSpec, err := c.Driver.GetStoragePodSpec(cluster)
+	podSpec, err := c.Driver.GetStoragePodSpec(cluster, nodeName)
 	if err != nil {
 		return nil, err
 	}
