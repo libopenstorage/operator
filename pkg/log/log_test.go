@@ -12,19 +12,19 @@ func TestLog(t *testing.T) {
 	}{
 		{
 			src:      "github.com/libopenstorage/operator/cmd/operator.go",
-			expected: "github.com/libopenstorage/operator/cmd/operator.go",
+			expected: "operator.go",
 		},
 		{
 			src:      "go/sys/foo/bar/github.com/libopenstorage/operator/cmd/operator.go",
-			expected: "github.com/libopenstorage/operator/cmd/operator.go",
+			expected: "operator.go",
 		},
 		{
 			src:      "gith.com/libopenstorage/operator/cmd/operator.go",
-			expected: "gith.com/libopenstorage/operator/cmd/operator.go",
+			expected: "operator.go",
 		},
 		{
 			src:      "foo/bar",
-			expected: "foo/bar",
+			expected: "bar",
 		},
 	}
 

@@ -84,7 +84,6 @@ func run(c *cli.Context) {
 	} else {
 		log.SetLevel(log.InfoLevel)
 	}
-	log.SetReportCaller(true)
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
