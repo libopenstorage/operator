@@ -12,6 +12,8 @@ import (
 
 	snap_v1 "github.com/kubernetes-incubator/external-storage/snapshot/pkg/apis/crd/v1"
 	snap_client "github.com/kubernetes-incubator/external-storage/snapshot/pkg/client"
+	aut_v1alpaha1 "github.com/libopenstorage/autopilot/pkg/apis/autopilot/v1alpha1"
+	autopilotclientset "github.com/libopenstorage/autopilot/pkg/client/clientset/versioned"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	ostclientset "github.com/libopenstorage/operator/pkg/client/clientset/versioned"
 	"github.com/libopenstorage/stork/pkg/apis/stork/v1alpha1"
@@ -26,7 +28,7 @@ import (
 	talisman_v1beta2 "github.com/portworx/talisman/pkg/apis/portworx/v1beta2"
 	talismanclientset "github.com/portworx/talisman/pkg/client/clientset/versioned"
 	"github.com/sirupsen/logrus"
-	apps_api "k8s.io/api/apps/v1beta2"
+	apps_api "k8s.io/api/apps/v1"
 	batch_v1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	rbac_v1 "k8s.io/api/rbac/v1"
@@ -46,7 +48,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/kubernetes/typed/apps/v1beta2"
+	appsv1_client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
@@ -91,6 +93,7 @@ type Ops interface {
 	ClusterPairOps
 	MigrationOps
 	ClusterDomainsOps
+	AutopilotRuleOps
 	StorageClusterOps
 	ObjectOps
 	SchedulePolicyOps
@@ -110,6 +113,7 @@ type Ops interface {
 		dynamicInterface dynamic.Interface,
 		ocpClient ocp_clientset.Interface,
 		ocpSecurityClient ocp_security_clientset.Interface,
+		autopilotClient autopilotclientset.Interface,
 	)
 	SecurityContextConstraints
 
@@ -138,7 +142,7 @@ type EventOps interface {
 // NamespaceOps is an interface to perform namespace operations
 type NamespaceOps interface {
 	// ListNamespaces returns all the namespaces
-	ListNamespaces() (*v1.NamespaceList, error)
+	ListNamespaces(labelSelector map[string]string) (*v1.NamespaceList, error)
 	// GetNamespace returns a namespace object for given name
 	GetNamespace(name string) (*v1.Namespace, error)
 	// CreateNamespace creates a namespace with given name and metadata
@@ -188,8 +192,6 @@ type ServiceOps interface {
 	GetService(string, string) (*v1.Service, error)
 	// CreateService creates the given service
 	CreateService(*v1.Service) (*v1.Service, error)
-	// UpdateService updates the given service
-	UpdateService(*v1.Service) (*v1.Service, error)
 	// DeleteService deletes the given service
 	DeleteService(name, namespace string) error
 	// ValidateDeletedService validates if given service is deleted
@@ -309,8 +311,6 @@ type JobOps interface {
 
 // RBACOps is an interface to perform RBAC operations
 type RBACOps interface {
-	// GetRole gets the given role
-	GetRole(name, namespace string) (*rbac_v1.Role, error)
 	// CreateRole creates the given role
 	CreateRole(role *rbac_v1.Role) (*rbac_v1.Role, error)
 	// UpdateRole updates the given role
@@ -321,8 +321,6 @@ type RBACOps interface {
 	GetClusterRole(name string) (*rbac_v1.ClusterRole, error)
 	// UpdateClusterRole updates the given cluster role
 	UpdateClusterRole(role *rbac_v1.ClusterRole) (*rbac_v1.ClusterRole, error)
-	// GetRoleBinding gets the given role binding
-	GetRoleBinding(name, namespace string) (*rbac_v1.RoleBinding, error)
 	// CreateRoleBinding creates the given role binding
 	CreateRoleBinding(role *rbac_v1.RoleBinding) (*rbac_v1.RoleBinding, error)
 	// UpdateRoleBinding updates the given role binding
@@ -335,12 +333,8 @@ type RBACOps interface {
 	CreateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
 	// UpdateClusterRoleBinding updates the given cluster role binding
 	UpdateClusterRoleBinding(role *rbac_v1.ClusterRoleBinding) (*rbac_v1.ClusterRoleBinding, error)
-	// GetServiceAccount gets the given service account
-	GetServiceAccount(name, namespace string) (*v1.ServiceAccount, error)
 	// CreateServiceAccount creates the given service account
 	CreateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error)
-	// UpdateServiceAccount updates the given service account
-	UpdateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error)
 	// DeleteRole deletes the given role
 	DeleteRole(name, namespace string) error
 	// DeleteRoleBinding deletes the given role binding
@@ -410,8 +404,6 @@ type StorageClassOps interface {
 	GetStorageClass(name string) (*storage_api.StorageClass, error)
 	// CreateStorageClass creates the given storage class
 	CreateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error)
-	// UpdateStorageClass updates the given storage class
-	UpdateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error)
 	// DeleteStorageClass deletes the given storage class
 	DeleteStorageClass(name string) error
 	// GetStorageClassParams returns the parameters of the given sc in the native map format
@@ -436,8 +428,12 @@ type PersistentVolumeClaimOps interface {
 	GetPersistentVolumeClaim(pvcName string, namespace string) (*v1.PersistentVolumeClaim, error)
 	// GetPersistentVolumeClaims returns all PVCs in given namespace and that match the optional labelSelector
 	GetPersistentVolumeClaims(namespace string, labelSelector map[string]string) (*v1.PersistentVolumeClaimList, error)
+	// CreatePersistentVolume creates the given PV
+	CreatePersistentVolume(pv *v1.PersistentVolume) (*v1.PersistentVolume, error)
 	// GetPersistentVolume returns the PV for given name
 	GetPersistentVolume(pvName string) (*v1.PersistentVolume, error)
+	// DeletePersistentVolume deletes the PV for given name
+	DeletePersistentVolume(pvName string) error
 	// GetPersistentVolumes returns all PVs in cluster
 	GetPersistentVolumes() (*v1.PersistentVolumeList, error)
 	// GetVolumeForPersistentVolumeClaim returns the volumeID for the given PVC
@@ -574,9 +570,11 @@ type CRDOps interface {
 	// This API will be deprecated soon. Use RegisterCRD instead
 	CreateCRD(resource CustomResource) error
 	// RegisterCRD creates the given custom resource
-	RegisterCRD(crdDefinition *apiextensionsv1beta1.CustomResourceDefinition) error
+	RegisterCRD(crd *apiextensionsv1beta1.CustomResourceDefinition) error
 	// ValidateCRD checks if the given CRD is registered
 	ValidateCRD(resource CustomResource, timeout, retryInterval time.Duration) error
+	// DeleteCRD deletes the CRD for the given complete name (plural.group)
+	DeleteCRD(fullName string) error
 }
 
 // ClusterPairOps is an interface to perfrom k8s ClusterPair operations
@@ -622,6 +620,20 @@ type ClusterDomainsOps interface {
 	ValidateClusterDomainUpdate(string, time.Duration, time.Duration) error
 	// ListClusterDomainUpdates lists ClusterDomainUpdates
 	ListClusterDomainUpdates() (*v1alpha1.ClusterDomainUpdateList, error)
+}
+
+// AutopilotRuleOps is an interface to perform k8s AutopilotRule operations
+type AutopilotRuleOps interface {
+	// CreateAutopilotRule creates the AutopilotRule object
+	CreateAutopilotRule(*aut_v1alpaha1.AutopilotRule) (*aut_v1alpaha1.AutopilotRule, error)
+	// GetAutopilotRule gets the AutopilotRule for the provided name
+	GetAutopilotRule(string) (*aut_v1alpaha1.AutopilotRule, error)
+	// UpdateAutopilotRule updates the AutopilotRule
+	UpdateAutopilotRule(*aut_v1alpaha1.AutopilotRule) (*aut_v1alpaha1.AutopilotRule, error)
+	// DeleteAutopilotRule deletes the AutopilotRule of the given name
+	DeleteAutopilotRule(string) error
+	// ListAutopilotRules lists AutopilotRules
+	ListAutopilotRules() (*aut_v1alpaha1.AutopilotRuleList, error)
 }
 
 // MigrationOps is an interface to perfrom k8s Migration operations
@@ -818,6 +830,7 @@ type k8sOps struct {
 	storkClient        storkclientset.Interface
 	ostClient          ostclientset.Interface
 	talismanClient     talismanclientset.Interface
+	autopilotClient    autopilotclientset.Interface
 	apiExtensionClient apiextensionsclient.Interface
 	config             *rest.Config
 	dynamicInterface   dynamic.Interface
@@ -860,6 +873,7 @@ func (k *k8sOps) SetClient(
 	dynamicInterface dynamic.Interface,
 	ocpClient ocp_clientset.Interface,
 	ocpSecurityClient ocp_security_clientset.Interface,
+	autopilotClient autopilotclientset.Interface,
 ) {
 
 	k.client = client
@@ -870,6 +884,7 @@ func (k *k8sOps) SetClient(
 	k.dynamicInterface = dynamicInterface
 	k.ocpClient = ocpClient
 	k.ocpSecurityClient = ocpSecurityClient
+	k.autopilotClient = autopilotClient
 }
 
 // Initialize the k8s client if uninitialized
@@ -932,12 +947,14 @@ func (k *k8sOps) UpdateSecurityContextConstraints(securityContextConstraints *oc
 
 // Namespace APIs - BEGIN
 
-func (k *k8sOps) ListNamespaces() (*v1.NamespaceList, error) {
+func (k *k8sOps) ListNamespaces(labelSelector map[string]string) (*v1.NamespaceList, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
 	}
 
-	return k.client.CoreV1().Namespaces().List(meta_v1.ListOptions{})
+	return k.client.CoreV1().Namespaces().List(meta_v1.ListOptions{
+		LabelSelector: mapToCSV(labelSelector),
+	})
 }
 
 func (k *k8sOps) GetNamespace(name string) (*v1.Namespace, error) {
@@ -1426,14 +1443,6 @@ func (k *k8sOps) CreateService(service *v1.Service) (*v1.Service, error) {
 	}
 
 	return k.client.CoreV1().Services(ns).Create(service)
-}
-
-func (k *k8sOps) UpdateService(service *v1.Service) (*v1.Service, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.CoreV1().Services(service.Namespace).Update(service)
 }
 
 func (k *k8sOps) DeleteService(name, namespace string) error {
@@ -2459,14 +2468,6 @@ func (k *k8sOps) getListOptionsForStatefulSet(ss *apps_api.StatefulSet) (meta_v1
 
 // RBAC APIs - BEGIN
 
-func (k *k8sOps) GetRole(name, namespace string) (*rbac_v1.Role, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.Rbac().Roles(namespace).Get(name, meta_v1.GetOptions{})
-}
-
 func (k *k8sOps) CreateRole(role *rbac_v1.Role) (*rbac_v1.Role, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
@@ -2505,14 +2506,6 @@ func (k *k8sOps) UpdateClusterRole(role *rbac_v1.ClusterRole) (*rbac_v1.ClusterR
 	}
 
 	return k.client.Rbac().ClusterRoles().Update(role)
-}
-
-func (k *k8sOps) GetRoleBinding(name, namespace string) (*rbac_v1.RoleBinding, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.Rbac().RoleBindings(namespace).Get(name, meta_v1.GetOptions{})
 }
 
 func (k *k8sOps) CreateRoleBinding(binding *rbac_v1.RoleBinding) (*rbac_v1.RoleBinding, error) {
@@ -2563,28 +2556,12 @@ func (k *k8sOps) ListClusterRoleBindings() (*rbac_v1.ClusterRoleBindingList, err
 	return k.client.Rbac().ClusterRoleBindings().List(meta_v1.ListOptions{})
 }
 
-func (k *k8sOps) GetServiceAccount(name, namespace string) (*v1.ServiceAccount, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.Core().ServiceAccounts(namespace).Get(name, meta_v1.GetOptions{})
-}
-
 func (k *k8sOps) CreateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
 	}
 
 	return k.client.Core().ServiceAccounts(account.Namespace).Create(account)
-}
-
-func (k *k8sOps) UpdateServiceAccount(account *v1.ServiceAccount) (*v1.ServiceAccount, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.Core().ServiceAccounts(account.Namespace).Update(account)
 }
 
 func (k *k8sOps) DeleteRole(name, namespace string) error {
@@ -2991,14 +2968,6 @@ func (k *k8sOps) CreateStorageClass(sc *storage_api.StorageClass) (*storage_api.
 	return k.client.StorageV1().StorageClasses().Create(sc)
 }
 
-func (k *k8sOps) UpdateStorageClass(sc *storage_api.StorageClass) (*storage_api.StorageClass, error) {
-	if err := k.initK8sClient(); err != nil {
-		return nil, err
-	}
-
-	return k.client.StorageV1().StorageClasses().Update(sc)
-}
-
 func (k *k8sOps) DeleteStorageClass(name string) error {
 	if err := k.initK8sClient(); err != nil {
 		return err
@@ -3087,6 +3056,14 @@ func (k *k8sOps) ValidatePersistentVolumeClaim(pvc *v1.PersistentVolumeClaim, ti
 	return nil
 }
 
+func (k *k8sOps) CreatePersistentVolume(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+
+	return k.client.CoreV1().PersistentVolumes().Create(pv)
+}
+
 func (k *k8sOps) GetPersistentVolumeClaim(pvcName string, namespace string) (*v1.PersistentVolumeClaim, error) {
 	if err := k.initK8sClient(); err != nil {
 		return nil, err
@@ -3116,6 +3093,16 @@ func (k *k8sOps) GetPersistentVolume(pvName string) (*v1.PersistentVolume, error
 	}
 
 	return k.client.Core().PersistentVolumes().Get(pvName, meta_v1.GetOptions{})
+}
+
+func (k *k8sOps) DeletePersistentVolume(pvName string) error {
+	if err := k.initK8sClient(); err != nil {
+		return err
+	}
+
+	return k.client.Core().PersistentVolumes().Delete(pvName, &meta_v1.DeleteOptions{
+		PropagationPolicy: &deleteForegroundPolicy,
+	})
 }
 
 func (k *k8sOps) GetPersistentVolumes() (*v1.PersistentVolumeList, error) {
@@ -4348,12 +4335,12 @@ func (k *k8sOps) CreateCRD(resource CustomResource) error {
 	return nil
 }
 
-func (k *k8sOps) RegisterCRD(crdDefinition *apiextensionsv1beta1.CustomResourceDefinition) error {
+func (k *k8sOps) RegisterCRD(crd *apiextensionsv1beta1.CustomResourceDefinition) error {
 	if err := k.initK8sClient(); err != nil {
 		return err
 	}
 
-	_, err := k.apiExtensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crdDefinition)
+	_, err := k.apiExtensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 	if err != nil {
 		return err
 	}
@@ -4366,7 +4353,7 @@ func (k *k8sOps) ValidateCRD(resource CustomResource, timeout, retryInterval tim
 	}
 
 	crdName := fmt.Sprintf("%s.%s", resource.Plural, resource.Group)
-	return wait.Poll(timeout, retryInterval, func() (bool, error) {
+	return wait.Poll(retryInterval, timeout, func() (bool, error) {
 		crd, err := k.apiExtensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crdName, meta_v1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -4385,6 +4372,16 @@ func (k *k8sOps) ValidateCRD(resource CustomResource, timeout, retryInterval tim
 		}
 		return false, nil
 	})
+}
+
+func (k *k8sOps) DeleteCRD(fullName string) error {
+	if err := k.initK8sClient(); err != nil {
+		return err
+	}
+
+	return k.apiExtensionClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Delete(fullName, &meta_v1.DeleteOptions{PropagationPolicy: &deleteForegroundPolicy})
 }
 
 func (k *k8sOps) CreateVolumePlacementStrategy(spec *talisman_v1beta2.VolumePlacementStrategy) (*talisman_v1beta2.VolumePlacementStrategy, error) {
@@ -4595,6 +4592,50 @@ func (k *k8sOps) ListClusterDomainUpdates() (*v1alpha1.ClusterDomainUpdateList, 
 }
 
 // ClusterDomain CRD - END
+
+// AutopilotRule CRD - BEGIN
+
+// CreateAutopilotRule creates the AutopilotRule object
+func (k *k8sOps) CreateAutopilotRule(rule *aut_v1alpaha1.AutopilotRule) (*aut_v1alpaha1.AutopilotRule, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+	return k.autopilotClient.AutopilotV1alpha1().AutopilotRules().Create(rule)
+}
+
+// GetAutopilotRule gets the AutopilotRule for the provided name
+func (k *k8sOps) GetAutopilotRule(name string) (*aut_v1alpaha1.AutopilotRule, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+	return k.autopilotClient.AutopilotV1alpha1().AutopilotRules().Get(name, meta_v1.GetOptions{})
+}
+
+// UpdateAutopilotRule updates the AutopilotRule
+func (k *k8sOps) UpdateAutopilotRule(rule *aut_v1alpaha1.AutopilotRule) (*aut_v1alpaha1.AutopilotRule, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+	return k.autopilotClient.AutopilotV1alpha1().AutopilotRules().Update(rule)
+}
+
+// DeleteAutopilotRule deletes the AutopilotRule of the given name
+func (k *k8sOps) DeleteAutopilotRule(name string) error {
+	if err := k.initK8sClient(); err != nil {
+		return err
+	}
+	return k.autopilotClient.AutopilotV1alpha1().AutopilotRules().Delete(name, &meta_v1.DeleteOptions{})
+}
+
+// ListAutopilotRules lists AutopilotRules
+func (k *k8sOps) ListAutopilotRules() (*aut_v1alpaha1.AutopilotRuleList, error) {
+	if err := k.initK8sClient(); err != nil {
+		return nil, err
+	}
+	return k.autopilotClient.AutopilotV1alpha1().AutopilotRules().List(meta_v1.ListOptions{})
+}
+
+// AutopilotRule CRD - END
 
 // Object APIs - BEGIN
 
@@ -5075,8 +5116,8 @@ func (k *k8sOps) ValidateApplicationClone(name, namespace string, timeout, retry
 
 // ApplicationClone APIs - END
 
-func (k *k8sOps) appsClient() v1beta2.AppsV1beta2Interface {
-	return k.client.AppsV1beta2()
+func (k *k8sOps) appsClient() appsv1_client.AppsV1Interface {
+	return k.client.AppsV1()
 }
 
 func (k *k8sOps) ocpAppsClient() ocp_appsv1_client.AppsV1Interface {
