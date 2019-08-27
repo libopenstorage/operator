@@ -363,6 +363,20 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:f9a845a9559305c56b201a2165657b4b855e9844a73548a129916627eb98e06b"
+  name = "github.com/libopenstorage/autopilot"
+  packages = [
+    "pkg/apis/autopilot",
+    "pkg/apis/autopilot/v1alpha1",
+    "pkg/client/clientset/versioned",
+    "pkg/client/clientset/versioned/scheme",
+    "pkg/client/clientset/versioned/typed/autopilot/v1alpha1",
+  ]
+  pruneopts = "UT"
+  revision = "6802f3aa8e82c4c9affab0e78194f9a929890da2"
+
+[[projects]]
+  branch = "master"
   digest = "1:971473f2f40451540acc735ce19c4229d15eaab55b0cee525974b872662ff984"
   name = "github.com/libopenstorage/cloudops"
   packages = [
@@ -546,14 +560,14 @@
 
 [[projects]]
   branch = "kubernetes-1.13.1"
-  digest = "1:009db87596540320e7e01e2b38ae5de42627992aeab5cd7c8a7f43c9b7dfe297"
+  digest = "1:ccb55addb5606421d5c66c78dbaeda8825ea75108dc0053de924e0ad14e836d5"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "256b606f13bfde7cb631dd69c0f0378dceef2e60"
+  revision = "6f544c1f85c9edc8174895626f6d2df451a529b7"
 
 [[projects]]
   branch = "master"
@@ -940,14 +954,16 @@
   version = "kubernetes-1.13.1"
 
 [[projects]]
-  digest = "1:ace21b4261a9bc8d06b188f03ce48d1bed92ccba4890fad616cf283939f723c6"
+  digest = "1:6eb3c71a8b2e8b0f28509ddf2ce94e8f0eaa325c89d6dc66e1e49e89ca634e96"
   name = "k8s.io/apiextensions-apiserver"
   packages = [
     "pkg/apis/apiextensions",
     "pkg/apis/apiextensions/v1beta1",
     "pkg/client/clientset/clientset",
+    "pkg/client/clientset/clientset/fake",
     "pkg/client/clientset/clientset/scheme",
     "pkg/client/clientset/clientset/typed/apiextensions/v1beta1",
+    "pkg/client/clientset/clientset/typed/apiextensions/v1beta1/fake",
     "pkg/features",
   ]
   pruneopts = "UT"
@@ -1441,6 +1457,7 @@
     "k8s.io/api/rbac/v1",
     "k8s.io/api/storage/v1",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
+    "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
@@ -1454,6 +1471,7 @@
     "k8s.io/apimachinery/pkg/util/intstr",
     "k8s.io/apimachinery/pkg/util/rand",
     "k8s.io/apimachinery/pkg/util/runtime",
+    "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/apimachinery/pkg/version",
     "k8s.io/apimachinery/pkg/watch",
     "k8s.io/client-go/discovery",
