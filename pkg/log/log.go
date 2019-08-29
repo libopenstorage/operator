@@ -2,9 +2,10 @@ package log
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"runtime"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -13,7 +14,7 @@ func init() {
 		TimestampFormat: "02-01-2006 15:04:05",
 		FullTimestamp:   true,
 		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			return "", fmt.Sprintf(" %s:%d", formatFilePath(f.File), f.Line)
+			return "", fmt.Sprintf("%s:%d", formatFilePath(f.File), f.Line)
 		},
 	}
 	log.SetFormatter(formatter)
