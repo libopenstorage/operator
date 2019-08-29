@@ -20,6 +20,8 @@ package storagecluster
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"path"
 	"reflect"
 	"regexp"
 	"sort"
@@ -40,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -75,6 +78,9 @@ const (
 	defaultMaxUnavailablePods           = 1
 	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
 	storageNodeStatusPlural             = "storagenodestatuses"
+	crdBasePath                         = "/crds"
+	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
+	storageNodeCRDFile                  = "core_v1alpha1_storagenode_crd.yaml"
 )
 
 // Reasons for StorageCluster events
@@ -92,6 +98,7 @@ var _ reconcile.Reconciler = &Controller{}
 var (
 	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
 	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
+	crdBaseDir     = getCRDBasePath
 )
 
 // Controller reconciles a StorageCluster object
@@ -106,11 +113,6 @@ type Controller struct {
 	Driver                        storage.Driver
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
-}
-
-// RegisterCRD is registering StorageCluster CRD
-func (c *Controller) RegisterCRD() error {
-	return c.createCRD()
 }
 
 // Init initialize the storage cluster controller
@@ -217,46 +219,47 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	return reconcile.Result{}, nil
 }
 
-// createCRD creates the CRD for StorageCluster object
-func (c *Controller) createCRD() error {
-	resource := k8s.CustomResource{
-		Name:       corev1alpha1.StorageClusterResourceName,
-		Plural:     corev1alpha1.StorageClusterResourcePlural,
-		Group:      corev1alpha1.SchemeGroupVersion.Group,
-		Version:    corev1alpha1.SchemeGroupVersion.Version,
-		Scope:      apiextensionsv1beta1.NamespaceScoped,
-		Kind:       reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(),
-		ShortNames: []string{corev1alpha1.StorageClusterShortName},
+// RegisterCRD registers and validates CRDs
+func (c *Controller) RegisterCRD() error {
+	// Create and validate StorageCluster CRD
+	crd, err := getCRDFromFile(storageClusterCRDFile)
+	if err != nil {
+		return err
 	}
-	err := k8s.Instance().CreateCRD(resource)
+	err = k8s.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
+	resource := k8s.CustomResource{
+		Plural: corev1alpha1.StorageClusterResourcePlural,
+		Group:  corev1alpha1.SchemeGroupVersion.Group,
+	}
 	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
+		return err
+	}
+
+	// Create and validate StorageNode CRD
+	crd, err = getCRDFromFile(storageNodeCRDFile)
+	if err != nil {
+		return err
+	}
+	err = k8s.Instance().RegisterCRD(crd)
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
 	resource = k8s.CustomResource{
-		Name:       corev1alpha1.StorageNodeResourceName,
-		Plural:     corev1alpha1.StorageNodeResourcePlural,
-		Group:      corev1alpha1.SchemeGroupVersion.Group,
-		Version:    corev1alpha1.SchemeGroupVersion.Version,
-		Scope:      apiextensionsv1beta1.NamespaceScoped,
-		Kind:       reflect.TypeOf(corev1alpha1.StorageNode{}).Name(),
-		ShortNames: []string{corev1alpha1.StorageNodeShortName},
+		Plural: corev1alpha1.StorageNodeResourcePlural,
+		Group:  corev1alpha1.SchemeGroupVersion.Group,
 	}
-	err = k8s.Instance().CreateCRD(resource)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return err
-	}
-
 	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
 		return err
 	}
 
+	// Delete StorageNodeStatus CRD as it is not longer used
 	nodeStatusCRDName := fmt.Sprintf("%s.%s",
 		storageNodeStatusPlural,
 		corev1alpha1.SchemeGroupVersion.Group,
@@ -961,6 +964,30 @@ func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageC
 	labels[labelKeyName] = cluster.Name
 	labels[labelKeyDriverName] = c.Driver.String()
 	return labels
+}
+
+func getCRDFromFile(
+	filename string,
+) (*apiextensionsv1beta1.CustomResourceDefinition, error) {
+	objBytes, err := ioutil.ReadFile(path.Join(crdBaseDir(), filename))
+	if err != nil {
+		return nil, err
+	}
+	scheme := runtime.NewScheme()
+	if err := apiextensionsv1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	codecs := serializer.NewCodecFactory(scheme)
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+	_, _, err = codecs.UniversalDeserializer().Decode([]byte(objBytes), nil, crd)
+	if err != nil {
+		return nil, err
+	}
+	return crd, nil
+}
+
+func getCRDBasePath() string {
+	return crdBasePath
 }
 
 type podByCreationTimestampAndPhase []*v1.Pod

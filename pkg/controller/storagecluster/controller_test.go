@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +41,6 @@ func TestRegisterCRD(t *testing.T) {
 		fakeClient, nil, nil, nil,
 		fakeExtClient, nil, nil, nil, nil,
 	)
-
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
 	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
@@ -60,7 +58,16 @@ func TestRegisterCRD(t *testing.T) {
 
 	controller := Controller{}
 
+	// Should fail if the CRD specs are not found
 	err := controller.RegisterCRD()
+	require.Error(t, err)
+
+	// Set the correct crd path
+	crdBaseDir = func() string {
+		return "../../../deploy/crds"
+	}
+
+	err = controller.RegisterCRD()
 	require.NoError(t, err)
 
 	crds, err := fakeExtClient.ApiextensionsV1beta1().
@@ -75,12 +82,21 @@ func TestRegisterCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, storageClusterCRDName, crd.Name)
 	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, crd.Spec.Group)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Version)
+	require.Len(t, crd.Spec.Versions, 1)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
+	require.True(t, crd.Spec.Versions[0].Served)
+	require.True(t, crd.Spec.Versions[0].Storage)
 	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, crd.Spec.Scope)
 	require.Equal(t, corev1alpha1.StorageClusterResourceName, crd.Spec.Names.Singular)
 	require.Equal(t, corev1alpha1.StorageClusterResourcePlural, crd.Spec.Names.Plural)
 	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(), crd.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageClusterList{}).Name(), crd.Spec.Names.ListKind)
 	require.Equal(t, []string{corev1alpha1.StorageClusterShortName}, crd.Spec.Names.ShortNames)
+	subresource := &apiextensionsv1beta1.CustomResourceSubresources{
+		Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
+	}
+	require.Equal(t, subresource, crd.Spec.Subresources)
+	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
 
 	crd, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
@@ -88,12 +104,18 @@ func TestRegisterCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, storageNodeCRDName, crd.Name)
 	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, crd.Spec.Group)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Version)
+	require.Len(t, crd.Spec.Versions, 1)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
+	require.True(t, crd.Spec.Versions[0].Served)
+	require.True(t, crd.Spec.Versions[0].Storage)
 	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, crd.Spec.Scope)
 	require.Equal(t, corev1alpha1.StorageNodeResourceName, crd.Spec.Names.Singular)
 	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, crd.Spec.Names.Plural)
 	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), crd.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), crd.Spec.Names.ListKind)
 	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, crd.Spec.Names.ShortNames)
+	require.Equal(t, subresource, crd.Spec.Subresources)
+	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
 
 	// If CRDs are already present, then should not fail
 	err = controller.RegisterCRD()
@@ -124,6 +146,9 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 		fakeClient, nil, nil, nil,
 		fakeExtClient, nil, nil, nil, nil,
 	)
+	crdBaseDir = func() string {
+		return "../../../deploy/crds"
+	}
 
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
