@@ -40,10 +40,6 @@ func (c *FakeCoreV1alpha1) StorageNodes(namespace string) v1alpha1.StorageNodeIn
 	return &FakeStorageNodes{c, namespace}
 }
 
-func (c *FakeCoreV1alpha1) StorageNodeStatuses(namespace string) v1alpha1.StorageNodeStatusInterface {
-	return &FakeStorageNodeStatuses{c, namespace}
-}
-
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeCoreV1alpha1) RESTClient() rest.Interface {

@@ -30,8 +30,6 @@ type Interface interface {
 	StorageClusters() StorageClusterInformer
 	// StorageNodes returns a StorageNodeInformer.
 	StorageNodes() StorageNodeInformer
-	// StorageNodeStatuses returns a StorageNodeStatusInformer.
-	StorageNodeStatuses() StorageNodeStatusInformer
 }
 
 type version struct {
@@ -58,9 +56,4 @@ func (v *version) StorageClusters() StorageClusterInformer {
 // StorageNodes returns a StorageNodeInformer.
 func (v *version) StorageNodes() StorageNodeInformer {
 	return &storageNodeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// StorageNodeStatuses returns a StorageNodeStatusInformer.
-func (v *version) StorageNodeStatuses() StorageNodeStatusInformer {
-	return &storageNodeStatusInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

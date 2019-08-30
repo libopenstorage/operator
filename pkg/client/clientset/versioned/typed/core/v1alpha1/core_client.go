@@ -30,7 +30,6 @@ type CoreV1alpha1Interface interface {
 	ClusterOperationsGetter
 	StorageClustersGetter
 	StorageNodesGetter
-	StorageNodeStatusesGetter
 }
 
 // CoreV1alpha1Client is used to interact with features provided by the core.libopenstorage.org group.
@@ -48,10 +47,6 @@ func (c *CoreV1alpha1Client) StorageClusters(namespace string) StorageClusterInt
 
 func (c *CoreV1alpha1Client) StorageNodes(namespace string) StorageNodeInterface {
 	return newStorageNodes(c, namespace)
-}
-
-func (c *CoreV1alpha1Client) StorageNodeStatuses(namespace string) StorageNodeStatusInterface {
-	return newStorageNodeStatuses(c, namespace)
 }
 
 // NewForConfig creates a new CoreV1alpha1Client for the given config.
