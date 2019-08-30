@@ -41,11 +41,3 @@ type StorageNodeListerExpansion interface{}
 // StorageNodeNamespaceListerExpansion allows custom methods to be added to
 // StorageNodeNamespaceLister.
 type StorageNodeNamespaceListerExpansion interface{}
-
-// StorageNodeStatusListerExpansion allows custom methods to be added to
-// StorageNodeStatusLister.
-type StorageNodeStatusListerExpansion interface{}
-
-// StorageNodeStatusNamespaceListerExpansion allows custom methods to be added to
-// StorageNodeStatusNamespaceLister.
-type StorageNodeStatusNamespaceListerExpansion interface{}

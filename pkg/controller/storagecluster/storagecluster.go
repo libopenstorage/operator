@@ -74,6 +74,7 @@ const (
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
 	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
+	storageNodeStatusPlural             = "storagenodestatuses"
 )
 
 // Reasons for StorageCluster events
@@ -257,7 +258,7 @@ func (c *Controller) createCRD() error {
 	}
 
 	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		corev1alpha1.StorageNodeStatusResourcePlural,
+		storageNodeStatusPlural,
 		corev1alpha1.SchemeGroupVersion.Group,
 	)
 	err = k8s.Instance().DeleteCRD(nodeStatusCRDName)

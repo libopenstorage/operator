@@ -23,5 +23,3 @@ type ClusterOperationExpansion interface{}
 type StorageClusterExpansion interface{}
 
 type StorageNodeExpansion interface{}
-
-type StorageNodeStatusExpansion interface{}

@@ -110,7 +110,7 @@ func TestRegisterCRD(t *testing.T) {
 
 func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		corev1alpha1.StorageNodeStatusResourcePlural,
+		storageNodeStatusPlural,
 		corev1alpha1.SchemeGroupVersion.Group,
 	)
 	nodeStatusCRD := &apiextensionsv1beta1.CustomResourceDefinition{
