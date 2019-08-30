@@ -19,6 +19,22 @@ spec:
   - name: v1alpha1
     served: true
     storage: true
+  additionalPrinterColumns:
+  - name: Cluster UUID
+    type: string
+    description: The unique ID of the storage cluster
+    JSONPath: .status.clusterUid
+  - name: Status
+    type: string
+    description: The status of the storage cluster
+    JSONPath: .status.phase
+  - name: Version
+    type: string
+    description: The version of the storage cluster
+    JSONPath: .spec.version
+  - name: Age
+    type: date
+    JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
       properties:
@@ -28,99 +44,291 @@ spec:
           type: string
         metadata: {}
         spec:
+          type: object
+          description: The desired behavior of the storage cluster.
           properties:
             image:
               type: string
+              description: Docker image of the storage driver.
             version:
               type: string
+              description: Version of the storage driver. This field is read-only.
             imagePullPolicy:
               type: string
+              description: Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always.
             imagePullSecret:
               type: string
+              description: Image pull secret is a reference to secret in the same namespace as the
+                StorageCluster. It is used for pulling all images used by the StorageCluster.
             customImageRegistry:
               type: string
+              description: >-
+                Custom container image registry server that will be used instead of
+                index.docker.io to download Docker images. This may include the repository as well.
+                (Example: myregistry.net:5443 or myregistry.com/myrepository)
             secretsProvider:
               type: string
+              description: Secrets provider is the name of secret provider that driver will connect to.
             startPort:
               type: integer
               format: int32
-            updateStrategy: {}
+              description: Start port is the starting port in the range of ports used by the cluster.
+            updateStrategy:
+              type: object
+              description: An update strategy to replace existing StorageCluster pods with new pods.
+              properties:
+                type:
+                  type: string
+                  description: Type of storage cluster update. Can be RollingUpdate or OnDelete.
+                    Default is RollingUpdate.
+                rollingUpdate:
+                  type: object
+                  description: Spec to control the desired behavior of storage cluster rolling update.
+                  properties:
+                    maxUnavailable:
+                      description: >-
+                        The maximum number of StorageCluster pods that can be unavailable
+                        during the update. Value can be an absolute number (ex: 5) or a percentage of
+                        total number of StorageCluster pods at the start of the update (ex: 10%).
+                        Absolute number is calculated from percentage by rounding up. This cannot be 0.
+                        Default value is 1. Example: when this is set to 30%, at most 30% of the total
+                        number of nodes that should be running the storage pod can have their pods
+                        stopped for an update at any given time. The update starts by stopping at most
+                        30% of those StorageCluster pods and then brings up new StorageCluster pods in
+                        their place. Once the new pods are available, it then proceeds onto other
+                        StorageCluster pods, thus ensuring that at least 70% of original number of
+                        StorageCluster pods are available at all times during the update.
+            deleteStrategy:
+              type: object
+              description: Delete strategy to uninstall and wipe the storage cluster.
+              properties:
+                type:
+                  type: string
+                  description: Type of storage cluster delete. Can be Uninstall or UninstallAndWipe.
+                    There is no default delete strategy. When no delete strategy only objects managed
+                    by the StorageCluster controller and owned by the StorageCluster object are deleted.
+                    The storage driver will left in a state where it will not be managed by any object.
+                    Uninstall strategy ensure that the cluster is completely uninstalled even from the
+                    storage driver perspective. UninstallAndWipe strategy ensure that the cluster is
+                    completely uninstalled as well as the storage devices and metadata are wiped for
+                    reuse. This may result in data loss.
             revisionHistoryLimit:
               type: integer
               format: int32
-            placement: {}
+              description: The number of old history to retain to allow rollback. This is a pointer
+                to distinguish explicity zero and not specified. Defaults to 10.
+            placement:
+              type: object
+              description: Describes placement configuration for the storage cluster pods.
+              properties:
+                nodeAffinity:
+                  type: object
+                  description: Describes node affinity scheduling rules for the storage cluster pods.
+                    This is exactly the same object as Kubernetes node affinity for pods.
             kvdb:
+              type: object
+              description: Details of KVDB that the storage driver will use.
               properties:
                 internal:
                   type: boolean
+                  description: Flag indicating whether to use internal KVDB or an external KVDB.
                 endpoints:
                   type: array
+                  description: If using external KVDB, this is the list of KVDB endpoints.
                   items:
                     type: string
                 authSecret:
                   type: string
+                  description: Authentication secret is the name of Kubernetes secret containing
+                    information to authenticate with the KVDB. It could have the username/password
+                    for basic auth, certificate information or an ACL token.
             storage:
+              type: object
+              description: Details of the storage used by the storage driver.
               properties:
                 useAll:
                   type: boolean
+                  description: Use all available, unformatted, unpartioned devices. This will be
+                    ignored if spec.storage.devices is not empty.
                 useAllWithPartitions:
                   type: boolean
+                  description: Use all available unformatted devices. This will be
+                    ignored if spec.storage.devices is not empty.
                 forceUseDisks:
                   type: boolean
-                devices: {}
+                  description: Flag indicating to use the devices even if there is file system present
+                    on it. Note that the devices may be wiped before using.
+                devices:
+                  type: array
+                  description: List of devices to be used by the storage driver.
+                  items:
+                    type: string
                 journalDevice:
                   type: string
+                  description: Device used for journaling.
                 systemMetadataDevice:
                   type: string
-                dataStorageType:
-                  type: string
-                raidLevel:
-                  type: string
+                  description: Device that will be used to store system metadata by the driver.
             cloudStorage:
+              type: object
+              description: Details of storage used in cloud environment.
               properties:
                 maxStorageNodes:
                   type: integer
                   format: int32
                   minimum: 0
+                  description: Maximum nodes that will have storage in the cluster.
                 maxStorageNodesPerZone:
                   type: integer
                   format: int32
                   minimum: 0
-                deviceSpecs: {}
+                  description: Maximum nodes in every zone that will have storage in the cluster.
+                deviceSpecs:
+                  type: array
+                  description: List of storage device specs. A cloud storage device will be created
+                    for every spec in the list. The specs will be applied to all nodes in the cluster
+                    up to spec.cloudStorage.maxStorageNodes or spec.cloudStorage.maxStorageNodesPerZone.
+                  items:
+                    type: string
+                capacitySpecs:
+                  type: array
+                  description: List of cluster wide storage types and their capacities. A single
+                    capacity spec identifies a storage pool with a set of minimum requested IOPS
+                    and size. Based on the cloud provider, the total storage capacity will get
+                    divided amongst the nodes. The nodes bearing storage themselves will get
+                    uniformly distributed across all the zones.
+                  items:
+                    type: object
+                    properties:
+                      minIOPS:
+                        type: integer
+                        description: Minimum IOPS expected from the cloud drive.
+                      minCapacityInGiB:
+                        type: integer
+                        description: Minimum capacity for this cloud device spec.
+                      maxCapacityInGiB:
+                        type: integer
+                        description: Maximum capacity for this cloud device spec should not go above
+                          this threshold.
+                      options:
+                        type: object
+                        description: Additional options required to provision the drive in cloud.
                 journalDeviceSpec:
                   type: string
+                  description: Device spec for the journal device.
                 systemMetadataDeviceSpec:
                   type: string
+                  description: Device spec for the metadata device. This device will be used to store
+                    system metadata by the driver.
             network:
+              type: object
+              description: Contains network information that is needed by the storage driver.
               properties:
                 dataInterface:
                   type: string
+                  description: Name of the network interface used by the storage driver for data traffic.
                 mgmtInterface:
                   type: string
+                  description: Name of the network interface used by the storage driver for management traffic.
             stork:
+              type: object
+              description: Contains STORK related spec.
               properties:
                 enabled:
                   type: boolean
+                  description: Flag indicating whether STORK needs to be enabled.
                 image:
                   type: string
-                args: {}
-                env: {}
+                  description: Docker image of the STORK container.
+                args:
+                  type: object
+                  description: >-
+                    It is map of arguments given to STORK. Example: driver: pxd
+                env:
+                  description: List of environment variables used by STORK. This is an array of
+                    Kubernetes EnvVar where the value can be given directly or from a source like field,
+                    config map or secret.
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Name of the environment variable.
+                      value:
+                        type: string
+                        description: Value of the environment variable.
             userInterface:
+              type: object
+              description: Contains spec of a user interface for the storage driver.
               properties:
                 enabled:
                   type: boolean
+                  description: Flag indicating whether the user interface needs to be enabled.
                 image:
                   type: string
-                env: {}
-            env: {}
+                  description: Docker image of the user interface container.
+                env:
+                  description: List of environment variables used by the UI components. This is an array
+                    of Kubernetes EnvVar where the value can be given directly or from a source like field,
+                    config map or secret.
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Name of the environment variable.
+                      value:
+                        type: string
+                        description: Value of the environment variable.
+            env:
+              description: List of environment variables used by the driver. This is an array of Kubernetes
+                EnvVar where the value can be given directly or from a source like field, config map or secret.
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Name of the environment variable.
+                  value:
+                    type: string
+                    description: Value of the environment variable.
         status:
+          type: object
+          description: Most recently observed status of the storage cluster. This data may not be up to date.
           properties:
             clusterName:
               type: string
+              description: Name of the storage cluster.
             clusterUid:
               type: string
+              description: Unique ID of the storage cluster.
             phase:
               type: string
+              description: Phase of the StorageCluster is a simple, high-level summary of where the
+                StorageCluster is in its lifecycle. The condition array contains more detailed
+                information about the state of the cluster.
             collisionCount:
-              type: int32
-            conditions: {}
+              type: integer
+              format: int32
+              description: Count of hash collisions for the StorageCluster. The StorageCluster controller
+                uses this field as a collision avoidance mechanism when it needs to create the name of
+                the newest ControllerRevision.
+            conditions:
+              type: array
+              description: Contains details for the current condition of this cluster.
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    description: Type of the condition.
+                  status:
+                    type: string
+                    description: Status of the condition.
+                  reason:
+                    type: string
+                    description: Reason is human readable message indicating details about the current
+                      state of the cluster.
