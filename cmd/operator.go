@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/version"
+	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"k8s.io/client-go/rest"
@@ -20,9 +23,14 @@ import (
 )
 
 const (
-	defaultLockObjectName      = "openstorage-operator"
-	defaultLockObjectNamespace = "kube-system"
-	defaultResyncPeriod        = 30 * time.Second
+	flagLeaderElect              = "leader-elect"
+	flagLeaderElectLockName      = "leader-elect-lock-name"
+	flagLeaderElectLockNamespace = "leader-elect-lock-namespace"
+	flagMetricsPort              = "metrics-port"
+	defaultLockObjectName        = "openstorage-operator"
+	defaultLockObjectNamespace   = "kube-system"
+	defaultResyncPeriod          = 30 * time.Second
+	defaultMetricsPort           = 8999
 )
 
 func main() {
@@ -51,18 +59,23 @@ func main() {
 			Usage: "Storage driver name",
 		},
 		cli.BoolTFlag{
-			Name:  "leader-elect",
+			Name:  flagLeaderElect,
 			Usage: "Enable leader election (default: true)",
 		},
 		cli.StringFlag{
-			Name:  "leader-elect-lock-name",
+			Name:  flagLeaderElectLockName,
 			Usage: "Name for the leader election lock object",
 			Value: defaultLockObjectName,
 		},
 		cli.StringFlag{
-			Name:  "leader-elect-lock-namespace",
+			Name:  flagLeaderElectLockNamespace,
 			Usage: "Namespace for the leader election lock object",
 			Value: defaultLockObjectNamespace,
+		},
+		cli.IntFlag{
+			Name:  flagMetricsPort,
+			Usage: "Port on which the operator metrics are to be exposed",
+			Value: defaultMetricsPort,
 		},
 	}
 
@@ -124,6 +137,12 @@ func run(c *cli.Context) {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
 
+	// Create Service object to expose the metrics port
+	_, err = metrics.ExposeMetricsPort(context.TODO(), int32(c.Int(flagMetricsPort)))
+	if err != nil {
+		log.Warnf("Failed to expose metrics port: %v", err.Error())
+	}
+
 	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
@@ -145,12 +164,13 @@ func run(c *cli.Context) {
 func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error) {
 	syncPeriod := defaultResyncPeriod
 	managerOpts := manager.Options{
-		SyncPeriod: &syncPeriod,
+		SyncPeriod:         &syncPeriod,
+		MetricsBindAddress: fmt.Sprintf("0.0.0.0:%d", c.Int(flagMetricsPort)),
 	}
-	if c.BoolT("leader-elect") {
+	if c.BoolT(flagLeaderElect) {
 		managerOpts.LeaderElection = true
-		managerOpts.LeaderElectionID = c.String("leader-elect-lock-name")
-		managerOpts.LeaderElectionNamespace = c.String("leader-elect-lock-namespace")
+		managerOpts.LeaderElectionID = c.String(flagLeaderElectLockName)
+		managerOpts.LeaderElectionNamespace = c.String(flagLeaderElectLockNamespace)
 	}
 	return manager.New(config, managerOpts)
 }
