@@ -192,12 +192,12 @@
   version = "v1.2.0"
 
 [[projects]]
-  branch = "master"
   digest = "1:0bfbe13936953a98ae3cfe8ed6670d396ad81edf069a806d2f6515d7bb6950df"
   name = "github.com/google/btree"
   packages = ["."]
   pruneopts = "UT"
   revision = "4030bb1f1f0c35b30ca7009e9ebd06849dd45306"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -237,14 +237,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b4395b2a4566c24459af3d04009b39cc21762fc77ec7bf7a1aa905c91e8f018d"
+  digest = "1:5fc0e23b254a1bd7d8d2d42fa093ba33471d08f52fe04afd3713adabb5888dc3"
   name = "github.com/gregjones/httpcache"
   packages = [
     ".",
     "diskcache",
   ]
   pruneopts = "UT"
-  revision = "3befbb6ad0cc97d4c25d851e9528915809e1a22f"
+  revision = "901d90724c7919163f472a9812253fb26761123d"
 
 [[projects]]
   digest = "1:950942c08fb75a83a0dc9127bcfe53bd46972ddadcfcf4bd6eedd4081ed8dce5"
@@ -377,20 +377,6 @@
   revision = "8d0fa3f1af89702ffe7ad3a99e070feb6600338b"
 
 [[projects]]
-  branch = "master"
-  digest = "1:c55bc14c1fdd921b44f7dc4c6a55314c44c98b1110f902ffb9e56e1b79c0ba5c"
-  name = "github.com/libopenstorage/stork"
-  packages = [
-    "pkg/apis/stork",
-    "pkg/apis/stork/v1alpha1",
-    "pkg/client/clientset/versioned",
-    "pkg/client/clientset/versioned/scheme",
-    "pkg/client/clientset/versioned/typed/stork/v1alpha1",
-  ]
-  pruneopts = "UT"
-  revision = "19da95bd7280434afa8455f027ffdd6b6ba7c6ca"
-
-[[projects]]
   digest = "1:ff5ebae34cfbf047d505ee150de27e60570e8c394b3b8fdbb720ff6ac71985fc"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
@@ -473,14 +459,6 @@
   revision = "431ec9a26e5021f35fa41ee9a89842db9bfdb370"
 
 [[projects]]
-  digest = "1:bde6c3a610bd01ea7e2c8d9c7fd1116531fb6619f46f73f4f2ea16adb70da6be"
-  name = "github.com/operator-framework/operator-sdk"
-  packages = ["pkg/util/k8sutil"]
-  pruneopts = "UT"
-  revision = "e5a0ab096e1a7c0e6b937d2b41707eccb82c3c77"
-  version = "v0.0.7"
-
-[[projects]]
   digest = "1:e5d0bd87abc2781d14e274807a470acd180f0499f8bf5bb18606e9ec22ad9de9"
   name = "github.com/pborman/uuid"
   packages = ["."]
@@ -489,20 +467,20 @@
   version = "v1.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:3bf17a6e6eaa6ad24152148a631d18662f7212e21637c2699bff3369b7f00fa2"
+  branch = "reshape"
+  digest = "1:e321077ace3af287e3c0ac039a84bf6c73fa8d286204e77b1779d4f55c95d7f0"
   name = "github.com/petar/GoLLRB"
   packages = ["llrb"]
   pruneopts = "UT"
-  revision = "53be0d36a84c2a886ca057d34b6aa4468df9ccb4"
+  revision = "038245bdceefe41310f8b2365e9d07c64738be65"
 
 [[projects]]
-  digest = "1:0e7775ebbcf00d8dd28ac663614af924411c868dca3d5aa762af0fae3808d852"
+  digest = "1:a8c2725121694dfbf6d552fb86fe6b46e3e7135ea05db580c28695b916162aad"
   name = "github.com/peterbourgon/diskv"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
-  version = "v2.0.1"
+  revision = "0be1b92a6df0e4f5cb0a5d15fb7f643d0ad93ce6"
+  version = "v3.0.0"
 
 [[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
@@ -530,14 +508,14 @@
 
 [[projects]]
   branch = "kubernetes-1.13.1"
-  digest = "1:009db87596540320e7e01e2b38ae5de42627992aeab5cd7c8a7f43c9b7dfe297"
+  digest = "1:9400895e02edde774bbdfcff8f27f8dc30205114286255bc1740bd07b51bb90e"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "256b606f13bfde7cb631dd69c0f0378dceef2e60"
+  revision = "85d18ba3b1a97a4db6242ef4ac7bc603d0961b49"
 
 [[projects]]
   branch = "master"
@@ -1266,15 +1244,14 @@
   version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
   digest = "1:03a96603922fc1f6895ae083e1e16d943b55ef0656b56965351bd87e7d90485f"
   name = "k8s.io/kube-openapi"
   packages = ["pkg/util/proto"]
   pruneopts = "UT"
-  revision = "0317810137be915b9cf888946c6e115c1bfac693"
+  revision = "c59034cc13d587f5ef4e85ca0ade0c1866ae8e1d"
 
 [[projects]]
-  digest = "1:00d6b09a0e7ac881b6a387b012794baf26f728ccc870054554ecb5bebbcaeb7c"
+  digest = "1:8b44500919903ad981238d8ff954d5e396ca51326a60210e342487b6ad100c5e"
   name = "k8s.io/kubernetes"
   packages = [
     "pkg/api/legacyscheme",
@@ -1317,6 +1294,7 @@
     "pkg/util/goroutinemap/exponentialbackoff",
     "pkg/util/hash",
     "pkg/util/io",
+    "pkg/util/keymutex",
     "pkg/util/mount",
     "pkg/util/net/sets",
     "pkg/util/nsenter",
@@ -1333,8 +1311,8 @@
     "staging/src/k8s.io/sample-controller/pkg/signals",
   ]
   pruneopts = "UT"
-  revision = "2166946f41b36dea2c4626f90a77706f426cdea2"
-  version = "v1.13.5"
+  revision = "37d169313237cb4ceb2cc4bef300f2ae3053c1a2"
+  version = "v1.13.10"
 
 [[projects]]
   branch = "master"
