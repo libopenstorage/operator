@@ -34,6 +34,7 @@ spec:
     JSONPath: .spec.version
   - name: Age
     type: date
+    description: The age of the storage cluster
     JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:

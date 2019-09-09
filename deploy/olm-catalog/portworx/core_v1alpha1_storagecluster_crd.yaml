@@ -34,6 +34,7 @@ spec:
     JSONPath: .spec.version
   - name: Age
     type: date
+    description: The age of the storage cluster
     JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
@@ -104,19 +105,19 @@ spec:
               properties:
                 type:
                   type: string
-                  description: Type of storage cluster delete strategy. Can be Uninstall or UninstallAndWipe.
+                  description: Type of storage cluster delete. Can be Uninstall or UninstallAndWipe.
                     There is no default delete strategy. When no delete strategy only objects managed
                     by the StorageCluster controller and owned by the StorageCluster object are deleted.
-                    The storage driver will left in a state where it will not be managed by any object.
-                    Uninstall strategy ensure that the cluster is completely uninstalled even from the
-                    storage driver perspective. UninstallAndWipe strategy ensure that the cluster is
+                    The storage driver will be left in a state where it will not be managed by any object.
+                    Uninstall strategy ensures that the cluster is completely uninstalled even from the
+                    storage driver perspective. UninstallAndWipe strategy ensures that the cluster is
                     completely uninstalled as well as the storage devices and metadata are wiped for
                     reuse. This may result in data loss.
             revisionHistoryLimit:
               type: integer
               format: int32
               description: The number of old history to retain to allow rollback. This is a pointer
-                to distinguish explicity zero and not specified. Defaults to 10.
+                to distinguish between an explicit zero and not specified. Defaults to 10.
             placement:
               type: object
               description: Describes placement configuration for the storage cluster pods.
@@ -140,7 +141,7 @@ spec:
                 authSecret:
                   type: string
                   description: Authentication secret is the name of Kubernetes secret containing
-                    information to authenticate with the KVDB. It could have the username/password
+                    information to authenticate with the external KVDB. It could have the username/password
                     for basic auth, certificate information or an ACL token.
             storage:
               type: object
@@ -148,7 +149,7 @@ spec:
               properties:
                 useAll:
                   type: boolean
-                  description: Use all available, unformatted, unpartioned devices. This will be
+                  description: Use all available, unformatted, unpartitioned devices. This will be
                     ignored if spec.storage.devices is not empty.
                 useAllWithPartitions:
                   type: boolean
@@ -188,6 +189,7 @@ spec:
                   description: List of storage device specs. A cloud storage device will be created
                     for every spec in the list. The specs will be applied to all nodes in the cluster
                     up to spec.cloudStorage.maxStorageNodes or spec.cloudStorage.maxStorageNodesPerZone.
+                    This will be ignored if spec.cloudStorage.capacitySpecs is present.
                   items:
                     type: string
                 capacitySpecs:
@@ -205,11 +207,14 @@ spec:
                         description: Minimum IOPS expected from the cloud drive.
                       minCapacityInGiB:
                         type: integer
-                        description: Minimum capacity for this cloud device spec.
+                        description: Minimum capacity for this storage cluster. The total capacity
+                          of devices created by this capacity spec should not be less than this
+                          number for the entire cluster.
                       maxCapacityInGiB:
                         type: integer
-                        description: Maximum capacity for this cloud device spec should not go above
-                          this threshold.
+                        description: Maximum capacity for this storage cluster. The total capacity
+                          of devices created by this capacity spec should not be greater than this
+                          number for the entire cluster.
                       options:
                         type: object
                         description: Additional options required to provision the drive in cloud.
