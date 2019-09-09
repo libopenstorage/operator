@@ -104,7 +104,7 @@ spec:
               properties:
                 type:
                   type: string
-                  description: Type of storage cluster delete. Can be Uninstall or UninstallAndWipe.
+                  description: Type of storage cluster delete strategy. Can be Uninstall or UninstallAndWipe.
                     There is no default delete strategy. When no delete strategy only objects managed
                     by the StorageCluster controller and owned by the StorageCluster object are deleted.
                     The storage driver will left in a state where it will not be managed by any object.
