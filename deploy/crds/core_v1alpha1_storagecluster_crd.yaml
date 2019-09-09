@@ -34,6 +34,7 @@ spec:
     JSONPath: .spec.version
   - name: Age
     type: date
+    description: The age of the storage cluster
     JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
@@ -188,6 +189,7 @@ spec:
                   description: List of storage device specs. A cloud storage device will be created
                     for every spec in the list. The specs will be applied to all nodes in the cluster
                     up to spec.cloudStorage.maxStorageNodes or spec.cloudStorage.maxStorageNodesPerZone.
+                    This will be ignored if spec.cloudStorage.capacitySpecs is present.
                   items:
                     type: string
                 capacitySpecs:
@@ -205,11 +207,14 @@ spec:
                         description: Minimum IOPS expected from the cloud drive.
                       minCapacityInGiB:
                         type: integer
-                        description: Minimum capacity for this cloud device spec.
+                        description: Minimum capacity for this storage cluster. The total capacity
+                          of devices created by this capacity spec should not be less than this
+                          number for the entire cluster.
                       maxCapacityInGiB:
                         type: integer
-                        description: Maximum capacity for this cloud device spec should not go above
-                          this threshold.
+                        description: Maximum capacity for this storage cluster. The total capacity
+                          of devices created by this capacity spec should not be greater than this
+                          number for the entire cluster.
                       options:
                         type: object
                         description: Additional options required to provision the drive in cloud.
