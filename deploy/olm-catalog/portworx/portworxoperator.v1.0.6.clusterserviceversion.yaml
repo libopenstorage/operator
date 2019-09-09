@@ -212,17 +212,21 @@ spec:
                         - portworx-operator
                     topologyKey: kubernetes.io/hostname
               containers:
-              - command:
+              - name: portworx-operator
+                image: openstorage/openstorage-operator:master
+                imagePullPolicy: Always
+                command:
                 - /operator
                 - --verbose
                 - --driver=portworx
                 - --leader-elect=true
-                image: openstorage/openstorage-operator:master
-                imagePullPolicy: Always
-                name: portworx-operator
-                resources: {}
-                securityContext:
-                  privileged: false
+                env:
+                - name: OPERATOR_NAME
+                  value: portworx-operator
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
               serviceAccountName: portworx-operator
     strategy: deployment
   customresourcedefinitions:

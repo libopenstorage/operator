@@ -21,17 +21,21 @@ spec:
         name: portworx-operator
     spec:
       containers:
-      - command:
+      - name: portworx-operator
+        image: openstorage/openstorage-operator:master
+        imagePullPolicy: Always
+        command:
         - /operator
         - --verbose
         - --driver=portworx
         - --leader-elect=true
-        imagePullPolicy: Always
-        image: openstorage/openstorage-operator:master
-        securityContext:
-          privileged: false
-        name: portworx-operator
-      hostPID: false
+        env:
+        - name: OPERATOR_NAME
+          value: portworx-operator
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
