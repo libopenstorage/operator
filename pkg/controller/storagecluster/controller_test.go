@@ -38,8 +38,8 @@ func TestRegisterCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	k8s.Instance().SetClient(
-		fakeClient, nil, nil, nil,
-		fakeExtClient, nil, nil, nil, nil,
+		fakeClient, nil, nil,
+		fakeExtClient, nil, nil, nil,
 	)
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
@@ -143,8 +143,8 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeExtClient := fakeextclient.NewSimpleClientset(nodeStatusCRD)
 	k8s.Instance().SetClient(
-		fakeClient, nil, nil, nil,
-		fakeExtClient, nil, nil, nil, nil,
+		fakeClient, nil, nil,
+		fakeExtClient, nil, nil, nil,
 	)
 	crdBaseDir = func() string {
 		return "../../../deploy/crds"
@@ -3508,8 +3508,8 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	fakeClient := fake.NewSimpleClientset()
 	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(), nil, nil,
-		fakeClient, nil, nil, nil, nil, nil,
+		fakek8sclient.NewSimpleClientset(), nil,
+		fakeClient, nil, nil, nil, nil,
 	)
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
