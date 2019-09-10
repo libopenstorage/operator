@@ -59,7 +59,7 @@ func TestStorkInstallation(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -294,7 +294,7 @@ func TestStorkImageChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -349,7 +349,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -420,7 +420,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -491,7 +491,7 @@ func TestStorkCPUChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -549,7 +549,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -682,7 +682,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -745,7 +745,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -804,7 +804,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -860,7 +860,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -919,7 +919,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -974,7 +974,7 @@ func TestDisableStork(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -1105,7 +1105,7 @@ func TestRemoveStork(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -1236,7 +1236,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 
 	k8s.Instance().SetClient(
 		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)

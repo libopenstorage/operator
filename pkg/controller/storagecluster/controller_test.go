@@ -3358,7 +3358,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	fakeClient := fake.NewSimpleClientset()
 	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(), nil, nil,
+		fakek8sclient.NewSimpleClientset(), nil,
 		fakeClient, nil, nil, nil, nil,
 	)
 
