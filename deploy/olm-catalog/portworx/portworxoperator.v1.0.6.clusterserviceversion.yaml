@@ -52,7 +52,7 @@ spec:
   displayName: Portworx Enterprise
   version: 1.0.6
   minKubeVersion: "1.11.0"
-  maturity: alpha
+  maturity: stable
   replaces: portworx-operator.v1.0.5
   maintainers:
   - name: Portworx
