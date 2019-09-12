@@ -17,6 +17,9 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -31,6 +34,7 @@ const (
 	defaultLockObjectNamespace   = "kube-system"
 	defaultResyncPeriod          = 30 * time.Second
 	defaultMetricsPort           = 8999
+	metricsPortName              = "metrics"
 )
 
 func main() {
@@ -137,10 +141,23 @@ func run(c *cli.Context) {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
 
-	// Create Service object to expose the metrics port
-	_, err = metrics.ExposeMetricsPort(context.TODO(), int32(c.Int(flagMetricsPort)))
-	if err != nil {
-		log.Warnf("Failed to expose metrics port: %v", err.Error())
+	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
+	metricsPort := c.Int(flagMetricsPort)
+	metricsServicePorts := []v1.ServicePort{
+		{
+			Name:       metricsPortName,
+			Port:       int32(metricsPort),
+			TargetPort: intstr.FromInt(metricsPort),
+		},
+	}
+	metricsService, err := metrics.CreateMetricsService(context.TODO(), config, metricsServicePorts)
+	if err == nil {
+		_, err = metrics.CreateServiceMonitors(config, metricsService.Namespace, []*v1.Service{metricsService})
+		if err != nil && !errors.IsAlreadyExists(err) {
+			log.Warnf("Failed to create ServiceMonitor: %v", err)
+		}
+	} else {
+		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
 	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
