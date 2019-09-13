@@ -507,6 +507,11 @@ func (p *portworx) createClusterRole(ownerRef *metav1.OwnerReference) error {
 					Resources: []string{"volumeplacementstrategies"},
 					Verbs:     []string{"get", "list"},
 				},
+				{
+					APIGroups: []string{"stork.libopenstorage.org"},
+					Resources: []string{"backuplocations"},
+					Verbs:     []string{"get", "list"},
+				},
 			},
 		},
 		ownerRef,
@@ -599,6 +604,16 @@ func (p *portworx) createLighthouseClusterRole(ownerRef *metav1.OwnerReference) 
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list"},
+				},
+				{
+					APIGroups: []string{"extensions", "apps"},
+					Resources: []string{"deployments"},
+					Verbs:     []string{"get", "list"},
+				},
+				{
+					APIGroups: []string{""},
 					Resources: []string{"secrets"},
 					Verbs:     []string{"get", "create", "update"},
 				},
@@ -609,13 +624,29 @@ func (p *portworx) createLighthouseClusterRole(ownerRef *metav1.OwnerReference) 
 				},
 				{
 					APIGroups: []string{""},
-					Resources: []string{"nodes", "services"},
+					Resources: []string{"nodes"},
 					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"services"},
+					Verbs:     []string{"get", "list", "watch", "create"},
 				},
 				{
 					APIGroups: []string{"stork.libopenstorage.org"},
 					Resources: []string{"*"},
 					Verbs:     []string{"get", "list", "create", "delete", "update"},
+				},
+				{
+					APIGroups: []string{"monitoring.coreos.com"},
+					Resources: []string{
+						"alertmanagers",
+						"prometheuses",
+						"prometheuses/finalizers",
+						"servicemonitors",
+						"prometheusrules",
+					},
+					Verbs: []string{"*"},
 				},
 			},
 		},
