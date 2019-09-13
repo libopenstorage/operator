@@ -251,74 +251,9 @@ func (c *Controller) createStorkClusterRole(ownerRef *metav1.OwnerReference) err
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
-					APIGroups: []string{""},
-					Resources: []string{"pods", "pods/exec"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumes"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumeclaims"},
-					Verbs:     []string{"get", "list", "watch", "update"},
-				},
-				{
-					APIGroups: []string{"storage.k8s.io"},
-					Resources: []string{"storageclasses"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"events"},
-					Verbs:     []string{"list", "watch", "create", "update", "patch"},
-				},
-				{
-					APIGroups: []string{"stork.libopenstorage.org"},
-					Resources: []string{"*"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
-				},
-				{
-					APIGroups: []string{"apiextensions.k8s.io"},
-					Resources: []string{"customresourcedefinitions"},
-					Verbs:     []string{"get", "create"},
-				},
-				{
-					APIGroups: []string{"volumesnapshot.external-storage.k8s.io"},
-					Resources: []string{"volumesnapshots", "volumesnapshotdatas"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"configmaps"},
-					Verbs:     []string{"get", "create", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"services"},
-					Verbs:     []string{"get"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"nodes"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{"*"},
-					Resources: []string{"deployments", "deployments/extensions"},
-					Verbs:     []string{"get", "list", "watch", "update", "patch", "initialize"},
-				},
-				{
-					APIGroups: []string{"*"},
-					Resources: []string{"statefulsets", "statefulsets/extensions"},
-					Verbs:     []string{"get", "list", "watch", "update", "patch", "initialize"},
-				},
-				{
 					APIGroups: []string{"*"},
 					Resources: []string{"*"},
-					Verbs:     []string{"get", "list"},
+					Verbs:     []string{"*"},
 				},
 			},
 		},

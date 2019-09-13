@@ -25,3 +25,6 @@ rules:
 - apiGroups: ["portworx.io"]
   resources: ["volumeplacementstrategies"]
   verbs: ["get", "list"]
+- apiGroups: ["stork.libopenstorage.org"]
+  resources: ["backuplocations"]
+  verbs: ["get", "list"]
