@@ -1810,7 +1810,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
-		csiStatefulSetCreated:             true,
+		csiApplicationCreated:             true,
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1833,7 +1833,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.False(t, driver.volumePlacementStrategyCRDCreated)
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiStatefulSetCreated)
+	require.False(t, driver.csiApplicationCreated)
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
@@ -1844,7 +1844,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
-		csiStatefulSetCreated:             true,
+		csiApplicationCreated:             true,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1866,7 +1866,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.False(t, driver.volumePlacementStrategyCRDCreated)
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiStatefulSetCreated)
+	require.False(t, driver.csiApplicationCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
@@ -1991,7 +1991,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
-		csiStatefulSetCreated:             true,
+		csiApplicationCreated:             true,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2016,7 +2016,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.False(t, driver.volumePlacementStrategyCRDCreated)
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiStatefulSetCreated)
+	require.False(t, driver.csiApplicationCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
@@ -2043,7 +2043,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
-		csiStatefulSetCreated:             true,
+		csiApplicationCreated:             true,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2065,7 +2065,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.False(t, driver.volumePlacementStrategyCRDCreated)
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiStatefulSetCreated)
+	require.False(t, driver.csiApplicationCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)

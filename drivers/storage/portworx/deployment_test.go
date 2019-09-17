@@ -551,6 +551,37 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	actual = driver.GetStoragePodSpec(cluster)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
+	// Storage device specs
+	devices := []string{"type=one", "type=two", "type=three"}
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		DeviceSpecs: &devices,
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-s", "type=one",
+		"-s", "type=two",
+		"-s", "type=three",
+	}
+
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Storage device specs empty
+	devices = []string{}
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		DeviceSpecs: &devices,
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+	}
+
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
 	// Max storage nodes
 	maxNodes := uint32(3)
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
@@ -580,7 +611,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Storage devices
-	devices := []string{"type=one", "type=two"}
+	devices = []string{"type=one", "type=two"}
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
 		DeviceSpecs: &devices,
 	}
@@ -1110,6 +1141,15 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	actual := driver.GetStoragePodSpec(cluster)
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// Update Portworx version, which should use new CSI driver name
+	cluster.Spec.Image = "portworx/oci-monitor:2.2"
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[3],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+	)
 }
 
 func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
@@ -1138,6 +1178,80 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	actual := driver.GetStoragePodSpec(cluster)
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// Update Portworx version, which should use new CSI driver name
+	cluster.Spec.Image = "portworx/oci-monitor:2.2"
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+	)
+}
+
+func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil, nil)
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+
+	// PX_IMAGE env var gets precedence over spec.image.
+	// We verify that by checking that CSI registrar is using old driver name.
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.2",
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_IMAGE",
+						Value: "portworx/oci-monitor:2.1.1-rc1",
+					},
+				},
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+	)
+
+	// If version cannot be found from the Portworx image tag, then check the annotation
+	// for version. This is useful in testing when your image tag does not have version.
+	cluster.Spec.Image = "portworx/oci-monitor:custom_oci_tag"
+	cluster.Spec.Env[0].Value = "portworx/oci-monitor:custom_px_tag"
+	cluster.Annotations = map[string]string{
+		annotationPXVersion: "2.1",
+	}
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+	)
+
+	// If valid version is not found from the image or the annotation, then assume latest
+	// Portworx version. Verify this by checking the new CSI driver name in registrar.
+	cluster.Annotations = map[string]string{
+		annotationPXVersion: "portworx/oci-monitor:invalid",
+	}
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+	)
 }
 
 func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {

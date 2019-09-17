@@ -51,7 +51,7 @@ type portworx struct {
 	volumePlacementStrategyCRDCreated bool
 	pvcControllerDeploymentCreated    bool
 	lhDeploymentCreated               bool
-	csiStatefulSetCreated             bool
+	csiApplicationCreated             bool
 	sdkConn                           *grpc.ClientConn
 }
 
