@@ -1,11 +1,10 @@
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: px-csi-ext
   namespace: kube-test
 spec:
-  serviceName: "px-csi-service"
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: px-csi-driver
@@ -14,15 +13,28 @@ spec:
       labels:
         app: px-csi-driver
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
       serviceAccountName: px-csi
       containers:
         - name: csi-external-provisioner
           imagePullPolicy: Always
-          image: quay.io/k8scsi/csi-provisioner:v1.1.0
+          image: quay.io/openstorage/csi-provisioner:v1.3.0-1
           args:
-            - "--v=5"
+            - "--v=3"
             - "--provisioner=com.openstorage.pxd"
             - "--csi-address=$(ADDRESS)"
+            - "--enable-leader-election"
+            - "--leader-election-type=endpoints"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -33,10 +45,11 @@ spec:
               mountPath: /csi
         - name: csi-attacher
           imagePullPolicy: Always
-          image: quay.io/k8scsi/csi-attacher:v1.1.1
+          image: quay.io/openstorage/csi-attacher:v1.2.1-1
           args:
-            - "--v=5"
+            - "--v=3"
             - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -45,13 +58,14 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
-        - name: csi-cluster-registrar
+        - name: csi-snapshotter
           imagePullPolicy: Always
-          image: quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1
+          image: quay.io/openstorage/csi-snapshotter:v1.2.0-1
           args:
-            - "--v=5"
+            - "--v=3"
             - "--csi-address=$(ADDRESS)"
-            - "--pod-info-mount-version=v1"
+            - "--snapshotter=com.openstorage.pxd"
+            - "--leader-election=true"
           env:
             - name: ADDRESS
               value: /csi/csi.sock

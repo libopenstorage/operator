@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"fmt"
+	"math"
 	"path"
 	"strconv"
 	"strings"
@@ -33,14 +34,15 @@ const (
 	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
 	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
 	annotationServiceType      = pxAnnotationPrefix + "/service-type"
+	annotationPXVersion        = pxAnnotationPrefix + "/px-version"
 	templateVersion            = "v4"
-	csiBasePath                = "/var/lib/kubelet/plugins/com.openstorage.pxd"
 	secretKeyKvdbCA            = "kvdb-ca.crt"
 	secretKeyKvdbCert          = "kvdb.crt"
 	secretKeyKvdbCertKey       = "kvdb.key"
 	secretKeyKvdbUsername      = "username"
 	secretKeyKvdbPassword      = "password"
 	secretKeyKvdbACLToken      = "acl-token"
+	envKeyPXImage              = "PX_IMAGE"
 )
 
 type volumeInfo struct {
@@ -154,21 +156,6 @@ var (
 		},
 	}
 
-	// csiVolumeInfoList is a list of volumes applicable when running csi sidecars
-	csiVolumeInfoList = []volumeInfo{
-		{
-			name:         "registration-dir",
-			hostPath:     "/var/lib/kubelet/plugins_registry",
-			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-		},
-		{
-			name:         "csi-driver-path",
-			hostPath:     "/var/lib/kubelet/plugins/com.openstorage.pxd",
-			mountPath:    csiBasePath,
-			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-		},
-	}
-
 	// kvdbVolumeInfo has information of the volume needed for kvdb certs
 	kvdbVolumeInfo = volumeInfo{
 		name:      "kvdbcerts",
@@ -188,6 +175,7 @@ type template struct {
 	serviceType        v1.ServiceType
 	startPort          int
 	k8sVersion         *version.Version
+	pxVersion          *version.Version
 	csiVersions        csiVersions
 	kvdb               map[string]string
 	cloudConfig        *cloudstorage.Config
@@ -217,8 +205,10 @@ func newTemplate(
 		return nil, fmt.Errorf("invalid kubernetes version %v: %v", numericVersion, err)
 	}
 
+	t.pxVersion = extractPXVersion(cluster)
+
 	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
-		csiGenerator := newCSIGenerator(*t.k8sVersion)
+		csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion)
 		t.csiVersions, err = csiGenerator.getSidecarContainerVersions()
 		if err != nil {
 			return nil, err
@@ -432,24 +422,24 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 		container.Name = "csi-node-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			"quay.io/k8scsi/csi-node-driver-registrar:v"+t.csiVersions.nodeRegistrar,
+			t.csiVersions.nodeRegistrar,
 		)
 		container.Args = []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiBasePath),
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiBasePath()),
 		}
 	} else if t.csiVersions.registrar != "" {
 		container.Name = "csi-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			"quay.io/k8scsi/driver-registrar:v"+t.csiVersions.registrar,
+			t.csiVersions.registrar,
 		)
 		container.Args = []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
 			"--mode=node-register",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiBasePath),
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiBasePath()),
 		}
 	}
 
@@ -694,7 +684,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envList = append(envList,
 			v1.EnvVar{
 				Name:  "CSI_ENDPOINT",
-				Value: "unix://" + csiBasePath + "/csi.sock",
+				Value: "unix://" + t.csiBasePath() + "/csi.sock",
 			},
 		)
 		if t.csiVersions.version != "" {
@@ -734,7 +724,10 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
 
 	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
-		volumeInfoList = append(volumeInfoList, csiVolumeInfoList...)
+		volumeInfoList = append(volumeInfoList, volumeInfo{
+			name:      "csi-driver-path",
+			mountPath: t.csiBasePath(),
+		})
 	}
 
 	volumeMounts := make([]v1.VolumeMount, 0)
@@ -845,8 +838,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 	volumeInfoList = append(volumeInfoList,
 		volumeInfo{
 			name:         "csi-driver-path",
-			hostPath:     "/var/lib/kubelet/plugins/com.openstorage.pxd",
-			mountPath:    csiBasePath,
+			hostPath:     t.csiBasePath(),
 			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 		},
 	)
@@ -875,6 +867,45 @@ func (t *template) loadKvdbAuth() map[string]string {
 		t.kvdb[k] = string(v)
 	}
 	return t.kvdb
+}
+
+func (t *template) csiBasePath() string {
+	return path.Join("/var/lib/kubelet/plugins", t.csiVersions.driverName)
+}
+
+func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
+	var (
+		err       error
+		pxVersion *version.Version
+	)
+
+	pxImage := cluster.Spec.Image
+	for _, env := range cluster.Spec.Env {
+		if env.Name == envKeyPXImage {
+			pxImage = env.Value
+			break
+		}
+	}
+
+	parts := strings.Split(pxImage, ":")
+	if len(parts) >= 2 {
+		pxVersionStr := parts[len(parts)-1]
+		pxVersion, err = version.NewSemver(pxVersionStr)
+		if err != nil {
+			logrus.Warnf("Invalid PX version %s extracted from image name: %v", pxVersionStr, err)
+			if pxVersionStr, exists := cluster.Annotations[annotationPXVersion]; exists {
+				pxVersion, err = version.NewSemver(pxVersionStr)
+				if err != nil {
+					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
+				}
+			}
+		}
+	}
+
+	if pxVersion == nil {
+		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
+	}
+	return pxVersion
 }
 
 func stringPtr(val string) *string {
