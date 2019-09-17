@@ -1,11 +1,10 @@
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: px-csi-ext
   namespace: kube-test
 spec:
-  serviceName: "px-csi-service"
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: px-csi-driver
@@ -29,11 +28,13 @@ spec:
       containers:
         - name: csi-external-provisioner
           imagePullPolicy: Always
-          image: quay.io/k8scsi/csi-provisioner:v0.4.2
+          image: quay.io/openstorage/csi-provisioner:v1.3.0-1
           args:
             - "--v=3"
-            - "--provisioner=com.openstorage.pxd"
+            - "--provisioner=pxd.portworx.com"
             - "--csi-address=$(ADDRESS)"
+            - "--enable-leader-election"
+            - "--leader-election-type=endpoints"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -44,10 +45,42 @@ spec:
               mountPath: /csi
         - name: csi-attacher
           imagePullPolicy: Always
-          image: quay.io/k8scsi/csi-attacher:v0.4.2
+          image: quay.io/openstorage/csi-attacher:v1.2.1-1
           args:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-snapshotter:v1.2.0-1
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--snapshotter=pxd.portworx.com"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-resizer:v0.2.0-1
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -59,5 +92,5 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            path: /var/lib/kubelet/plugins/pxd.portworx.com
             type: DirectoryOrCreate
