@@ -1811,6 +1811,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
 		csiApplicationCreated:             true,
+		csiNodeInfoCRDCreated:             true,
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1834,6 +1835,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
 	require.False(t, driver.csiApplicationCreated)
+	require.False(t, driver.csiNodeInfoCRDCreated)
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
@@ -1845,6 +1847,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 		pvcControllerDeploymentCreated:    true,
 		lhDeploymentCreated:               true,
 		csiApplicationCreated:             true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1867,6 +1870,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.False(t, driver.pvcControllerDeploymentCreated)
 	require.False(t, driver.lhDeploymentCreated)
 	require.False(t, driver.csiApplicationCreated)
+	require.False(t, driver.csiNodeInfoCRDCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)

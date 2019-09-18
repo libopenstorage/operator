@@ -234,6 +234,12 @@ func (p *portworx) setupCSI(t *template) error {
 			return err
 		}
 	}
+	if t.csiVersions.createCsiNodeCrd && !p.csiNodeInfoCRDCreated {
+		if err := createCSINodeInfoCRD(); err != nil {
+			return err
+		}
+		p.csiNodeInfoCRDCreated = true
+	}
 	return nil
 }
 
@@ -313,6 +319,7 @@ func (p *portworx) unsetInstallParams() {
 	p.pvcControllerDeploymentCreated = false
 	p.lhDeploymentCreated = false
 	p.csiApplicationCreated = false
+	p.csiNodeInfoCRDCreated = false
 }
 
 func createVolumePlacementStrategyCRD() error {
@@ -347,6 +354,107 @@ func createVolumePlacementStrategyCRD() error {
 				Plural:     resource.Plural,
 				Kind:       "VolumePlacementStrategy",
 				ShortNames: []string{"vps", "vp"},
+			},
+		},
+	}
+
+	err := k8s.Instance().RegisterCRD(crd)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	return k8s.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+}
+
+func createCSINodeInfoCRD() error {
+	logrus.Debugf("Creating CSINodeInfo CRD")
+
+	resource := k8s.CustomResource{
+		Plural: "csinodeinfos",
+		Group:  "csi.storage.k8s.io",
+	}
+
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s.%s", resource.Plural, resource.Group),
+			Labels: map[string]string{
+				"addonmanager.kubernetes.io/mode": "Reconcile",
+			},
+		},
+		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
+			Group:   resource.Group,
+			Version: "v1alpha1",
+			Scope:   apiextensionsv1beta1.ClusterScoped,
+			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+				Plural: resource.Plural,
+				Kind:   "CSINodeInfo",
+			},
+			Validation: &apiextensionsv1beta1.CustomResourceValidation{
+				OpenAPIV3Schema: &apiextensionsv1beta1.JSONSchemaProps{
+					Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+						"spec": {
+							Description: "Specification of CSINodeInfo",
+							Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+								"drivers": {
+									Description: "List of CSI drivers running on the node and their specs.",
+									Type:        "array",
+									Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+										Schema: &apiextensionsv1beta1.JSONSchemaProps{
+											Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+												"name": {
+													Description: "The CSI driver that this object refers to.",
+													Type:        "string",
+												},
+												"nodeID": {
+													Description: "The node from the driver point of view.",
+													Type:        "string",
+												},
+												"topologyKeys": {
+													Description: "List of keys supported by the driver.",
+													Type:        "array",
+													Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+														Schema: &apiextensionsv1beta1.JSONSchemaProps{
+															Type: "string",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						"status": {
+							Description: "Status of CSINodeInfo",
+							Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+								"drivers": {
+									Description: "List of CSI drivers running on the node and their statuses.",
+									Type:        "array",
+									Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+										Schema: &apiextensionsv1beta1.JSONSchemaProps{
+											Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+												"name": {
+													Description: "The CSI driver that this object refers to.",
+													Type:        "string",
+												},
+												"available": {
+													Description: "Whether the CSI driver is installed.",
+													Type:        "boolean",
+												},
+												"volumePluginMechanism": {
+													Description: "Indicates to external components the required mechanism " +
+														"to use for any in-tree plugins replaced by this driver.",
+													Type:    "string",
+													Pattern: "in-tree|csi",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -13,8 +14,14 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -120,11 +127,25 @@ func GetExpectedDaemonSet(t *testing.T, fileName string) *appsv1.DaemonSet {
 	return daemonSet
 }
 
+// GetExpectedCRD returns the CustomResourceDefinition object from given yaml spec file
+func GetExpectedCRD(t *testing.T, fileName string) *apiextensionsv1beta1.CustomResourceDefinition {
+	obj := getKubernetesObject(t, fileName)
+	crd, ok := obj.(*apiextensionsv1beta1.CustomResourceDefinition)
+	assert.True(t, ok, "Expected CustomResourceDefinition object")
+	return crd
+}
+
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
 	assert.NoError(t, err)
-	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
+	scheme := runtime.NewScheme()
+	v1.AddToScheme(scheme)
+	appsv1.AddToScheme(scheme)
+	rbacv1.AddToScheme(scheme)
+	apiextensionsv1beta1.AddToScheme(scheme)
+	codecs := serializer.NewCodecFactory(scheme)
+	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)
 	return obj
 }
@@ -141,4 +162,25 @@ func GetPullPolicyForContainer(
 		}
 	}
 	return ""
+}
+
+// ActivateCRDWhenCreated activates the given CRD by updating it's status. It waits for
+// CRD to be created for 1 minute before returning an error
+func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
+	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		crd, err := fakeClient.ApiextensionsV1beta1().
+			CustomResourceDefinitions().
+			Get(crdName, metav1.GetOptions{})
+		if err == nil {
+			crd.Status.Conditions = []apiextensionsv1beta1.CustomResourceDefinitionCondition{{
+				Type:   apiextensionsv1beta1.Established,
+				Status: apiextensionsv1beta1.ConditionTrue,
+			}}
+			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			return true, nil
+		} else if !errors.IsNotFound(err) {
+			return false, err
+		}
+		return false, nil
+	})
 }
