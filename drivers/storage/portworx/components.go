@@ -1674,6 +1674,7 @@ func getCSIDeploymentSpec(
 					"--v=3",
 					"--csi-address=$(ADDRESS)",
 					"--leader-election=true",
+					"--leader-election-type=" + leaderElectionType,
 				},
 				Env: []v1.EnvVar{
 					{
@@ -1706,6 +1707,7 @@ func getCSIDeploymentSpec(
 					"--csi-address=$(ADDRESS)",
 					"--snapshotter=" + t.csiVersions.driverName,
 					"--leader-election=true",
+					"--leader-election-type=" + leaderElectionType,
 				},
 				Env: []v1.EnvVar{
 					{
