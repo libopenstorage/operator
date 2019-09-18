@@ -52,6 +52,7 @@ type portworx struct {
 	pvcControllerDeploymentCreated    bool
 	lhDeploymentCreated               bool
 	csiApplicationCreated             bool
+	csiNodeInfoCRDCreated             bool
 	sdkConn                           *grpc.ClientConn
 	zoneToInstancesMap                map[string]int
 	cloudProvider                     string
