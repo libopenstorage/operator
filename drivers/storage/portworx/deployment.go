@@ -18,27 +18,28 @@ import (
 )
 
 const (
-	pxContainerName            = "portworx"
-	pxAnnotationPrefix         = "portworx.io"
-	annotationIsPKS            = pxAnnotationPrefix + "/is-pks"
-	annotationIsGKE            = pxAnnotationPrefix + "/is-gke"
-	annotationIsAKS            = pxAnnotationPrefix + "/is-aks"
-	annotationIsEKS            = pxAnnotationPrefix + "/is-eks"
-	annotationIsOpenshift      = pxAnnotationPrefix + "/is-openshift"
-	annotationPVCController    = pxAnnotationPrefix + "/pvc-controller"
-	annotationLogFile          = pxAnnotationPrefix + "/log-file"
-	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
-	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
-	annotationServiceType      = pxAnnotationPrefix + "/service-type"
-	annotationPXVersion        = pxAnnotationPrefix + "/px-version"
-	templateVersion            = "v4"
-	secretKeyKvdbCA            = "kvdb-ca.crt"
-	secretKeyKvdbCert          = "kvdb.crt"
-	secretKeyKvdbCertKey       = "kvdb.key"
-	secretKeyKvdbUsername      = "username"
-	secretKeyKvdbPassword      = "password"
-	secretKeyKvdbACLToken      = "acl-token"
-	envKeyPXImage              = "PX_IMAGE"
+	pxContainerName               = "portworx"
+	pxAnnotationPrefix            = "portworx.io"
+	annotationIsPKS               = pxAnnotationPrefix + "/is-pks"
+	annotationIsGKE               = pxAnnotationPrefix + "/is-gke"
+	annotationIsAKS               = pxAnnotationPrefix + "/is-aks"
+	annotationIsEKS               = pxAnnotationPrefix + "/is-eks"
+	annotationIsOpenshift         = pxAnnotationPrefix + "/is-openshift"
+	annotationPVCController       = pxAnnotationPrefix + "/pvc-controller"
+	annotationLogFile             = pxAnnotationPrefix + "/log-file"
+	annotationMiscArgs            = pxAnnotationPrefix + "/misc-args"
+	annotationPVCControllerCPU    = pxAnnotationPrefix + "/pvc-controller-cpu"
+	annotationServiceType         = pxAnnotationPrefix + "/service-type"
+	annotationPXVersion           = pxAnnotationPrefix + "/px-version"
+	templateVersion               = "v4"
+	secretKeyKvdbCA               = "kvdb-ca.crt"
+	secretKeyKvdbCert             = "kvdb.crt"
+	secretKeyKvdbCertKey          = "kvdb.key"
+	secretKeyKvdbUsername         = "username"
+	secretKeyKvdbPassword         = "password"
+	secretKeyKvdbACLToken         = "acl-token"
+	envKeyPXImage                 = "PX_IMAGE"
+	envKeyDeprecatedCSIDriverName = "PORTWORX_USEDEPRECATED_CSIDRIVERNAME"
 )
 
 type volumeInfo struct {
@@ -199,9 +200,10 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	}
 
 	t.pxVersion = extractPXVersion(cluster)
+	deprecatedCSIDriverName := useDeprecatedCSIDriverName(cluster)
 
 	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
-		csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion)
+		csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
 		t.csiVersions, err = csiGenerator.getSidecarContainerVersions()
 		if err != nil {
 			return nil, err
@@ -825,6 +827,16 @@ func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
+}
+
+func useDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == envKeyDeprecatedCSIDriverName {
+			value, err := strconv.ParseBool(env.Value)
+			return err == nil && value
+		}
+	}
+	return false
 }
 
 func stringPtr(val string) *string {

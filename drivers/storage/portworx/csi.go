@@ -47,15 +47,21 @@ type csiVersions struct {
 
 // csiGenerator contains information needed to generate CSI side car versions
 type csiGenerator struct {
-	kubeVersion version.Version
-	pxVersion   version.Version
+	kubeVersion             version.Version
+	pxVersion               version.Version
+	useDeprecatedDriverName bool
 }
 
 // newCSIGenerator returns a version generator
-func newCSIGenerator(kubeVersion version.Version, pxVersion version.Version) *csiGenerator {
+func newCSIGenerator(
+	kubeVersion version.Version,
+	pxVersion version.Version,
+	useDeprecatedDriverName bool,
+) *csiGenerator {
 	return &csiGenerator{
-		kubeVersion: kubeVersion,
-		pxVersion:   pxVersion,
+		kubeVersion:             kubeVersion,
+		pxVersion:               pxVersion,
+		useDeprecatedDriverName: useDeprecatedDriverName,
 	}
 }
 
@@ -116,7 +122,7 @@ func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
 	// Set the CSI driver name
 	// - PX Versions <2.2.0 will always use the deprecated CSI Driver Name.
 	// - PX Versions >=2.2.0 will default to the new name
-	if g.pxVersion.LessThan(pxVer2_2) {
+	if g.useDeprecatedDriverName || g.pxVersion.LessThan(pxVer2_2) {
 		cv.driverName = DeprecatedCSIDriverName
 	} else {
 		cv.driverName = CSIDriverName

@@ -2063,6 +2063,55 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 }
 
+func TestCSIInstallWithDepcrecatedCSIDriverName(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	// Install with Portworx version 2.2+ and deprecated CSI driver name
+	// We should use add the resizer sidecar and use the old driver name.
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.2",
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PORTWORX_USEDEPRECATED_CSIDRIVERNAME",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentWithResizerAndOldDriver_1.0.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+}
+
 func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)

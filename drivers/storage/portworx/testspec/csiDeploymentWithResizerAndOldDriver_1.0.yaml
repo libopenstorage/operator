@@ -1,0 +1,85 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: px-csi-ext
+  namespace: kube-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: px-csi-driver
+  template:
+    metadata:
+      labels:
+        app: px-csi-driver
+    spec:
+      serviceAccountName: px-csi
+      containers:
+        - name: csi-external-provisioner
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-provisioner:v1.3.0-1
+          args:
+            - "--v=3"
+            - "--provisioner=com.openstorage.pxd"
+            - "--csi-address=$(ADDRESS)"
+            - "--enable-leader-election"
+            - "--leader-election-type=endpoints"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-attacher
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-attacher:v1.2.1-1
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-snapshotter:v1.2.0-1
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--snapshotter=com.openstorage.pxd"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          imagePullPolicy: Always
+          image: quay.io/openstorage/csi-resizer:v0.2.0-1
+          args:
+            - "--v=3"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            type: DirectoryOrCreate

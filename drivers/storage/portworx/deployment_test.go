@@ -1254,6 +1254,74 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	)
 }
 
+func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil, nil)
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+
+	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is true, use the old CSI driver name.
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.2",
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PORTWORX_USEDEPRECATED_CSIDRIVERNAME",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual := driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+	)
+
+	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME has true value, use old CSI driver name.
+	cluster.Spec.Env[0].Value = "1"
+	driver = portworx{}
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+	)
+
+	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is false, use new CSI driver name.
+	cluster.Spec.Env[0].Value = "false"
+	driver = portworx{}
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+	)
+
+	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is invalid, use new CSI driver name.
+	cluster.Spec.Env[0].Value = "invalid_boolean"
+	driver = portworx{}
+	actual = driver.GetStoragePodSpec(cluster)
+
+	assert.Equal(t,
+		actual.Containers[1].Args[2],
+		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+	)
+}
+
 func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetClient(fakeClient, nil, nil, nil, nil, nil, nil)
