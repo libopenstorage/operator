@@ -50,6 +50,7 @@ spec:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"
             - "--leader-election=true"
+            - "--leader-election-type=endpoints"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -66,6 +67,7 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--snapshotter=pxd.portworx.com"
             - "--leader-election=true"
+            - "--leader-election-type=endpoints"
           env:
             - name: ADDRESS
               value: /csi/csi.sock

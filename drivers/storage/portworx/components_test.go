@@ -2480,8 +2480,12 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
+	require.Equal(t, "--leader-election-type=endpoints",
+		deployment.Spec.Template.Spec.Containers[1].Args[3])
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
+	require.Equal(t, "--leader-election-type=endpoints",
+		deployment.Spec.Template.Spec.Containers[2].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
 		deployment.Spec.Template.Spec.Containers[3].Image)
 
@@ -2507,6 +2511,8 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
+	require.Equal(t, "--leader-election-type=leases",
+		deployment.Spec.Template.Spec.Containers[1].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
