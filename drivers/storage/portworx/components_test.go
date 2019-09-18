@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1986,6 +1987,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 
@@ -2063,6 +2065,109 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 }
 
+func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	extensionsClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, extensionsClient, nil, nil, nil)
+	// CSINodeInfo CRD should be created for k8s version 1.12.*
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.1.2",
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+		},
+	}
+
+	expectedCRD := testutil.GetExpectedCRD(t, "csiNodeInfoCrd.yaml")
+	go func() {
+		err := testutil.ActivateCRDWhenCreated(extensionsClient, expectedCRD.Name)
+		require.NoError(t, err)
+	}()
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	actualCRD, err := extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(expectedCRD.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, expectedCRD.Name, actualCRD.Name)
+	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
+	require.Equal(t, expectedCRD.Spec, actualCRD.Spec)
+
+	// Expect the CRD to be created even for k8s version 1.13.*
+	err = extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Delete(expectedCRD.Name, nil)
+	require.NoError(t, err)
+	driver.csiNodeInfoCRDCreated = false
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.99",
+	}
+
+	go func() {
+		err := testutil.ActivateCRDWhenCreated(extensionsClient, expectedCRD.Name)
+		require.NoError(t, err)
+	}()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	actualCRD, err = extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(expectedCRD.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, expectedCRD.Name, actualCRD.Name)
+	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
+	require.Equal(t, expectedCRD.Spec, actualCRD.Spec)
+
+	// CRD should not to be created for k8s version 1.11.* or below
+	err = extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Delete(expectedCRD.Name, nil)
+	require.NoError(t, err)
+	driver.csiNodeInfoCRDCreated = false
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.11.99",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	_, err = extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(expectedCRD.Name, metav1.GetOptions{})
+	require.True(t, errors.IsNotFound(err))
+
+	// CRD should not to be created for k8s version 1.14+
+	driver.csiNodeInfoCRDCreated = false
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	_, err = extensionsClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(expectedCRD.Name, metav1.GetOptions{})
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestCSIInstallWithDepcrecatedCSIDriverName(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
@@ -2072,6 +2177,7 @@ func TestCSIInstallWithDepcrecatedCSIDriverName(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 
@@ -2158,6 +2264,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 
@@ -2252,6 +2359,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 
@@ -2316,6 +2424,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 
@@ -2411,6 +2520,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
@@ -2464,6 +2574,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
@@ -2617,6 +2728,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, record.NewFakeRecorder(0))
 

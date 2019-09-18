@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/wait"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
@@ -48,11 +47,11 @@ func TestRegisterCRD(t *testing.T) {
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
 	go func() {
-		err := updateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
+		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
 		require.NoError(t, err)
 	}()
 	go func() {
-		err := updateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
+		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
 		require.NoError(t, err)
 	}()
 
@@ -157,11 +156,11 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
 	go func() {
-		err := updateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
+		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
 		require.NoError(t, err)
 	}()
 	go func() {
-		err := updateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
+		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
 		require.NoError(t, err)
 	}()
 
@@ -3999,23 +3998,4 @@ func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 			},
 		},
 	}
-}
-
-func updateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
-		crd, err := fakeClient.ApiextensionsV1beta1().
-			CustomResourceDefinitions().
-			Get(crdName, metav1.GetOptions{})
-		if err == nil {
-			crd.Status.Conditions = []apiextensionsv1beta1.CustomResourceDefinitionCondition{{
-				Type:   apiextensionsv1beta1.Established,
-				Status: apiextensionsv1beta1.ConditionTrue,
-			}}
-			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
-			return true, nil
-		} else if !errors.IsNotFound(err) {
-			return false, err
-		}
-		return false, nil
-	})
 }
