@@ -49,6 +49,12 @@ func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
 	})
 
 	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+		Key:      schedapi.TaintNodePIDPressure,
+		Operator: v1.TolerationOpExists,
+		Effect:   v1.TaintEffectNoSchedule,
+	})
+
+	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
 		Key:      schedapi.TaintNodeUnschedulable,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
@@ -56,18 +62,6 @@ func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
 
 	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
 		Key:      schedapi.TaintNodeNetworkUnavailable,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoSchedule,
-	})
-
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
-		Key:      schedapi.TaintNodeOutOfDisk,
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
-		Key:      schedapi.TaintNodeOutOfDisk,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
 	})

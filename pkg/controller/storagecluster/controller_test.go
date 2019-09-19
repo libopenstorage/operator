@@ -1213,7 +1213,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	}
 	result, err := controller.Reconcile(request)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "pod control error, pod control error")
+	require.Contains(t, err.Error(), "pod control error")
 	require.Empty(t, result)
 
 	// Verify there is event raised for failure to create/delete pods
