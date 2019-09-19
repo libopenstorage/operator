@@ -101,9 +101,11 @@ func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
 		cv.includeEndpointsAndConfigMapsForLeases = true
 	}
 
-	// Feature flags for Portworx version >= 2.2
-	if g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2) {
-		// Resizing supported in portworx >= 2.2
+	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
+	// Our CSI driver only supports resizing in PX 2.2.
+	// Resize support is Alpha starting k8s 1.14
+	if (g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2)) &&
+		(g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14)) {
 		cv.includeResizer = true
 	}
 
