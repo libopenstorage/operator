@@ -2047,8 +2047,11 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
-	// Install with Portworx version 2.2+
+	// Install with Portworx version 2.2+ and k8s version 1.14
 	// We should use add the resizer sidecar and use the new driver name.
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
 	cluster.Spec.Image = "portworx/image:2.2"
 
 	err = driver.PreInstall(cluster)
@@ -2168,11 +2171,11 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestCSIInstallWithDepcrecatedCSIDriverName(t *testing.T) {
+func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.14.0",
 	}
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
@@ -2287,15 +2290,13 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 4)
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
-	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[3].Image)
 
 	// Change provisioner image
 	deployment.Spec.Template.Spec.Containers[0].Image = "my-csi-provisioner:test"
@@ -2336,8 +2337,20 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
-	// Change resizer image
-	deployment.Spec.Template.Spec.Containers[3].Image = "my-csi-resizer:test"
+	// Enable resizer and the change it's image
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
+		deployment.Spec.Template.Spec.Containers[2].Image)
+
+	deployment.Spec.Template.Spec.Containers[2].Image = "my-csi-resizer:test"
 	err = k8sClient.Update(context.TODO(), deployment)
 	require.NoError(t, err)
 
@@ -2347,7 +2360,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[3].Image)
+		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
 func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
@@ -2473,7 +2486,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 4)
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=endpoints",
@@ -2486,10 +2499,9 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=endpoints",
 		deployment.Spec.Template.Spec.Containers[2].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[3].Image)
 
-	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar.
+	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar
+	// and add the resizer sidecar
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
@@ -2552,7 +2564,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 4)
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
 		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.3.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image,
@@ -2565,9 +2577,20 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
+
+	// Change the k8s version to 1.14, so that resizer sidecar is deployed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/quay.io/openstorage/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[3].Image,
+		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
 
@@ -2606,7 +2629,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 4)
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
 		customRepo+"/csi-provisioner:v1.3.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image,
@@ -2619,9 +2642,20 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 		customRepo+"/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
+
+	// Change the k8s version to 1.14, so that resizer sidecar is deployed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.6",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[3].Image,
+		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
 
