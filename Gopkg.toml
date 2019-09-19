@@ -39,7 +39,7 @@ required = [
 
 [[constraint]]
   name = "sigs.k8s.io/controller-runtime"
-  version = "0.1.10"
+  version = "0.2.2"
 
 [[constraint]]
   name = "github.com/portworx/sched-ops"
@@ -53,33 +53,42 @@ required = [
   name = "github.com/libopenstorage/stork"
   branch = "master"
 
+[[constraint]]
+  name = "k8s.io/kubernetes"
+  version = "=1.14.6"
+
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.13.1"
+  version = "kubernetes-1.14.6"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.13.1"
+  version = "kubernetes-1.14.6"
 
 [[override]]
   name = "k8s.io/client-go"
-  version = "kubernetes-1.13.1"
-
-[[override]]
-  name = "k8s.io/kubernetes"
-  version = "1.13.1"
+  version = "kubernetes-1.14.6"
 
 [[override]]
   name = "k8s.io/apiextensions-apiserver"
-  version = "kubernetes-1.13.1"
+  version = "kubernetes-1.14.6"
+
+[[override]]
+  name = "k8s.io/apiserver"
+  version = "kubernetes-1.14.6"
 
 [[constraint]]
   name = "k8s.io/code-generator"
-  version = "kubernetes-1.13.1"
+  version = "kubernetes-1.14.6"
 
 [[override]]
   name = "github.com/coreos/prometheus-operator"
   version = "v0.29.0"
+
+# For dependency below: Refer to issue https://github.com/golang/dep/issues/1799
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "https://github.com/fsnotify/fsnotify.git"
 
 [prune]
   go-tests = true
