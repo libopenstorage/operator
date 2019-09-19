@@ -318,7 +318,7 @@ func (p *portworx) updateNodeStatuses(
 	}
 
 	nodeStatusList := &corev1alpha1.StorageNodeStatusList{}
-	if err = p.k8sClient.List(context.TODO(), &client.ListOptions{}, nodeStatusList); err != nil {
+	if err = p.k8sClient.List(context.TODO(), nodeStatusList, &client.ListOptions{}); err != nil {
 		return fmt.Errorf("failed to get a list of StorageNodeStatus: %v", err)
 	}
 

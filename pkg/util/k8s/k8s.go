@@ -924,10 +924,10 @@ func GetPodsByOwner(
 	podList := &v1.PodList{}
 	err := k8sClient.List(
 		context.TODO(),
+		podList,
 		&client.ListOptions{
 			Namespace: namespace,
 		},
-		podList,
 	)
 	if err != nil {
 		return nil, err

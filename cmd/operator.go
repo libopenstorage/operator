@@ -107,15 +107,15 @@ func run(c *cli.Context) {
 		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
 	}
 
-	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
-		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
-	}
-
 	log.Info("Registering components")
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
+	}
+
+	if err = d.Init(mgr.GetClient(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
+		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
 	// Setup storage cluster controller
