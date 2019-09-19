@@ -160,7 +160,7 @@ func run(c *cli.Context) {
 		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
-	if err = d.Init(mgr.GetClient(), mgr.GetRecorder(storagecluster.ControllerName)); err != nil {
+	if err = d.Init(mgr.GetClient(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 

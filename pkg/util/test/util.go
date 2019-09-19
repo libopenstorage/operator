@@ -42,7 +42,7 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 
 // List returns a list of objects using the given Kubernetes client
 func List(k8sClient client.Client, obj runtime.Object) error {
-	return k8sClient.List(context.TODO(), &client.ListOptions{}, obj)
+	return k8sClient.List(context.TODO(), obj, &client.ListOptions{})
 }
 
 // Get returns an object using the given Kubernetes client

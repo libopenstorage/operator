@@ -48,12 +48,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/integer"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	daemonutil "k8s.io/kubernetes/pkg/controller/daemon/util"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
-	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	"k8s.io/utils/integer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -120,7 +119,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
-	c.recorder = mgr.GetRecorder(ControllerName)
+	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 
 	// Create a new controller
 	ctrl, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -421,7 +420,7 @@ func (c *Controller) manage(
 	// For each node, if the node is running the storage pod but isn't supposed to, kill the storage pod.
 	// If the node is supposed to run the storage pod, but isn't, create the storage pod on the node.
 	nodeList := &v1.NodeList{}
-	err = c.client.List(context.TODO(), &client.ListOptions{}, nodeList)
+	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
 			cluster, err)
@@ -761,15 +760,15 @@ func (c *Controller) simulate(
 	newPod *v1.Pod,
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
-) ([]algorithm.PredicateFailureReason, *schedulercache.NodeInfo, error) {
+) ([]predicates.PredicateFailureReason, *schedulernodeinfo.NodeInfo, error) {
 	podList := &v1.PodList{}
 	fieldSelector := fields.SelectorFromSet(map[string]string{nodeNameIndex: node.Name})
-	err := c.client.List(context.TODO(), &client.ListOptions{FieldSelector: fieldSelector}, podList)
+	err := c.client.List(context.TODO(), podList, &client.ListOptions{FieldSelector: fieldSelector})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	nodeInfo := schedulercache.NewNodeInfo()
+	nodeInfo := schedulernodeinfo.NewNodeInfo()
 	if err = nodeInfo.SetNode(node); err != nil {
 		logrus.Warnf("Error setting setting node object in cache: %v", err)
 	}
@@ -867,9 +866,9 @@ func isControlledByStorageCluster(pod *v1.Pod, uid types.UID) bool {
 // and PodToleratesNodeTaints predicate
 func checkPredicates(
 	pod *v1.Pod,
-	nodeInfo *schedulercache.NodeInfo,
-) (bool, []algorithm.PredicateFailureReason, error) {
-	var predicateFails []algorithm.PredicateFailureReason
+	nodeInfo *schedulernodeinfo.NodeInfo,
+) (bool, []predicates.PredicateFailureReason, error) {
+	var predicateFails []predicates.PredicateFailureReason
 
 	fit, reasons, err := predicates.PodToleratesNodeTaints(pod, nil, nodeInfo)
 	if err != nil {
@@ -917,7 +916,7 @@ func (c *Controller) getStoragePods(
 	// List all pods to include those that don't match the selector anymore but
 	// have a ControllerRef pointing to this controller.
 	podList := &v1.PodList{}
-	err := c.client.List(context.TODO(), &client.ListOptions{Namespace: cluster.Namespace}, podList)
+	err := c.client.List(context.TODO(), podList, &client.ListOptions{Namespace: cluster.Namespace})
 	if err != nil {
 		return nil, err
 	}

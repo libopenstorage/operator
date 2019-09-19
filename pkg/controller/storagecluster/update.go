@@ -157,7 +157,7 @@ func (c *Controller) controlledHistories(
 	// List all histories to include those that don't match the selector anymore
 	// but have a ControllerRef pointing to the controller.
 	historyList := &apps.ControllerRevisionList{}
-	err := c.client.List(context.TODO(), &client.ListOptions{Namespace: cluster.Namespace}, historyList)
+	err := c.client.List(context.TODO(), historyList, &client.ListOptions{Namespace: cluster.Namespace})
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (c *Controller) getUnavailableNumbers(
 ) (int, int, error) {
 	logrus.Debugf("Getting unavailable numbers")
 	nodeList := &v1.NodeList{}
-	err := c.client.List(context.TODO(), &client.ListOptions{}, nodeList)
+	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
 	if err != nil {
 		return -1, -1, fmt.Errorf("couldn't get list of nodes during rolling "+
 			"update of storage cluster  %#v: %v", cluster, err)
