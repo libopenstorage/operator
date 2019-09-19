@@ -34,23 +34,7 @@ spec:
             - "--provisioner=pxd.portworx.com"
             - "--csi-address=$(ADDRESS)"
             - "--enable-leader-election"
-            - "--leader-election-type=endpoints"
-          env:
-            - name: ADDRESS
-              value: /csi/csi.sock
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
-        - name: csi-attacher
-          imagePullPolicy: Always
-          image: quay.io/openstorage/csi-attacher:v1.2.1-1
-          args:
-            - "--v=3"
-            - "--csi-address=$(ADDRESS)"
-            - "--leader-election=true"
-            - "--leader-election-type=endpoints"
+            - "--leader-election-type=leases"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -67,7 +51,7 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--snapshotter=pxd.portworx.com"
             - "--leader-election=true"
-            - "--leader-election-type=endpoints"
+            - "--leader-election-type=leases"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
