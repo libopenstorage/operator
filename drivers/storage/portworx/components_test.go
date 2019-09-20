@@ -2671,11 +2671,11 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "--leader-election-type=endpoints",
+	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
-	require.Equal(t, "--leader-election-type=endpoints",
+	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[4])
 
 	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar
