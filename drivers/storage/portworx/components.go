@@ -1628,8 +1628,10 @@ func getCSIDeploymentSpec(
 	}
 
 	leaderElectionType := "leases"
+	provisionerLeaderElectionType := "leases"
 	if t.csiVersions.includeEndpointsAndConfigMapsForLeases {
-		leaderElectionType = "endpoints"
+		leaderElectionType = "configmaps"
+		provisionerLeaderElectionType = "endpoints"
 	}
 
 	deployment := &appsv1.Deployment{
@@ -1659,7 +1661,7 @@ func getCSIDeploymentSpec(
 								"--provisioner=" + t.csiVersions.driverName,
 								"--csi-address=$(ADDRESS)",
 								"--enable-leader-election",
-								"--leader-election-type=" + leaderElectionType,
+								"--leader-election-type=" + provisionerLeaderElectionType,
 							},
 							Env: []v1.EnvVar{
 								{
