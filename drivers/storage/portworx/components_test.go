@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1976,6 +1977,149 @@ func TestCSIInstall(t *testing.T) {
 	require.Len(t, statefulSet.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
 	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
+
+	// CSIDriver object should be created only for k8s version 1.14+
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.4",
+	}
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.0.3",
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "true",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI ServiceAccount
+	serviceAccountList := &v1.ServiceAccountList{}
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.Len(t, serviceAccountList.Items, 2)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// CSI ClusterRole
+	clusterRoleList := &rbacv1.ClusterRoleList{}
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.Len(t, clusterRoleList.Items, 2)
+
+	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// CSI ClusterRoleBinding
+	crbList := &rbacv1.ClusterRoleBindingList{}
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.Len(t, crbList.Items, 2)
+
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// CSI Service
+	serviceList := &v1.ServiceList{}
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.Len(t, serviceList.Items, 3)
+
+	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
+	service := &v1.Service{}
+	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Name, service.Name)
+	require.Equal(t, expectedService.Namespace, service.Namespace)
+	require.Len(t, service.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, service.OwnerReferences[0].Name)
+	require.Equal(t, expectedService.Labels, service.Labels)
+	require.Equal(t, expectedService.Spec, service.Spec)
+
+	// CSI StatefulSet
+	statefulSetList := &appsv1.StatefulSetList{}
+	err = testutil.List(k8sClient, statefulSetList)
+	require.NoError(t, err)
+	require.Len(t, statefulSetList.Items, 1)
+
+	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
+	statefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
+	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
+	require.Len(t, statefulSet.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
+	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
+
+	// CSIDriver object should be created only for k8s version 1.14+
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
@@ -2047,6 +2191,13 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
+	// CSIDriver object should be not be created for k8s 1.13
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+
 	// Install with Portworx version 2.2+ and k8s version 1.14
 	// We should use add the resizer sidecar and use the new driver name.
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -2066,6 +2217,20 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// CSIDriver object should be created for k8s 1.14+
+	// For Portworx 2.2+ we should create the driver object with new driver name
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.NoError(t, err)
+	require.Len(t, csiDriver.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
+	require.False(t, *csiDriver.Spec.AttachRequired)
+	require.False(t, *csiDriver.Spec.PodInfoOnMount)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
@@ -2219,6 +2384,19 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// CSIDriver should also be created with deprecated driver name
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	require.NoError(t, err)
+	require.Len(t, csiDriver.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
+	require.False(t, *csiDriver.Spec.AttachRequired)
+	require.False(t, *csiDriver.Spec.PodInfoOnMount)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
@@ -2763,7 +2941,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.14.0",
 	}
 	k8sClient := fake.NewFakeClient()
 	driver := portworx{
@@ -2807,6 +2985,10 @@ func TestDisableCSI_1_0(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.NoError(t, err)
+
 	// Disable CSI
 	cluster.Spec.FeatureGates[string(FeatureCSI)] = "false"
 	err = driver.PreInstall(cluster)
@@ -2833,6 +3015,10 @@ func TestDisableCSI_1_0(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+
 	// Remove CSI flag. Default should be disabled.
 	delete(cluster.Spec.FeatureGates, string(FeatureCSI))
 	err = driver.PreInstall(cluster)
@@ -2857,5 +3043,9 @@ func TestDisableCSI_1_0(t *testing.T) {
 
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
