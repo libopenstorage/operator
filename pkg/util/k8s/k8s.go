@@ -10,6 +10,7 @@ import (
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -539,6 +540,78 @@ func DeleteStorageClass(
 	storageClass.OwnerReferences = newOwners
 	logrus.Debugf("Disowning %s StorageClass", name)
 	return k8sClient.Update(context.TODO(), storageClass)
+}
+
+// CreateOrUpdateCSIDriver creates a CSIDriver if not present,
+// else updates it if it has changed
+func CreateOrUpdateCSIDriver(
+	k8sClient client.Client,
+	driver *storagev1beta1.CSIDriver,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingDriver := &storagev1beta1.CSIDriver{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{Name: driver.Name},
+		existingDriver,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating %s CSIDriver", driver.Name)
+		return k8sClient.Create(context.TODO(), driver)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(driver.Spec, existingDriver.Spec)
+
+	for _, o := range existingDriver.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			driver.OwnerReferences = append(driver.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(driver.OwnerReferences) > len(existingDriver.OwnerReferences) {
+		logrus.Debugf("Updating %s CSIDriver", driver.Name)
+		return k8sClient.Update(context.TODO(), driver)
+	}
+	return nil
+}
+
+// DeleteCSIDriver deletes the CSIDriver object if present and owned
+func DeleteCSIDriver(
+	k8sClient client.Client,
+	name string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name: name,
+	}
+
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err := k8sClient.Get(context.TODO(), resource, csiDriver)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(csiDriver.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(csiDriver.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(csiDriver.OwnerReferences) > 0 && len(csiDriver.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete CSIDriver %s as it is not owned", name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s CSIDriver", name)
+		return k8sClient.Delete(context.TODO(), csiDriver)
+	}
+	csiDriver.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s CSIDriver", name)
+	return k8sClient.Update(context.TODO(), csiDriver)
 }
 
 // CreateOrUpdateService creates a service if not present, else updates it

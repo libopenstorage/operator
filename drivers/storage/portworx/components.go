@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -121,7 +122,7 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 			return err
 		}
 	} else {
-		if err = p.removeCSI(t.cluster); err != nil {
+		if err = p.removeCSI(t); err != nil {
 			return err
 		}
 	}
@@ -219,6 +220,11 @@ func (p *portworx) setupCSI(t *template) error {
 	if err := p.createCSIService(t, ownerRef); err != nil {
 		return err
 	}
+	if t.csiVersions.includeCsiDriverInfo {
+		if err := p.createCSIDriver(t, ownerRef); err != nil {
+			return err
+		}
+	}
 	if t.csiVersions.useDeployment {
 		if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiApplicationName, t.cluster.Namespace, *ownerRef); err != nil {
 			return err
@@ -290,8 +296,8 @@ func (p *portworx) removeLighthouse(cluster *corev1alpha1.StorageCluster) error 
 	return nil
 }
 
-func (p *portworx) removeCSI(cluster *corev1alpha1.StorageCluster) error {
-	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+func (p *portworx) removeCSI(t *template) error {
+	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
 	// We don't delete the service account for CSI because it is part of CSV. If
 	// we disable CSI then the CSV upgrades would fail as requirements are not met.
 	if err := k8sutil.DeleteClusterRole(p.k8sClient, csiClusterRoleName, *ownerRef); err != nil {
@@ -300,16 +306,21 @@ func (p *portworx) removeCSI(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, csiClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(p.k8sClient, csiServiceName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteService(p.k8sClient, csiServiceName, t.cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStatefulSet(p.k8sClient, csiApplicationName, t.cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(p.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDeployment(p.k8sClient, csiApplicationName, t.cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	p.csiApplicationCreated = false
+	if t.csiVersions.includeCsiDriverInfo {
+		if err := k8sutil.DeleteCSIDriver(p.k8sClient, t.csiVersions.driverName, *ownerRef); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -465,6 +476,26 @@ func createCSINodeInfoCRD() error {
 	}
 
 	return k8s.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+}
+
+func (p *portworx) createCSIDriver(
+	t *template,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateCSIDriver(
+		p.k8sClient,
+		&storagev1beta1.CSIDriver{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            t.csiVersions.driverName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Spec: storagev1beta1.CSIDriverSpec{
+				AttachRequired: boolPtr(false),
+				PodInfoOnMount: boolPtr(false),
+			},
+		},
+		ownerRef,
+	)
 }
 
 func (p *portworx) createServiceAccount(
