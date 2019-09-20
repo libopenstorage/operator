@@ -38,7 +38,7 @@ type csiVersions struct {
 	includeAttacher bool
 	// includeResizer dicates whether or not to include the resizer sidecar.
 	includeResizer bool
-	// includeCsiDriverInfo dictates whether or not to add the CsiDriverInfo object.
+	// includeCsiDriverInfo dictates whether or not to add the CSIDriver object.
 	includeCsiDriverInfo bool
 	// includeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
 	// In Kubernetes Kubernetes 1.14+ leader election does not use configmaps.
@@ -63,6 +63,16 @@ func newCSIGenerator(
 		pxVersion:               pxVersion,
 		useDeprecatedDriverName: useDeprecatedDriverName,
 	}
+}
+
+func (g *csiGenerator) basicCSIVersions() csiVersions {
+	cv := csiVersions{}
+	cv.driverName = g.driverName()
+	k8sVer1_14, _ := version.NewVersion("1.14")
+	if g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14) {
+		cv.includeCsiDriverInfo = true
+	}
+	return cv
 }
 
 // getSidecarContainerVersions returns the appropriate side car versions
@@ -122,13 +132,7 @@ func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
 	}
 
 	// Set the CSI driver name
-	// - PX Versions <2.2.0 will always use the deprecated CSI Driver Name.
-	// - PX Versions >=2.2.0 will default to the new name
-	if g.useDeprecatedDriverName || g.pxVersion.LessThan(pxVer2_2) {
-		cv.driverName = DeprecatedCSIDriverName
-	} else {
-		cv.driverName = CSIDriverName
-	}
+	cv.driverName = g.driverName()
 
 	// If we have k8s version < v1.14, we include the attacher.
 	// This is because the CSIDriver object was alpha until 1.14+
@@ -179,4 +183,14 @@ func (g *csiGenerator) setSidecarContainerVersionsV0_4() *csiVersions {
 		c.version = "0.3"
 	}
 	return c
+}
+
+func (g *csiGenerator) driverName() string {
+	pxVer2_2, _ := version.NewVersion("2.2")
+	// PX Versions <2.2.0 will always use the deprecated CSI Driver Name.
+	// PX Versions >=2.2.0 will default to the new name
+	if g.useDeprecatedDriverName || g.pxVersion.LessThan(pxVer2_2) {
+		return DeprecatedCSIDriverName
+	}
+	return CSIDriverName
 }

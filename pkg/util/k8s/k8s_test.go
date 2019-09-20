@@ -9,6 +9,7 @@ import (
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -544,6 +545,80 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestDeleteCSIDriver(t *testing.T) {
+	name := "test"
+	expected := &storagev1beta1.CSIDriver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+	k8sClient := fake.NewFakeClient(expected)
+
+	// Don't delete or throw error if the CSI driver is not present
+	err := DeleteCSIDriver(k8sClient, "not-present-csi-driver")
+	require.NoError(t, err)
+
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.NoError(t, err)
+	require.Equal(t, expected, csiDriver)
+
+	// Don't delete when there is no owner in the CSI driver
+	// but trying to delete for specific owners
+	err = DeleteCSIDriver(k8sClient, name, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.NoError(t, err)
+	require.Equal(t, expected, csiDriver)
+
+	// Delete when there is no owner in the CSI driver
+	err = DeleteCSIDriver(k8sClient, name)
+	require.NoError(t, err)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the CSI driver is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeleteCSIDriver(k8sClient, name)
+	require.NoError(t, err)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.NoError(t, err)
+	require.Equal(t, expected, csiDriver)
+
+	// Don't delete when the CSI driver is owned by objects
+	// more than what are passed on delete call
+	err = DeleteCSIDriver(k8sClient, name, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.NoError(t, err)
+	require.Len(t, csiDriver.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), csiDriver.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), csiDriver.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the CSI driver
+	err = DeleteCSIDriver(k8sClient, name,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	csiDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, csiDriver, name, "")
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestDeleteService(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
@@ -770,6 +845,80 @@ func TestDeleteStatefulSet(t *testing.T) {
 	statefulSet = &appsv1.StatefulSet{}
 	err = get(k8sClient, statefulSet, name, namespace)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestCSIDriverChangeSpec(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+
+	attachRequired := true
+	expectedDriver := &storagev1beta1.CSIDriver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+		Spec: storagev1beta1.CSIDriverSpec{
+			AttachRequired: &attachRequired,
+		},
+	}
+
+	err := CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
+	require.NoError(t, err)
+
+	actualDriver := &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, actualDriver, "test", "")
+	require.NoError(t, err)
+	require.True(t, *actualDriver.Spec.AttachRequired)
+
+	// Change spec
+	attachRequired = false
+
+	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
+	require.NoError(t, err)
+
+	actualDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, actualDriver, "test", "")
+	require.NoError(t, err)
+	require.False(t, *actualDriver.Spec.AttachRequired)
+}
+
+func TestCSIDriverWithOwnerReferences(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedDriver := &storagev1beta1.CSIDriver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
+	require.NoError(t, err)
+
+	actualDriver := &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, actualDriver, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, &firstOwner)
+	require.NoError(t, err)
+
+	actualDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, actualDriver, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedDriver.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, &secondOwner)
+	require.NoError(t, err)
+
+	actualDriver = &storagev1beta1.CSIDriver{}
+	err = get(k8sClient, actualDriver, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualDriver.OwnerReferences)
 }
 
 func TestServicePortAddition(t *testing.T) {

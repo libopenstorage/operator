@@ -202,12 +202,14 @@ func newTemplate(cluster *corev1alpha1.StorageCluster) (*template, error) {
 	t.pxVersion = extractPXVersion(cluster)
 	deprecatedCSIDriverName := useDeprecatedCSIDriverName(cluster)
 
+	csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
 	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
-		csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
 		t.csiVersions, err = csiGenerator.getSidecarContainerVersions()
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		t.csiVersions = csiGenerator.basicCSIVersions()
 	}
 
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
