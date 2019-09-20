@@ -118,6 +118,13 @@ spec:
               format: int32
               description: The number of old history to retain to allow rollback. This is a pointer
                 to distinguish between an explicit zero and not specified. Defaults to 10.
+            featureGates:
+              type: object
+              description: This is a map of feature names to string values.
+            runtimeOptions:
+              type: object
+              description: This is map of any runtime options that need to be sent to the storage
+                driver. The value is a string.
             placement:
               type: object
               description: Describes placement configuration for the storage cluster pods.
