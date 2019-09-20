@@ -1582,7 +1582,7 @@ func (p *portworx) createCSIDeployment(
 		t.cluster.Spec.CustomImageRegistry,
 		t.csiVersions.provisioner,
 	)
-	if t.csiVersions.includeAttacher {
+	if t.csiVersions.includeAttacher && t.csiVersions.attacher != "" {
 		attacherImage = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
 			t.csiVersions.attacher,
@@ -1594,7 +1594,7 @@ func (p *portworx) createCSIDeployment(
 			t.csiVersions.snapshotter,
 		)
 	}
-	if t.csiVersions.resizer != "" {
+	if t.csiVersions.includeResizer && t.csiVersions.resizer != "" {
 		resizerImage = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
 			t.csiVersions.resizer,
