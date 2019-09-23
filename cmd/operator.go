@@ -10,7 +10,6 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
-	"github.com/libopenstorage/operator/pkg/controller/clusteroperation"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/version"
@@ -110,13 +109,6 @@ func run(c *cli.Context) {
 	// Register CRDs
 	log.Info("Registering components")
 
-	// Setup cluster operation controller
-	clusterOperationController := clusteroperation.Controller{}
-	err = clusterOperationController.RegisterCRD()
-	if err != nil {
-		log.Fatalf("Error registering CRD's for ClusterOperation controller : %v", err)
-	}
-
 	d, err := storage.Get(driverName)
 	if err != nil {
 		log.Fatalf("Error getting Storage driver %v: %v", driverName, err)
@@ -162,10 +154,6 @@ func run(c *cli.Context) {
 
 	if err = d.Init(mgr.GetClient(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
-	}
-
-	if err := clusterOperationController.Init(mgr); err != nil {
-		log.Fatalf("Error initializing  clusterOperationController : %v", err)
 	}
 
 	// Setup storage cluster controller
