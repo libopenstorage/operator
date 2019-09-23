@@ -19,15 +19,14 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
-	rest "k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/rest"
 )
 
 type CoreV1alpha1Interface interface {
 	RESTClient() rest.Interface
-	ClusterOperationsGetter
 	StorageClustersGetter
 	StorageNodesGetter
 }
@@ -35,10 +34,6 @@ type CoreV1alpha1Interface interface {
 // CoreV1alpha1Client is used to interact with features provided by the core.libopenstorage.org group.
 type CoreV1alpha1Client struct {
 	restClient rest.Interface
-}
-
-func (c *CoreV1alpha1Client) ClusterOperations(namespace string) ClusterOperationInterface {
-	return newClusterOperations(c, namespace)
 }
 
 func (c *CoreV1alpha1Client) StorageClusters(namespace string) StorageClusterInterface {
