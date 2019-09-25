@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1alpha1"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/testing"
+	v1alpha1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1alpha1"
+	rest "k8s.io/client-go/rest"
+	testing "k8s.io/client-go/testing"
 )
 
 type FakeCoreV1alpha1 struct {
