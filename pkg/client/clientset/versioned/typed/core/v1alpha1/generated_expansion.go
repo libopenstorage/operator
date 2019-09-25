@@ -18,8 +18,6 @@ limitations under the License.
 
 package v1alpha1
 
-type ClusterOperationExpansion interface{}
-
 type StorageClusterExpansion interface{}
 
 type StorageNodeExpansion interface{}
