@@ -30,7 +30,7 @@ const (
 	driverName                        = "portworx"
 	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
-	defaultPortworxImage              = "portworx/oci-monitor:2.1.3"
+	defaultPortworxImage              = "portworx/oci-monitor:2.1.5"
 	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
 	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
