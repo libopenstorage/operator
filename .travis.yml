@@ -5,8 +5,8 @@ go:
   - 1.11.2
 script:
   - |
-    if [ "${TRAVIS_BRANCH}" == "master" ]; then
-      export DOCKER_HUB_STORAGE_OPERATOR_TAG=master
+    if [ "${TRAVIS_BRANCH}" == "px-rel-1.0.6" ]; then
+      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.0.6-dev
     else
       export DOCKER_HUB_STORAGE_OPERATOR_TAG=`git rev-parse --short HEAD`
     fi
