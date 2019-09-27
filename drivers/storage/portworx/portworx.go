@@ -30,8 +30,9 @@ const (
 	driverName                        = "portworx"
 	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
-	defaultPortworxImage              = "portworx/oci-monitor:2.1.3"
+	defaultPortworxImage              = "portworx/oci-monitor"
 	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
+	defaultStorkImage                 = "openstorage/stork:2.2.5"
 	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
@@ -100,14 +101,18 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
+	t, err := newTemplate(toUpdate)
+	if err != nil {
+		return
+	}
 	if len(strings.TrimSpace(toUpdate.Spec.Image)) == 0 {
-		toUpdate.Spec.Image = defaultPortworxImage
+		toUpdate.Spec.Image = defaultPortworxImage + ":" + t.defaultPortworxVersion()
 	}
-	if toUpdate.Spec.UserInterface != nil &&
-		toUpdate.Spec.UserInterface.Enabled &&
-		len(strings.TrimSpace(toUpdate.Spec.UserInterface.Image)) == 0 {
-		toUpdate.Spec.UserInterface.Image = defaultLighthouseImage
+	partitions := strings.Split(toUpdate.Spec.Image, ":")
+	if len(partitions) > 1 {
+		toUpdate.Spec.Version = partitions[len(partitions)-1]
 	}
+
 	if toUpdate.Spec.Kvdb == nil {
 		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
 	}
@@ -117,15 +122,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	if toUpdate.Spec.SecretsProvider == nil {
 		toUpdate.Spec.SecretsProvider = stringPtr(defaultSecretsProvider)
 	}
-	startPort := uint32(defaultStartPort)
-	if toUpdate.Spec.StartPort == nil {
-		toUpdate.Spec.StartPort = &startPort
-	}
+	startPort := uint32(t.startPort)
+	toUpdate.Spec.StartPort = &startPort
+
 	if toUpdate.Spec.Placement == nil || toUpdate.Spec.Placement.NodeAffinity == nil {
-		t, err := newTemplate(toUpdate)
-		if err != nil {
-			return
-		}
 		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
 			NodeAffinity: &v1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -136,6 +136,46 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 					},
 				},
 			},
+		}
+	}
+
+	components, err := t.componentVersions()
+	if err != nil {
+		logrus.Warnf(err.Error())
+	}
+
+	// Use the lighthouse image from release manifest if the current image is not locked,
+	// else keep using the existing image. If the current image is empty then use the
+	// default image from manifest else a hardcoded one if absent in manifest.
+	if toUpdate.Spec.UserInterface != nil &&
+		toUpdate.Spec.UserInterface.Enabled {
+		toUpdate.Spec.UserInterface.Image = strings.TrimSpace(toUpdate.Spec.UserInterface.Image)
+		if len(components.Lighthouse) > 0 {
+			if !toUpdate.Spec.UserInterface.LockImage ||
+				len(toUpdate.Spec.UserInterface.Image) == 0 {
+				toUpdate.Spec.UserInterface.Image = components.Lighthouse
+			}
+		} else if len(toUpdate.Spec.UserInterface.Image) == 0 {
+			toUpdate.Spec.UserInterface.Image = defaultLighthouseImage
+		}
+	}
+
+	// Enabled stork by default
+	if toUpdate.Spec.Stork == nil {
+		toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{Enabled: true}
+	}
+	// Use the stork image from release manifest if the current image is not locked,
+	// else keep using the existing image. If the current image is empty then use the
+	// default image from manifest else a hardcoded one if absent in manifest.
+	if toUpdate.Spec.Stork.Enabled {
+		toUpdate.Spec.Stork.Image = strings.TrimSpace(toUpdate.Spec.Stork.Image)
+		if len(components.Stork) > 0 {
+			if !toUpdate.Spec.Stork.LockImage ||
+				len(toUpdate.Spec.Stork.Image) == 0 {
+				toUpdate.Spec.Stork.Image = components.Stork
+			}
+		} else if len(toUpdate.Spec.Stork.Image) == 0 {
+			toUpdate.Spec.Stork.Image = defaultStorkImage
 		}
 	}
 }

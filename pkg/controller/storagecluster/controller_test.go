@@ -223,27 +223,6 @@ func TestStorageClusterDefaults(t *testing.T) {
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
 	require.Equal(t, v1.PullNever, cluster.Spec.ImagePullPolicy)
-
-	// Populate version from image
-	cluster.Spec.Image = "test/image:1.2.3"
-	cluster.Spec.Version = ""
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.Equal(t, "1.2.3", cluster.Spec.Version)
-
-	// Don't populate version from image if not tag present
-	cluster.Spec.Image = "test/image"
-	cluster.Spec.Version = ""
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.Empty(t, cluster.Spec.Version)
-
-	// Don't populate version if image not present
-	cluster.Spec.Image = ""
-	cluster.Spec.Version = ""
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.Empty(t, cluster.Spec.Version)
 }
 
 func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
@@ -313,72 +292,6 @@ func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, corev1alpha1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Nil(t, cluster.Spec.UpdateStrategy.RollingUpdate)
-}
-
-func TestStorageClusterDefaultsForStork(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "kube-test",
-		},
-	}
-
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-
-	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
-	}
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-
-	// Stork should be enabled be default
-	err := controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.True(t, cluster.Spec.Stork.Enabled)
-	require.Equal(t, defaultStorkImage, cluster.Spec.Stork.Image)
-
-	// Stork should use default image if not specified and enabled in spec
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
-		Enabled: true,
-	}
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.True(t, cluster.Spec.Stork.Enabled)
-	require.Equal(t, defaultStorkImage, cluster.Spec.Stork.Image)
-
-	// Stork should use default image if empty and enabled in spec
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
-		Enabled: true,
-		Image:   "  ",
-	}
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.True(t, cluster.Spec.Stork.Enabled)
-	require.Equal(t, defaultStorkImage, cluster.Spec.Stork.Image)
-
-	// Stork should not use default image if image already present in spec
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
-		Enabled: true,
-		Image:   "testimage",
-	}
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.True(t, cluster.Spec.Stork.Enabled)
-	require.Equal(t, "testimage", cluster.Spec.Stork.Image)
-
-	// Stork should not use default image if disabled in spec
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
-		Enabled: false,
-	}
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.False(t, cluster.Spec.Stork.Enabled)
-	require.Empty(t, cluster.Spec.Stork.Image)
 }
 
 func TestStorageClusterDefaultsForFinalizer(t *testing.T) {

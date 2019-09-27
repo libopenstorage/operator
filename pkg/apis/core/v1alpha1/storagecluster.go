@@ -291,6 +291,10 @@ type UserInterfaceSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Image is the docker image of the user interface container
 	Image string `json:"image,omitempty"`
+	// LockImage is a boolean indicating if the user interface image needs to be locked
+	// to the given image. If the image is not locked, it can be updated by the driver
+	// during upgrades.
+	LockImage bool `json:"lockImage,omitempty"`
 	// Env is a list of environment variables used by UI component
 	Env []v1.EnvVar `json:"env,omitempty"`
 }
@@ -301,6 +305,10 @@ type StorkSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Image is docker image of the STORK container
 	Image string `json:"image,omitempty"`
+	// LockImage is a boolean indicating if the stork image needs to be locked
+	// to the given image. If the image is not locked, it can be updated by the
+	// driver during upgrades.
+	LockImage bool `json:"lockImage,omitempty"`
 	// Args is a map of arguments given to STORK
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by stork

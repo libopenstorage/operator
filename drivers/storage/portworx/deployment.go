@@ -11,6 +11,7 @@ import (
 	version "github.com/hashicorp/go-version"
 
 	"github.com/libopenstorage/cloudops"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -180,6 +181,7 @@ type template struct {
 	csiVersions        csiVersions
 	kvdb               map[string]string
 	cloudConfig        *cloudstorage.Config
+	releases           *manifest.ReleaseManifest
 }
 
 func newTemplate(
@@ -191,19 +193,10 @@ func newTemplate(
 
 	t := &template{cluster: cluster}
 
-	k8sVersion, err := k8s.Instance().GetVersion()
+	var err error
+	t.k8sVersion, err = extractK8sVersion()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
-
-	numericVersion := strings.TrimLeft(matches[1], "v")
-	t.k8sVersion, err = version.NewVersion(numericVersion)
-	if err != nil {
-		return nil, fmt.Errorf("invalid kubernetes version %v: %v", numericVersion, err)
+		return nil, err
 	}
 
 	t.pxVersion = extractPXVersion(cluster)
@@ -217,6 +210,11 @@ func newTemplate(
 		}
 	} else {
 		t.csiVersions = csiGenerator.basicCSIVersions()
+	}
+
+	t.releases, err = manifest.NewReleaseManifest()
+	if err != nil {
+		return nil, fmt.Errorf("error getting release manifest for portworx: %v", err)
 	}
 
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
@@ -877,6 +875,18 @@ func (t *template) csiBasePath() string {
 	return path.Join("/var/lib/kubelet/plugins", t.csiVersions.driverName)
 }
 
+func extractK8sVersion() (*version.Version, error) {
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	return version.NewVersion(matches[1])
+}
+
 func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 	var (
 		err       error
@@ -910,6 +920,22 @@ func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
+}
+
+func (t *template) componentVersions() (manifest.Release, error) {
+	components, err := t.releases.GetFromVersion(t.pxVersion)
+	if err != nil {
+		logrus.Debugf("Could not find an entry for portworx %v in release manifest: %v", t.pxVersion, err)
+		components, err = t.releases.GetDefault()
+		if err != nil {
+			return manifest.Release{}, fmt.Errorf("error getting default release from manifest: %v", err)
+		}
+	}
+	return *components, nil
+}
+
+func (t *template) defaultPortworxVersion() string {
+	return t.releases.DefaultRelease
 }
 
 func useDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {

@@ -1,0 +1,5 @@
+defaultRelease: 2.1.5
+releases:
+  2.1.5:
+    stork: openstorage/stork:2.2.4
+    lighthouse: portworx/px-lighthouse:2.0.4
