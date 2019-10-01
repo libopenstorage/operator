@@ -6,7 +6,7 @@ metadata:
   annotations:
     portworx.io/is-openshift: "true"
 spec:
-  image: "registry.connect.redhat.com/portworx/px-monitor:2.1.2"
+  image: "portworx/oci-monitor:2.1.5"
   imagePullPolicy: "Always"
   kvdb:
     internal: true
