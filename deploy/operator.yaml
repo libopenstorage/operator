@@ -27,7 +27,7 @@ spec:
         - --driver=portworx
         - --leader-elect=true
         imagePullPolicy: Always
-        image: openstorage/openstorage-operator:master
+        image: openstorage/openstorage-operator:1.0.6-dev
         securityContext:
           privileged: false
         name: portworx-operator
