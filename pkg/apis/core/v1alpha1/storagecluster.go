@@ -84,6 +84,8 @@ type StorageClusterSpec struct {
 	// Stork contains STORK related parameters. For more information about STORK,
 	// check https://github.com/libopenstorage/stork
 	Stork *StorkSpec `json:"stork,omitempty"`
+	// Monitoring contains monitoring configuration for the storage cluster.
+	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	// Nodes []NodeSpec `json:"nodes"`
@@ -313,6 +315,13 @@ type StorkSpec struct {
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by stork
 	Env []v1.EnvVar `json:"env,omitempty"`
+}
+
+// MonitoringSpec contains monitoring configuration for the storage cluster.
+type MonitoringSpec struct {
+	// EnableMetrics this exposes the storage cluster metrics to external
+	// monitoring solutions like Prometheus.
+	EnableMetrics bool `json:"enableMetrics,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster

@@ -30,7 +30,8 @@ required = [
   "k8s.io/gengo/generator",
   "k8s.io/gengo/examples/defaulter-gen/generators",
   "k8s.io/code-generator/cmd/defaulter-gen/args",
-  "k8s.io/code-generator/cmd/deepcopy-gen/args"
+  "k8s.io/code-generator/cmd/deepcopy-gen/args",
+  "github.com/golang/protobuf/protoc-gen-go",
 ]
 
 [[constraint]]
@@ -43,7 +44,7 @@ required = [
 
 [[constraint]]
   name = "github.com/portworx/sched-ops"
-  branch = "kubernetes-1.13.1"
+  branch = "operator"
 
 [[constraint]]
   name = "github.com/libopenstorage/openstorage"
@@ -84,6 +85,10 @@ required = [
 [[override]]
   name = "github.com/coreos/prometheus-operator"
   version = "v0.29.0"
+
+[[constraint]]
+  name = "github.com/golang/protobuf"
+  version = "v1.3.0"
 
 # For dependency below: Refer to issue https://github.com/golang/dep/issues/1799
 [[override]]
