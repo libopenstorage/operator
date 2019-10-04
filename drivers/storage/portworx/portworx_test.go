@@ -95,7 +95,7 @@ func TestGetStorkEnvList(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,7 +199,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -289,7 +289,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -379,7 +379,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -427,7 +427,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 
 func TestSetDefaultsOnStorageClusterOnError(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetClient(versionClient, nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(versionClient)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "invalid",
 	}
@@ -1636,13 +1636,12 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		AnyTimes()
 
 	// Fake a node object without matching ip address or hostname to storage node
-	k8s.Instance().SetClient(
+	k8s.Instance().SetBaseClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-name",
 			},
 		}),
-		nil, nil, nil, nil, nil, nil,
 	)
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -1654,7 +1653,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.Empty(t, nodeStatusList.Items)
 
 	// Fake a node object with matching data ip address
-	k8s.Instance().SetClient(
+	k8s.Instance().SetBaseClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-name",
@@ -1668,7 +1667,6 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1682,7 +1680,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching mgmt ip address
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetClient(
+	k8s.Instance().SetBaseClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-name",
@@ -1696,7 +1694,6 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1710,7 +1707,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching hostname
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetClient(
+	k8s.Instance().SetBaseClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-name",
@@ -1724,7 +1721,6 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1738,7 +1734,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching hostname from labels
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetClient(
+	k8s.Instance().SetBaseClient(
 		fakek8sclient.NewSimpleClientset(&v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-name",
@@ -1747,7 +1743,6 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 				},
 			},
 		}),
-		nil, nil, nil, nil, nil, nil,
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -1873,7 +1868,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 
 func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *testing.T) {
 	// Create fake k8s client without any nodes to lookup
-	k8s.Instance().SetClient(fakek8sclient.NewSimpleClientset(), nil, nil, nil, nil, nil, nil)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

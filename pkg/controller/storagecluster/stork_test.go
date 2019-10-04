@@ -57,10 +57,7 @@ func TestStorkInstallation(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -292,10 +289,7 @@ func TestStorkImageChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -347,10 +341,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -418,10 +409,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -489,10 +477,7 @@ func TestStorkCPUChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -547,10 +532,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -680,10 +662,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -743,10 +722,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -802,10 +778,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -858,10 +831,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -917,10 +887,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -972,10 +939,7 @@ func TestDisableStork(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -1103,10 +1067,7 @@ func TestRemoveStork(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -1234,10 +1195,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetClient(
-		fakek8sclient.NewSimpleClientset(),
-		nil, nil, nil, nil, nil, nil,
-	)
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
