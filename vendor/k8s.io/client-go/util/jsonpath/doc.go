@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,16 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package scheme contains utilities for gradually building Schemes,
-// which contain information associating Go types with Kubernetes
-// groups, versions, and kinds.
-//
-// Deprecated: use pkg/scheme instead.
-package scheme
-
-import (
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
-)
-
-// Builder builds a new Scheme for mapping go types to Kubernetes GroupVersionKinds.
-type Builder = scheme.Builder
+// package jsonpath is a template engine using jsonpath syntax,
+// which can be seen at http://goessner.net/articles/JsonPath/.
+// In addition, it has {range} {end} function to iterate list and slice.
+package jsonpath // import "k8s.io/client-go/util/jsonpath"

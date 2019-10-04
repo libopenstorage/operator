@@ -2,6 +2,29 @@
 
 
 [[projects]]
+  digest = "1:26ee1e365ea8f312ee11e170fc6675bac0dd3d4adf2406e753d0a43527e1afb8"
+  name = "cloud.google.com/go"
+  packages = ["compute/metadata"]
+  pruneopts = "UT"
+  revision = "264def2dd949cdb8a803bb9f50fa29a67b798a6a"
+  version = "v0.46.3"
+
+[[projects]]
+  digest = "1:c3d8d652ba193a848d6d0a6f3caa81e68000aa93d2bde5a4c405c2c1a1d2a434"
+  name = "github.com/Azure/go-autorest"
+  packages = [
+    "autorest",
+    "autorest/adal",
+    "autorest/azure",
+    "autorest/date",
+    "logger",
+    "tracing",
+  ]
+  pruneopts = "UT"
+  revision = "69b4126ece6b5257e2f9b0017007d2334153655f"
+  version = "v13.0.1"
+
+[[projects]]
   digest = "1:a2682518d905d662d984ef9959984ef87cecb777d379bfa9d9fe40e78069b3e4"
   name = "github.com/PuerkitoBio/purell"
   packages = ["."]
@@ -80,11 +103,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:3d89924c8f89318d81c5d21a5d704bba9ab821f0580a5afcae2b3172f7b1156a"
+  digest = "1:a80dd73b64585bfa4c84e44e277d95ed163e9d73dedfc7e32030eba648e36efb"
   name = "github.com/coreos/prometheus-operator"
   packages = [
     "pkg/apis/monitoring",
     "pkg/apis/monitoring/v1",
+    "pkg/client/versioned",
     "pkg/client/versioned/scheme",
     "pkg/client/versioned/typed/monitoring/v1",
   ]
@@ -235,14 +259,16 @@
   version = "1.3.1"
 
 [[projects]]
-  digest = "1:5eae7496bdb74a6c7592bc74ea3da8a6a61a361fd52682820900d755bb144194"
+  digest = "1:ceffaf5aa0fe0c037973dc0f68040ef8c1cdc3261405ef6e1223e18559eb1ac2"
   name = "github.com/golang/protobuf"
   packages = [
     "jsonpb",
     "proto",
+    "protoc-gen-go",
     "protoc-gen-go/descriptor",
     "protoc-gen-go/generator",
     "protoc-gen-go/generator/internal/remap",
+    "protoc-gen-go/grpc",
     "protoc-gen-go/plugin",
     "ptypes",
     "ptypes/any",
@@ -252,8 +278,8 @@
     "ptypes/wrappers",
   ]
   pruneopts = "UT"
-  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
-  version = "v1.2.0"
+  revision = "6c65a5562fc06764971b7c5d05c76c75e84bdbf7"
+  version = "v1.3.2"
 
 [[projects]]
   branch = "master"
@@ -290,6 +316,22 @@
   pruneopts = "UT"
   revision = "7c663266750e7d82587642f65e60bc4083f1f84e"
   version = "v0.2.0"
+
+[[projects]]
+  digest = "1:98996125fe832b116f882df3e55624bc481c88b436728ecbdf477534f3eb639f"
+  name = "github.com/gophercloud/gophercloud"
+  packages = [
+    ".",
+    "openstack",
+    "openstack/identity/v2/tenants",
+    "openstack/identity/v2/tokens",
+    "openstack/identity/v3/tokens",
+    "openstack/utils",
+    "pagination",
+  ]
+  pruneopts = "UT"
+  revision = "a84f8b330d669c6dff53ee9743a7579ac9541b69"
+  version = "v0.4.0"
 
 [[projects]]
   digest = "1:950942c08fb75a83a0dc9127bcfe53bd46972ddadcfcf4bd6eedd4081ed8dce5"
@@ -395,15 +437,15 @@
   version = "v1.0.1"
 
 [[projects]]
-  branch = "openstorage-5.3.0-alpha.1"
-  digest = "1:e5de9c26565d4bed13cf4de63ce4e7b2acdae8fa517662ecebe18875623082c1"
+  branch = "openstorage-5.1"
+  digest = "1:e77c9766c913e28a0887f851bbe55be019e0a595842dfa3bb70a53f46c6618d1"
   name = "github.com/kubernetes-incubator/external-storage"
   packages = [
     "snapshot/pkg/apis/crd/v1",
     "snapshot/pkg/client",
   ]
   pruneopts = "UT"
-  revision = "56c2f48bc0449218e341f9bde977a8043219efc5"
+  revision = "9394ee8dd5361cfe8fee25c233721e4060ff0473"
   source = "github.com/libopenstorage/external-storage"
 
 [[projects]]
@@ -575,15 +617,15 @@
   revision = "d281ecddf165aa0bf45849c8505387bf5662b4c7"
 
 [[projects]]
-  branch = "kubernetes-1.13.1"
-  digest = "1:9400895e02edde774bbdfcff8f27f8dc30205114286255bc1740bd07b51bb90e"
+  branch = "operator"
+  digest = "1:2bde09074793afb7ffef65f2109d165b8c95263b6db50317c5e2374d11ba705b"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "85d18ba3b1a97a4db6242ef4ac7bc603d0961b49"
+  revision = "026cc106510812a9ee45bdf493a147cee0634186"
 
 [[projects]]
   branch = "master"
@@ -755,11 +797,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9927d6aceb89d188e21485f42a7a254e67e6fdcf4260aba375fe18e3c300dfb4"
+  digest = "1:645cb780e4f3177111b40588f0a7f5950efcfb473e7ff41d8d81b2ba5eaa6ed5"
   name = "golang.org/x/oauth2"
   packages = [
     ".",
+    "google",
     "internal",
+    "jws",
+    "jwt",
   ]
   pruneopts = "UT"
   revision = "9f3314589c9a9136388751d9adae6b0ed400978a"
@@ -835,13 +880,16 @@
   version = "v2.0.1"
 
 [[projects]]
-  digest = "1:6eb6e3b6d9fffb62958cf7f7d88dbbe1dd6839436b0802e194c590667a40412a"
+  digest = "1:04f2ff15fc59e1ddaf9900ad0e19e5b19586b31f9dafd4d592b617642b239d8f"
   name = "google.golang.org/appengine"
   packages = [
+    ".",
     "internal",
+    "internal/app_identity",
     "internal/base",
     "internal/datastore",
     "internal/log",
+    "internal/modules",
     "internal/remote_api",
     "internal/urlfetch",
     "urlfetch",
@@ -851,8 +899,8 @@
   version = "v1.5.0"
 
 [[projects]]
-  branch = "jba-regen"
-  digest = "1:942335f6796b56d5cfb773e938cee5302d1a763930f34b87fd26d33f7f0b9404"
+  branch = "master"
+  digest = "1:802a0ee14db7898b2bf4a1bea346b8dcb68e900dcf89d501cc65339439ef60d4"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/annotations",
@@ -861,7 +909,7 @@
     "protobuf/field_mask",
   ]
   pruneopts = "UT"
-  revision = "42f80515abfed431577ebeded4ab86390ce0a5cd"
+  revision = "c459b9ce5143dd819763d9329ff92a8e35e61bd9"
 
 [[projects]]
   digest = "1:e0530a91daaa2ada05b0146d06b137016bd8054f00b340d28c09177f7667a2f7"
@@ -1086,7 +1134,7 @@
   version = "kubernetes-1.14.6"
 
 [[projects]]
-  digest = "1:ef928751d105b27d8fd51f81d272f59e8f26150ffe40dc8d5903d15483bb94b5"
+  digest = "1:d676133a941f3367816ab57f67ebd4c1f5ac4889e780df106c43fcbb3ea29f0f"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -1254,11 +1302,17 @@
     "pkg/apis/clientauthentication/v1alpha1",
     "pkg/apis/clientauthentication/v1beta1",
     "pkg/version",
+    "plugin/pkg/client/auth",
+    "plugin/pkg/client/auth/azure",
     "plugin/pkg/client/auth/exec",
+    "plugin/pkg/client/auth/gcp",
+    "plugin/pkg/client/auth/oidc",
+    "plugin/pkg/client/auth/openstack",
     "rest",
     "rest/watch",
     "restmapper",
     "testing",
+    "third_party/forked/golang/template",
     "tools/auth",
     "tools/cache",
     "tools/clientcmd",
@@ -1281,6 +1335,7 @@
     "util/exec",
     "util/flowcontrol",
     "util/homedir",
+    "util/jsonpath",
     "util/keyutil",
     "util/retry",
     "util/workqueue",
@@ -1449,7 +1504,7 @@
   revision = "21c4ce38f2a793ec01e925ddc31216500183b773"
 
 [[projects]]
-  digest = "1:24870f2a0db80f1465d8d81a90c55783bcbc959f50a2e0ac5ef35c2b76a4779b"
+  digest = "1:8e9f3bb68b141efd1a4687e89d44c664ddd85349f19889c4eaaa3e6274785491"
   name = "sigs.k8s.io/controller-runtime"
   packages = [
     "pkg/cache",
@@ -1475,7 +1530,6 @@
     "pkg/recorder",
     "pkg/runtime/inject",
     "pkg/runtime/log",
-    "pkg/runtime/scheme",
     "pkg/scheme",
     "pkg/source",
     "pkg/source/internal",
@@ -1500,7 +1554,9 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1",
     "github.com/golang/mock/gomock",
+    "github.com/golang/protobuf/protoc-gen-go",
     "github.com/google/shlex",
     "github.com/hashicorp/go-version",
     "github.com/libopenstorage/cloudops",
@@ -1525,11 +1581,13 @@
     "google.golang.org/grpc",
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/reflection",
+    "gopkg.in/yaml.v2",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
     "k8s.io/api/rbac/v1",
     "k8s.io/api/storage/v1",
+    "k8s.io/api/storage/v1beta1",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake",
     "k8s.io/apimachinery/pkg/api/errors",
@@ -1578,12 +1636,10 @@
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/fake",
     "sigs.k8s.io/controller-runtime/pkg/controller",
-    "sigs.k8s.io/controller-runtime/pkg/event",
     "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
-    "sigs.k8s.io/controller-runtime/pkg/predicate",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",
-    "sigs.k8s.io/controller-runtime/pkg/runtime/scheme",
+    "sigs.k8s.io/controller-runtime/pkg/scheme",
     "sigs.k8s.io/controller-runtime/pkg/source",
   ]
   solver-name = "gps-cdcl"
