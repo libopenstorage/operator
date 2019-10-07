@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -37,6 +38,7 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
 	corev1alpha1.AddToScheme(s)
+	monitoringv1.AddToScheme(s)
 	return fake.NewFakeClientWithScheme(s, initObjects...)
 }
 
@@ -135,6 +137,22 @@ func GetExpectedCRD(t *testing.T, fileName string) *apiextensionsv1beta1.CustomR
 	return crd
 }
 
+// GetExpectedServiceMonitor returns the ServiceMonitor object from given yaml spec file
+func GetExpectedServiceMonitor(t *testing.T, fileName string) *monitoringv1.ServiceMonitor {
+	obj := getKubernetesObject(t, fileName)
+	serviceMonitor, ok := obj.(*monitoringv1.ServiceMonitor)
+	assert.True(t, ok, "Expected ServiceMonitor object")
+	return serviceMonitor
+}
+
+// GetExpectedPrometheusRule returns the PrometheusRule object from given yaml spec file
+func GetExpectedPrometheusRule(t *testing.T, fileName string) *monitoringv1.PrometheusRule {
+	obj := getKubernetesObject(t, fileName)
+	prometheusRule, ok := obj.(*monitoringv1.PrometheusRule)
+	assert.True(t, ok, "Expected PrometheusRule object")
+	return prometheusRule
+}
+
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
@@ -144,6 +162,7 @@ func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	appsv1.AddToScheme(scheme)
 	rbacv1.AddToScheme(scheme)
 	apiextensionsv1beta1.AddToScheme(scheme)
+	monitoringv1.AddToScheme(scheme)
 	codecs := serializer.NewCodecFactory(scheme)
 	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)

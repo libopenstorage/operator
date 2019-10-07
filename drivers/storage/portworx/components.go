@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -20,6 +21,7 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metaerrors "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,6 +51,8 @@ const (
 	lhConfigInitContainerName     = "config-init"
 	lhConfigSyncContainerName     = "config-sync"
 	lhStorkConnectorContainerName = "stork-connector"
+	pxServiceMonitor              = "portworx"
+	pxPrometheusRule              = "portworx"
 	csiServiceAccountName         = "px-csi"
 	csiClusterRoleName            = "px-csi"
 	csiClusterRoleBindingName     = "px-csi"
@@ -60,6 +64,7 @@ const (
 	csiResizerContainerName       = "csi-resizer"
 	pxRESTPortName                = "px-api"
 	pxSDKPortName                 = "px-sdk"
+	pxKVDBPortName                = "px-kvdb"
 )
 
 const (
@@ -113,6 +118,16 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 		}
 	} else {
 		if err = p.removeLighthouse(t.cluster); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.EnableMetrics {
+		if err = p.setupMonitoring(t); err != nil {
+			return err
+		}
+	} else {
+		if err = p.removeMonitoring(t.cluster); err != nil {
 			return err
 		}
 	}
@@ -206,6 +221,25 @@ func (p *portworx) setupLighthouse(t *template) error {
 	return nil
 }
 
+func (p *portworx) setupMonitoring(t *template) error {
+	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
+	if err := p.createServiceMonitor(t.cluster, ownerRef); metaerrors.IsNoMatchError(err) {
+		p.warningEvent(t.cluster, failedComponentReason,
+			fmt.Sprintf("Failed to create ServiceMonitor for Portworx. Ensure Prometheus is deployed correctly. %v", err))
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := p.createPrometheusRule(t.cluster, ownerRef); metaerrors.IsNoMatchError(err) {
+		p.warningEvent(t.cluster, failedComponentReason,
+			fmt.Sprintf("Failed to create PrometheusRule for Portworx. Ensure Prometheus is deployed correctly. %v", err))
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *portworx) setupCSI(t *template) error {
 	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
 	if err := p.createCSIServiceAccount(t.cluster.Namespace, ownerRef); err != nil {
@@ -293,6 +327,19 @@ func (p *portworx) removeLighthouse(cluster *corev1alpha1.StorageCluster) error 
 		return err
 	}
 	p.lhDeploymentCreated = false
+	return nil
+}
+
+func (p *portworx) removeMonitoring(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	err := k8sutil.DeleteServiceMonitor(p.k8sClient, pxServiceMonitor, cluster.Namespace, *ownerRef)
+	if err != nil && !metaerrors.IsNoMatchError(err) {
+		return err
+	}
+	err = k8sutil.DeletePrometheusRule(p.k8sClient, pxPrometheusRule, cluster.Namespace, *ownerRef)
+	if err != nil && !metaerrors.IsNoMatchError(err) {
+		return err
+	}
 	return nil
 }
 
@@ -1071,7 +1118,7 @@ func (p *portworx) createPortworxService(
 					TargetPort: intstr.FromInt(t.startPort),
 				},
 				{
-					Name:       "px-kvdb",
+					Name:       pxKVDBPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9019),
 					TargetPort: intstr.FromInt(t.startPort + 18),
@@ -2010,6 +2057,184 @@ func (p *portworx) createPortworxAPIDaemonSet(
 	}
 
 	return k8sutil.CreateOrUpdateDaemonSet(p.k8sClient, newDaemonSet, ownerRef)
+}
+
+func (p *portworx) createServiceMonitor(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	svcMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxServiceMonitor,
+			Namespace: cluster.Namespace,
+			Labels: map[string]string{
+				"name": pxServiceMonitor,
+			},
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					Port: pxRESTPortName,
+				},
+				{
+					Port: pxKVDBPortName,
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{cluster.Namespace},
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: p.GetSelectorLabels(),
+			},
+		},
+	}
+
+	return k8sutil.CreateOrUpdateServiceMonitor(p.k8sClient, svcMonitor, ownerRef)
+}
+
+func (p *portworx) createPrometheusRule(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	promRule := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxPrometheusRule,
+			Namespace: cluster.Namespace,
+			Labels: map[string]string{
+				"prometheus": "portworx",
+			},
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: monitoringv1.PrometheusRuleSpec{
+			Groups: []monitoringv1.RuleGroup{
+				{
+					Name: "portworx.rules",
+					Rules: []monitoringv1.Rule{
+						{
+							Alert: "PortworxVolumeUsageCritical",
+							Expr:  intstr.FromString("100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 80"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is high.",
+								"severity": "critical",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 80% used for more than 10 minutes.",
+								"summary":     "Portworx volume capacity is at {{$value}}% used.",
+							},
+						},
+						{
+							Alert: "PortworxVolumeUsage",
+							Expr:  intstr.FromString("100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 70"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
+								"severity": "warning",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% used for more than 10 minutes.",
+								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
+							},
+						},
+						{
+							Alert: "PortworxVolumeWillFill",
+							Expr:  intstr.FromString("(px_volume_usage_bytes / px_volume_capacity_bytes) > 0.7 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) < 0"),
+							For:   "10m",
+							Labels: map[string]string{
+								"issue":    "Disk volume {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within 2 weeks.",
+								"severity": "warning",
+							},
+							Annotations: map[string]string{
+								"description": "Disk volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has been predicted to fill within 2 weeks for more than 10 minutes.",
+								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and is predicted to fill within 2 weeks.",
+							},
+						},
+						{
+							Alert: "PortworxStorageUsageCritical",
+							Expr:  intstr.FromString("100 * (1 - px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes) < 20"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
+								"severity": "critical",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 80% used for more than 10 minutes.",
+								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
+							},
+						},
+						{
+							Alert: "PortworxStorageUsage",
+							Expr:  intstr.FromString("100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)) < 30"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx storage {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
+								"severity": "warning",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% used for more than 10 minutes.",
+								"summary":     "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
+							},
+						},
+						{
+							Alert: "PortworxStorageWillFill",
+							Expr:  intstr.FromString("(100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes))) < 30 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) < 0"),
+							For:   "10m",
+							Labels: map[string]string{
+								"issue":    "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within 2 weeks.",
+								"severity": "warning",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has been predicted to fill within 2 weeks for more than 10 minutes.",
+								"summary":     "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% full and is predicted to fill within 2 weeks.",
+							},
+						},
+						{
+							Alert: "PortworxStorageNodeDown",
+							Expr:  intstr.FromString("max(px_cluster_status_nodes_storage_down) > 0"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx Storage Node is Offline.",
+								"severity": "critical",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx Storage Node has been offline for more than 5 minutes.",
+								"summary":     "Portworx Storage Node is Offline.",
+							},
+						},
+						{
+							Alert: "PortworxQuorumUnhealthy",
+							Expr:  intstr.FromString("max(px_cluster_status_cluster_quorum) > 1"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx Quorum Unhealthy.",
+								"severity": "critical",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx cluster Quorum Unhealthy for more than 5 minutes.",
+								"summary":     "Portworx Quorum Unhealthy.",
+							},
+						},
+						{
+							Alert: "PortworxMemberDown",
+							Expr:  intstr.FromString("(max(px_cluster_status_cluster_size) - count(px_cluster_status_cluster_size)) > 0"),
+							For:   "5m",
+							Labels: map[string]string{
+								"issue":    "Portworx cluster member(s) is(are) down.",
+								"severity": "critical",
+							},
+							Annotations: map[string]string{
+								"description": "Portworx cluster member(s) has(have) been down for more than 5 minutes.",
+								"summary":     "Portworx cluster member(s) is(are) down.",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return k8sutil.CreateOrUpdatePrometheusRule(p.k8sClient, promRule, ownerRef)
 }
 
 func getPortworxAPIServiceLabels() map[string]string {

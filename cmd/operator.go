@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
@@ -120,17 +121,20 @@ func run(c *cli.Context) {
 		log.Fatalf("Error registering CRD's for StorageCluster controller: %v", err)
 	}
 
-	//TODO: don't move createManager above register CRD section. This part will be refactored because of a bug,
+	// TODO: Don't move createManager above register CRD section. This part will be refactored because of a bug,
 	// similar to https://github.com/kubernetes-sigs/controller-runtime/issues/321
 	mgr, err := createManager(c, config)
 	if err != nil {
 		log.Fatalf("Failed to create controller manager: %v", err)
 	}
 
-	// Setup Scheme for all resources
-	//TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
+	// Add custom resources to scheme
+	// TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
+	}
+	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
 	}
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
