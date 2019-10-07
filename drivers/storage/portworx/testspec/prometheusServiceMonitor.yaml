@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  namespace: kube-test
+  name: portworx
+  labels:
+    name: portworx
+spec:
+  selector:
+    matchLabels:
+      name: portworx
+  namespaceSelector:
+    matchNames:
+    - kube-test
+  endpoints:
+  - port: px-api
+  - port: px-kvdb

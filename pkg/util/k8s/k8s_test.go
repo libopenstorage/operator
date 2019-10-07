@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -12,10 +14,8 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -35,7 +35,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, sa)
 
@@ -45,7 +45,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, sa)
 
@@ -54,7 +54,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the service account is owned by an object
@@ -66,7 +66,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, sa)
 
@@ -76,7 +76,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), sa.OwnerReferences[0].UID)
@@ -91,7 +91,7 @@ func TestDeleteServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = get(k8sClient, sa, name, namespace)
+	err = testutil.Get(k8sClient, sa, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -111,7 +111,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role := &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, role)
 
@@ -121,7 +121,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role = &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, role)
 
@@ -130,7 +130,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role = &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the role is owned by an object
@@ -142,7 +142,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role = &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, role)
 
@@ -152,7 +152,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role = &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, role.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), role.OwnerReferences[0].UID)
@@ -167,7 +167,7 @@ func TestDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 
 	role = &rbacv1.Role{}
-	err = get(k8sClient, role, name, namespace)
+	err = testutil.Get(k8sClient, role, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -187,7 +187,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding := &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, roleBinding)
 
@@ -197,7 +197,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding = &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, roleBinding)
 
@@ -206,7 +206,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding = &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the role binding is owned by an object
@@ -218,7 +218,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding = &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, roleBinding)
 
@@ -228,7 +228,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding = &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, roleBinding.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), roleBinding.OwnerReferences[0].UID)
@@ -243,7 +243,7 @@ func TestDeleteRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	roleBinding = &rbacv1.RoleBinding{}
-	err = get(k8sClient, roleBinding, name, namespace)
+	err = testutil.Get(k8sClient, roleBinding, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -261,7 +261,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole := &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, clusterRole)
 
@@ -271,7 +271,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole = &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, clusterRole)
 
@@ -280,7 +280,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole = &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the cluster role is owned by an object
@@ -292,7 +292,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole = &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, clusterRole)
 
@@ -302,7 +302,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole = &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.NoError(t, err)
 	require.Len(t, clusterRole.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), clusterRole.OwnerReferences[0].UID)
@@ -317,7 +317,7 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	clusterRole = &rbacv1.ClusterRole{}
-	err = get(k8sClient, clusterRole, name, "")
+	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -335,7 +335,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, crb)
 
@@ -345,7 +345,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, crb)
 
@@ -354,7 +354,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the cluster role binding is owned by an object
@@ -366,7 +366,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, crb)
 
@@ -376,7 +376,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.NoError(t, err)
 	require.Len(t, crb.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), crb.OwnerReferences[0].UID)
@@ -391,8 +391,78 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = get(k8sClient, crb, name, "")
+	err = testutil.Get(k8sClient, crb, name, "")
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestStorageClassChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedStorageClass := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+		Provisioner: "foo",
+	}
+
+	err := CreateOrUpdateStorageClass(k8sClient, expectedStorageClass, nil)
+	require.NoError(t, err)
+
+	actualStorageClass := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.Equal(t, "foo", actualStorageClass.Provisioner)
+
+	// Change storage class
+	expectedStorageClass.Provisioner = "bar"
+
+	err = CreateOrUpdateStorageClass(k8sClient, expectedStorageClass, nil)
+	require.NoError(t, err)
+
+	actualStorageClass = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.Equal(t, "bar", actualStorageClass.Provisioner)
+}
+
+func TestStorageClassWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedStorageClass := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdateStorageClass(k8sClient, expectedStorageClass, nil)
+	require.NoError(t, err)
+
+	actualStorageClass := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualStorageClass.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdateStorageClass(k8sClient, expectedStorageClass, &firstOwner)
+	require.NoError(t, err)
+
+	actualStorageClass = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualStorageClass.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedStorageClass.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdateStorageClass(k8sClient, expectedStorageClass, &secondOwner)
+	require.NoError(t, err)
+
+	actualStorageClass = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualStorageClass.OwnerReferences)
 }
 
 func TestDeleteStorageClass(t *testing.T) {
@@ -409,7 +479,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass := &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, storageClass)
 
@@ -419,7 +489,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass = &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, storageClass)
 
@@ -428,7 +498,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass = &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the storage class is owned by an object
@@ -440,7 +510,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass = &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, storageClass)
 
@@ -450,7 +520,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass = &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.NoError(t, err)
 	require.Len(t, storageClass.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), storageClass.OwnerReferences[0].UID)
@@ -465,7 +535,7 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 
 	storageClass = &storagev1.StorageClass{}
-	err = get(k8sClient, storageClass, name, "")
+	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -485,7 +555,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap := &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, configMap)
 
@@ -495,7 +565,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap = &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, configMap)
 
@@ -504,7 +574,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap = &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the config map is owned by an object
@@ -516,7 +586,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap = &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, configMap)
 
@@ -526,7 +596,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap = &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), configMap.OwnerReferences[0].UID)
@@ -541,7 +611,7 @@ func TestDeleteConfigMap(t *testing.T) {
 	require.NoError(t, err)
 
 	configMap = &v1.ConfigMap{}
-	err = get(k8sClient, configMap, name, namespace)
+	err = testutil.Get(k8sClient, configMap, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -559,7 +629,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, csiDriver)
 
@@ -569,7 +639,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, csiDriver)
 
@@ -578,7 +648,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the CSI driver is owned by an object
@@ -590,7 +660,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, csiDriver)
 
@@ -600,7 +670,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.NoError(t, err)
 	require.Len(t, csiDriver.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), csiDriver.OwnerReferences[0].UID)
@@ -615,7 +685,7 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, csiDriver, name, "")
+	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -635,7 +705,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, service)
 
@@ -645,7 +715,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, service)
 
@@ -654,7 +724,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the service is owned by an object
@@ -666,7 +736,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, service)
 
@@ -676,7 +746,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, service.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), service.OwnerReferences[0].UID)
@@ -691,7 +761,7 @@ func TestDeleteService(t *testing.T) {
 	require.NoError(t, err)
 
 	service = &v1.Service{}
-	err = get(k8sClient, service, name, namespace)
+	err = testutil.Get(k8sClient, service, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -711,7 +781,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, deployment)
 
@@ -721,7 +791,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, deployment)
 
@@ -730,7 +800,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the deployment is owned by an object
@@ -742,7 +812,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, deployment)
 
@@ -752,7 +822,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), deployment.OwnerReferences[0].UID)
@@ -767,7 +837,7 @@ func TestDeleteDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment = &appsv1.Deployment{}
-	err = get(k8sClient, deployment, name, namespace)
+	err = testutil.Get(k8sClient, deployment, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -787,7 +857,7 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, statefulSet)
 
@@ -797,7 +867,7 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, statefulSet)
 
@@ -806,7 +876,7 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the stateful set is owned by an object
@@ -818,7 +888,7 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, statefulSet)
 
@@ -828,7 +898,7 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.OwnerReferences, 2)
 	require.Equal(t, types.UID("alpha"), statefulSet.OwnerReferences[0].UID)
@@ -843,7 +913,313 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = get(k8sClient, statefulSet, name, namespace)
+	err = testutil.Get(k8sClient, statefulSet, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestServiceMonitorChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				Any: true,
+			},
+		},
+	}
+
+	err := CreateOrUpdateServiceMonitor(k8sClient, expectedMonitor, nil)
+	require.NoError(t, err)
+
+	actualMonitor := &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, actualMonitor, "test", "test-ns")
+	require.NoError(t, err)
+	require.True(t, actualMonitor.Spec.NamespaceSelector.Any)
+
+	// Change spec
+	expectedMonitor.Spec.NamespaceSelector.Any = false
+
+	err = CreateOrUpdateServiceMonitor(k8sClient, expectedMonitor, nil)
+	require.NoError(t, err)
+
+	actualMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, actualMonitor, "test", "test-ns")
+	require.NoError(t, err)
+	require.False(t, actualMonitor.Spec.NamespaceSelector.Any)
+}
+
+func TestServiceMonitorWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdateServiceMonitor(k8sClient, expectedMonitor, nil)
+	require.NoError(t, err)
+
+	actualMonitor := &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, actualMonitor, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualMonitor.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdateServiceMonitor(k8sClient, expectedMonitor, &firstOwner)
+	require.NoError(t, err)
+
+	actualMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, actualMonitor, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualMonitor.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedMonitor.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdateServiceMonitor(k8sClient, expectedMonitor, &secondOwner)
+	require.NoError(t, err)
+
+	actualMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, actualMonitor, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualMonitor.OwnerReferences)
+}
+
+func TestDeleteServiceMonitor(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(expected)
+
+	// Don't delete or throw error if the service monitor is not present
+	err := DeleteServiceMonitor(k8sClient, "not-present-service-monitor", namespace)
+	require.NoError(t, err)
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, serviceMonitor)
+
+	// Don't delete when there is no owner in the service monitor
+	// but trying to delete for specific owners
+	err = DeleteServiceMonitor(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, serviceMonitor)
+
+	// Delete when there is no owner in the service monitor
+	err = DeleteServiceMonitor(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the service monitor is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeleteServiceMonitor(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, serviceMonitor)
+
+	// Don't delete when the service monitor is owned by objects
+	// more than what are passed on delete call
+	err = DeleteServiceMonitor(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, serviceMonitor.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), serviceMonitor.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), serviceMonitor.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the service monitor
+	err = DeleteServiceMonitor(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestPrometheusRuleChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedRule := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: monitoringv1.PrometheusRuleSpec{
+			Groups: []monitoringv1.RuleGroup{
+				{
+					Name: "group-1",
+				},
+			},
+		},
+	}
+
+	err := CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
+	require.NoError(t, err)
+
+	actualRule := &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "group-1", actualRule.Spec.Groups[0].Name)
+
+	// Change spec
+	expectedRule.Spec.Groups[0].Name = "group-2"
+
+	err = CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
+	require.NoError(t, err)
+
+	actualRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "group-2", actualRule.Spec.Groups[0].Name)
+}
+
+func TestPrometheusRuleWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedRule := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
+	require.NoError(t, err)
+
+	actualRule := &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualRule.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdatePrometheusRule(k8sClient, expectedRule, &firstOwner)
+	require.NoError(t, err)
+
+	actualRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualRule.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedRule.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdatePrometheusRule(k8sClient, expectedRule, &secondOwner)
+	require.NoError(t, err)
+
+	actualRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualRule.OwnerReferences)
+}
+
+func TestDeletePrometheusRule(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(expected)
+
+	// Don't delete or throw error if the prometheus rule is not present
+	err := DeletePrometheusRule(k8sClient, "not-present-prometheus-rule", namespace)
+	require.NoError(t, err)
+
+	prometheusRule := &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheusRule)
+
+	// Don't delete when there is no owner in the prometheus rule
+	// but trying to delete for specific owners
+	err = DeletePrometheusRule(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheusRule)
+
+	// Delete when there is no owner in the prometheus rule
+	err = DeletePrometheusRule(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the prometheus rule is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeletePrometheusRule(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheusRule)
+
+	// Don't delete when the prometheus rule is owned by objects
+	// more than what are passed on delete call
+	err = DeletePrometheusRule(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, prometheusRule.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), prometheusRule.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), prometheusRule.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the prometheus rule
+	err = DeletePrometheusRule(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -864,7 +1240,7 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 	require.NoError(t, err)
 
 	actualDriver := &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, actualDriver, "test", "")
+	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.True(t, *actualDriver.Spec.AttachRequired)
 
@@ -875,7 +1251,7 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, actualDriver, "test", "")
+	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.False(t, *actualDriver.Spec.AttachRequired)
 }
@@ -895,7 +1271,7 @@ func TestCSIDriverWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualDriver := &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, actualDriver, "test", "")
+	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
 
@@ -904,7 +1280,7 @@ func TestCSIDriverWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, actualDriver, "test", "")
+	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
 
@@ -916,7 +1292,7 @@ func TestCSIDriverWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
-	err = get(k8sClient, actualDriver, "test", "")
+	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualDriver.OwnerReferences)
 }
@@ -944,7 +1320,7 @@ func TestServicePortAddition(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -958,7 +1334,7 @@ func TestServicePortAddition(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
@@ -991,7 +1367,7 @@ func TestServicePortRemoval(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1002,7 +1378,7 @@ func TestServicePortRemoval(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
@@ -1031,7 +1407,7 @@ func TestServiceTargetPortChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1042,7 +1418,7 @@ func TestServiceTargetPortChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
@@ -1070,7 +1446,7 @@ func TestServicePortNumberChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1081,7 +1457,7 @@ func TestServicePortNumberChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
@@ -1111,7 +1487,7 @@ func TestServiceRemoveNodePortsForClusterIP(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1122,7 +1498,7 @@ func TestServiceRemoveNodePortsForClusterIP(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Ports[0].NodePort)
 }
@@ -1152,7 +1528,7 @@ func TestServiceRemoveNodePortsForExternalNameType(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1163,7 +1539,7 @@ func TestServiceRemoveNodePortsForExternalNameType(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Ports[0].NodePort)
 }
@@ -1191,7 +1567,7 @@ func TestServicePortProtocolChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1202,7 +1578,7 @@ func TestServicePortProtocolChange(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 }
@@ -1230,7 +1606,7 @@ func TestServicePortEmptyExistingProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1241,7 +1617,7 @@ func TestServicePortEmptyExistingProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Len(t, expectedService.Spec.Ports, 1)
 	require.Empty(t, actualService.Spec.Ports[0].Protocol)
@@ -1270,7 +1646,7 @@ func TestServicePortEmptyNewProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedService.Spec.Ports, actualService.Spec.Ports)
 
@@ -1281,7 +1657,7 @@ func TestServicePortEmptyNewProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Len(t, expectedService.Spec.Ports, 1)
 	require.Equal(t, v1.ProtocolTCP, actualService.Spec.Ports[0].Protocol)
@@ -1304,7 +1680,7 @@ func TestServiceChangeServiceType(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, actualService.Spec.Type)
 
@@ -1315,7 +1691,7 @@ func TestServiceChangeServiceType(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, actualService.Spec.Type)
 }
@@ -1334,7 +1710,7 @@ func TestServiceChangeLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Labels)
 
@@ -1345,7 +1721,7 @@ func TestServiceChangeLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Labels, actualService.Labels)
 
@@ -1356,7 +1732,7 @@ func TestServiceChangeLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Labels, actualService.Labels)
 
@@ -1367,7 +1743,7 @@ func TestServiceChangeLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Labels)
 }
@@ -1388,7 +1764,7 @@ func TestServiceWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualService.OwnerReferences)
 
@@ -1397,7 +1773,7 @@ func TestServiceWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualService.OwnerReferences)
 
@@ -1408,7 +1784,7 @@ func TestServiceWithOwnerReferences(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualService.OwnerReferences)
 }
@@ -1427,7 +1803,7 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService := &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Selector)
 
@@ -1438,7 +1814,7 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Spec.Selector, actualService.Spec.Selector)
 
@@ -1449,7 +1825,7 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Spec.Selector, actualService.Spec.Selector)
 
@@ -1460,18 +1836,7 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	actualService = &v1.Service{}
-	err = get(k8sClient, actualService, "test", "test-ns")
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Selector)
-}
-
-func get(k8sClient client.Client, obj runtime.Object, name, namespace string) error {
-	return k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      name,
-			Namespace: namespace,
-		},
-		obj,
-	)
 }

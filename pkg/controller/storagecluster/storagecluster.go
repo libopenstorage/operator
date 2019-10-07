@@ -211,7 +211,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 
 	if err := c.syncStorageCluster(instance); err != nil {
 		c.recorder.Event(instance, v1.EventTypeWarning, failedSyncReason, err.Error())
-		logrus.Warnf("failed to sync: %v", err)
+		logrus.Warnf(err.Error())
 		return reconcile.Result{}, err
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -978,6 +979,157 @@ func CreateOrUpdateStorageNode(
 		return k8sClient.Status().Update(context.TODO(), existingNode)
 	}
 	return nil
+}
+
+// CreateOrUpdateServiceMonitor creates a ServiceMonitor if not present, else updates it
+func CreateOrUpdateServiceMonitor(
+	k8sClient client.Client,
+	monitor *monitoringv1.ServiceMonitor,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingMonitor := &monitoringv1.ServiceMonitor{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      monitor.Name,
+			Namespace: monitor.Namespace,
+		},
+		existingMonitor,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
+		return k8sClient.Create(context.TODO(), monitor)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(monitor.Spec, existingMonitor.Spec)
+
+	for _, o := range existingMonitor.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			monitor.OwnerReferences = append(monitor.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(monitor.OwnerReferences) > len(existingMonitor.OwnerReferences) {
+		monitor.ResourceVersion = existingMonitor.ResourceVersion
+		logrus.Debugf("Updating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
+		return k8sClient.Update(context.TODO(), monitor)
+	}
+	return nil
+}
+
+// DeleteServiceMonitor deletes a storage class if present and owned
+func DeleteServiceMonitor(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	monitor := &monitoringv1.ServiceMonitor{}
+	err := k8sClient.Get(context.TODO(), resource, monitor)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(monitor.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(monitor.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(monitor.OwnerReferences) > 0 && len(monitor.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete ServiceMonitor %s/%s as it is not owned", namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s ServiceMonitor", namespace, name)
+		return k8sClient.Delete(context.TODO(), monitor)
+	}
+	monitor.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s ServiceMonitor", namespace, name)
+	return k8sClient.Update(context.TODO(), monitor)
+}
+
+// CreateOrUpdatePrometheusRule creates a PrometheusRule if not present, else updates it
+func CreateOrUpdatePrometheusRule(
+	k8sClient client.Client,
+	rule *monitoringv1.PrometheusRule,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingRule := &monitoringv1.PrometheusRule{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      rule.Name,
+			Namespace: rule.Namespace,
+		},
+		existingRule,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating PrometheusRule %s/%s", rule.Namespace, rule.Name)
+		return k8sClient.Create(context.TODO(), rule)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(rule.Spec, existingRule.Spec)
+
+	for _, o := range existingRule.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			rule.OwnerReferences = append(rule.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(rule.OwnerReferences) > len(existingRule.OwnerReferences) {
+		rule.ResourceVersion = existingRule.ResourceVersion
+		logrus.Debugf("Updating PrometheusRule %s/%s", rule.Namespace, rule.Name)
+		return k8sClient.Update(context.TODO(), rule)
+	}
+	return nil
+}
+
+// DeletePrometheusRule deletes a storage class if present and owned
+func DeletePrometheusRule(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	rule := &monitoringv1.PrometheusRule{}
+	err := k8sClient.Get(context.TODO(), resource, rule)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(rule.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(rule.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(rule.OwnerReferences) > 0 && len(rule.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete PrometheusRule %s/%s as it is not owned", namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s PrometheusRule", namespace, name)
+		return k8sClient.Delete(context.TODO(), rule)
+	}
+	rule.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s PrometheusRule", namespace, name)
+	return k8sClient.Update(context.TODO(), rule)
 }
 
 // GetDaemonSetPods returns a list of pods for the given daemon set

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
@@ -2958,5 +2959,115 @@ func TestDisableCSI_1_0(t *testing.T) {
 
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestMonitoringMetricsEnabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				EnableMetrics: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// ServiceMonitor for Prometheus
+	serviceMonitorList := &monitoringv1.ServiceMonitorList{}
+	err = testutil.List(k8sClient, serviceMonitorList)
+	require.NoError(t, err)
+	require.Len(t, serviceMonitorList.Items, 1)
+
+	expectedServiceMonitor := testutil.GetExpectedServiceMonitor(t, "prometheusServiceMonitor.yaml")
+	serviceMonitor := serviceMonitorList.Items[0]
+	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
+	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Len(t, serviceMonitor.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
+	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
+
+	// PrometheusRule for Prometheus
+	ruleList := &monitoringv1.PrometheusRuleList{}
+	err = testutil.List(k8sClient, ruleList)
+	require.NoError(t, err)
+	require.Len(t, ruleList.Items, 1)
+
+	expectedPrometheusRule := testutil.GetExpectedPrometheusRule(t, "prometheusRule.yaml")
+	prometheusRule := ruleList.Items[0]
+	require.Equal(t, expectedPrometheusRule.Name, prometheusRule.Name)
+	require.Equal(t, expectedPrometheusRule.Namespace, prometheusRule.Namespace)
+	require.Len(t, prometheusRule.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, prometheusRule.OwnerReferences[0].Name)
+	require.Equal(t, expectedPrometheusRule.Spec, prometheusRule.Spec)
+}
+
+func TestDisableMonitoring(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				EnableMetrics: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sm := &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	require.NoError(t, err)
+
+	pr := &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable metrics monitoring
+	cluster.Spec.Monitoring.EnableMetrics = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sm = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pr = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Remove monitoring spec. Default should be disabled.
+	cluster.Spec.Monitoring = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sm = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pr = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }

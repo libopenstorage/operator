@@ -43,6 +43,7 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	failedSyncReason                  = "FailedSync"
+	failedComponentReason             = "FailedComponent"
 	labelPortworxVersion              = "PX Version"
 )
 
