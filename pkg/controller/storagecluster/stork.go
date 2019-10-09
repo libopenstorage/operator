@@ -199,7 +199,7 @@ func (c *Controller) createStorkConfigMap(
 func (c *Controller) createStorkSnapshotStorageClass(
 	ownerRef *metav1.OwnerReference,
 ) error {
-	return k8sutil.CreateOrUpdateStorageClass(
+	return k8sutil.CreateStorageClass(
 		c.client,
 		&storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
@@ -208,7 +208,6 @@ func (c *Controller) createStorkSnapshotStorageClass(
 			},
 			Provisioner: "stork-snapshot",
 		},
-		ownerRef,
 	)
 }
 

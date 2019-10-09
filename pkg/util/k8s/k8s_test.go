@@ -395,6 +395,35 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCreateStorageClass(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	expectedStorageClass := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+		Provisioner: "foo",
+	}
+
+	err := CreateStorageClass(k8sClient, expectedStorageClass)
+	require.NoError(t, err)
+
+	actualStorageClass := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.Equal(t, "foo", actualStorageClass.Provisioner)
+
+	// Trying to create again will not create again and not return an error
+	expectedStorageClass.Provisioner = "bar"
+
+	err = CreateStorageClass(k8sClient, expectedStorageClass)
+	require.NoError(t, err)
+
+	actualStorageClass = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualStorageClass, "test", "")
+	require.NoError(t, err)
+	require.Equal(t, "foo", actualStorageClass.Provisioner)
+}
+
 func TestDeleteStorageClass(t *testing.T) {
 	name := "test"
 	expected := &storagev1.StorageClass{
