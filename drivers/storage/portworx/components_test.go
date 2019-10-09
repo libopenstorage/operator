@@ -2979,6 +2979,9 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 			Monitoring: &corev1alpha1.MonitoringSpec{
 				EnableMetrics: true,
 			},
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Internal: false,
+			},
 		},
 	}
 
@@ -3012,6 +3015,37 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.Len(t, prometheusRule.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, prometheusRule.OwnerReferences[0].Name)
 	require.Equal(t, expectedPrometheusRule.Spec, prometheusRule.Spec)
+
+	// ServiceMonitor with internal kvdb
+	cluster.Spec.Kvdb.Internal = true
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedServiceMonitor = testutil.GetExpectedServiceMonitor(t, "prometheusServiceMonitorWithInternalKvdb.yaml")
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, pxServiceMonitor, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
+	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Len(t, serviceMonitor.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
+	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
+
+	// ServiceMonitor when kvdb spec is empty
+	cluster.Spec.Kvdb = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, pxServiceMonitor, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
+	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Len(t, serviceMonitor.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
+	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
 }
 
 func TestDisableMonitoring(t *testing.T) {

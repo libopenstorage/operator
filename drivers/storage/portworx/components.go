@@ -2077,9 +2077,6 @@ func (p *portworx) createServiceMonitor(
 				{
 					Port: pxRESTPortName,
 				},
-				{
-					Port: pxKVDBPortName,
-				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{cluster.Namespace},
@@ -2088,6 +2085,14 @@ func (p *portworx) createServiceMonitor(
 				MatchLabels: p.GetSelectorLabels(),
 			},
 		},
+	}
+
+	// In case kvdb spec is nil, we will default to internal kvdb
+	if cluster.Spec.Kvdb == nil || cluster.Spec.Kvdb.Internal {
+		svcMonitor.Spec.Endpoints = append(
+			svcMonitor.Spec.Endpoints,
+			monitoringv1.Endpoint{Port: pxKVDBPortName},
+		)
 	}
 
 	return k8sutil.CreateOrUpdateServiceMonitor(p.k8sClient, svcMonitor, ownerRef)
