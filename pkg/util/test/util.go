@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -97,6 +98,14 @@ func GetExpectedRoleBinding(t *testing.T, fileName string) *rbacv1.RoleBinding {
 	return roleBinding
 }
 
+// GetExpectedStorageClass returns the StorageClass object from given yaml spec file
+func GetExpectedStorageClass(t *testing.T, fileName string) *storagev1.StorageClass {
+	obj := getKubernetesObject(t, fileName)
+	storageClass, ok := obj.(*storagev1.StorageClass)
+	assert.True(t, ok, "Expected StorageClass object")
+	return storageClass
+}
+
 // GetExpectedService returns the Service object from given yaml spec file
 func GetExpectedService(t *testing.T, fileName string) *v1.Service {
 	obj := getKubernetesObject(t, fileName)
@@ -157,13 +166,10 @@ func GetExpectedPrometheusRule(t *testing.T, fileName string) *monitoringv1.Prom
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
 	assert.NoError(t, err)
-	scheme := runtime.NewScheme()
-	v1.AddToScheme(scheme)
-	appsv1.AddToScheme(scheme)
-	rbacv1.AddToScheme(scheme)
-	apiextensionsv1beta1.AddToScheme(scheme)
-	monitoringv1.AddToScheme(scheme)
-	codecs := serializer.NewCodecFactory(scheme)
+	s := scheme.Scheme
+	apiextensionsv1beta1.AddToScheme(s)
+	monitoringv1.AddToScheme(s)
+	codecs := serializer.NewCodecFactory(s)
 	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)
 	return obj

@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -182,6 +183,183 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Len(t, ds.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
+}
+
+func TestDefaultStorageClassesWithStork(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Len(t, storageClassList.Items, 8)
+
+	expectedSC := testutil.GetExpectedStorageClass(t, "storageClassDb.yaml")
+	actualSC := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbEncryptedStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassReplicated.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxReplicatedStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassReplicatedEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxReplicatedEncryptedStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbLocalSnapshot.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbLocalSnapshotStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbLocalSnapshotStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbLocalSnapshotEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbLocalSnapshotEncryptedStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbLocalSnapshotEncryptedStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbCloudSnapshot.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbCloudSnapshotStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbCloudSnapshotStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbCloudSnapshotEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbCloudSnapshotEncryptedStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, pxDbCloudSnapshotEncryptedStorageClass)
+	require.Len(t, actualSC.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+}
+
+func TestDefaultStorageClassesWithoutStork(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: false,
+			},
+		},
+	}
+
+	// Stork is disabled
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Len(t, storageClassList.Items, 4)
+
+	actualSC := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	require.NoError(t, err)
+
+	// Stork config is empty
+	cluster.Spec.Stork = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList = &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Len(t, storageClassList.Items, 4)
+
+	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	require.NoError(t, err)
 }
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {

@@ -489,12 +489,11 @@ func DeleteConfigMap(
 	return k8sClient.Update(context.TODO(), configMap)
 }
 
-// CreateOrUpdateStorageClass creates a storage class if not present,
-// else updates it if it has changed
-func CreateOrUpdateStorageClass(
+// CreateStorageClass creates a storage class only if not present.
+// It will not return error if already present.
+func CreateStorageClass(
 	k8sClient client.Client,
 	sc *storagev1.StorageClass,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	existingSC := &storagev1.StorageClass{}
 	err := k8sClient.Get(
@@ -503,25 +502,10 @@ func CreateOrUpdateStorageClass(
 		existingSC,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s storage class", sc.Name)
+		logrus.Debugf("Creating %s StorageClass", sc.Name)
 		return k8sClient.Create(context.TODO(), sc)
-	} else if err != nil {
-		return err
 	}
-
-	modified := !reflect.DeepEqual(sc.Provisioner, existingSC.Provisioner)
-
-	for _, o := range existingSC.OwnerReferences {
-		if o.UID != ownerRef.UID {
-			sc.OwnerReferences = append(sc.OwnerReferences, o)
-		}
-	}
-
-	if modified || len(sc.OwnerReferences) > len(existingSC.OwnerReferences) {
-		logrus.Debugf("Updating %s storage class", sc.Name)
-		return k8sClient.Update(context.TODO(), sc)
-	}
-	return nil
+	return err
 }
 
 // DeleteStorageClass deletes a storage class if present and owned

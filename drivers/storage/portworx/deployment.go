@@ -1,8 +1,8 @@
 package portworx
 
 import (
+	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"math"
 	"path"
 	"strconv"
@@ -17,8 +17,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"

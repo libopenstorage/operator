@@ -11,6 +11,7 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -19,6 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,42 +32,51 @@ import (
 )
 
 const (
-	pxServiceAccountName          = "portworx"
-	pxClusterRoleName             = "portworx"
-	pxClusterRoleBindingName      = "portworx"
-	pxRoleName                    = "portworx"
-	pxRoleBindingName             = "portworx"
-	pxServiceName                 = "portworx-service"
-	pxAPIServiceName              = "portworx-api"
-	pxAPIDaemonSetName            = "portworx-api"
-	pvcServiceAccountName         = "portworx-pvc-controller"
-	pvcClusterRoleName            = "portworx-pvc-controller"
-	pvcClusterRoleBindingName     = "portworx-pvc-controller"
-	pvcDeploymentName             = "portworx-pvc-controller"
-	pvcContainerName              = "portworx-pvc-controller-manager"
-	lhServiceAccountName          = "px-lighthouse"
-	lhClusterRoleName             = "px-lighthouse"
-	lhClusterRoleBindingName      = "px-lighthouse"
-	lhServiceName                 = "px-lighthouse"
-	lhDeploymentName              = "px-lighthouse"
-	lhContainerName               = "px-lighthouse"
-	lhConfigInitContainerName     = "config-init"
-	lhConfigSyncContainerName     = "config-sync"
-	lhStorkConnectorContainerName = "stork-connector"
-	pxServiceMonitor              = "portworx"
-	pxPrometheusRule              = "portworx"
-	csiServiceAccountName         = "px-csi"
-	csiClusterRoleName            = "px-csi"
-	csiClusterRoleBindingName     = "px-csi"
-	csiServiceName                = "px-csi-service"
-	csiApplicationName            = "px-csi-ext"
-	csiProvisionerContainerName   = "csi-external-provisioner"
-	csiAttacherContainerName      = "csi-attacher"
-	csiSnapshotterContainerName   = "csi-snapshotter"
-	csiResizerContainerName       = "csi-resizer"
-	pxRESTPortName                = "px-api"
-	pxSDKPortName                 = "px-sdk"
-	pxKVDBPortName                = "px-kvdb"
+	pxServiceAccountName                   = "portworx"
+	pxClusterRoleName                      = "portworx"
+	pxClusterRoleBindingName               = "portworx"
+	pxRoleName                             = "portworx"
+	pxRoleBindingName                      = "portworx"
+	pxServiceName                          = "portworx-service"
+	pxAPIServiceName                       = "portworx-api"
+	pxAPIDaemonSetName                     = "portworx-api"
+	pvcServiceAccountName                  = "portworx-pvc-controller"
+	pvcClusterRoleName                     = "portworx-pvc-controller"
+	pvcClusterRoleBindingName              = "portworx-pvc-controller"
+	pvcDeploymentName                      = "portworx-pvc-controller"
+	pvcContainerName                       = "portworx-pvc-controller-manager"
+	lhServiceAccountName                   = "px-lighthouse"
+	lhClusterRoleName                      = "px-lighthouse"
+	lhClusterRoleBindingName               = "px-lighthouse"
+	lhServiceName                          = "px-lighthouse"
+	lhDeploymentName                       = "px-lighthouse"
+	lhContainerName                        = "px-lighthouse"
+	lhConfigInitContainerName              = "config-init"
+	lhConfigSyncContainerName              = "config-sync"
+	lhStorkConnectorContainerName          = "stork-connector"
+	pxServiceMonitor                       = "portworx"
+	pxPrometheusRule                       = "portworx"
+	csiServiceAccountName                  = "px-csi"
+	csiClusterRoleName                     = "px-csi"
+	csiClusterRoleBindingName              = "px-csi"
+	csiServiceName                         = "px-csi-service"
+	csiApplicationName                     = "px-csi-ext"
+	csiProvisionerContainerName            = "csi-external-provisioner"
+	csiAttacherContainerName               = "csi-attacher"
+	csiSnapshotterContainerName            = "csi-snapshotter"
+	csiResizerContainerName                = "csi-resizer"
+	pxRESTPortName                         = "px-api"
+	pxSDKPortName                          = "px-sdk"
+	pxKVDBPortName                         = "px-kvdb"
+	portworxProvisioner                    = "kubernetes.io/portworx-volume"
+	pxDbStorageClass                       = "px-db"
+	pxReplicatedStorageClass               = "px-replicated"
+	pxDbLocalSnapshotStorageClass          = "px-db-local-snapshot"
+	pxDbCloudSnapshotStorageClass          = "px-db-cloud-snapshot"
+	pxDbEncryptedStorageClass              = "px-db-encrypted"
+	pxReplicatedEncryptedStorageClass      = "px-replicated-encrypted"
+	pxDbLocalSnapshotEncryptedStorageClass = "px-db-local-snapshot-encrypted"
+	pxDbCloudSnapshotEncryptedStorageClass = "px-db-cloud-snapshot-encrypted"
 )
 
 const (
@@ -101,6 +112,11 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 	}
 	if err = p.setupPortworxAPI(t); err != nil {
 		return err
+	}
+	if err = p.createPortworxStorageClasses(t); err != nil {
+		msg := fmt.Sprintf("Failed to create default Portworx storage classes. %v", err)
+		p.warningEvent(cluster, failedComponentReason, msg)
+		return nil
 	}
 	if err = p.createCustomResourceDefinitions(); err != nil {
 		return err
@@ -426,6 +442,144 @@ func createVolumePlacementStrategyCRD() error {
 	}
 
 	return k8s.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+}
+
+func (p *portworx) createPortworxStorageClasses(t *template) error {
+	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
+	docAnnotations := map[string]string{
+		"params/docs":              "https://docs.portworx.com/scheduler/kubernetes/dynamic-provisioning.html",
+		"params/fs":                "Filesystem to be laid out: none|xfs|ext4",
+		"params/block_size":        "Block size",
+		"params/repl":              "Replication factor for the volume: 1|2|3",
+		"params/secure":            "Flag to create an encrypted volume: true|false",
+		"params/shared":            "Flag to create a globally shared namespace volume which can be used by multiple pods: true|false",
+		"params/priority_io":       "IO Priority: low|medium|high",
+		"params/io_profile":        "IO Profile can be used to override the I/O algorithm Portworx uses for the volumes: db|sequential|random|cms",
+		"params/aggregation_level": "Specifies the number of replication sets the volume can be aggregated from",
+		"params/sticky":            "Flag to create sticky volumes that cannot be deleted until the flag is disabled",
+		"params/journal":           "Flag to indicate if you want to use journal device for the volume's metadata. This will use the journal device that you used when installing Portworx. It is recommended to use a journal device to absorb PX metadata writes",
+	}
+
+	storageClasses := []*storagev1.StorageClass{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxDbStorageClass,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Annotations:     docAnnotations,
+			},
+			Provisioner: portworxProvisioner,
+			Parameters: map[string]string{
+				api.SpecHaLevel:   "3",
+				api.SpecIoProfile: "db",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxDbEncryptedStorageClass,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Annotations: map[string]string{
+					"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
+				},
+			},
+			Provisioner: portworxProvisioner,
+			Parameters: map[string]string{
+				api.SpecHaLevel:   "3",
+				api.SpecIoProfile: "db",
+				api.SpecSecure:    "true",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxReplicatedStorageClass,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Provisioner: portworxProvisioner,
+			Parameters: map[string]string{
+				api.SpecHaLevel: "2",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxReplicatedEncryptedStorageClass,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Provisioner: portworxProvisioner,
+			Parameters: map[string]string{
+				api.SpecHaLevel: "2",
+				api.SpecSecure:  "true",
+			},
+		},
+	}
+
+	if t.cluster.Spec.Stork != nil && t.cluster.Spec.Stork.Enabled {
+		storageClasses = append(storageClasses,
+			&storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            pxDbLocalSnapshotStorageClass,
+					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				},
+				Provisioner: portworxProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "3",
+					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: local
+`,
+				},
+			},
+			&storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            pxDbLocalSnapshotEncryptedStorageClass,
+					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				},
+				Provisioner: portworxProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "3",
+					api.SpecSecure:  "true",
+					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: local
+`,
+				},
+			},
+			&storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            pxDbCloudSnapshotStorageClass,
+					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				},
+				Provisioner: portworxProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "3",
+					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: cloud
+`,
+				},
+			},
+			&storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            pxDbCloudSnapshotEncryptedStorageClass,
+					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				},
+				Provisioner: portworxProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "3",
+					api.SpecSecure:  "true",
+					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: cloud
+`,
+				},
+			},
+		)
+	}
+
+	for _, sc := range storageClasses {
+		if err := k8sutil.CreateStorageClass(p.k8sClient, sc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func createCSINodeInfoCRD() error {
