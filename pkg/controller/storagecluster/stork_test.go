@@ -9,6 +9,7 @@ import (
 	"github.com/golang/mock/gomock"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
 )
 
@@ -257,19 +259,31 @@ func TestStorkWithoutImage(t *testing.T) {
 	}
 
 	driver := testutil.MockDriver(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client: testutil.FakeK8sClient(cluster),
-		Driver: driver,
+		client:   testutil.FakeK8sClient(cluster),
+		Driver:   driver,
+		recorder: recorder,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
 	err := controller.syncStork(cluster)
-	require.EqualError(t, err, "stork image cannot be empty")
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Stork. stork image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
 
 	cluster.Spec.Stork.Image = ""
 	err = controller.syncStork(cluster)
-	require.EqualError(t, err, "stork image cannot be empty")
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Stork. stork image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
 }
 
 func TestStorkImageChange(t *testing.T) {
@@ -592,15 +606,21 @@ func TestStorkInvalidCPU(t *testing.T) {
 
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:   k8sClient,
+		Driver:   driver,
+		recorder: recorder,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
 
+	// Should not return error, instead raise an event
 	err := controller.syncStork(cluster)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Stork.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestStorkSchedulerInvalidCPU(t *testing.T) {
@@ -628,9 +648,11 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:   k8sClient,
+		Driver:   driver,
+		recorder: recorder,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -638,8 +660,12 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
 		AnyTimes()
 
+	// Should not return error, instead raise an event
 	err := controller.syncStork(cluster)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Stork.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestStorkSchedulerRollbackImageChange(t *testing.T) {

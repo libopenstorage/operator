@@ -2,10 +2,12 @@ package portworx
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -887,10 +889,11 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 func TestPVCControllerInvalidCPU(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := fake.NewFakeClient()
+	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -903,8 +906,12 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 		},
 	}
 
+	// Should not return error but raise an event instead
 	err := driver.PreInstall(cluster)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup PVC controller.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestPVCControllerRollbackImageChanges(t *testing.T) {
@@ -1282,10 +1289,11 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 func TestLighthouseWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := fake.NewFakeClient()
+	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1299,12 +1307,23 @@ func TestLighthouseWithoutImage(t *testing.T) {
 		},
 	}
 
+	// Should not return an error, instead should raise an event
 	err := driver.PreInstall(cluster)
-	require.EqualError(t, err, "lighthouse image cannot be empty")
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Lighthouse. lighthouse image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
 
 	cluster.Spec.UserInterface.Image = ""
 	err = driver.PreInstall(cluster)
-	require.EqualError(t, err, "lighthouse image cannot be empty")
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Lighthouse. lighthouse image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
 }
 
 func TestLighthouseImageChange(t *testing.T) {

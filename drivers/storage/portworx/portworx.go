@@ -13,6 +13,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
@@ -43,8 +44,6 @@ const (
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
-	failedSyncReason                  = "FailedSync"
-	failedComponentReason             = "FailedComponent"
 	labelPortworxVersion              = "PX Version"
 )
 
@@ -324,7 +323,7 @@ func (p *portworx) updateStorageNodes(
 			)
 			if err != nil {
 				msg := fmt.Sprintf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
-				p.warningEvent(cluster, failedSyncReason, msg)
+				p.warningEvent(cluster, util.FailedSyncReason, msg)
 				continue
 			}
 			node.SchedulerNodeName = k8sNode.Name
@@ -373,7 +372,7 @@ func (p *portworx) updateStorageNodes(
 		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, storageNode, ownerRef)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
-			p.warningEvent(cluster, failedSyncReason, msg)
+			p.warningEvent(cluster, util.FailedSyncReason, msg)
 		}
 	}
 
@@ -390,7 +389,7 @@ func (p *portworx) updateStorageNodes(
 			if err != nil && !errors.IsNotFound(err) {
 				msg := fmt.Sprintf("Failed to delete StorageNode %v/%v: %v",
 					nodeStatus.Namespace, nodeStatus.Name, err)
-				p.warningEvent(cluster, failedSyncReason, msg)
+				p.warningEvent(cluster, util.FailedSyncReason, msg)
 			}
 		}
 	}

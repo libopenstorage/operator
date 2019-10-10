@@ -12,6 +12,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -426,7 +427,49 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 		recorder:   recorder,
 	}
 
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetStorkDriverName().Return("mock", nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	// Reconcile should not fail on stork install failure. Only event should be raised.
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedComponentReason))
+}
+
+func TestFailureDuringDriverPreInstall(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:     k8sClient,
+		Driver:     driver,
+		podControl: podControl,
+		recorder:   recorder,
+	}
+
+	driver.EXPECT().PreInstall(gomock.Any()).Return(fmt.Errorf("preinstall error"))
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -439,13 +482,14 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 		},
 	}
 	result, err := controller.Reconcile(request)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to install/update stork")
+	require.Contains(t, err.Error(), "preinstall error")
 	require.Empty(t, result)
 
 	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+	actualEvent := <-recorder.Events
+	require.Contains(t, actualEvent,
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
+	require.Contains(t, actualEvent, "preinstall error")
 }
 
 func TestStoragePodGetsScheduled(t *testing.T) {
@@ -607,7 +651,7 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 	// Verify there is event raised for the failed pod
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedStoragePodReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedStoragePodReason))
 
 	// Verify no pod is created on first node, failed pod is deleted,
 	// and already deleted pod is not deleted again
@@ -779,7 +823,7 @@ func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
 	// Verify event is raised if failed to place pod
 	// Two events per pod are raised as we simulate every pod on the node twice
 	require.Len(t, recorder.Events, 4)
-	expectedEvent := fmt.Sprintf("%v %v", v1.EventTypeWarning, failedPlacementReason)
+	expectedEvent := fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedPlacementReason)
 	require.Contains(t, <-recorder.Events, expectedEvent)
 	require.Contains(t, <-recorder.Events, expectedEvent)
 	require.Contains(t, <-recorder.Events, expectedEvent)
@@ -1134,9 +1178,9 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	// Verify there is event raised for failure to create/delete pods
 	require.Len(t, recorder.Events, 2)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedStoragePodReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedStoragePodReason))
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 }
 
 func TestTimeoutFailureDuringCreatePods(t *testing.T) {
@@ -1274,7 +1318,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Equal(t, <-recorder.Events,
-		fmt.Sprintf("%v %v update status error", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v update status error", v1.EventTypeWarning, util.FailedSyncReason))
 
 	newCluster := &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
@@ -1316,7 +1360,7 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 }
 
 func TestUpdateDriverWithInstanceInformation(t *testing.T) {
@@ -1532,7 +1576,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
 	updatedCluster = &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
@@ -2094,7 +2138,7 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 }
 
 func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T) {
@@ -3455,7 +3499,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
 	currCluster := &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
@@ -3478,7 +3522,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
 	currCluster = &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
@@ -3506,7 +3550,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
 	currCluster = &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
@@ -3528,7 +3572,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v", v1.EventTypeWarning, failedSyncReason))
+		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
 	currCluster = &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)

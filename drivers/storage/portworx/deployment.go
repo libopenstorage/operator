@@ -338,7 +338,7 @@ func (p *portworx) GetStoragePodSpec(
 			err = p.createStorageNode(cluster, nodeName, cloudConfig)
 			if err != nil {
 				msg := fmt.Sprintf("Failed to create node for nodeID %v: %v", nodeName, err)
-				p.warningEvent(cluster, failedSyncReason, msg)
+				p.warningEvent(cluster, util.FailedSyncReason, msg)
 			}
 		}
 		t.cloudConfig = cloudConfig

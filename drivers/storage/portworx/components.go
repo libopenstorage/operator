@@ -110,55 +110,66 @@ func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error
 	if err = p.setupPortworxService(t); err != nil {
 		return err
 	}
+
 	if err = p.setupPortworxAPI(t); err != nil {
-		return err
+		msg := fmt.Sprintf("Failed to setup Portworx API. %v", err)
+		p.warningEvent(cluster, util.FailedComponentReason, msg)
 	}
+
 	if err = p.createPortworxStorageClasses(t); err != nil {
 		msg := fmt.Sprintf("Failed to create default Portworx storage classes. %v", err)
-		p.warningEvent(cluster, failedComponentReason, msg)
-		return nil
+		p.warningEvent(cluster, util.FailedComponentReason, msg)
 	}
+
 	if err = p.createCustomResourceDefinitions(); err != nil {
 		return err
 	}
 
 	if t.needsPVCController {
 		if err = p.setupPVCController(t); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to setup PVC controller. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	} else {
 		if err = p.removePVCController(t.cluster); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to cleanup PVC controller. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	}
 
 	if cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled {
 		if err = p.setupLighthouse(t); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to setup Lighthouse. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	} else {
 		if err = p.removeLighthouse(t.cluster); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to cleanup Lighthouse. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	}
 
 	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.EnableMetrics {
 		if err = p.setupMonitoring(t); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to setup monitoring components. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	} else {
 		if err = p.removeMonitoring(t.cluster); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to cleanup monitoring components. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	}
 
 	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
 		if err = p.setupCSI(t); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to setup CSI components. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	} else {
 		if err = p.removeCSI(t); err != nil {
-			return err
+			msg := fmt.Sprintf("Failed to cleanup CSI components. %v", err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	}
 
@@ -244,14 +255,14 @@ func (p *portworx) setupLighthouse(t *template) error {
 func (p *portworx) setupMonitoring(t *template) error {
 	ownerRef := metav1.NewControllerRef(t.cluster, controllerKind)
 	if err := p.createServiceMonitor(t.cluster, ownerRef); metaerrors.IsNoMatchError(err) {
-		p.warningEvent(t.cluster, failedComponentReason,
+		p.warningEvent(t.cluster, util.FailedComponentReason,
 			fmt.Sprintf("Failed to create ServiceMonitor for Portworx. Ensure Prometheus is deployed correctly. %v", err))
 		return nil
 	} else if err != nil {
 		return err
 	}
 	if err := p.createPrometheusRule(t.cluster, ownerRef); metaerrors.IsNoMatchError(err) {
-		p.warningEvent(t.cluster, failedComponentReason,
+		p.warningEvent(t.cluster, util.FailedComponentReason,
 			fmt.Sprintf("Failed to create PrometheusRule for Portworx. Ensure Prometheus is deployed correctly. %v", err))
 		return nil
 	} else if err != nil {
