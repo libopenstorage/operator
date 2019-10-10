@@ -54,11 +54,19 @@ func (c *Controller) syncStork(
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		_, err := c.Driver.GetStorkDriverName()
 		if err == nil {
-			return c.setupStork(cluster)
+			if err := c.setupStork(cluster); err != nil {
+				msg := fmt.Sprintf("Failed to setup Stork. %v", err)
+				c.warningEvent(cluster, util.FailedComponentReason, msg)
+			}
+			return nil
 		}
 		logrus.Warnf("Cannot install Stork for %s driver: %v", c.Driver.String(), err)
 	}
-	return c.removeStork(cluster)
+	if err := c.removeStork(cluster); err != nil {
+		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
+		c.warningEvent(cluster, util.FailedComponentReason, msg)
+	}
+	return nil
 }
 
 func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {

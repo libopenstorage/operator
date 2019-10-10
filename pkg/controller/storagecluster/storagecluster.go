@@ -31,6 +31,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
@@ -79,16 +80,6 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
 	storageNodeCRDFile                  = "core_v1alpha1_storagenode_crd.yaml"
-)
-
-// Reasons for StorageCluster events
-const (
-	// failedPlacementReason is added to an event when operator can't schedule a Pod to a specified node.
-	failedPlacementReason = "FailedPlacement"
-	// failedStoragePodReason is added to an event when the status of a Pod of a StorageCluster is 'Failed'.
-	failedStoragePodReason = "FailedStoragePod"
-	// failedSyncReason is added to an event when the status the cluster could not be synced.
-	failedSyncReason = "FailedSync"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -195,8 +186,8 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	log.Infof("Reconciling StorageCluster")
 
 	// Fetch the StorageCluster instance
-	instance := &corev1alpha1.StorageCluster{}
-	err := c.client.Get(context.TODO(), request.NamespacedName, instance)
+	cluster := &corev1alpha1.StorageCluster{}
+	err := c.client.Get(context.TODO(), request.NamespacedName, cluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -207,9 +198,8 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 		return reconcile.Result{}, err
 	}
 
-	if err := c.syncStorageCluster(instance); err != nil {
-		c.recorder.Event(instance, v1.EventTypeWarning, failedSyncReason, err.Error())
-		logrus.Warnf(err.Error())
+	if err := c.syncStorageCluster(cluster); err != nil {
+		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -285,7 +275,7 @@ func (c *Controller) syncStorageCluster(
 
 	// Ensure Stork is deployed with right configuration
 	if err := c.syncStork(cluster); err != nil {
-		return fmt.Errorf("failed to install/update stork: %v", err)
+		return err
 	}
 
 	// Construct histories of the StorageCluster, and get the hash of current history
@@ -393,8 +383,7 @@ func (c *Controller) updateStorageClusterStatus(
 ) error {
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
-		logrus.Error(err.Error())
-		c.recorder.Event(cluster, v1.EventTypeWarning, failedSyncReason, err.Error())
+		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
 	}
 	return c.client.Status().Update(context.TODO(), toUpdate)
 }
@@ -606,8 +595,7 @@ func (c *Controller) podsShouldBeOnNode(
 			}
 			if pod.Status.Phase == v1.PodFailed {
 				msg := fmt.Sprintf("Found failed storage pod %s on node %s, will try to kill it", pod.Name, node.Name)
-				logrus.Warnf(msg)
-				c.recorder.Eventf(cluster, v1.EventTypeWarning, failedStoragePodReason, msg)
+				c.warningEvent(cluster, util.FailedStoragePodReason, msg)
 				podsToDelete = append(podsToDelete, pod.Name)
 			} else {
 				storagePodsRunning = append(storagePodsRunning, pod)
@@ -711,7 +699,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 				emitEvent = true
 			}
 			if emitEvent {
-				c.recorder.Eventf(cluster, v1.EventTypeWarning, failedPlacementReason,
+				c.recorder.Eventf(cluster, v1.EventTypeWarning, util.FailedPlacementReason,
 					"failed to place pod on %q: %s", node.Name, reason.GetReason)
 			}
 		}
@@ -719,7 +707,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 	// only emit this event if insufficient resource is the only thing
 	// preventing the storage cluster from scheduling
 	if shouldSchedule && insufficientResourceErr != nil {
-		c.recorder.Eventf(cluster, v1.EventTypeWarning, failedPlacementReason,
+		c.recorder.Eventf(cluster, v1.EventTypeWarning, util.FailedPlacementReason,
 			"failed to place pod on %q: %s", node.Name, insufficientResourceErr.Error())
 		shouldSchedule = false
 	}
@@ -956,6 +944,14 @@ func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageC
 	labels[labelKeyName] = cluster.Name
 	labels[labelKeyDriverName] = c.Driver.String()
 	return labels
+}
+
+func (c *Controller) warningEvent(
+	cluster *corev1alpha1.StorageCluster,
+	reason, message string,
+) {
+	logrus.Warn(message)
+	c.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
 }
 
 func getCRDFromFile(

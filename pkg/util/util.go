@@ -5,6 +5,18 @@ import (
 	"strings"
 )
 
+// Reasons for controller events
+const (
+	// FailedPlacementReason is added to an event when operator can't schedule a Pod to a specified node.
+	FailedPlacementReason = "FailedPlacement"
+	// FailedStoragePodReason is added to an event when the status of a Pod of a cluster is 'Failed'.
+	FailedStoragePodReason = "FailedStoragePod"
+	// FailedSyncReason is added to an event when the status the cluster could not be synced.
+	FailedSyncReason = "FailedSync"
+	// FailedComponentReason is added to an event when setting up or removing a component fails.
+	FailedComponentReason = "FailedComponent"
+)
+
 var (
 	// commonDockerRegistries is a map of commonly used Docker registries
 	commonDockerRegistries = map[string]bool{
