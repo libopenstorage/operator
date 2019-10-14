@@ -1,4 +1,5 @@
 STORAGE_OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TAG)
+PWX_DOC_HOST ?= https://docs.portworx.com
 
 ifndef PKGS
 PKGS := $(shell go list ./... 2>&1 | grep -v 'github.com/libopenstorage/operator/vendor' | grep -v 'pkg/client/informers/externalversions' | grep -v versioned | grep -v 'pkg/apis/core')
@@ -102,6 +103,12 @@ verify-catalog:
 	docker run -it --rm \
 		-v $(BASE_DIR)/deploy:/deploy \
 		python:3 bash -c "pip3 install operator-courier && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
+
+cleanconfigs:
+	rm -f "bin/configs/portworx-prometheus-rule.yaml"
+
+getconfigs: cleanconfigs
+	wget '$(PWX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs
 
 clean:
 	-rm -rf $(BIN)

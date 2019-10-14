@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"io/ioutil"
 	"reflect"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -14,9 +15,26 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// ParseObjectFromFile reads the given file and loads the object from the file in obj
+func ParseObjectFromFile(
+	filepath string,
+	scheme *runtime.Scheme,
+	obj runtime.Object,
+) error {
+	objBytes, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return err
+	}
+	codecs := serializer.NewCodecFactory(scheme)
+	_, _, err = codecs.UniversalDeserializer().Decode([]byte(objBytes), nil, obj)
+	return err
+}
 
 // CreateOrUpdateServiceAccount creates a service account if not present,
 // else updates it if it has changed

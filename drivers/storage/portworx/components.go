@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"path"
 	"reflect"
 	"regexp"
 	"strings"
@@ -76,11 +77,14 @@ const (
 	defaultLhStorkConnectorImage = "portworx/lh-stork-connector"
 	envKeyLhConfigSyncImage      = "LIGHTHOUSE_CONFIG_SYNC_IMAGE"
 	envKeyLhStorkConnectorImage  = "LIGHTHOUSE_STORK_CONNECTOR_IMAGE"
+	portworxSpecsDir             = "/configs"
+	pxPrometheusRuleFile         = "portworx-prometheus-rule.yaml"
 )
 
 var (
 	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	specsBaseDir   = getSpecsBaseDir
 )
 
 func (p *portworx) installComponents(cluster *corev1alpha1.StorageCluster) error {
@@ -2102,144 +2106,20 @@ func (p *portworx) createPrometheusRule(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	promRule := &monitoringv1.PrometheusRule{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxPrometheusRule,
-			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"prometheus": "portworx",
-			},
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-		},
-		Spec: monitoringv1.PrometheusRuleSpec{
-			Groups: []monitoringv1.RuleGroup{
-				{
-					Name: "portworx.rules",
-					Rules: []monitoringv1.Rule{
-						{
-							Alert: "PortworxVolumeUsageCritical",
-							Expr:  intstr.FromString("100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 80"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is high.",
-								"severity": "critical",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 80% used for more than 10 minutes.",
-								"summary":     "Portworx volume capacity is at {{$value}}% used.",
-							},
-						},
-						{
-							Alert: "PortworxVolumeUsage",
-							Expr:  intstr.FromString("100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 70"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
-								"severity": "warning",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% used for more than 10 minutes.",
-								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
-							},
-						},
-						{
-							Alert: "PortworxVolumeWillFill",
-							Expr:  intstr.FromString("(px_volume_usage_bytes / px_volume_capacity_bytes) > 0.7 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) < 0"),
-							For:   "10m",
-							Labels: map[string]string{
-								"issue":    "Disk volume {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within 2 weeks.",
-								"severity": "warning",
-							},
-							Annotations: map[string]string{
-								"description": "Disk volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has been predicted to fill within 2 weeks for more than 10 minutes.",
-								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and is predicted to fill within 2 weeks.",
-							},
-						},
-						{
-							Alert: "PortworxStorageUsageCritical",
-							Expr:  intstr.FromString("100 * (1 - px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes) < 20"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
-								"severity": "critical",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 80% used for more than 10 minutes.",
-								"summary":     "Portworx volume {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
-							},
-						},
-						{
-							Alert: "PortworxStorageUsage",
-							Expr:  intstr.FromString("100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)) < 30"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx storage {{$labels.volumeid}} usage on {{$labels.host}} is critical.",
-								"severity": "warning",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% used for more than 10 minutes.",
-								"summary":     "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.",
-							},
-						},
-						{
-							Alert: "PortworxStorageWillFill",
-							Expr:  intstr.FromString("(100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes))) < 30 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) < 0"),
-							For:   "10m",
-							Labels: map[string]string{
-								"issue":    "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within 2 weeks.",
-								"severity": "warning",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has been predicted to fill within 2 weeks for more than 10 minutes.",
-								"summary":     "Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 70% full and is predicted to fill within 2 weeks.",
-							},
-						},
-						{
-							Alert: "PortworxStorageNodeDown",
-							Expr:  intstr.FromString("max(px_cluster_status_nodes_storage_down) > 0"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx Storage Node is Offline.",
-								"severity": "critical",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx Storage Node has been offline for more than 5 minutes.",
-								"summary":     "Portworx Storage Node is Offline.",
-							},
-						},
-						{
-							Alert: "PortworxQuorumUnhealthy",
-							Expr:  intstr.FromString("max(px_cluster_status_cluster_quorum) > 1"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx Quorum Unhealthy.",
-								"severity": "critical",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx cluster Quorum Unhealthy for more than 5 minutes.",
-								"summary":     "Portworx Quorum Unhealthy.",
-							},
-						},
-						{
-							Alert: "PortworxMemberDown",
-							Expr:  intstr.FromString("(max(px_cluster_status_cluster_size) - count(px_cluster_status_cluster_size)) > 0"),
-							For:   "5m",
-							Labels: map[string]string{
-								"issue":    "Portworx cluster member(s) is(are) down.",
-								"severity": "critical",
-							},
-							Annotations: map[string]string{
-								"description": "Portworx cluster member(s) has(have) been down for more than 5 minutes.",
-								"summary":     "Portworx cluster member(s) is(are) down.",
-							},
-						},
-					},
-				},
-			},
-		},
+	filename := path.Join(specsBaseDir(), pxPrometheusRuleFile)
+	prometheusRule := &monitoringv1.PrometheusRule{}
+	if err := k8sutil.ParseObjectFromFile(filename, p.scheme, prometheusRule); err != nil {
+		return err
 	}
-
-	return k8sutil.CreateOrUpdatePrometheusRule(p.k8sClient, promRule, ownerRef)
+	prometheusRule.ObjectMeta = metav1.ObjectMeta{
+		Name:      pxPrometheusRule,
+		Namespace: cluster.Namespace,
+		Labels: map[string]string{
+			"prometheus": "portworx",
+		},
+		OwnerReferences: []metav1.OwnerReference{*ownerRef},
+	}
+	return k8sutil.CreateOrUpdatePrometheusRule(p.k8sClient, prometheusRule, ownerRef)
 }
 
 func getPortworxAPIServiceLabels() map[string]string {
@@ -2284,4 +2164,8 @@ func getImageFromEnv(imageKey string, envs []v1.EnvVar) string {
 		}
 	}
 	return ""
+}
+
+func getSpecsBaseDir() string {
+	return portworxSpecsDir
 }

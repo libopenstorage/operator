@@ -31,27 +31,27 @@ spec:
         severity: warning
     - alert: PortworxVolumeWillFill
       annotations:
-        description: Disk volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has
-          been predicted to fill within 2 weeks for more than 10 minutes.
+        description: Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and has
+          been predicted to fill within 2 weeks.
         summary: Portworx volume {{$labels.volumeid}} on {{$labels.host}} is over 70% full and is
           predicted to fill within 2 weeks.
       expr: (px_volume_usage_bytes / px_volume_capacity_bytes) > 0.7 and predict_linear(px_cluster_disk_available_bytes[1h],
         14 * 86400) < 0
       for: 10m
       labels:
-        issue: Disk volume {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within
+        issue: Portworx volume {{$labels.volumeid}} on {{$labels.host}} is predicted to fill within
           2 weeks.
         severity: warning
     - alert: PortworxStorageUsageCritical
       annotations:
         description: Portworx storage {{$labels.volumeid}} on {{$labels.host}} is over 80% used
           for more than 10 minutes.
-        summary: Portworx volume {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.
+        summary: Portworx storage {{$labels.volumeid}} on {{$labels.host}} is at {{$value}}% used.
       expr: 100 * (1 - px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
         < 20
       for: 5m
       labels:
-        issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.host}} is critical.
+        issue: Portworx storage {{$labels.volumeid}} usage on {{$labels.host}} is critical.
         severity: critical
     - alert: PortworxStorageUsage
       annotations:

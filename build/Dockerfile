@@ -13,4 +13,5 @@ COPY licenses /licenses
 COPY vendor/github.com/libopenstorage/cloudops/specs /specs
 COPY deploy/crds /crds
 COPY manifests /manifests
-COPY ./bin/operator /
+COPY bin/configs /configs
+COPY bin/operator /

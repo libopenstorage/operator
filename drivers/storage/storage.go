@@ -5,6 +5,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -23,7 +24,7 @@ type UpdateDriverInfo struct {
 // to implement these interfaces.
 type Driver interface {
 	// Init initializes the storage driver
-	Init(client.Client, record.EventRecorder) error
+	Init(client.Client, *runtime.Scheme, record.EventRecorder) error
 	// String returns the string name of the driver
 	String() string
 	// UpdateDriver updates the driver with the current cluster and node conditions.

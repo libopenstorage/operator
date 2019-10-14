@@ -20,7 +20,6 @@ package storagecluster
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"path"
 	"reflect"
 	"regexp"
@@ -32,6 +31,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -42,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -116,7 +115,6 @@ type Controller struct {
 
 // Init initialize the storage cluster controller
 func (c *Controller) Init(mgr manager.Manager) error {
-
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
@@ -963,18 +961,13 @@ func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageC
 func getCRDFromFile(
 	filename string,
 ) (*apiextensionsv1beta1.CustomResourceDefinition, error) {
-	objBytes, err := ioutil.ReadFile(path.Join(crdBaseDir(), filename))
-	if err != nil {
-		return nil, err
-	}
+	filepath := path.Join(crdBaseDir(), filename)
 	scheme := runtime.NewScheme()
 	if err := apiextensionsv1beta1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-	codecs := serializer.NewCodecFactory(scheme)
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-	_, _, err = codecs.UniversalDeserializer().Decode([]byte(objBytes), nil, crd)
-	if err != nil {
+	if err := k8sutil.ParseObjectFromFile(filepath, scheme, crd); err != nil {
 		return nil, err
 	}
 	return crd, nil
