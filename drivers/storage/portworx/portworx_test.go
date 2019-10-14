@@ -25,6 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -48,19 +49,24 @@ func TestString(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	driver := portworx{}
+	k8sClient := fake.NewFakeClient()
+	scheme := runtime.NewScheme()
+	recorder := record.NewFakeRecorder(0)
 
 	// Nil k8s client
-	recorder := record.NewFakeRecorder(0)
-	err := driver.Init(nil, recorder)
+	err := driver.Init(nil, scheme, recorder)
 	require.EqualError(t, err, "kubernetes client cannot be nil")
 
+	// Nil k8s scheme
+	err = driver.Init(k8sClient, nil, recorder)
+	require.EqualError(t, err, "kubernetes scheme cannot be nil")
+
 	// Nil k8s event recorder
-	k8sClient := fake.NewFakeClient()
-	err = driver.Init(k8sClient, nil)
+	err = driver.Init(k8sClient, scheme, nil)
 	require.EqualError(t, err, "event recorder cannot be nil")
 
 	// Valid k8s client
-	err = driver.Init(k8sClient, recorder)
+	err = driver.Init(k8sClient, scheme, recorder)
 	require.NoError(t, err)
 	require.Equal(t, k8sClient, driver.k8sClient)
 }

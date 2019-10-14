@@ -63,6 +63,9 @@ func TestRegisterCRD(t *testing.T) {
 	crdBaseDir = func() string {
 		return "../../../deploy/crds"
 	}
+	defer func() {
+		crdBaseDir = getCRDBasePath
+	}()
 
 	err = controller.RegisterCRD()
 	require.NoError(t, err)
@@ -144,6 +147,9 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	crdBaseDir = func() string {
 		return "../../../deploy/crds"
 	}
+	defer func() {
+		crdBaseDir = getCRDBasePath
+	}()
 
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group

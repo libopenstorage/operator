@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
@@ -32,7 +33,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	startPort := uint32(10001)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -189,7 +190,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -273,7 +274,7 @@ func TestPVCControllerInstall(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -299,7 +300,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -338,7 +339,7 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -373,7 +374,7 @@ func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -414,7 +415,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -449,7 +450,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -484,7 +485,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -519,7 +520,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -553,7 +554,7 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -671,7 +672,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -711,7 +712,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -735,7 +736,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -781,7 +782,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -823,7 +824,7 @@ func TestLighthouseInstall(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -932,7 +933,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -968,7 +969,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1004,7 +1005,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1040,7 +1041,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1106,7 +1107,7 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1134,7 +1135,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1176,7 +1177,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1223,7 +1224,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1270,7 +1271,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1309,7 +1310,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1359,7 +1360,7 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1424,7 +1425,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1501,7 +1502,7 @@ func TestRemovePVCController(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1563,7 +1564,7 @@ func TestDisablePVCController(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1624,7 +1625,7 @@ func TestRemoveLighthouse(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1696,7 +1697,7 @@ func TestDisableLighthouse(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1772,7 +1773,7 @@ func TestCSIInstall(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1908,7 +1909,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2044,7 +2045,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2157,7 +2158,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2259,7 +2260,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	// Install with Portworx version 2.2+ and deprecated CSI driver name
 	// We should use add the resizer sidecar and use the old driver name.
@@ -2321,7 +2322,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2359,7 +2360,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2464,7 +2465,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2529,7 +2530,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2630,7 +2631,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2695,7 +2696,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2759,7 +2760,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2860,7 +2861,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2968,7 +2969,14 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	specsBaseDir = func() string {
+		return "../../../bin/configs"
+	}
+	defer func() {
+		specsBaseDir = getSpecsBaseDir
+	}()
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3054,7 +3062,14 @@ func TestDisableMonitoring(t *testing.T) {
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
-	driver.Init(k8sClient, record.NewFakeRecorder(0))
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	specsBaseDir = func() string {
+		return "../../../bin/configs"
+	}
+	defer func() {
+		specsBaseDir = getSpecsBaseDir
+	}()
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{

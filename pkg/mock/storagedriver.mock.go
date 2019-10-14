@@ -9,6 +9,7 @@ import (
 	storage "github.com/libopenstorage/operator/drivers/storage"
 	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	record "k8s.io/client-go/tools/record"
 	reflect "reflect"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,17 +112,17 @@ func (mr *MockDriverMockRecorder) GetStorkEnvList(arg0 interface{}) *gomock.Call
 }
 
 // Init mocks base method
-func (m *MockDriver) Init(arg0 client.Client, arg1 record.EventRecorder) error {
+func (m *MockDriver) Init(arg0 client.Client, arg1 *runtime.Scheme, arg2 record.EventRecorder) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Init", arg0, arg1)
+	ret := m.ctrl.Call(m, "Init", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Init indicates an expected call of Init
-func (mr *MockDriverMockRecorder) Init(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockDriverMockRecorder) Init(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockDriver)(nil).Init), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockDriver)(nil).Init), arg0, arg1, arg2)
 }
 
 // PreInstall mocks base method

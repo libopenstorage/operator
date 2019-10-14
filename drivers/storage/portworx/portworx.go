@@ -21,6 +21,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,6 +50,7 @@ const (
 
 type portworx struct {
 	k8sClient                         client.Client
+	scheme                            *runtime.Scheme
 	recorder                          record.EventRecorder
 	pxAPIDaemonSetCreated             bool
 	volumePlacementStrategyCRDCreated bool
@@ -65,11 +67,19 @@ func (p *portworx) String() string {
 	return driverName
 }
 
-func (p *portworx) Init(k8sClient client.Client, recorder record.EventRecorder) error {
+func (p *portworx) Init(
+	k8sClient client.Client,
+	scheme *runtime.Scheme,
+	recorder record.EventRecorder,
+) error {
 	if k8sClient == nil {
 		return fmt.Errorf("kubernetes client cannot be nil")
 	}
 	p.k8sClient = k8sClient
+	if scheme == nil {
+		return fmt.Errorf("kubernetes scheme cannot be nil")
+	}
+	p.scheme = scheme
 	if recorder == nil {
 		return fmt.Errorf("event recorder cannot be nil")
 	}
