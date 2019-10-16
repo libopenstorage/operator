@@ -13,6 +13,8 @@ const (
 	FailedStoragePodReason = "FailedStoragePod"
 	// FailedSyncReason is added to an event when the status the cluster could not be synced.
 	FailedSyncReason = "FailedSync"
+	// FailedValidationReason is added to an event when operator validations fail.
+	FailedValidationReason = "FailedValidation"
 	// FailedComponentReason is added to an event when setting up or removing a component fails.
 	FailedComponentReason = "FailedComponent"
 )

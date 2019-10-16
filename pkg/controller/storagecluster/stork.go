@@ -11,7 +11,6 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -662,16 +661,8 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
-	k8sVersion, err := k8s.Instance().GetVersion()
-	if err != nil {
-		return err
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
 	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-scheduler-amd64:"+matches[1])
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+c.kubernetesVersion.String())
 
 	command := []string{
 		"/usr/local/bin/kube-scheduler",

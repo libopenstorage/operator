@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
@@ -26,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	kversion "k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
@@ -180,6 +183,100 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	for _, crd := range crds.Items {
 		require.NotEqual(t, nodeStatusCRDName, crd.Name)
 	}
+}
+
+func TestKubernetesVersionValidation(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "v1.10.99",
+	}
+	k8s.Instance().SetBaseClient(fakeClient)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:   k8sClient,
+		recorder: recorder,
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), "minimum supported kubernetes version")
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v minimum supported kubernetes version",
+			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// Invalid kubernetes version
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "invalid",
+	}
+	controller.kubernetesVersion = nil
+
+	result, err = controller.Reconcile(request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), "invalid kubernetes version received")
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v invalid kubernetes version received",
+			v1.EventTypeWarning, util.FailedValidationReason))
+}
+
+func TestSingleClusterValidation(t *testing.T) {
+	existingCluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "main-cluster",
+			Namespace:  "main-ns",
+			Finalizers: []string{deleteFinalizerName},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "extra-cluster",
+			Namespace: "extra-ns",
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	k8sClient := testutil.FakeK8sClient(existingCluster, cluster)
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), fmt.Sprintf("only one StorageCluster is allowed in a Kubernetes cluster. "+
+		"StorageCluster %s/%s already exists", existingCluster.Namespace, existingCluster.Name))
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v only one StorageCluster is allowed in a Kubernetes cluster. "+
+			"StorageCluster %s/%s already exists", v1.EventTypeWarning, util.FailedValidationReason,
+			existingCluster.Namespace, existingCluster.Name))
 }
 
 func TestStorageClusterDefaults(t *testing.T) {
@@ -416,15 +513,17 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 	cluster.Annotations = map[string]string{
 		annotationStorkCPU: "invalid-cpu",
 	}
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
@@ -458,15 +557,17 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().PreInstall(gomock.Any()).Return(fmt.Errorf("preinstall error"))
@@ -504,15 +605,17 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	k8sNode1 := createK8sNode("k8s-node-1", 1)
 	k8sNode2 := createK8sNode("k8s-node-2", 1)
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	expectedPod := &v1.Pod{
@@ -586,15 +689,17 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -671,15 +776,17 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -775,15 +882,17 @@ func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
@@ -852,15 +961,17 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	podSpec := v1.PodSpec{
@@ -946,15 +1057,17 @@ func TestStoragePodFailureDueToPodNotFitsHostPorts(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	podSpec := v1.PodSpec{
@@ -1026,15 +1139,17 @@ func TestStoragePodFailureDueToTaintsTolerationsNotMatch(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -1123,6 +1238,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{
@@ -1130,10 +1246,11 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1189,6 +1306,7 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	recorder := record.NewFakeRecorder(10)
@@ -1196,10 +1314,11 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 		Err: errors.NewTimeoutError("timeout error", 0),
 	}
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1235,15 +1354,17 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1282,15 +1403,17 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1331,15 +1454,17 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1378,15 +1503,17 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	k8sNode3 := createK8sNode("k8s-node-3", 1)
 	k8sNode3.Labels = map[string]string{failureDomainZoneKey: "z2"}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
@@ -1453,15 +1580,17 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -1524,15 +1653,17 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 		labelKeyDriverName: driverName,
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	// Empty delete condition should not remove finalizer
@@ -1649,15 +1780,17 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -1769,6 +1902,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -1778,10 +1912,11 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -1953,6 +2088,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -1962,10 +2098,11 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -2097,15 +2234,17 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -2147,6 +2286,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2156,10 +2296,11 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2201,6 +2342,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2210,10 +2352,11 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2303,6 +2446,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2312,10 +2456,11 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2456,6 +2601,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2465,10 +2611,11 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2595,6 +2742,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2604,10 +2752,11 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2676,6 +2825,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2685,10 +2835,11 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2759,6 +2910,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2768,10 +2920,11 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2839,6 +2992,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2848,10 +3002,11 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2918,6 +3073,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -2927,10 +3083,11 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -2997,6 +3154,7 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -3006,10 +3164,11 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -3077,6 +3236,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -3086,10 +3246,11 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -3253,6 +3414,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
@@ -3262,10 +3424,11 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -3329,15 +3492,17 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Spec.Image = "test/image:v1"
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -3453,15 +3618,17 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Spec.Image = "image/v1"
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	fakeClient := fake.NewSimpleClientset()
@@ -3602,15 +3769,17 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Spec.Image = "test/image:v1"
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -3730,15 +3899,17 @@ func TestHistoryCleanup(t *testing.T) {
 	revisionLimit := int32(1)
 	cluster.Spec.RevisionHistoryLimit = &revisionLimit
 	cluster.Spec.Image = "test/image:v1"
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:     k8sClient,
-		Driver:     driver,
-		podControl: podControl,
-		recorder:   recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
