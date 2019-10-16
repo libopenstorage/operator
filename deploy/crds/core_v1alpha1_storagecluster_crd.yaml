@@ -294,6 +294,14 @@ spec:
                       value:
                         type: string
                         description: Value of the environment variable.
+            monitoring:
+              type: object
+              description: Contains monitoring configuration for the storage cluster.
+              properties:
+                enableMetrics:
+                  type: boolean
+                  description: This flag is enabled will expose the storage cluster metrics to external
+                    monitoring solutions like Prometheus.
             env:
               description: List of environment variables used by the driver. This is an array of Kubernetes
                 EnvVar where the value can be given directly or from a source like field, config map or secret.
