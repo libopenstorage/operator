@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"path"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
@@ -80,13 +80,13 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
 	storageNodeCRDFile                  = "core_v1alpha1_storagenode_crd.yaml"
+	minSupportedK8sVersion              = "1.11.0"
 )
 
 var _ reconcile.Reconciler = &Controller{}
 
 var (
 	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
-	kbVerRegex     = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 	crdBaseDir     = getCRDBasePath
 )
 
@@ -100,6 +100,7 @@ type Controller struct {
 	podControl                    k8scontroller.PodControlInterface
 	crControl                     k8scontroller.ControllerRevisionControlInterface
 	Driver                        storage.Driver
+	kubernetesVersion             *version.Version
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 }
@@ -198,12 +199,78 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 		return reconcile.Result{}, err
 	}
 
+	if err := c.validate(cluster); err != nil {
+		c.warningEvent(cluster, util.FailedValidationReason, err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := c.syncStorageCluster(cluster); err != nil {
 		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (c *Controller) validate(cluster *corev1alpha1.StorageCluster) error {
+	if err := c.validateK8sVersion(); err != nil {
+		return err
+	}
+	if err := c.validateSingleCluster(cluster); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) validateK8sVersion() error {
+	var err error
+	if c.kubernetesVersion == nil {
+		c.kubernetesVersion, err = k8sutil.GetVersion()
+		if err != nil {
+			return err
+		}
+	}
+	minVersion, err := version.NewVersion(minSupportedK8sVersion)
+	if err != nil {
+		return err
+	}
+	if c.kubernetesVersion.LessThan(minVersion) {
+		return fmt.Errorf("minimum supported kubernetes version by the operator is %s",
+			minSupportedK8sVersion)
+	}
+	return nil
+}
+
+func (c *Controller) validateSingleCluster(current *corev1alpha1.StorageCluster) error {
+	// If the current cluster has the delete finalizer then it has been already reconciled
+	for _, finalizer := range current.Finalizers {
+		if finalizer == deleteFinalizerName {
+			return nil
+		}
+	}
+
+	// If the cluster current cluster does not have the finalizer, check if any existing
+	// StorageClusters have the finalizer. If none if them have it, then current just got
+	// lucky and is the only StorageCluster that will get reconciled; else if a cluster
+	// is found with the finalizer then we cannot process current as we support only 1.
+	clusterList := &corev1alpha1.StorageClusterList{}
+	err := c.client.List(context.TODO(), clusterList, &client.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list storage clusters. %v", err)
+	}
+	for _, cluster := range clusterList.Items {
+		if cluster.Name == current.Name && cluster.Namespace == current.Namespace {
+			continue
+		}
+		for _, finalizer := range cluster.Finalizers {
+			if finalizer == deleteFinalizerName {
+				return fmt.Errorf("only one StorageCluster is allowed in a Kubernetes cluster. "+
+					"StorageCluster %s/%s already exists", cluster.Namespace, cluster.Name)
+			}
+		}
+	}
+
+	return nil
 }
 
 // RegisterCRD registers and validates CRDs

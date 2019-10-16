@@ -2,11 +2,15 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"reflect"
+	"regexp"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -20,6 +24,23 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var (
+	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
+)
+
+// GetVersion returns the kubernetes server version
+func GetVersion() (*version.Version, error) {
+	k8sVersion, err := k8s.Instance().GetVersion()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	return version.NewVersion(matches[1])
+}
 
 // ParseObjectFromFile reads the given file and loads the object from the file in obj
 func ParseObjectFromFile(

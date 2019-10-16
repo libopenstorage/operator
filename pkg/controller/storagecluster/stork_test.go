@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/go-version"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -14,7 +15,7 @@ import (
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,11 +61,13 @@ func TestStorkInstallation(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -258,12 +261,14 @@ func TestStorkWithoutImage(t *testing.T) {
 		},
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:   testutil.FakeK8sClient(cluster),
-		Driver:   driver,
-		recorder: recorder,
+		client:            testutil.FakeK8sClient(cluster),
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+		recorder:          recorder,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -304,11 +309,13 @@ func TestStorkImageChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -356,11 +363,13 @@ func TestStorkArgumentsChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -424,11 +433,13 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -492,11 +503,13 @@ func TestStorkCPUChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -547,11 +560,13 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -604,13 +619,15 @@ func TestStorkInvalidCPU(t *testing.T) {
 		},
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:   k8sClient,
-		Driver:   driver,
-		recorder: recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -646,13 +663,15 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		},
 	}
 
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:   k8sClient,
-		Driver:   driver,
-		recorder: recorder,
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -689,11 +708,13 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -708,7 +729,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
+		"gcr.io/google_containers/kube-scheduler-amd64:v1.11.0",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -723,7 +744,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
+		"gcr.io/google_containers/kube-scheduler-amd64:v1.11.0",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -749,11 +770,13 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -805,11 +828,13 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -832,7 +857,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/kube-scheduler-amd64:v0.0.0",
+		customRepo+"/kube-scheduler-amd64:v1.11.0",
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -858,11 +883,13 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -889,7 +916,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v0.0.0",
+		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v1.11.0",
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -914,11 +941,13 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -966,11 +995,13 @@ func TestDisableStork(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1094,11 +1125,13 @@ func TestRemoveStork(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1222,11 +1255,13 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 	}
 
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("", fmt.Errorf("not supported"))
