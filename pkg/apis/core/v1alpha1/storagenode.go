@@ -37,13 +37,14 @@ type StorageNodeList struct {
 type StorageNodeSpec struct {
 	// Version of the storage driver on the node
 	Version string `json:"version,omitempty"`
-	// CloudStorage used to create pods
-	CloudStorage StorageNodeCloudDriveConfigs `json:"cloudStorage"`
+	// CloudStorage configuration specifying storage for the node in cloud environments
+	CloudStorage StorageNodeCloudDriveConfigs `json:"cloudStorage,omitempty"`
 }
 
-// StorageNodeCloudDriveConfigs is a config for storage node cloud drives
+// StorageNodeCloudDriveConfigs specifies storage for the node in cloud environments
 type StorageNodeCloudDriveConfigs struct {
-	DriveConfigs []StorageNodeCloudDriveConfig `json:"driveConfigs"`
+	// DriveConfigs list of cloud drive configs for the storage node
+	DriveConfigs []StorageNodeCloudDriveConfig `json:"driveConfigs,omitempty"`
 }
 
 // StorageNodeCloudDriveConfig is a structure for storing a configuration for a single drive

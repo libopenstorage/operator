@@ -38,12 +38,8 @@ spec:
     JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
+      type: object
       properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata: {}
         spec:
           type: object
           description: The desired behavior of the storage node. Currently changing the spec does
@@ -54,6 +50,32 @@ spec:
             version:
               type: string
               description: Version of the storage driver on the node.
+            cloudStorage:
+              type: object
+              description: Details of storage on the node for cloud environments.
+              properties:
+                driveConfigs:
+                  type: array
+                  description: List of cloud drive configs for the storage node.
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        description: Type of cloud drive.
+                      sizeInGiB:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        description: Size of cloud drive in GiB.
+                      iops:
+                        type: integer
+                        format: int32
+                        minimum: 0
+                        description: IOPS required from the cloud drive.
+                      options:
+                        type: object
+                        description: Additional options for the cloud drive.
         status:
           type: object
           description: Most recently observed status of the storage node. The data may not be up
