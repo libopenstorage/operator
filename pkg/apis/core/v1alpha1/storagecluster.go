@@ -72,8 +72,6 @@ type StorageClusterSpec struct {
 	SecretsProvider *string `json:"secretsProvider,omitempty"`
 	// StartPort is the starting port in the range of ports used by the cluster
 	StartPort *uint32 `json:"startPort,omitempty"`
-	// CallHome send cluster information for analytics
-	CallHome *bool `json:"callHome,omitempty"`
 	// FeatureGates are a set of key-value pairs that describe what experimental
 	// features need to be enabled
 	FeatureGates map[string]string `json:"featureGates,omitempty"`
@@ -229,19 +227,15 @@ type StorageSpec struct {
 	JournalDevice *string `json:"journalDevice,omitempty"`
 	// SystemMdDevice device that will be used to store system metadata
 	SystemMdDevice *string `json:"systemMetadataDevice,omitempty"`
-	// DataStorageType backing store type for managing drives and pools
-	DataStorageType *string `json:"dataStorageType,omitempty"`
-	// RaidLevel raid level for the storage pool
-	RaidLevel *string `json:"raidLevel,omitempty"`
 }
 
 // CloudStorageCapacitySpec details the minimum and maximum amount of storage
 // that will be provisioned in the cluster for a particular set of minimum IOPS.
 type CloudStorageCapacitySpec struct {
 	// MinIOPS minimum IOPS expected from the cloud drive
-	MinIOPS uint32 `json:"minIOPS"`
+	MinIOPS uint32 `json:"minIOPS,omitempty"`
 	// MinCapacityInGiB minimum capacity for this cloud device spec
-	MinCapacityInGiB uint64 `json:"minCapacityInGiB"`
+	MinCapacityInGiB uint64 `json:"minCapacityInGiB,omitempty"`
 	// MaxCapacityInGiB capacity for this cloud device spec should not go above this threshold
 	MaxCapacityInGiB uint64 `json:"maxCapacityInGiB,omitempty"`
 	// Options additional options required to provision the drive in cloud
@@ -330,8 +324,6 @@ type StorageClusterStatus struct {
 	ClusterName string `json:"clusterName,omitempty"`
 	// ClusterUID unique ID for the storage cluster
 	ClusterUID string `json:"clusterUid,omitempty"`
-	// CreatedAt timestamp at which the storage cluster was created
-	CreatedAt *meta.Time `json:"createdAt,omitempty"`
 	// Phase is current status of the storage cluster
 	Phase string `json:"phase,omitempty"`
 	// Count of hash collisions for the StorageCluster. The StorageCluster

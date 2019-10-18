@@ -3373,11 +3373,6 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
 
-	// TestCase: Change spec.callHome
-	callHome := true
-	cluster.Spec.CallHome = &callHome
-	k8sClient.Update(context.TODO(), cluster)
-
 	podControl.DeletePodName = nil
 
 	result, err = controller.Reconcile(request)

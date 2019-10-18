@@ -38,12 +38,8 @@ spec:
     JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
+      type: object
       properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata: {}
         spec:
           type: object
           description: The desired behavior of the storage cluster.
@@ -73,6 +69,7 @@ spec:
             startPort:
               type: integer
               format: int32
+              minimum: 0
               description: Start port is the starting port in the range of ports used by the cluster.
             updateStrategy:
               type: object
@@ -82,11 +79,15 @@ spec:
                   type: string
                   description: Type of storage cluster update. Can be RollingUpdate or OnDelete.
                     Default is RollingUpdate.
+                  enum:
+                  - RollingUpdate
+                  - OnDelete
                 rollingUpdate:
                   type: object
                   description: Spec to control the desired behavior of storage cluster rolling update.
                   properties:
                     maxUnavailable:
+                      # x-kubernetes-int-or-string: true
                       description: >-
                         The maximum number of StorageCluster pods that can be unavailable
                         during the update. Value can be an absolute number (ex: 5) or a percentage of
@@ -99,6 +100,9 @@ spec:
                         their place. Once the new pods are available, it then proceeds onto other
                         StorageCluster pods, thus ensuring that at least 70% of original number of
                         StorageCluster pods are available at all times during the update.
+                      oneOf:
+                      - type: integer
+                      - type: string
             deleteStrategy:
               type: object
               description: Delete strategy to uninstall and wipe the storage cluster.
@@ -113,6 +117,9 @@ spec:
                     storage driver perspective. UninstallAndWipe strategy ensures that the cluster is
                     completely uninstalled as well as the storage devices and metadata are wiped for
                     reuse. This may result in data loss.
+                  enum:
+                  - Uninstall
+                  - UninstallAndWipe
             revisionHistoryLimit:
               type: integer
               format: int32
@@ -133,6 +140,94 @@ spec:
                   type: object
                   description: Describes node affinity scheduling rules for the storage cluster pods.
                     This is exactly the same object as Kubernetes node affinity for pods.
+                  properties:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      type: object
+                      properties:
+                        nodeSelectorTerms:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              matchExpressions:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    key:
+                                      type: string
+                                    operator:
+                                      type: string
+                                    values:
+                                      type: array
+                                      items:
+                                        type: string
+                                  required:
+                                  - key
+                                  - operator
+                              matchFields:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    key:
+                                      type: string
+                                    operator:
+                                      type: string
+                                    values:
+                                      type: array
+                                      items:
+                                        type: string
+                                  required:
+                                  - key
+                                  - operator
+                      required:
+                      - nodeSelectorTerms
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          weight:
+                            type: integer
+                          preference:
+                            type: object
+                            properties:
+                              matchExpressions:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    key:
+                                      type: string
+                                    operator:
+                                      type: string
+                                    values:
+                                      type: array
+                                      items:
+                                        type: string
+                                  required:
+                                  - key
+                                  - operator
+                              matchFields:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    key:
+                                      type: string
+                                    operator:
+                                      type: string
+                                    values:
+                                      type: array
+                                      items:
+                                        type: string
+                                  required:
+                                  - key
+                                  - operator
+                        required:
+                        - preference
+                        - weight
             kvdb:
               type: object
               description: Details of KVDB that the storage driver will use.
@@ -211,14 +306,20 @@ spec:
                     properties:
                       minIOPS:
                         type: integer
+                        format: int32
+                        minimum: 0
                         description: Minimum IOPS expected from the cloud drive.
                       minCapacityInGiB:
                         type: integer
+                        format: int64
+                        minimum: 0
                         description: Minimum capacity for this storage cluster. The total capacity
                           of devices created by this capacity spec should not be less than this
                           number for the entire cluster.
                       maxCapacityInGiB:
                         type: integer
+                        format: int64
+                        minimum: 0
                         description: Maximum capacity for this storage cluster. The total capacity
                           of devices created by this capacity spec should not be greater than this
                           number for the entire cluster.
@@ -249,6 +350,10 @@ spec:
                 enabled:
                   type: boolean
                   description: Flag indicating whether STORK needs to be enabled.
+                lockImage:
+                  type: boolean
+                  description: Flag indicating if the STORK image needs to be locked to the given image.
+                    If the image is not locked, it can be updated by the storage driver during upgrades.
                 image:
                   type: string
                   description: Docker image of the STORK container.
@@ -257,19 +362,54 @@ spec:
                   description: >-
                     It is map of arguments given to STORK. Example: driver: pxd
                 env:
+                  type: array
                   description: List of environment variables used by STORK. This is an array of
                     Kubernetes EnvVar where the value can be given directly or from a source like field,
                     config map or secret.
-                  type: array
                   items:
                     type: object
                     properties:
                       name:
                         type: string
-                        description: Name of the environment variable.
                       value:
                         type: string
-                        description: Value of the environment variable.
+                      valueFrom:
+                        type: object
+                        properties:
+                          configMapKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                          fieldRef:
+                            type: object
+                            properties:
+                              apiVersion:
+                                type: string
+                              fieldPath:
+                                type: string
+                          resourceFieldRef:
+                            type: object
+                            properties:
+                              containerName:
+                                type: string
+                              divisor:
+                                type: string
+                              resource:
+                                type: string
+                          secretKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
             userInterface:
               type: object
               description: Contains spec of a user interface for the storage driver.
@@ -277,23 +417,62 @@ spec:
                 enabled:
                   type: boolean
                   description: Flag indicating whether the user interface needs to be enabled.
+                lockImage:
+                  type: boolean
+                  description: Flag indicating if the user interface image needs to be locked to the given
+                    image. If the image is not locked, it can be updated by the storage driver during upgrades.
                 image:
                   type: string
                   description: Docker image of the user interface container.
                 env:
+                  type: array
                   description: List of environment variables used by the UI components. This is an array
                     of Kubernetes EnvVar where the value can be given directly or from a source like field,
                     config map or secret.
-                  type: array
                   items:
                     type: object
                     properties:
                       name:
                         type: string
-                        description: Name of the environment variable.
                       value:
                         type: string
-                        description: Value of the environment variable.
+                      valueFrom:
+                        type: object
+                        properties:
+                          configMapKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                          fieldRef:
+                            type: object
+                            properties:
+                              apiVersion:
+                                type: string
+                              fieldPath:
+                                type: string
+                          resourceFieldRef:
+                            type: object
+                            properties:
+                              containerName:
+                                type: string
+                              divisor:
+                                type: string
+                              resource:
+                                type: string
+                          secretKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
             monitoring:
               type: object
               description: Contains monitoring configuration for the storage cluster.
@@ -303,18 +482,53 @@ spec:
                   description: This flag is enabled will expose the storage cluster metrics to external
                     monitoring solutions like Prometheus.
             env:
+              type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes
                 EnvVar where the value can be given directly or from a source like field, config map or secret.
-              type: array
               items:
                 type: object
                 properties:
                   name:
                     type: string
-                    description: Name of the environment variable.
                   value:
                     type: string
-                    description: Value of the environment variable.
+                  valueFrom:
+                    type: object
+                    properties:
+                      configMapKeyRef:
+                        type: object
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          optional:
+                            type: boolean
+                      fieldRef:
+                        type: object
+                        properties:
+                          apiVersion:
+                            type: string
+                          fieldPath:
+                            type: string
+                      resourceFieldRef:
+                        type: object
+                        properties:
+                          containerName:
+                            type: string
+                          divisor:
+                            type: string
+                          resource:
+                            type: string
+                      secretKeyRef:
+                        type: object
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          optional:
+                            type: boolean
         status:
           type: object
           description: Most recently observed status of the storage cluster. This data may not be up to date.
@@ -336,6 +550,14 @@ spec:
               description: Count of hash collisions for the StorageCluster. The StorageCluster controller
                 uses this field as a collision avoidance mechanism when it needs to create the name of
                 the newest ControllerRevision.
+            storage:
+              type: object
+              description: Contains details of storage in the cluster.
+              properties:
+                storageNodesPerZone:
+                  type: integer
+                  format: int32
+                  description: The number of storage nodes per zone in the cluster.
             conditions:
               type: array
               description: Contains details for the current condition of this cluster.
