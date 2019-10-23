@@ -138,6 +138,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
 	require.Equal(t, uint32(defaultStartPort), *cluster.Spec.StartPort)
+	require.True(t, *cluster.Spec.Storage.UseAll)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
 	// Use default image from release manifest when spec.image has empty value
@@ -197,6 +198,51 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.StartPort = &startPort
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, uint32(10001), *cluster.Spec.StartPort)
+
+	// Do not use default storage config if cloud storage config present
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
+	cluster.Spec.Storage = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Storage)
+
+	// Add default storage config if cloud storage and storage config are both present
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Storage.UseAll)
+
+	// Do no use default storage config if devices is not nil
+	devices := make([]string, 0)
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		Devices: &devices,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Storage.UseAll)
+
+	devices = append(devices, "/dev/sda")
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Storage.UseAll)
+
+	// Do not set useAll if useAllWithPartitions is true
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAllWithPartitions: boolPtr(true),
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Storage.UseAll)
+
+	// Should set useAll if useAllWithPartitions is false
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAllWithPartitions: boolPtr(false),
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Storage.UseAll)
+
+	// Do not change useAll if already has a value
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll: boolPtr(false),
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.False(t, *cluster.Spec.Storage.UseAll)
 
 	// Add default placement if node placement is nil
 	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{}
