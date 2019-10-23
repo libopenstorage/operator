@@ -13,5 +13,11 @@ releases:
     stork: openstorage/stork:2.2.5
     lighthouse: portworx/px-lighthouse:2.0.4
   2.2.0:
-    stork: openstorage/stork:2.3-dev
-    lighthouse: portworx/px-lighthouse:2.0.4
+    stork: openstorage/stork:2.3.1
+    lighthouse: portworx/px-lighthouse:2.0.5
+  2.2.0.1:
+    stork: openstorage/stork:2.3.1
+    lighthouse: portworx/px-lighthouse:2.0.5
+  2.2.1:
+    stork: openstorage/stork:2.3.1
+    lighthouse: portworx/px-lighthouse:2.0.5
