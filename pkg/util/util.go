@@ -11,7 +11,7 @@ const (
 	FailedPlacementReason = "FailedPlacement"
 	// FailedStoragePodReason is added to an event when the status of a Pod of a cluster is 'Failed'.
 	FailedStoragePodReason = "FailedStoragePod"
-	// FailedSyncReason is added to an event when the status the cluster could not be synced.
+	// FailedSyncReason is added to an event when the status of the cluster could not be synced.
 	FailedSyncReason = "FailedSync"
 	// FailedValidationReason is added to an event when operator validations fail.
 	FailedValidationReason = "FailedValidation"
