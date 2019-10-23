@@ -136,6 +136,18 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	startPort := uint32(t.startPort)
 	toUpdate.Spec.StartPort = &startPort
 
+	// If no storage spec is provided, initialize one where Portworx takes all available drives
+	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
+		toUpdate.Spec.Storage = &corev1alpha1.StorageSpec{}
+	}
+	if toUpdate.Spec.Storage != nil {
+		if toUpdate.Spec.Storage.Devices == nil &&
+			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
+			toUpdate.Spec.Storage.UseAll == nil {
+			toUpdate.Spec.Storage.UseAll = boolPtr(true)
+		}
+	}
+
 	if toUpdate.Spec.Placement == nil || toUpdate.Spec.Placement.NodeAffinity == nil {
 		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
 			NodeAffinity: &v1.NodeAffinity{
