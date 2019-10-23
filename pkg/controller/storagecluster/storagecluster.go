@@ -250,7 +250,7 @@ func (c *Controller) validateSingleCluster(current *corev1alpha1.StorageCluster)
 	}
 
 	// If the cluster current cluster does not have the finalizer, check if any existing
-	// StorageClusters have the finalizer. If none if them have it, then current just got
+	// StorageClusters have the finalizer. If none of them have it, then current just got
 	// lucky and is the only StorageCluster that will get reconciled; else if a cluster
 	// is found with the finalizer then we cannot process current as we support only 1.
 	clusterList := &corev1alpha1.StorageClusterList{}

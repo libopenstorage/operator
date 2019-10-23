@@ -6,6 +6,7 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -16,8 +17,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	kversion "k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
+	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestGetVersion(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetBaseClient(fakeClient)
+
+	// Valid version
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "v1.2.3",
+	}
+	actualVersion, err := GetVersion()
+	require.NoError(t, err)
+	require.Equal(t, "1.2.3", actualVersion.String())
+
+	// Invalid version
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "invalid",
+	}
+	actualVersion, err = GetVersion()
+	require.EqualError(t, err, "invalid kubernetes version received: invalid")
+	require.Nil(t, actualVersion)
+}
 
 func TestDeleteServiceAccount(t *testing.T) {
 	name := "test"
