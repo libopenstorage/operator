@@ -26,16 +26,8 @@ metadata:
           },
           "spec": {
             "image": "registry.connect.redhat.com/portworx/px-monitor:2.1.5",
-            "stork": {
-              "enabled": true,
-              "image": "openstorage/stork:2.2.5"
-            },
             "userInterface": {
-              "enabled": true,
-              "image": "portworx/px-lighthouse:2.0.4"
-            },
-            "storage": {
-              "useAll": true
+              "enabled": true
             }
           }
         },
@@ -149,9 +141,9 @@ spec:
   - type: SingleNamespace
     supported: true
   - type: MultiNamespace
-    supported: false
+    supported: true
   - type: AllNamespaces
-    supported: false
+    supported: true
   install:
     spec:
       clusterPermissions:
@@ -262,17 +254,11 @@ spec:
         description: The docker image name and version of Portworx Enterprise.
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:text'
-      - path: imagePullPolicy
-        displayName: Image Pull Policy
-        description: It is the pull policy for the image. Takes one of Always, Never,
-          IfNotPresent. Defaults to Always.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:imagePullPolicy'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:image'
       - path: imagePullSecret
-        displayName: Image Pull Secret
-        description: It is a reference to secret in the kube-system namespace which
-          is used for pulling images used by this storage cluster.
+        displayName: Private Registry Image Pull Secret
+        description: It is a reference to a secret in the same namespace as the
+          StorageCluster. This secret is used to pull images from a private
+          registry.
         x-descriptors:
         - 'urn:alm:descriptor:io.kubernetes:Secret'
         - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:image'
@@ -285,42 +271,48 @@ spec:
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:text'
         - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:image'
-      - path: stork.enabled
-        displayName: Enable Stork
-        description: 'Enable Stork'
+      - description: The secrets provider which will contain secrets that are needed by
+          Portworx for features like volume encryption, cloudsnaps, etc.
+        displayName: Secrets Provider
+        path: secretsProvider
         x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:stork'
-      - path: stork.image
-        displayName: Stork Image
-        description: The docker image name and version of Stork.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:text'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:stork'
-      - path: userInterface.enabled
-        displayName: Enable Lighthouse
-        description: 'Enable Lighthouse'
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:lighthouse'
-      - path: userInterface.image
-        displayName: Lighthouse Image
-        description: The docker image name and version of Lighthouse.
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:text'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:lighthouse'
-      - path: monitoring.enableMetrics
-        displayName: Enable Metrics
-        description: 'Expose Portworx metrics to Prometheus'
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-        - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:monitoring'
-      - path: featureGates.CSI
-        displayName: Enable CSI
-        description: 'Enable CSI'
-        x-descriptors:
-        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
         - 'urn:alm:descriptor:com.tectonic.ui:advanced'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:k8s'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:vault'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:aws-kms'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:azure-kv'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:ibm-kp'
+      - description: This controls the delete strategy of the Portworx cluster.
+        displayName: DeleteStrategy
+        path: deleteStrategy.type
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:advanced'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:Uninstall'
+        - 'urn:alm:descriptor:com.tectonic.ui:select:UninstallAndWipe'
+      - description: It is the pull policy for the image. Accepts one of Always, Never,
+          IfNotPresent. Defaults to Always.
+        displayName: Image Pull Policy
+        path: imagePullPolicy
+      - description: Expose Portworx metrics to Prometheus.
+        displayName: Enable Metrics
+        path: monitoring.enableMetrics
+      - description: The network interface to be used by Portworx for data traffic.
+        displayName: Data Interface
+        path: network.dataInterface
+      - description: The network interface to be used by Portworx for management
+          traffic.
+        displayName: Management Interface
+        path: network.mgmtInterface
+      - description: It is the starting port in the range of ports used by Portworx.
+        displayName: Start Port
+        path: startPort
+      - description: Revision history limit is the number of old histories to retain.
+        displayName: Revision History Limit
+        path: revisionHistoryLimit
+      - description: Version is a read-only field. It contains the current version of
+          Portworx.
+        displayName: Version
+        path: version
       statusDescriptors:
       - path: conditions
         displayName: Cluster Conditions
