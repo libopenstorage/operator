@@ -957,6 +957,28 @@ func CreateOrUpdateDaemonSet(
 	return k8sClient.Update(context.TODO(), existingDS)
 }
 
+// UpdateStorageClusterStatus updates the status of given StorageCluster object
+// on the latest copy
+func UpdateStorageClusterStatus(
+	k8sClient client.Client,
+	cluster *corev1alpha1.StorageCluster,
+) error {
+	existingCluster := &corev1alpha1.StorageCluster{}
+	if err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		existingCluster,
+	); err != nil {
+		return err
+	}
+
+	cluster.ResourceVersion = existingCluster.ResourceVersion
+	return k8sClient.Status().Update(context.TODO(), cluster)
+}
+
 // CreateOrUpdateStorageNode creates a StorageNode if not present, else updates it
 func CreateOrUpdateStorageNode(
 	k8sClient client.Client,

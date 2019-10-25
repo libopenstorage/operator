@@ -403,13 +403,10 @@ func (c *Controller) deleteStorageCluster(
 
 	if deleteFinalizerExists(cluster) {
 		toDelete := cluster.DeepCopy()
-		deleteClusterCondition, err := c.Driver.DeleteStorage(toDelete)
-		if err != nil {
-			logrus.Errorf("Failed to delete storage: %v", err)
-			return fmt.Errorf("driver failed to delete storage: %v", err)
-		} else if deleteClusterCondition == nil {
-			// Return without error as the delete condition is not yet populated
-			return nil
+		deleteClusterCondition, driverErr := c.Driver.DeleteStorage(toDelete)
+		if driverErr != nil {
+			msg := fmt.Sprintf("Driver failed to delete storage. %v", driverErr)
+			c.warningEvent(toDelete, util.FailedSyncReason, msg)
 		}
 		// Check if there is an existing delete condition and overwrite it
 		foundIndex := -1
@@ -420,20 +417,32 @@ func (c *Controller) deleteStorageCluster(
 			}
 		}
 		if foundIndex == -1 {
+			if deleteClusterCondition == nil {
+				deleteClusterCondition = &corev1alpha1.ClusterCondition{
+					Type:   corev1alpha1.ClusterConditionTypeDelete,
+					Status: corev1alpha1.ClusterOperationInProgress,
+				}
+				if driverErr != nil {
+					deleteClusterCondition.Reason = err.Error()
+				}
+			}
+			foundIndex = len(toDelete.Status.Conditions)
 			toDelete.Status.Conditions = append(toDelete.Status.Conditions, *deleteClusterCondition)
-		} else {
+		} else if deleteClusterCondition != nil {
+			// Update existing delete condition only if we have the latest Delete condition
 			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
 
-		if err := c.client.Status().Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
+		toDelete.Status.Phase = string(corev1alpha1.ClusterConditionTypeDelete) + string(toDelete.Status.Conditions[foundIndex].Status)
+		if err := k8sutil.UpdateStorageClusterStatus(c.client, toDelete); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}
 
-		if deleteClusterCondition.Status == corev1alpha1.ClusterOperationCompleted {
+		if toDelete.Status.Conditions[foundIndex].Status == corev1alpha1.ClusterOperationCompleted {
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
-			if err := c.client.Update(context.TODO(), toDelete); err != nil {
+			if err := c.client.Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
 				return err
 			}
 		}
@@ -452,7 +461,7 @@ func (c *Controller) updateStorageClusterStatus(
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
 		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
 	}
-	return c.client.Status().Update(context.TODO(), toUpdate)
+	return k8sutil.UpdateStorageClusterStatus(c.client, toUpdate)
 }
 
 func (c *Controller) manage(

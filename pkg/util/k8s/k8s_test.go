@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -899,6 +900,39 @@ func TestDeleteStatefulSet(t *testing.T) {
 	statefulSet = &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, statefulSet, name, namespace)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestUpdateStorageClusterStatus(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			ResourceVersion: "200",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Install",
+		},
+	}
+
+	// Fail if cluster is not present
+	err := UpdateStorageClusterStatus(k8sClient, cluster)
+	require.True(t, errors.IsNotFound(err))
+
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	// Should keep the latest resource version on update even if input object is old
+	cluster.Status.Phase = "Update"
+	cluster.ResourceVersion = "100"
+	err = UpdateStorageClusterStatus(k8sClient, cluster)
+	require.NoError(t, err)
+
+	actualCluster := &corev1alpha1.StorageCluster{}
+	err = testutil.Get(k8sClient, actualCluster, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "Update", actualCluster.Status.Phase)
+	require.Equal(t, "200", actualCluster.ResourceVersion)
 }
 
 func TestServiceMonitorChangeSpec(t *testing.T) {
