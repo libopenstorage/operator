@@ -1694,24 +1694,31 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 
 	updatedCluster := &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.Empty(t, updatedCluster.Status.Conditions)
+	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
-	// If storage driver returns error, then controller should return error as well
+	// If storage driver returns error, then controller should not return error but raise an event
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, fmt.Errorf("delete error"))
 
 	result, err = controller.Reconcile(request)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "delete error")
+	require.NoError(t, err)
 	require.Empty(t, result)
 
 	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
+	raisedEvent := <-recorder.Events
+	require.Contains(t, raisedEvent,
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
+	require.Contains(t, raisedEvent, "delete error")
 
 	updatedCluster = &corev1alpha1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.Empty(t, updatedCluster.Status.Conditions)
+	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is not present already, then add to the cluster
@@ -1722,7 +1729,8 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	}
 	k8sClient.Update(context.TODO(), updatedCluster)
 	condition := &corev1alpha1.ClusterCondition{
-		Type: corev1alpha1.ClusterConditionTypeDelete,
+		Type:   corev1alpha1.ClusterConditionTypeDelete,
+		Status: corev1alpha1.ClusterOperationFailed,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -1735,12 +1743,13 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
+	require.Equal(t, "DeleteFailed", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is present, then update it
 	condition = &corev1alpha1.ClusterCondition{
 		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationInProgress,
+		Status: corev1alpha1.ClusterOperationTimeout,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -1753,6 +1762,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
+	require.Equal(t, "DeleteTimeout", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition status is completed, then remove delete finalizer
