@@ -106,6 +106,14 @@ func GetExpectedStorageClass(t *testing.T, fileName string) *storagev1.StorageCl
 	return storageClass
 }
 
+// GetExpectedConfigMap returns the ConfigMap object from given yaml spec file
+func GetExpectedConfigMap(t *testing.T, fileName string) *v1.ConfigMap {
+	obj := getKubernetesObject(t, fileName)
+	configMap, ok := obj.(*v1.ConfigMap)
+	assert.True(t, ok, "Expected ConfigMap object")
+	return configMap
+}
+
 // GetExpectedService returns the Service object from given yaml spec file
 func GetExpectedService(t *testing.T, fileName string) *v1.Service {
 	obj := getKubernetesObject(t, fileName)

@@ -38,6 +38,7 @@ type ReleaseManifest struct {
 type Release struct {
 	Stork      string `yaml:"stork,omitempty"`
 	Lighthouse string `yaml:"lighthouse,omitempty"`
+	Autopilot  string `yaml:"autopilot,omitempty"`
 }
 
 // NewReleaseManifest returns a release manifest object from the portworx releases file
