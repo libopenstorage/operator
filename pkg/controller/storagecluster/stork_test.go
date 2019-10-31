@@ -495,9 +495,6 @@ func TestStorkCPUChange(t *testing.T) {
 			Stork: &corev1alpha1.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
-				Args: map[string]string{
-					"test-key": "test-value",
-				},
 			},
 		},
 	}

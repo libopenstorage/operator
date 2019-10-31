@@ -1550,10 +1550,238 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	require.Equal(t, "test/stork-connector:t2", image)
 }
 
-func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
-	// Set fake kubernetes client for k8s version
+func TestAutopilotInstall(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1alpha1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "debug",
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot ConfigMap
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")
+	autopilotConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfigMap, autopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, autopilotConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, autopilotConfigMap.Namespace)
+	require.Len(t, autopilotConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, autopilotConfigMap.Data)
+
+	// Autopilot ServiceAccount
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, autopilotServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Autopilot ClusterRole
+	expectedCR := testutil.GetExpectedClusterRole(t, "autopilotClusterRole.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, autopilotClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// Autopilot ClusterRoleBinding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, autopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Autopilot Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, autopilotDeployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, autopilotDeployment.Namespace)
+	require.Len(t, autopilotDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotDeployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Labels, autopilotDeployment.Labels)
+	require.Equal(t, expectedDeployment.Annotations, autopilotDeployment.Annotations)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedDeployment.Spec, autopilotDeployment.Spec)
+}
+
+func TestAutopilotWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := fake.NewFakeClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	// Should not return an error, instead should raise an event
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Autopilot. autopilot image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
+
+	cluster.Spec.Autopilot.Image = ""
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Autopilot. autopilot image cannot be empty",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
+}
+
+func TestAutopilotWithImagePullSecret(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(0)
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	imagePullSecret := "registry-secret"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ImagePullSecret: &imagePullSecret,
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t,
+		imagePullSecret,
+		autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+}
+
+func TestAutopilotWithEnvironmentVariables(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(0)
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  "FOO",
+						Value: "foo",
+					},
+					{
+						Name:  "BAR",
+						Value: "bar",
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
+	// Env vars are sorted on the key
+	require.Equal(t, "BAR", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Name)
+	require.Equal(t, "bar", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Value)
+	require.Equal(t, "FOO", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
+	require.Equal(t, "foo", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
+}
+
+func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1573,6 +1801,10 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
 			},
 		},
 	}
@@ -1613,12 +1845,308 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 		customRepo+"/lh-config-sync:test",
 		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
 	)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestAutopilotImageChange(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := getImageFromDeployment(autopilotDeployment, autopilotContainerName)
+	require.Equal(t, "portworx/autopilot:v1", image)
+
+	// Change the autopilot image
+	cluster.Spec.Autopilot.Image = "portworx/autopilot:v2"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image = getImageFromDeployment(autopilotDeployment, autopilotContainerName)
+	require.Equal(t, "portworx/autopilot:v2", image)
+}
+
+func TestAutopilotArgumentsChange(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+				Args: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Check custom new arg is present
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 4)
+	require.Contains(t,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Command,
+		"--test-key=test-value",
+	)
+	require.Contains(t,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Command,
+		"--log-level=debug",
+	)
+
+	// Overwrite existing argument with new value
+	cluster.Spec.Autopilot.Args["--log-level"] = "warn"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 4)
+	require.Contains(t,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Command,
+		"--log-level=warn",
+	)
+}
+
+func TestAutopilotConfigArgumentsChange(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Use default config args if nothing specified in the cluster spec
+	autopilotConfig := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfig, autopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.NotContains(t, autopilotConfig.Data["config.yaml"], "min_poll_interval")
+
+	// Overwrite the config arguments
+	// Check nothing has changed in deployment arguments and that the config map
+	// has changed to reflect the new argument
+	cluster.Spec.Autopilot.Args = map[string]string{"min_poll_interval": "10"}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotConfig = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfig, autopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, autopilotConfig.Data["config.yaml"], "min_poll_interval: 10")
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 3)
+	require.NotContains(t,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Command,
+		"--min_poll_interval=10",
+	)
+}
+
+func TestAutopilotEnvVarsChange(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+				Env: []v1.EnvVar{
+					{
+						Name:  "FOO",
+						Value: "foo",
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Check env vars are passed to deployment
+	expectedEnvs := append([]v1.EnvVar{}, cluster.Spec.Autopilot.Env...)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// Overwrite existing env vars
+	cluster.Spec.Autopilot.Env[0].Value = "bar"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedEnvs[0].Value = "bar"
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// Add new env vars
+	newEnv := v1.EnvVar{Name: "BAZ", Value: "baz"}
+	cluster.Spec.Autopilot.Env = append(cluster.Spec.Autopilot.Env, newEnv)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedEnvs = append(expectedEnvs, newEnv)
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+}
+
+func TestAutopilotCPUChange(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity := resource.MustParse(defaultAutopilotCPU)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Change the CPU resource required for Autopilot deployment
+	expectedCPU := "0.2"
+	cluster.Annotations = map[string]string{annotationAutopilotCPU: expectedCPU}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity = resource.MustParse(expectedCPU)
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+}
+
+func TestAutopilotInvalidCPU(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	k8sClient := fake.NewFakeClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationAutopilotCPU: "invalid-cpu",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestCompleteInstallWithCustomRegistry(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1639,6 +2167,10 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
 			},
 		},
 	}
@@ -1690,6 +2222,16 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		testutil.GetPullPolicyForContainer(lhDeployment, "stork-connector"))
 	require.Equal(t, v1.PullIfNotPresent,
 		lhDeployment.Spec.Template.Spec.InitContainers[0].ImagePullPolicy)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t, v1.PullIfNotPresent,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 }
 
 func TestRemovePVCController(t *testing.T) {
@@ -1957,6 +2499,145 @@ func TestDisableLighthouse(t *testing.T) {
 
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestRemoveAutopilot(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	cm := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Remove autopilot config
+	cluster.Spec.Autopilot = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	cm = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestDisableAutopilot(t *testing.T) {
+	k8sClient := fake.NewFakeClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+
+	cm := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable Autopilot
+	cluster.Spec.Autopilot.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	cm = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 

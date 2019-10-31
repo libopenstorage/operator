@@ -516,7 +516,7 @@ func (c *Controller) createStorkDeployment(
 		if c.Name == storkContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
-			existingEnvs = c.Env
+			existingEnvs = append([]v1.EnvVar{}, c.Env...)
 			sort.Sort(envByName(existingEnvs))
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break

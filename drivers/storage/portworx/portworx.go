@@ -35,6 +35,7 @@ const (
 	labelKeyName                      = "name"
 	defaultPortworxImage              = "portworx/oci-monitor"
 	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
+	defaultAutopilotImage             = "portworx/autopilot:v0.6.0"
 	defaultStorkImage                 = "openstorage/stork:2.2.5"
 	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
@@ -55,6 +56,7 @@ type portworx struct {
 	volumePlacementStrategyCRDCreated bool
 	pvcControllerDeploymentCreated    bool
 	lhDeploymentCreated               bool
+	autopilotDeploymentCreated        bool
 	csiApplicationCreated             bool
 	csiNodeInfoCRDCreated             bool
 	sdkConn                           *grpc.ClientConn
@@ -180,6 +182,34 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 			}
 		} else if len(toUpdate.Spec.UserInterface.Image) == 0 {
 			toUpdate.Spec.UserInterface.Image = defaultLighthouseImage
+		}
+	}
+
+	// Use the autopilot image from release manifest if the current image is not locked,
+	// else keep using the existing image. If the current image is empty then use the
+	// default image from manifest else a hardcoded one if absent in manifest.
+	if toUpdate.Spec.Autopilot != nil &&
+		toUpdate.Spec.Autopilot.Enabled {
+		toUpdate.Spec.Autopilot.Image = strings.TrimSpace(toUpdate.Spec.Autopilot.Image)
+		if len(components.Autopilot) > 0 {
+			if !toUpdate.Spec.Autopilot.LockImage ||
+				len(toUpdate.Spec.Autopilot.Image) == 0 {
+				toUpdate.Spec.Autopilot.Image = components.Autopilot
+			}
+		} else if len(toUpdate.Spec.Autopilot.Image) == 0 {
+			toUpdate.Spec.Autopilot.Image = defaultAutopilotImage
+		}
+
+		if len(toUpdate.Spec.Autopilot.Providers) == 0 {
+			toUpdate.Spec.Autopilot.Providers = []corev1alpha1.DataProviderSpec{
+				{
+					Name: "default",
+					Type: "prometheus",
+					Params: map[string]string{
+						"url": "http://prometheus:9090",
+					},
+				},
+			}
 		}
 	}
 

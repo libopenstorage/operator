@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autopilot-config
+  namespace: kube-test
+data:
+  config.yaml: |-
+    providers:
+    - name: default
+      type: prometheus
+      params: url=http://prometheus:9090
+    - name: second
+      type: datadog
+      params: auth=foobar,url=http://datadog:9090
+    min_poll_interval: 4

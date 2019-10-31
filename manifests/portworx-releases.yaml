@@ -18,6 +18,7 @@ releases:
   2.2.0.1:
     stork: openstorage/stork:2.3.1
     lighthouse: portworx/px-lighthouse:2.0.5
-  2.2.1:
+  2.3.0:
     stork: openstorage/stork:2.3.1
     lighthouse: portworx/px-lighthouse:2.0.5
+    autopilot: portworx/autopilot:1.0.0
