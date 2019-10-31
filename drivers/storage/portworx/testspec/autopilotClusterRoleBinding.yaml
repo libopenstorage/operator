@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: autopilot
+subjects:
+- kind: ServiceAccount
+  name: autopilot
+  namespace: kube-test
+roleRef:
+  kind: ClusterRole
+  name: autopilot
+  apiGroup: rbac.authorization.k8s.io

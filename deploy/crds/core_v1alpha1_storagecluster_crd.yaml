@@ -473,6 +473,88 @@ spec:
                                 type: string
                               optional:
                                 type: boolean
+            autopilot:
+              type: object
+              description: Contains spec of autopilot component for storage driver.
+              properties:
+                enabled:
+                  type: boolean
+                  description: Flag indicating whether autopilot needs to be enabled.
+                lockImage:
+                  type: boolean
+                  description: Flag indicating if the autopilot image needs to be locked to the given image.
+                    If the image is not locked, it can be updated by the storage driver during upgrades.
+                image:
+                  type: string
+                  description: Docker image of the autopilot container.
+                args:
+                  type: object
+                  description: >-
+                    It is a map of arguments provided to autopilot. Example: log-level: debug
+                env:
+                  type: array
+                  description: List of environment variables used by autopilot. This is an array of
+                    Kubernetes EnvVar where the value can be given directly or from a source like field,
+                    config map or secret.
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                      valueFrom:
+                        type: object
+                        properties:
+                          configMapKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                          fieldRef:
+                            type: object
+                            properties:
+                              apiVersion:
+                                type: string
+                              fieldPath:
+                                type: string
+                          resourceFieldRef:
+                            type: object
+                            properties:
+                              containerName:
+                                type: string
+                              divisor:
+                                type: string
+                              resource:
+                                type: string
+                          secretKeyRef:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                providers:
+                  type: array
+                  description: List of input data providers to autopilot.
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Unique name of the data provider.
+                      type:
+                        type: string
+                        description: Type of the data provider. For instance - prometheus
+                      params:
+                        type: object
+                        description: Map of key-value params for the provider.
             monitoring:
               type: object
               description: Contains monitoring configuration for the storage cluster.

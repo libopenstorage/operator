@@ -82,6 +82,10 @@ type StorageClusterSpec struct {
 	// Stork contains STORK related parameters. For more information about STORK,
 	// check https://github.com/libopenstorage/stork
 	Stork *StorkSpec `json:"stork,omitempty"`
+	// Autopilot contains details for the autopilot component if running external
+	// to the storage driver. The autopilot component could augment the storage
+	// driver to take intelligent actions based on the current state of the cluster.
+	Autopilot *AutopilotSpec `json:"autopilot,omitempty"`
 	// Monitoring contains monitoring configuration for the storage cluster.
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
@@ -309,6 +313,34 @@ type StorkSpec struct {
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by stork
 	Env []v1.EnvVar `json:"env,omitempty"`
+}
+
+// AutopilotSpec contains details of an autopilot component
+type AutopilotSpec struct {
+	// Enabled decides whether autopilot needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is docker image of the autopilot container
+	Image string `json:"image,omitempty"`
+	// LockImage is a boolean indicating if the autopilot image needs to be locked
+	// to the given image. If the image is not locked, it can be updated by the
+	// driver during upgrades.
+	LockImage bool `json:"lockImage,omitempty"`
+	// Providers is a list of input data providers for autopilot if it needs any
+	Providers []DataProviderSpec `json:"providers,omitempty"`
+	// Args is a map of arguments given to autopilot
+	Args map[string]string `json:"args,omitempty"`
+	// Env is a list of environment variables used by autopilot
+	Env []v1.EnvVar `json:"env,omitempty"`
+}
+
+// DataProviderSpec contains the details for data providers for components like autopilot
+type DataProviderSpec struct {
+	// Name is the unique name for the provider
+	Name string `json:"name,omitempty"`
+	// Type is the type of data provider. For instance, prometheus
+	Type string `json:"type,omitempty"`
+	// Params is a list of key-value params for the provider
+	Params map[string]string `json:"params,omitempty"`
 }
 
 // MonitoringSpec contains monitoring configuration for the storage cluster.

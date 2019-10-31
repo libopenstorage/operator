@@ -36,6 +36,7 @@ const (
 	annotationLogFile             = pxAnnotationPrefix + "/log-file"
 	annotationMiscArgs            = pxAnnotationPrefix + "/misc-args"
 	annotationPVCControllerCPU    = pxAnnotationPrefix + "/pvc-controller-cpu"
+	annotationAutopilotCPU        = pxAnnotationPrefix + "/autopilot-cpu"
 	annotationServiceType         = pxAnnotationPrefix + "/service-type"
 	annotationPXVersion           = pxAnnotationPrefix + "/px-version"
 	templateVersion               = "v4"
