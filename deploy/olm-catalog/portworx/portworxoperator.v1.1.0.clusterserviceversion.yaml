@@ -28,6 +28,9 @@ metadata:
             "image": "registry.connect.redhat.com/portworx/px-monitor:2.1.5",
             "userInterface": {
               "enabled": true
+            },
+            "autopilot": {
+              "enabled": false
             }
           }
         },
@@ -271,6 +274,13 @@ spec:
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:text'
         - 'urn:alm:descriptor:com.tectonic.ui:fieldGroup:image'
+      - path: autopilot.enable
+        displayName: Enable Autopilot
+        description: Autopilot automatically expands PVCs and Portworx storage based on
+          the current usage.
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:advanced'
+        - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
       - description: The secrets provider which will contain secrets that are needed by
           Portworx for features like volume encryption, cloudsnaps, etc.
         displayName: Secrets Provider
