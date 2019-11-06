@@ -32,15 +32,7 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-func TestMain(m *testing.M) {
-	manifestSetup(m)
-	code := m.Run()
-	manifestCleanup(m)
-	os.Exit(code)
-}
 
 func TestString(t *testing.T) {
 	driver := portworx{}
@@ -49,7 +41,7 @@ func TestString(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	driver := portworx{}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	scheme := runtime.NewScheme()
 	recorder := record.NewFakeRecorder(0)
 
@@ -134,6 +126,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
+	// Use default image if could not get it from release manifest
 	require.Equal(t, "portworx/oci-monitor:2.1.5", cluster.Spec.Image)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
@@ -142,9 +135,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
 	// Use default image from release manifest when spec.image has empty value
+	manifestSetup()
+	defer manifestCleanup()
 	cluster.Spec.Image = "  "
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "portworx/oci-monitor:2.1.5", cluster.Spec.Image)
+	require.Equal(t, "portworx/oci-monitor:2.1.5.1", cluster.Spec.Image)
 
 	// Don't use default image when spec.image has a value
 	cluster.Spec.Image = "foo/image:1.0.0"
@@ -251,6 +246,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
@@ -259,7 +257,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "px/image:2.1.5",
+			Image: "px/image:2.1.5.1",
 		},
 	}
 
@@ -340,7 +338,10 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Equal(t, defaultLighthouseImage, cluster.Spec.UserInterface.Image)
 }
 
-func TestStorageClusterDefaultsForStork(t *testing.T) {
+func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
@@ -349,7 +350,100 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "px/image:2.1.5",
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Don't enable autopilot if nothing specified in the user interface spec
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot)
+
+	// Don't use default Autopilot image if disabled
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: false,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Image)
+
+	// Use default Autopilot image from release manifest if no image present
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Spec.Autopilot.Image)
+
+	// Use default Autopilot image from release manifest if empty image present
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+		Image:   "  ",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Spec.Autopilot.Image)
+
+	// Use default Autopilot image from release manifest even if there is one present
+	// in the spec, but if that image is not locked
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+		Image:   "custom/autopilot-image:1.2.3",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Spec.Autopilot.Image)
+
+	// Don't use default Autopilot image from release manifest even if there is one
+	// present in the spec and it is locked by the user
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled:   true,
+		Image:     "custom/autopilot-image:1.2.3",
+		LockImage: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "custom/autopilot-image:1.2.3", cluster.Spec.Autopilot.Image)
+
+	// Use hardcoded default Autopilot image if not present in release manifest and
+	// in the spec
+	cluster.Spec.Image = "px/image:2.1.4"
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+		Image:   "",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultAutopilotImage, cluster.Spec.Autopilot.Image)
+
+	// Use hardcoded default Autopilot image if not present in release manifest and
+	// an empty image in the spec
+	cluster.Spec.Image = "px/image:2.1.4"
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+		Image:   "   ",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultAutopilotImage, cluster.Spec.Autopilot.Image)
+
+	// Use hardcoded default Autopilot image if not present in release manifest and
+	// an empty image in the spec, even if it's locked
+	cluster.Spec.Image = "px/image:2.1.4"
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled:   true,
+		Image:     "  ",
+		LockImage: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, defaultAutopilotImage, cluster.Spec.Autopilot.Image)
+}
+
+func TestStorageClusterDefaultsForStork(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
 		},
 	}
 
@@ -431,6 +525,9 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
@@ -478,6 +575,9 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterOnError(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
 	versionClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetBaseClient(versionClient)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -499,13 +599,15 @@ func TestSetDefaultsOnStorageClusterOnError(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Should not set the defaults if there is an internal error
-	require.Empty(t, cluster.Spec.Image)
 	require.Nil(t, cluster.Spec.Kvdb)
 	require.Nil(t, cluster.Spec.SecretsProvider)
 	require.Nil(t, cluster.Spec.StartPort)
 	require.Nil(t, cluster.Spec.Placement)
 	require.Nil(t, cluster.Spec.Stork)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
+
+	// Should set default portworx image irrespective of the error
+	require.Equal(t, "portworx/oci-monitor:2.1.5.1", cluster.Spec.Image)
 }
 
 func TestUpdateClusterStatusFirstTime(t *testing.T) {
@@ -2093,7 +2195,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient:                         k8sClient,
 		pxAPIDaemonSetCreated:             true,
@@ -2144,7 +2246,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 }
 
 func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2174,7 +2276,7 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 }
 
 func TestDeleteClusterWithCustomRegistry(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2204,7 +2306,7 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 }
 
 func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2242,7 +2344,7 @@ func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient:                         k8sClient,
 		pxAPIDaemonSetCreated:             true,
@@ -2294,7 +2396,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient:                         k8sClient,
 		pxAPIDaemonSetCreated:             true,
@@ -2343,7 +2445,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 }
 
 func TestDeleteClusterWithNodeAffinity(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2415,7 +2517,7 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 			UID:       types.UID("wiper-ds-uid"),
 		},
 	}
-	k8sClient := fake.NewFakeClient(wiperDS)
+	k8sClient := testutil.FakeK8sClient(wiperDS)
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2517,7 +2619,7 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 			UID:       types.UID("wiper-ds-uid"),
 		},
 	}
-	k8sClient := fake.NewFakeClient(wiperDS)
+	k8sClient := testutil.FakeK8sClient(wiperDS)
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2642,7 +2744,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap)
+	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap)
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -2950,10 +3052,11 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
 		},
 	}
-	return fake.NewFakeClient(wiperDS, wiperPod)
+	return testutil.FakeK8sClient(wiperDS, wiperPod)
 }
 
-func manifestSetup(t *testing.M) {
+func manifestSetup() {
+	os.Setenv(manifest.EnvKeyReleaseManifestURL, "foo")
 	os.RemoveAll(manifest.ManifestDir)
 	linkPath := path.Join(
 		os.Getenv("GOPATH"),
@@ -2962,6 +3065,7 @@ func manifestSetup(t *testing.M) {
 	os.Symlink(linkPath, manifest.ManifestDir)
 }
 
-func manifestCleanup(t *testing.M) {
+func manifestCleanup() {
+	os.Unsetenv(manifest.EnvKeyReleaseManifestURL)
 	os.RemoveAll(manifest.ManifestDir)
 }
