@@ -3,3 +3,4 @@ releases:
   2.1.5:
     stork: openstorage/stork:2.2.4
     lighthouse: portworx/px-lighthouse:2.0.4
+    autopilot: portworx/autopilot:0.0.0

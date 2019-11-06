@@ -4,18 +4,32 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"os"
 	"path"
 	"sort"
+	"time"
 
 	version "github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )
 
 const (
 	// ManifestDir directory where release manifest is stored
 	ManifestDir = "manifests"
-	// ReleasesFilename name of the release manifest file
-	ReleasesFilename = "portworx-releases.yaml"
+	// LocalReleaseManifest name of the embedded release manifest
+	LocalReleaseManifest = "portworx-releases-local.yaml"
+	// RemoteReleaseManifest name of the remote release manifest
+	RemoteReleaseManifest = "portworx-releases-remote.yaml"
+	// EnvKeyReleaseManifestURL is an environment variable to override the
+	// default release manifest download URL
+	EnvKeyReleaseManifestURL = "PX_RELEASE_MANIFEST_URL"
+	// defaultReleaseManifestURL is the URL to download the latest release manifest
+	defaultReleaseManifestURL = "https://install.portworx.com/versions"
+	// defaultManifestRefreshInternal internal after which we should refresh the
+	// downloaded release manifest
+	defaultManifestRefreshInterval = time.Hour
 )
 
 var (
@@ -25,7 +39,13 @@ var (
 	ErrReleaseNotFound = errors.New("release not found")
 	// ErrInvalidDefaultRelease when the default release is invalid
 	ErrInvalidDefaultRelease = errors.New("invalid default release")
-	loadReleaseManifest      = readManifestFile
+)
+
+// Methods to override for testing
+var (
+	readManifest    = readReleaseManifest
+	refreshInterval = manifestRefreshInterval
+	httpGet         = http.Get
 )
 
 // ReleaseManifest defines the Portworx release manifest
@@ -43,14 +63,13 @@ type Release struct {
 
 // NewReleaseManifest returns a release manifest object from the portworx releases file
 func NewReleaseManifest() (*ReleaseManifest, error) {
-	data, err := loadReleaseManifest()
+	manifest, err := loadRemoteManifest()
 	if err != nil {
-		return nil, err
-	}
-	manifest := &ReleaseManifest{}
-	err = yaml.Unmarshal([]byte(data), manifest)
-	if err != nil {
-		return nil, err
+		logrus.Debugf("Using local release manifest as loading remote manifest failed due to: %v", err)
+		manifest, err = loadLocalManifest()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if len(manifest.Releases) == 0 {
@@ -107,8 +126,102 @@ func (m *ReleaseManifest) getLatest() string {
 	return versions[len(versions)-1]
 }
 
-func readManifestFile() ([]byte, error) {
-	return ioutil.ReadFile(path.Join(ManifestDir, ReleasesFilename))
+func loadLocalManifest() (*ReleaseManifest, error) {
+	manifestPath := manifestFilepath(LocalReleaseManifest)
+	return loadManifestFromFile(manifestPath)
+}
+
+func loadRemoteManifest() (*ReleaseManifest, error) {
+	var fileExists bool
+	manifestPath := manifestFilepath(RemoteReleaseManifest)
+	file, err := os.Stat(manifestPath)
+	if err != nil {
+		logrus.Debugf("Cannot read release manifest. %v", err)
+	} else {
+		fileExists = true
+		expirationTime := time.Now().Add(-refreshInterval())
+		if file.ModTime().Before(expirationTime) {
+			logrus.Debugf("Release manifest is stale.")
+		} else {
+			manifest, err := loadManifestFromFile(manifestPath)
+			if err == nil {
+				return manifest, nil
+			}
+			logrus.Debugf("Failed to load existing release manifest. %v", err)
+		}
+	}
+
+	logrus.Debugf("Downloading latest release manifest.")
+	manifest, err := downloadManifest()
+	if err != nil {
+		logrus.Debugf("Failed to get latest release manifest. %v", err)
+		if fileExists {
+			// If download fails return the existing remote manifest if it exists
+			return loadManifestFromFile(manifestPath)
+		}
+		return nil, err
+	}
+	return manifest, nil
+}
+
+func downloadManifest() (*ReleaseManifest, error) {
+	manifestURL := defaultReleaseManifestURL
+	if url, exists := os.LookupEnv(EnvKeyReleaseManifestURL); exists {
+		manifestURL = url
+	}
+	resp, err := httpGet(manifestURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	manifest, err := loadManifest(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Write the manifest for future use instead of downloading it every time
+	manifestPath := manifestFilepath(RemoteReleaseManifest)
+	err = ioutil.WriteFile(manifestPath, body, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	return manifest, nil
+}
+
+func loadManifestFromFile(filename string) (*ReleaseManifest, error) {
+	content, err := readManifest(filename)
+	if err != nil {
+		return nil, err
+	}
+	return loadManifest(content)
+}
+
+func readReleaseManifest(filename string) ([]byte, error) {
+	return ioutil.ReadFile(filename)
+}
+
+func loadManifest(content []byte) (*ReleaseManifest, error) {
+	manifest := &ReleaseManifest{}
+	err := yaml.Unmarshal(content, manifest)
+	if err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+func manifestFilepath(filename string) string {
+	return path.Join(ManifestDir, filename)
+}
+
+func manifestRefreshInterval() time.Duration {
+	return defaultManifestRefreshInterval
 }
 
 type semver []string
