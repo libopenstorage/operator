@@ -1,4 +1,5 @@
 bin/
+manifests/
 *.swp
 *.test
 coverage.txt
