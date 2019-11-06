@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -34,6 +36,8 @@ const (
 	storkDriverName                   = "pxd"
 	labelKeyName                      = "name"
 	defaultPortworxImage              = "portworx/oci-monitor"
+	defaultPortworxVersion            = "2.1.5"
+	edgePortworxVersion               = "edge"
 	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
 	defaultAutopilotImage             = "portworx/autopilot:v0.6.0"
 	defaultStorkImage                 = "openstorage/stork:2.2.5"
@@ -114,13 +118,20 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
+	releases, err := manifest.NewReleaseManifest()
+	if err != nil {
+		logrus.Warnf(err.Error())
+	}
+
+	if len(strings.TrimSpace(toUpdate.Spec.Image)) == 0 {
+		toUpdate.Spec.Image = defaultPortworxImage + ":" + defaultPortworxImageVersion(releases)
+	}
+
 	t, err := newTemplate(toUpdate)
 	if err != nil {
 		return
 	}
-	if len(strings.TrimSpace(toUpdate.Spec.Image)) == 0 {
-		toUpdate.Spec.Image = defaultPortworxImage + ":" + t.defaultPortworxVersion()
-	}
+
 	partitions := strings.Split(toUpdate.Spec.Image, ":")
 	if len(partitions) > 1 {
 		toUpdate.Spec.Version = partitions[len(partitions)-1]
@@ -164,7 +175,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		}
 	}
 
-	components, err := t.componentVersions()
+	components, err := componentVersions(releases, t.pxVersion)
 	if err != nil {
 		logrus.Warnf(err.Error())
 	}
@@ -613,6 +624,32 @@ func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
 func isTLSEnabled() bool {
 	enabled, err := strconv.ParseBool(os.Getenv(envKeyPortworxEnableTLS))
 	return err == nil && enabled
+}
+
+func componentVersions(releases *manifest.ReleaseManifest, pxVersion *version.Version) (manifest.Release, error) {
+	if releases == nil {
+		return manifest.Release{}, fmt.Errorf("release manifest is empty")
+	}
+	components, err := releases.GetFromVersion(pxVersion)
+	if err != nil {
+		logrus.Debugf("Could not find an entry for portworx %v in release manifest: %v", pxVersion, err)
+		components, err = releases.Get(edgePortworxVersion)
+		if err != nil {
+			logrus.Debugf("Could not find an entry for 'edge' in release manifest: %v", err)
+			components, err = releases.GetDefault()
+			if err != nil {
+				return manifest.Release{}, fmt.Errorf("error getting default release from manifest: %v", err)
+			}
+		}
+	}
+	return *components, nil
+}
+
+func defaultPortworxImageVersion(releases *manifest.ReleaseManifest) string {
+	if releases != nil && len(releases.DefaultRelease) > 0 {
+		return releases.DefaultRelease
+	}
+	return defaultPortworxVersion
 }
 
 func init() {

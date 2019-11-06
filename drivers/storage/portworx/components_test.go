@@ -27,12 +27,11 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestBasicComponentsInstall(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -189,7 +188,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -306,7 +305,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -366,7 +365,7 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -450,7 +449,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 func TestPVCControllerInstall(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -476,7 +475,7 @@ func TestPVCControllerInstall(t *testing.T) {
 func TestPVCControllerWithInvalidValue(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -515,7 +514,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -550,7 +549,7 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -591,7 +590,7 @@ func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 func TestPVCControllerInstallForPKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -626,7 +625,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 func TestPVCControllerInstallForEKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -661,7 +660,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 func TestPVCControllerInstallForGKE(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -696,7 +695,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 func TestPVCControllerInstallForAKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -730,7 +729,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -848,7 +847,7 @@ func verifyPVCControllerDeployment(
 func TestPVCControllerCustomCPU(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -888,7 +887,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 
 func TestPVCControllerInvalidCPU(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -917,7 +916,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -963,7 +962,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1005,7 +1004,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 
 func TestLighthouseInstall(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1114,7 +1113,7 @@ func TestLighthouseInstall(t *testing.T) {
 
 func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1150,7 +1149,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 
 func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1186,7 +1185,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 
 func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1222,7 +1221,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 
 func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1288,7 +1287,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 
 func TestLighthouseWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -1328,7 +1327,7 @@ func TestLighthouseWithoutImage(t *testing.T) {
 
 func TestLighthouseImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1370,7 +1369,7 @@ func TestLighthouseImageChange(t *testing.T) {
 
 func TestLighthouseConfigInitImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1417,7 +1416,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 
 func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1464,7 +1463,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 
 func TestLighthouseWithoutImageTag(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1503,7 +1502,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1658,7 +1657,7 @@ func TestAutopilotInstall(t *testing.T) {
 
 func TestAutopilotWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -1857,7 +1856,7 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 
 func TestAutopilotImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1899,7 +1898,7 @@ func TestAutopilotImageChange(t *testing.T) {
 
 func TestAutopilotArgumentsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -1955,7 +1954,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 
 func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2008,7 +2007,7 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 
 func TestAutopilotEnvVarsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2069,7 +2068,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 
 func TestAutopilotCPUChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2114,7 +2113,7 @@ func TestAutopilotCPUChange(t *testing.T) {
 
 func TestAutopilotInvalidCPU(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
@@ -2237,7 +2236,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 func TestRemovePVCController(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2299,7 +2298,7 @@ func TestRemovePVCController(t *testing.T) {
 func TestDisablePVCController(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2360,7 +2359,7 @@ func TestDisablePVCController(t *testing.T) {
 
 func TestRemoveLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2432,7 +2431,7 @@ func TestRemoveLighthouse(t *testing.T) {
 
 func TestDisableLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2503,7 +2502,7 @@ func TestDisableLighthouse(t *testing.T) {
 }
 
 func TestRemoveAutopilot(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2572,7 +2571,7 @@ func TestRemoveAutopilot(t *testing.T) {
 }
 
 func TestDisableAutopilot(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2647,7 +2646,7 @@ func TestCSIInstall(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -2782,7 +2781,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.4",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -2918,7 +2917,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3032,7 +3031,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -3133,7 +3132,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3196,7 +3195,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -3233,7 +3232,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3338,7 +3337,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3403,7 +3402,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3504,7 +3503,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3569,7 +3568,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,
@@ -3634,7 +3633,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 	}
@@ -3734,7 +3733,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
 		csiNodeInfoCRDCreated:             true,

@@ -11,7 +11,6 @@ import (
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -184,7 +183,6 @@ type template struct {
 	csiVersions        csiVersions
 	kvdb               map[string]string
 	cloudConfig        *cloudstorage.Config
-	releases           *manifest.ReleaseManifest
 }
 
 func newTemplate(
@@ -213,11 +211,6 @@ func newTemplate(
 		}
 	} else {
 		t.csiVersions = csiGenerator.basicCSIVersions()
-	}
-
-	t.releases, err = manifest.NewReleaseManifest()
-	if err != nil {
-		return nil, fmt.Errorf("error getting release manifest for portworx: %v", err)
 	}
 
 	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
@@ -1021,22 +1014,6 @@ func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
-}
-
-func (t *template) componentVersions() (manifest.Release, error) {
-	components, err := t.releases.GetFromVersion(t.pxVersion)
-	if err != nil {
-		logrus.Debugf("Could not find an entry for portworx %v in release manifest: %v", t.pxVersion, err)
-		components, err = t.releases.GetDefault()
-		if err != nil {
-			return manifest.Release{}, fmt.Errorf("error getting default release from manifest: %v", err)
-		}
-	}
-	return *components, nil
-}
-
-func (t *template) defaultPortworxVersion() string {
-	return t.releases.DefaultRelease
 }
 
 func useDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {

@@ -4,23 +4,21 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/libopenstorage/operator/pkg/util/test"
-	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/client-go/kubernetes/scheme"
-
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/cloudops"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
@@ -549,7 +547,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 				JournalDeviceSpec: stringPtr("type=journal")},
 		},
 	}
-	k8sClient := test.FakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -858,7 +856,7 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 		},
 	}
 
-	k8sClient := fake.NewFakeClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,
@@ -2004,7 +2002,7 @@ func TestStorageNodeConfig(t *testing.T) {
 		},
 	}
 
-	k8sClient := test.FakeK8sClient(
+	k8sClient := testutil.FakeK8sClient(
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      storageDecisionMatrixCMName,

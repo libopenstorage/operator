@@ -1,6 +1,7 @@
-defaultRelease: 2.1.5
+defaultRelease: 2.1.5.1
 releases:
   2.1.4:
-  2.1.5:
+  2.1.5.1:
     stork: openstorage/stork:2.3.4
     lighthouse: portworx/px-lighthouse:2.3.4
+    autopilot: portworx/autopilot:2.3.4
