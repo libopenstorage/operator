@@ -28,3 +28,6 @@ rules:
 - apiGroups: ["stork.libopenstorage.org"]
   resources: ["backuplocations"]
   verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]

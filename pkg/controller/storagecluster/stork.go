@@ -349,7 +349,7 @@ func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference
 				},
 				{
 					APIGroups: []string{"storage.k8s.io"},
-					Resources: []string{"storageclasses"},
+					Resources: []string{"storageclasses", "csinodes"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
 			},
