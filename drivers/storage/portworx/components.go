@@ -1010,6 +1010,11 @@ func (p *portworx) createClusterRole(ownerRef *metav1.OwnerReference) error {
 					Resources: []string{"backuplocations"},
 					Verbs:     []string{"get", "list"},
 				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"events"},
+					Verbs:     []string{"create"},
+				},
 			},
 		},
 		ownerRef,
