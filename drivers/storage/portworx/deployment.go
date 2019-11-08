@@ -36,7 +36,6 @@ const (
 	annotationMiscArgs            = pxAnnotationPrefix + "/misc-args"
 	annotationPVCControllerCPU    = pxAnnotationPrefix + "/pvc-controller-cpu"
 	annotationAutopilotCPU        = pxAnnotationPrefix + "/autopilot-cpu"
-	annotationServiceType         = pxAnnotationPrefix + "/service-type"
 	annotationPXVersion           = pxAnnotationPrefix + "/px-version"
 	templateVersion               = "v4"
 	secretKeyKvdbCA               = "kvdb-ca.crt"
@@ -176,7 +175,6 @@ type template struct {
 	isOpenshift        bool
 	needsPVCController bool
 	imagePullPolicy    v1.PullPolicy
-	serviceType        v1.ServiceType
 	startPort          int
 	k8sVersion         *version.Version
 	pxVersion          *version.Version
@@ -241,15 +239,6 @@ func newTemplate(
 	// Do not run PVC controller if explicitly disabled
 	if err == nil && !enabled {
 		t.needsPVCController = false
-	}
-
-	if val, exists := cluster.Annotations[annotationServiceType]; exists {
-		serviceType := v1.ServiceType(val)
-		if serviceType == v1.ServiceTypeClusterIP ||
-			serviceType == v1.ServiceTypeNodePort ||
-			serviceType == v1.ServiceTypeLoadBalancer {
-			t.serviceType = serviceType
-		}
 	}
 
 	t.imagePullPolicy = v1.PullAlways

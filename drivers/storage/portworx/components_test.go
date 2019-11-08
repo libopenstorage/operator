@@ -376,11 +376,13 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsAKS:       "true",
-				annotationIsGKE:       "true",
-				annotationIsEKS:       "true",
-				annotationServiceType: "ClusterIP",
+				annotationIsAKS: "true",
+				annotationIsGKE: "true",
+				annotationIsEKS: "true",
 			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ServiceType: "ClusterIP",
 		},
 	}
 
@@ -398,7 +400,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 
 	// Load balancer service type
-	cluster.Annotations[annotationServiceType] = "LoadBalancer"
+	cluster.Spec.ServiceType = v1.ServiceTypeLoadBalancer
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -414,7 +416,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
 
 	// Node port service type
-	cluster.Annotations[annotationServiceType] = "NodePort"
+	cluster.Spec.ServiceType = v1.ServiceTypeNodePort
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -430,7 +432,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeNodePort, pxAPIService.Spec.Type)
 
 	// Invalid service type should use default service type
-	cluster.Annotations[annotationServiceType] = "Invalid"
+	cluster.Spec.ServiceType = v1.ServiceType("Invalid")
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1232,16 +1234,16 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsAKS:       "true",
-				annotationIsGKE:       "true",
-				annotationIsEKS:       "true",
-				annotationServiceType: "ClusterIP",
+				annotationIsAKS: "true",
+				annotationIsGKE: "true",
+				annotationIsEKS: "true",
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
+				Enabled:     true,
+				Image:       "portworx/px-lighthouse:test",
+				ServiceType: v1.ServiceTypeClusterIP,
 			},
 		},
 	}
@@ -1255,7 +1257,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeClusterIP, lhService.Spec.Type)
 
 	// Load balancer service type
-	cluster.Annotations[annotationServiceType] = "LoadBalancer"
+	cluster.Spec.UserInterface.ServiceType = v1.ServiceTypeLoadBalancer
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -1265,7 +1267,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 
 	// Node port service type
-	cluster.Annotations[annotationServiceType] = "NodePort"
+	cluster.Spec.UserInterface.ServiceType = v1.ServiceTypeNodePort
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -1275,7 +1277,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
 
 	// Invalid type should use the default service type
-	cluster.Annotations[annotationServiceType] = "Invalid"
+	cluster.Spec.UserInterface.ServiceType = v1.ServiceType("Invalid")
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 

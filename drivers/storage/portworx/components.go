@@ -1489,8 +1489,9 @@ func (p *portworx) createPortworxService(
 		},
 	}
 
-	if t.serviceType != "" {
-		newService.Spec.Type = t.serviceType
+	serviceType := getValidServiceType(t.cluster.Spec.ServiceType)
+	if serviceType != "" {
+		newService.Spec.Type = serviceType
 	}
 
 	return k8sutil.CreateOrUpdateService(p.k8sClient, newService, ownerRef)
@@ -1535,8 +1536,9 @@ func (p *portworx) createPortworxAPIService(
 		},
 	}
 
-	if t.serviceType != "" {
-		newService.Spec.Type = t.serviceType
+	serviceType := getValidServiceType(t.cluster.Spec.ServiceType)
+	if serviceType != "" {
+		newService.Spec.Type = serviceType
 	}
 
 	return k8sutil.CreateOrUpdateService(p.k8sClient, newService, ownerRef)
@@ -1573,8 +1575,9 @@ func (p *portworx) createLighthouseService(
 		},
 	}
 
-	if t.serviceType != "" {
-		newService.Spec.Type = t.serviceType
+	serviceType := getValidServiceType(t.cluster.Spec.UserInterface.ServiceType)
+	if serviceType != "" {
+		newService.Spec.Type = serviceType
 	} else if !t.isAKS && !t.isGKE && !t.isEKS {
 		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
@@ -2738,6 +2741,15 @@ func getImageFromEnv(imageKey string, envs []v1.EnvVar) string {
 
 func getSpecsBaseDir() string {
 	return portworxSpecsDir
+}
+
+func getValidServiceType(serviceType v1.ServiceType) v1.ServiceType {
+	if serviceType == v1.ServiceTypeClusterIP ||
+		serviceType == v1.ServiceTypeNodePort ||
+		serviceType == v1.ServiceTypeLoadBalancer {
+		return serviceType
+	}
+	return ""
 }
 
 type envByName []v1.EnvVar

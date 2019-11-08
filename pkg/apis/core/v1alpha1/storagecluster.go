@@ -62,6 +62,9 @@ type StorageClusterSpec struct {
 	// repository) that will be used instead of index.docker.io to download Docker
 	// images. (Example: myregistry.net:5443 or myregistry.com/myrepository)
 	CustomImageRegistry string `json:"customImageRegistry,omitempty"`
+	// ServiceType is the type of Kubernetes service the storage cluster exposes
+	// for external components to communicate with it.
+	ServiceType v1.ServiceType `json:"serviceType,omitempty"`
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
@@ -297,6 +300,9 @@ type UserInterfaceSpec struct {
 	LockImage bool `json:"lockImage,omitempty"`
 	// Env is a list of environment variables used by UI component
 	Env []v1.EnvVar `json:"env,omitempty"`
+	// ServiceType is the type of Kubernetes service the user interface component exposes
+	// for external components to communicate with it.
+	ServiceType v1.ServiceType `json:"serviceType,omitempty"`
 }
 
 // StorkSpec contains STORK related spec
