@@ -315,6 +315,10 @@ spec:
       - description: It is the starting port in the range of ports used by Portworx.
         displayName: Start Port
         path: startPort
+      - description: Type of Kubernetes Service Portworx should expose for external
+          components to communicate with it.
+        displayName: Service Type
+        path: serviceType
       - description: Revision history limit is the number of old histories to retain.
         displayName: Revision History Limit
         path: revisionHistoryLimit

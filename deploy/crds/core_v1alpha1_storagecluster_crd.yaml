@@ -63,6 +63,14 @@ spec:
                 Custom container image registry server that will be used instead of
                 index.docker.io to download Docker images. This may include the repository as well.
                 (Example: myregistry.net:5443 or myregistry.com/myrepository)
+            serviceType:
+              type: string
+              description: Type of Kubernetes Service the storage cluster should expose for external
+                components to communicate with it.
+              enum:
+              - ClusterIP
+              - NodePort
+              - LoadBalancer
             secretsProvider:
               type: string
               description: Secrets provider is the name of secret provider that driver will connect to.
@@ -424,6 +432,14 @@ spec:
                 image:
                   type: string
                   description: Docker image of the user interface container.
+                serviceType:
+                  type: string
+                  description: Type of Kubernetes Service the user interface component should expose for
+                    external components to communicate with it.
+                  enum:
+                  - ClusterIP
+                  - NodePort
+                  - LoadBalancer
                 env:
                   type: array
                   description: List of environment variables used by the UI components. This is an array
