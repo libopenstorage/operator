@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/cloudops"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
@@ -1059,7 +1060,7 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 
 	// Don't set the start port if same as default start port
-	startPort = uint32(defaultStartPort)
+	startPort = uint32(pxutil.DefaultStartPort)
 	cluster.Spec.StartPort = &startPort
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -1243,7 +1244,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			ImagePullPolicy: v1.PullIfNotPresent,
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "True",
+				string(pxutil.FeatureCSI): "True",
 			},
 		},
 	}
@@ -1411,33 +1412,6 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
-func TestPodSpecForCSIWithKubernetesVersionLessThan_1_11(t *testing.T) {
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
-	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.10.9",
-	}
-
-	nodeName := "testNode"
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/oci-monitor:2.1.1",
-			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
-			},
-		},
-	}
-
-	driver := portworx{}
-	_, err := driver.GetStoragePodSpec(cluster, nodeName)
-	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
-}
-
 func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	k8s.Instance().SetBaseClient(fakeClient)
@@ -1457,7 +1431,7 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -1498,7 +1472,7 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -1537,7 +1511,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			CommonConfig: corev1alpha1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -1605,7 +1579,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			CommonConfig: corev1alpha1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -1679,7 +1653,7 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
