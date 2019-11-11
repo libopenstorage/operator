@@ -1,4 +1,4 @@
-package portworx
+package util
 
 import (
 	"strconv"
@@ -12,7 +12,8 @@ const (
 	FeatureCSI Feature = "CSI"
 )
 
-func (feature Feature) isEnabled(featureMap map[string]string) bool {
+// IsEnabled checks if the feature is enabled in the given feature map
+func (feature Feature) IsEnabled(featureMap map[string]string) bool {
 	enabled, err := strconv.ParseBool(featureMap[string(feature)])
 	return err == nil && enabled
 }

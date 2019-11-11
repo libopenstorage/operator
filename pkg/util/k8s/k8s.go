@@ -1214,6 +1214,31 @@ func GetPodsByOwner(
 	return result, nil
 }
 
+// GetImageFromDeployment returns the image for given container in the deployment
+func GetImageFromDeployment(deployment *appsv1.Deployment, containerName string) string {
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	for _, c := range deployment.Spec.Template.Spec.InitContainers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	return ""
+}
+
+// GetValueFromEnv returns a value for the given key name in list of env vars
+func GetValueFromEnv(imageKey string, envs []v1.EnvVar) string {
+	for _, env := range envs {
+		if env.Name == imageKey {
+			return env.Value
+		}
+	}
+	return ""
+}
+
 func removeOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
 	toBeDeletedOwnerMap := make(map[types.UID]bool)
 	for _, owner := range toBeDeleted {

@@ -6,8 +6,11 @@ import (
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/stretchr/testify/require"
@@ -16,6 +19,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,10 +35,9 @@ import (
 
 func TestBasicComponentsInstall(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	startPort := uint32(10001)
 
@@ -80,7 +83,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Len(t, serviceAccountList.Items, 1)
 
 	sa := serviceAccountList.Items[0]
-	require.Equal(t, pxServiceAccountName, sa.Name)
+	require.Equal(t, pxutil.PortworxServiceAccountName, sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -150,7 +153,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	// Portworx Service
 	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
 	pxService := &v1.Service{}
-	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedPXService.Name, pxService.Name)
 	require.Equal(t, expectedPXService.Namespace, pxService.Namespace)
@@ -162,7 +165,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	// Portworx API Service
 	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService.yaml")
 	pxAPIService := &v1.Service{}
-	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedPxAPIService.Name, pxAPIService.Name)
 	require.Equal(t, expectedPxAPIService.Namespace, pxAPIService.Namespace)
@@ -188,10 +191,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -216,9 +218,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC := testutil.GetExpectedStorageClass(t, "storageClassDb.yaml")
 	actualSC := &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -227,9 +229,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbEncrypted.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-encrypted", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbEncryptedStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db-encrypted")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -238,9 +240,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassReplicated.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxReplicatedStorageClass)
+	require.Equal(t, expectedSC.Name, "px-replicated")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -249,9 +251,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassReplicatedEncrypted.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated-encrypted", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxReplicatedEncryptedStorageClass)
+	require.Equal(t, expectedSC.Name, "px-replicated-encrypted")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -260,9 +262,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbLocalSnapshot.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbLocalSnapshotStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-local-snapshot", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbLocalSnapshotStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db-local-snapshot")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -271,9 +273,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbLocalSnapshotEncrypted.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbLocalSnapshotEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-local-snapshot-encrypted", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbLocalSnapshotEncryptedStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db-local-snapshot-encrypted")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -282,9 +284,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbCloudSnapshot.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbCloudSnapshotStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-cloud-snapshot", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbCloudSnapshotStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db-cloud-snapshot")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -293,9 +295,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassDbCloudSnapshotEncrypted.yaml")
 	actualSC = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbCloudSnapshotEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-cloud-snapshot-encrypted", "")
 	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, pxDbCloudSnapshotEncryptedStorageClass)
+	require.Equal(t, expectedSC.Name, "px-db-cloud-snapshot-encrypted")
 	require.Len(t, actualSC.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
@@ -305,10 +307,9 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 
 func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -333,13 +334,13 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	require.Len(t, storageClassList.Items, 4)
 
 	actualSC := &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-encrypted", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated-encrypted", "")
 	require.NoError(t, err)
 
 	// Stork config is empty
@@ -353,22 +354,21 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, storageClassList.Items, 4)
 
-	err = testutil.Get(k8sClient, actualSC, pxDbStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxDbEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-db-encrypted", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated", "")
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, actualSC, pxReplicatedEncryptedStorageClass, "")
+	err = testutil.Get(k8sClient, actualSC, "px-replicated-encrypted", "")
 	require.NoError(t, err)
 }
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -388,12 +388,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService := &v1.Service{}
-	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
 	pxAPIService := &v1.Service{}
-	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 
@@ -404,12 +404,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
 
@@ -420,12 +420,12 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, pxAPIService.Spec.Type)
 
@@ -436,23 +436,21 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	pxService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxService, pxServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
 	pxAPIService = &v1.Service{}
-	err = testutil.Get(k8sClient, pxAPIService, pxAPIServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIService, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 }
 
 func TestPVCControllerInstall(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -473,12 +471,10 @@ func TestPVCControllerInstall(t *testing.T) {
 }
 
 func TestPVCControllerWithInvalidValue(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -495,29 +491,28 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -549,10 +544,9 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -571,29 +565,28 @@ func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	// PVC controller should not get installed if running in kube-system
 	// namespace in openshift
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPVCControllerInstallForPKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -625,10 +618,9 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 func TestPVCControllerInstallForEKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -660,10 +652,9 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 func TestPVCControllerInstallForGKE(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -695,10 +686,9 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 func TestPVCControllerInstallForAKS(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -729,10 +719,9 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -754,19 +743,19 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -782,9 +771,9 @@ func verifyPVCControllerInstall(
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, pvcServiceAccountName, sa.Name)
+	require.Equal(t, "portworx-pvc-controller", sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -797,7 +786,7 @@ func verifyPVCControllerInstall(
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "pvcControllerClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -812,7 +801,7 @@ func verifyPVCControllerInstall(
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "pvcControllerClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -847,10 +836,9 @@ func verifyPVCControllerDeployment(
 func TestPVCControllerCustomCPU(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -866,9 +854,10 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedCPUQuantity := resource.MustParse(defaultPVCControllerCPU)
+	// Default PVC controller CPU
+	expectedCPUQuantity := resource.MustParse("200m")
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 
@@ -880,7 +869,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedCPUQuantity = resource.MustParse(expectedCPU)
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
 }
@@ -889,9 +878,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -910,16 +897,16 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v Failed to setup PVC controller.", v1.EventTypeWarning, util.FailedComponentReason))
+		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
+			util.FailedComponentReason, component.PVCControllerComponentName))
 }
 
 func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -936,7 +923,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -951,7 +938,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		"gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -962,10 +949,9 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -982,7 +968,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	expectedCommand := deployment.Spec.Template.Spec.Containers[0].Command
 
@@ -997,17 +983,16 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
 }
 
 func TestLighthouseInstall(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1037,9 +1022,9 @@ func TestLighthouseInstall(t *testing.T) {
 	require.Len(t, serviceAccountList.Items, 3)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, lhServiceAccountName, sa.Name)
+	require.Equal(t, "px-lighthouse", sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -1052,7 +1037,7 @@ func TestLighthouseInstall(t *testing.T) {
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "lighthouseClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "px-lighthouse", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -1067,7 +1052,7 @@ func TestLighthouseInstall(t *testing.T) {
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "lighthouseClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, "px-lighthouse", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -1083,7 +1068,7 @@ func TestLighthouseInstall(t *testing.T) {
 
 	expectedLhService := testutil.GetExpectedService(t, "lighthouseService.yaml")
 	lhService := &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedLhService.Name, lhService.Name)
 	require.Equal(t, expectedLhService.Namespace, lhService.Namespace)
@@ -1100,7 +1085,7 @@ func TestLighthouseInstall(t *testing.T) {
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "lighthouseDeployment.yaml")
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, lhDeployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, lhDeployment.Namespace)
@@ -1113,10 +1098,9 @@ func TestLighthouseInstall(t *testing.T) {
 
 func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1140,19 +1124,18 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, lhServiceName, lhService.Name)
+	require.Equal(t, "px-lighthouse", lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 }
 
 func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1176,19 +1159,18 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, lhServiceName, lhService.Name)
+	require.Equal(t, "px-lighthouse", lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 }
 
 func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1212,19 +1194,18 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, lhServiceName, lhService.Name)
+	require.Equal(t, "px-lighthouse", lhService.Name)
 	require.Equal(t, cluster.Namespace, lhService.Namespace)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 }
 
 func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1250,7 +1231,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, lhService.Spec.Type)
 
@@ -1260,7 +1241,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 
@@ -1270,7 +1251,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
 
@@ -1280,18 +1261,17 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	lhService = &v1.Service{}
-	err = testutil.Get(k8sClient, lhService, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhService, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 }
 
 func TestLighthouseWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1328,9 +1308,7 @@ func TestLighthouseWithoutImage(t *testing.T) {
 func TestLighthouseImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1350,9 +1328,9 @@ func TestLighthouseImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(lhDeployment, lhContainerName)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse")
 	require.Equal(t, "portworx/px-lighthouse:v1", image)
 
 	// Change the lighthouse image
@@ -1361,18 +1339,17 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image = getImageFromDeployment(lhDeployment, lhContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse")
 	require.Equal(t, "portworx/px-lighthouse:v2", image)
 }
 
 func TestLighthouseConfigInitImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1392,15 +1369,15 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(lhDeployment, lhConfigInitContainerName)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, "config-init")
 	require.Equal(t, "portworx/lh-config-sync:v1", image)
 
 	// Change the lighthouse config init container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
 		{
-			Name:  envKeyLhConfigSyncImage,
+			Name:  "LIGHTHOUSE_CONFIG_SYNC_IMAGE",
 			Value: "test/config-sync:v2",
 		},
 	}
@@ -1408,18 +1385,17 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image = getImageFromDeployment(lhDeployment, lhConfigInitContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "config-init")
 	require.Equal(t, "test/config-sync:v2", image)
 }
 
 func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1439,15 +1415,15 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector")
 	require.Equal(t, "portworx/lh-stork-connector:v1", image)
 
 	// Change the lighthouse config sync container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
 		{
-			Name:  envKeyLhStorkConnectorImage,
+			Name:  "LIGHTHOUSE_STORK_CONNECTOR_IMAGE",
 			Value: "test/stork-connector:v2",
 		},
 	}
@@ -1455,18 +1431,17 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image = getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector")
 	require.Equal(t, "test/stork-connector:v2", image)
 }
 
 func TestLighthouseWithoutImageTag(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1488,24 +1463,23 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	// Lighthouse image should remain unchanged but sidecar container images
 	// should use the default image tag
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(lhDeployment, lhContainerName)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse")
 	require.Equal(t, "portworx/px-lighthouse", image)
-	image = getImageFromDeployment(lhDeployment, lhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync:"+defaultLighthouseImageTag, image)
-	image = getImageFromDeployment(lhDeployment, lhConfigSyncContainerName)
-	require.Equal(t, "portworx/lh-config-sync:"+defaultLighthouseImageTag, image)
-	image = getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector:"+defaultLighthouseImageTag, image)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "config-init")
+	require.Equal(t, "portworx/lh-config-sync:2.0.4", image)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "config-sync")
+	require.Equal(t, "portworx/lh-config-sync:2.0.4", image)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector")
+	require.Equal(t, "portworx/lh-stork-connector:2.0.4", image)
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1519,11 +1493,11 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 				Image:   "portworx/px-lighthouse",
 				Env: []v1.EnvVar{
 					{
-						Name:  envKeyLhConfigSyncImage,
+						Name:  "LIGHTHOUSE_CONFIG_SYNC_IMAGE",
 						Value: "test/config-sync:t1",
 					},
 					{
-						Name:  envKeyLhStorkConnectorImage,
+						Name:  "LIGHTHOUSE_STORK_CONNECTOR_IMAGE",
 						Value: "test/stork-connector:t2",
 					},
 				},
@@ -1537,24 +1511,23 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	// Lighthouse image should remain unchanged but sidecar container images
 	// should use the default image tag
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(lhDeployment, lhContainerName)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse")
 	require.Equal(t, "portworx/px-lighthouse", image)
-	image = getImageFromDeployment(lhDeployment, lhConfigInitContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "config-init")
 	require.Equal(t, "test/config-sync:t1", image)
-	image = getImageFromDeployment(lhDeployment, lhConfigSyncContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "config-sync")
 	require.Equal(t, "test/config-sync:t1", image)
-	image = getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector")
 	require.Equal(t, "test/stork-connector:t2", image)
 }
 
 func TestAutopilotInstall(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1600,7 +1573,7 @@ func TestAutopilotInstall(t *testing.T) {
 	// Autopilot ConfigMap
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")
 	autopilotConfigMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, autopilotConfigMap, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotConfigMap, "autopilot-config", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedConfigMap.Name, autopilotConfigMap.Name)
 	require.Equal(t, expectedConfigMap.Namespace, autopilotConfigMap.Namespace)
@@ -1610,9 +1583,9 @@ func TestAutopilotInstall(t *testing.T) {
 
 	// Autopilot ServiceAccount
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, autopilotServiceAccountName, sa.Name)
+	require.Equal(t, "autopilot", sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -1620,7 +1593,7 @@ func TestAutopilotInstall(t *testing.T) {
 	// Autopilot ClusterRole
 	expectedCR := testutil.GetExpectedClusterRole(t, "autopilotClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, autopilotClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "autopilot", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -1630,7 +1603,7 @@ func TestAutopilotInstall(t *testing.T) {
 	// Autopilot ClusterRoleBinding
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, autopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, "autopilot", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -1641,7 +1614,7 @@ func TestAutopilotInstall(t *testing.T) {
 	// Autopilot Deployment
 	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment.yaml")
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, autopilotDeployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, autopilotDeployment.Namespace)
@@ -1657,11 +1630,10 @@ func TestAutopilotInstall(t *testing.T) {
 
 func TestAutopilotWithoutImage(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1697,11 +1669,10 @@ func TestAutopilotWithoutImage(t *testing.T) {
 
 func TestAutopilotWithImagePullSecret(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(0)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	imagePullSecret := "registry-secret"
@@ -1723,7 +1694,7 @@ func TestAutopilotWithImagePullSecret(t *testing.T) {
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t,
@@ -1734,11 +1705,10 @@ func TestAutopilotWithImagePullSecret(t *testing.T) {
 
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(0)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1768,7 +1738,7 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
 	// Env vars are sorted on the key
@@ -1780,10 +1750,9 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 
 func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
 
@@ -1813,12 +1782,12 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pvcDeployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/kube-controller-manager-amd64:v0.0.0",
@@ -1826,27 +1795,27 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/px-lighthouse:test",
-		getImageFromDeployment(lhDeployment, lhContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse"),
 	)
 	require.Equal(t,
 		customRepo+"/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigSyncContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "config-sync"),
 	)
 	require.Equal(t,
 		customRepo+"/lh-stork-connector:test",
-		getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector"),
 	)
 	require.Equal(t,
 		customRepo+"/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "config-init"),
 	)
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/autopilot:test",
@@ -1856,10 +1825,9 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 
 func TestAutopilotImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1879,9 +1847,9 @@ func TestAutopilotImageChange(t *testing.T) {
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
-	image := getImageFromDeployment(autopilotDeployment, autopilotContainerName)
+	image := k8sutil.GetImageFromDeployment(autopilotDeployment, "autopilot")
 	require.Equal(t, "portworx/autopilot:v1", image)
 
 	// Change the autopilot image
@@ -1890,18 +1858,17 @@ func TestAutopilotImageChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
-	image = getImageFromDeployment(autopilotDeployment, autopilotContainerName)
+	image = k8sutil.GetImageFromDeployment(autopilotDeployment, "autopilot")
 	require.Equal(t, "portworx/autopilot:v2", image)
 }
 
 func TestAutopilotArgumentsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1925,7 +1892,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 
 	// Check custom new arg is present
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 4)
 	require.Contains(t,
@@ -1943,7 +1910,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 4)
 	require.Contains(t,
@@ -1954,10 +1921,9 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 
 func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1978,7 +1944,7 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 
 	// Use default config args if nothing specified in the cluster spec
 	autopilotConfig := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, autopilotConfig, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotConfig, "autopilot-config", cluster.Namespace)
 	require.NoError(t, err)
 	require.NotContains(t, autopilotConfig.Data["config.yaml"], "min_poll_interval")
 
@@ -1991,12 +1957,12 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	autopilotConfig = &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, autopilotConfig, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotConfig, "autopilot-config", cluster.Namespace)
 	require.NoError(t, err)
 	require.Contains(t, autopilotConfig.Data["config.yaml"], "min_poll_interval: 10")
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Command, 3)
 	require.NotContains(t,
@@ -2007,10 +1973,9 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 
 func TestAutopilotEnvVarsChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2038,7 +2003,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	// Check env vars are passed to deployment
 	expectedEnvs := append([]v1.EnvVar{}, cluster.Spec.Autopilot.Env...)
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 
@@ -2049,7 +2014,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedEnvs[0].Value = "bar"
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 
@@ -2061,17 +2026,16 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedEnvs = append(expectedEnvs, newEnv)
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotCPUChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2090,9 +2054,10 @@ func TestAutopilotCPUChange(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedCPUQuantity := resource.MustParse(defaultAutopilotCPU)
+	// Default Autopilot CPU
+	expectedCPUQuantity := resource.MustParse("0.1")
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
@@ -2105,7 +2070,7 @@ func TestAutopilotCPUChange(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedCPUQuantity = resource.MustParse(expectedCPU)
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
@@ -2113,11 +2078,10 @@ func TestAutopilotCPUChange(t *testing.T) {
 
 func TestAutopilotInvalidCPU(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2145,10 +2109,9 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 
 func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
 
@@ -2179,7 +2142,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, "portworx-api", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/k8s.gcr.io/pause:3.1",
@@ -2187,7 +2150,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	)
 
 	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, pvcDeployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
@@ -2195,26 +2158,26 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	)
 
 	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, lhDeployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/portworx/px-lighthouse:test",
-		getImageFromDeployment(lhDeployment, lhContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "px-lighthouse"),
 	)
 	require.Equal(t,
 		customRegistry+"/portworx/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigSyncContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "config-sync"),
 	)
 	require.Equal(t,
 		customRegistry+"/portworx/lh-stork-connector:test",
-		getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "stork-connector"),
 	)
 	require.Equal(t,
 		customRegistry+"/portworx/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
+		k8sutil.GetImageFromDeployment(lhDeployment, "config-init"),
 	)
 	require.Equal(t, v1.PullIfNotPresent,
-		testutil.GetPullPolicyForContainer(lhDeployment, lhContainerName))
+		testutil.GetPullPolicyForContainer(lhDeployment, "px-lighthouse"))
 	require.Equal(t, v1.PullIfNotPresent,
 		testutil.GetPullPolicyForContainer(lhDeployment, "config-sync"))
 	require.Equal(t, v1.PullIfNotPresent,
@@ -2223,7 +2186,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		lhDeployment.Spec.Template.Spec.InitContainers[0].ImagePullPolicy)
 
 	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/portworx/autopilot:test",
@@ -2236,10 +2199,9 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 func TestRemovePVCController(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2257,19 +2219,19 @@ func TestRemovePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Remove PVC Controller
@@ -2279,29 +2241,28 @@ func TestRemovePVCController(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDisablePVCController(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2319,19 +2280,19 @@ func TestDisablePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable PVC Controller
@@ -2341,28 +2302,27 @@ func TestDisablePVCController(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pvcServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "portworx-pvc-controller", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, pvcClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, pvcClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "portworx-pvc-controller", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, pvcDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "portworx-pvc-controller", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestRemoveLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2383,23 +2343,23 @@ func TestRemoveLighthouse(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-lighthouse", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-lighthouse", "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Remove lighthouse config
@@ -2409,32 +2369,31 @@ func TestRemoveLighthouse(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-lighthouse", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-lighthouse", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-lighthouse", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-lighthouse", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDisableLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2455,23 +2414,23 @@ func TestDisableLighthouse(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-lighthouse", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-lighthouse", "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable lighthouse
@@ -2481,31 +2440,30 @@ func TestDisableLighthouse(t *testing.T) {
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, lhServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-lighthouse", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, lhClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-lighthouse", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, lhClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-lighthouse", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, lhServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-lighthouse", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, lhDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-lighthouse", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestRemoveAutopilot(t *testing.T) {
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2525,23 +2483,23 @@ func TestRemoveAutopilot(t *testing.T) {
 	require.NoError(t, err)
 
 	cm := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, cm, "autopilot-config", cluster.Namespace)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "autopilot", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "autopilot", "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Remove autopilot config
@@ -2550,31 +2508,30 @@ func TestRemoveAutopilot(t *testing.T) {
 	require.NoError(t, err)
 
 	cm = &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, cm, "autopilot-config", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "autopilot", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "autopilot", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "autopilot", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "autopilot", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDisableAutopilot(t *testing.T) {
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2595,23 +2552,23 @@ func TestDisableAutopilot(t *testing.T) {
 	require.NoError(t, err)
 
 	cm := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, cm, "autopilot-config", cluster.Namespace)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "autopilot", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "autopilot", "")
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "autopilot", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable Autopilot
@@ -2620,23 +2577,23 @@ func TestDisableAutopilot(t *testing.T) {
 	require.NoError(t, err)
 
 	cm = &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, cm, autopilotConfigMapName, cluster.Namespace)
+	err = testutil.Get(k8sClient, cm, "autopilot-config", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, autopilotServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "autopilot", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, autopilotClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "autopilot", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, autopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "autopilot", "")
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, autopilotDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "autopilot", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -2646,10 +2603,9 @@ func TestCSIInstall(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2660,7 +2616,7 @@ func TestCSIInstall(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			Placement: &corev1alpha1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -2696,9 +2652,9 @@ func TestCSIInstall(t *testing.T) {
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, csiServiceAccountName, sa.Name)
+	require.Equal(t, "px-csi", sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -2711,7 +2667,7 @@ func TestCSIInstall(t *testing.T) {
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -2726,7 +2682,7 @@ func TestCSIInstall(t *testing.T) {
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -2742,7 +2698,7 @@ func TestCSIInstall(t *testing.T) {
 
 	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Name, service.Name)
 	require.Equal(t, expectedService.Namespace, service.Namespace)
@@ -2759,7 +2715,7 @@ func TestCSIInstall(t *testing.T) {
 
 	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
 	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
 	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
@@ -2769,9 +2725,9 @@ func TestCSIInstall(t *testing.T) {
 
 	// CSIDriver object should be created only for k8s version 1.14+
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -2781,11 +2737,12 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.4",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2796,7 +2753,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.0.3",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			Placement: &corev1alpha1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -2832,9 +2789,9 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, csiServiceAccountName, sa.Name)
+	require.Equal(t, "px-csi", sa.Name)
 	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -2847,7 +2804,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -2862,7 +2819,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualCRB, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
@@ -2878,7 +2835,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 
 	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedService.Name, service.Name)
 	require.Equal(t, expectedService.Namespace, service.Namespace)
@@ -2895,7 +2852,7 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 
 	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
 	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
 	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
@@ -2905,9 +2862,9 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 
 	// CSIDriver object should be created only for k8s version 1.14+
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -2917,11 +2874,12 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2932,7 +2890,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			Placement: &corev1alpha1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -2963,7 +2921,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -2972,7 +2930,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0.yaml")
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, deployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
@@ -2982,9 +2940,9 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 
 	// CSIDriver object should be not be created for k8s 1.13
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Install with Portworx version 2.2+ and k8s version 1.14
@@ -2992,6 +2950,8 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 	cluster.Spec.Image = "portworx/image:2.2"
 
 	err = driver.PreInstall(cluster)
@@ -2999,7 +2959,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1.0.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, deployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
@@ -3010,7 +2970,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	// CSIDriver object should be created for k8s 1.14+
 	// For Portworx 2.2+ we should create the driver object with new driver name
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.NoError(t, err)
 	require.Len(t, csiDriver.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
@@ -3018,7 +2978,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.False(t, *csiDriver.Spec.PodInfoOnMount)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -3031,10 +2991,9 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3045,7 +3004,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3072,10 +3031,13 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 		CustomResourceDefinitions().
 		Delete(expectedCRD.Name, nil)
 	require.NoError(t, err)
-	driver.csiNodeInfoCRDCreated = false
+	csiComponent, _ := component.Get(component.CSIComponentName)
+	csiComponent.MarkDeleted()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.99",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	go func() {
 		err := testutil.ActivateCRDWhenCreated(extensionsClient, expectedCRD.Name)
@@ -3098,10 +3060,12 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 		CustomResourceDefinitions().
 		Delete(expectedCRD.Name, nil)
 	require.NoError(t, err)
-	driver.csiNodeInfoCRDCreated = false
+	csiComponent.MarkDeleted()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.99",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3112,10 +3076,12 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// CRD should not to be created for k8s version 1.14+
-	driver.csiNodeInfoCRDCreated = false
+	csiComponent.MarkDeleted()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3132,11 +3098,9 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	// Install with Portworx version 2.2+ and deprecated CSI driver name
@@ -3149,7 +3113,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 			CommonConfig: corev1alpha1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -3167,7 +3131,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentWithResizerAndOldDriver_1.0.yaml")
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Name, deployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
@@ -3177,7 +3141,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 
 	// CSIDriver should also be created with deprecated driver name
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, DeprecatedCSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.NoError(t, err)
 	require.Len(t, csiDriver.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
@@ -3185,7 +3149,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	require.False(t, *csiDriver.Spec.PodInfoOnMount)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -3195,10 +3159,9 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3208,7 +3171,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3218,7 +3181,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
 	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, actualCR, "px-csi", "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
@@ -3232,11 +3195,12 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3247,7 +3211,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3256,7 +3220,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
@@ -3274,7 +3238,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
@@ -3287,7 +3251,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
@@ -3300,7 +3264,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
@@ -3309,11 +3273,13 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
@@ -3325,7 +3291,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
@@ -3337,11 +3303,12 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3352,7 +3319,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3361,7 +3328,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
@@ -3377,7 +3344,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
@@ -3390,7 +3357,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
@@ -3402,11 +3369,12 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3417,7 +3385,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3426,7 +3394,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
@@ -3435,24 +3403,26 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Use kubernetes version 1.13. CSI sidecars should run as Deployment instead of StatefulSet
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// We should remove the old StatefulSet and replaced it with Deployment
 	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
@@ -3473,16 +3443,18 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
@@ -3503,11 +3475,12 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
 
@@ -3521,7 +3494,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 			CustomImageRegistry: customRegistry,
 			ImagePullPolicy:     v1.PullIfNotPresent,
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "1",
+				string(pxutil.FeatureCSI): "1",
 			},
 		},
 	}
@@ -3530,7 +3503,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
@@ -3550,11 +3523,13 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRegistry+"/quay.io/k8scsi/csi-resizer:v0.3.0",
@@ -3568,11 +3543,12 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
 
@@ -3586,7 +3562,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 			CustomImageRegistry: customRepo,
 			ImagePullPolicy:     v1.PullIfNotPresent,
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "1",
+				string(pxutil.FeatureCSI): "1",
 			},
 		},
 	}
@@ -3595,7 +3571,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
@@ -3615,11 +3591,13 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.6",
 	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
 		customRepo+"/csi-resizer:v0.3.0",
@@ -3633,10 +3611,9 @@ func TestDisableCSI_0_3(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3646,7 +3623,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3655,75 +3632,75 @@ func TestDisableCSI_0_3(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(FeatureCSI)] = "false"
+	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Remove CSI flag. Default should be disabled.
-	delete(cluster.Spec.FeatureGates, string(FeatureCSI))
+	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, statefulSet, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -3733,11 +3710,9 @@ func TestDisableCSI_1_0(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3747,7 +3722,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			FeatureGates: map[string]string{
-				string(FeatureCSI): "true",
+				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
@@ -3756,103 +3731,104 @@ func TestDisableCSI_1_0(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.NoError(t, err)
 
 	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.NoError(t, err)
 
 	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(FeatureCSI)] = "false"
+	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	// Remove CSI flag. Default should be disabled.
-	delete(cluster.Spec.FeatureGates, string(FeatureCSI))
+	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, csiServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, "px-csi", cluster.Namespace)
 	require.NoError(t, err)
 
 	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, csiClusterRoleName, "")
+	err = testutil.Get(k8sClient, cr, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, csiClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, crb, "px-csi", "")
 	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, csiServiceName, cluster.Namespace)
+	err = testutil.Get(k8sClient, service, "px-csi-service", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
+	err = testutil.Get(k8sClient, deployment, "px-csi-ext", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, CSIDriverName, "")
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
 
 func TestMonitoringMetricsEnabled(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	specsBaseDir = func() string {
+	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
 	defer func() {
-		specsBaseDir = getSpecsBaseDir
+		pxutil.SpecsBaseDir = func() string {
+			return pxutil.PortworxSpecsDir
+		}
 	}()
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3909,7 +3885,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 
 	expectedServiceMonitor = testutil.GetExpectedServiceMonitor(t, "prometheusServiceMonitorWithInternalKvdb.yaml")
 	serviceMonitor = &monitoringv1.ServiceMonitor{}
-	err = testutil.Get(k8sClient, serviceMonitor, pxServiceMonitor, cluster.Namespace)
+	err = testutil.Get(k8sClient, serviceMonitor, "portworx", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
@@ -3924,7 +3900,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	serviceMonitor = &monitoringv1.ServiceMonitor{}
-	err = testutil.Get(k8sClient, serviceMonitor, pxServiceMonitor, cluster.Namespace)
+	err = testutil.Get(k8sClient, serviceMonitor, "portworx", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
@@ -3935,17 +3911,18 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 
 func TestDisableMonitoring(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
+	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	specsBaseDir = func() string {
+	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
 	defer func() {
-		specsBaseDir = getSpecsBaseDir
+		pxutil.SpecsBaseDir = func() string {
+			return pxutil.PortworxSpecsDir
+		}
 	}()
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -3964,11 +3941,11 @@ func TestDisableMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	sm := &monitoringv1.ServiceMonitor{}
-	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	err = testutil.Get(k8sClient, sm, "portworx", cluster.Namespace)
 	require.NoError(t, err)
 
 	pr := &monitoringv1.PrometheusRule{}
-	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
+	err = testutil.Get(k8sClient, pr, "portworx", cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable metrics monitoring
@@ -3977,11 +3954,11 @@ func TestDisableMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	sm = &monitoringv1.ServiceMonitor{}
-	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	err = testutil.Get(k8sClient, sm, "portworx", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	pr = &monitoringv1.PrometheusRule{}
-	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
+	err = testutil.Get(k8sClient, pr, "portworx", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Remove monitoring spec. Default should be disabled.
@@ -3990,10 +3967,37 @@ func TestDisableMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	sm = &monitoringv1.ServiceMonitor{}
-	err = testutil.Get(k8sClient, sm, pxServiceMonitor, cluster.Namespace)
+	err = testutil.Get(k8sClient, sm, "portworx", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	pr = &monitoringv1.PrometheusRule{}
-	err = testutil.Get(k8sClient, pr, pxPrometheusRule, cluster.Namespace)
+	err = testutil.Get(k8sClient, pr, "portworx", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: crdName,
+		},
+	}
+	_, err := fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+	if err != nil {
+		return err
+	}
+	return testutil.ActivateCRDWhenCreated(fakeClient, crdName)
+}
+
+func reregisterComponents() {
+	// Not registering PortworxCRDs component to avoid creating CRD
+	// for every test as we do not need to test it's creation every time.
+	component.DeregisterAllComponents()
+	component.RegisterPortworxBasicComponent()
+	component.RegisterPortworxAPIComponent()
+	component.RegisterPortworxStorageClassComponent()
+	component.RegisterAutopilotComponent()
+	component.RegisterCSIComponent()
+	component.RegisterLighthouseComponent()
+	component.RegisterPVCControllerComponent()
+	component.RegisterMonitoringComponent()
 }

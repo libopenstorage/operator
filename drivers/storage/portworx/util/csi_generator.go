@@ -1,7 +1,7 @@
-package portworx
+package util
 
 import (
-	"fmt"
+	"path"
 
 	version "github.com/hashicorp/go-version"
 )
@@ -13,85 +13,80 @@ const (
 	DeprecatedCSIDriverName = "com.openstorage.pxd"
 )
 
-// csiVersions holds the versions of the all the CSI sidecar containers
-type csiVersions struct {
-	version       string
-	attacher      string
-	snapshotter   string
-	resizer       string
-	nodeRegistrar string
-	provisioner   string
+// CSIConfiguration holds the versions of the all the CSI sidecar containers,
+// containers, CSI Version, and other flags
+type CSIConfiguration struct {
+	Version       string
+	Attacher      string
+	Snapshotter   string
+	Resizer       string
+	NodeRegistrar string
+	Provisioner   string
 	// old pre-Kube 1.13 registrar
-	registrar string
+	Registrar string
 	// For Kube v1.12 and v1.13 we need to create the CRD
 	// See: https://kubernetes-csi.github.io/docs/csi-node-object.html#enabling-csinodeinfo-on-kubernetes
 	// When enabled it also means we need to use the Alpha version of CsiNodeInfo RBAC
-	createCsiNodeCrd bool
+	CreateCsiNodeCrd bool
 	// Before Kube v1.13 the registration directory must be /var/lib/kubelet/plugins instead
 	// of /var/lib/kubelet/plugins_registry
-	useOlderPluginsDirAsRegistration bool
+	UseOlderPluginsDirAsRegistration bool
 	// driverName is decided based on the PX Version unless the deprecated flag is provided.
-	driverName string
+	DriverName string
 	// useDeployment decides whether to use a StatefulSet or Deployment for the CSI side cars.
-	useDeployment bool
+	UseDeployment bool
 	// includeAttacher dictates whether we include the csi-attacher sidecar or not.
-	includeAttacher bool
+	IncludeAttacher bool
 	// includeResizer dicates whether or not to include the resizer sidecar.
-	includeResizer bool
+	IncludeResizer bool
 	// includeCsiDriverInfo dictates whether or not to add the CSIDriver object.
-	includeCsiDriverInfo bool
+	IncludeCsiDriverInfo bool
 	// includeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
 	// In Kubernetes Kubernetes 1.14+ leader election does not use configmaps.
-	includeEndpointsAndConfigMapsForLeases bool
+	IncludeEndpointsAndConfigMapsForLeases bool
 }
 
-// csiGenerator contains information needed to generate CSI side car versions
-type csiGenerator struct {
+// CSIGenerator contains information needed to generate CSI side car versions
+type CSIGenerator struct {
 	kubeVersion             version.Version
 	pxVersion               version.Version
 	useDeprecatedDriverName bool
 }
 
-// newCSIGenerator returns a version generator
-func newCSIGenerator(
+// NewCSIGenerator returns a version generator
+func NewCSIGenerator(
 	kubeVersion version.Version,
 	pxVersion version.Version,
 	useDeprecatedDriverName bool,
-) *csiGenerator {
-	return &csiGenerator{
+) *CSIGenerator {
+	return &CSIGenerator{
 		kubeVersion:             kubeVersion,
 		pxVersion:               pxVersion,
 		useDeprecatedDriverName: useDeprecatedDriverName,
 	}
 }
 
-func (g *csiGenerator) basicCSIVersions() csiVersions {
-	cv := csiVersions{}
-	cv.driverName = g.driverName()
+// GetBasicCSIConfiguration returns a basic CSI configuration
+func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
+	cv := new(CSIConfiguration)
+	cv.DriverName = g.driverName()
 	k8sVer1_14, _ := version.NewVersion("1.14")
 	if g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14) {
-		cv.includeCsiDriverInfo = true
+		cv.IncludeCsiDriverInfo = true
 	}
 	return cv
 }
 
-// getSidecarContainerVersions returns the appropriate side car versions
+// GetCSIConfiguration returns the appropriate side car versions
 // for the specified Kubernetes and Portworx versions
-func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
-	k8sVer1_11, _ := version.NewVersion("1.11")
+func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	k8sVer1_12, _ := version.NewVersion("1.12")
 	k8sVer1_13, _ := version.NewVersion("1.13")
 	k8sVer1_14, _ := version.NewVersion("1.14")
 	pxVer2_1, _ := version.NewVersion("2.1")
 	pxVer2_2, _ := version.NewVersion("2.2")
 
-	// Only 1.11+ is supported because only CSI 0.3 or CSI 1.x are supported
-	if g.kubeVersion.LessThan(k8sVer1_11) {
-		return csiVersions{}, fmt.Errorf("kubernetes version %v does not have a "+
-			"compatible CSI version with the version of Portworx", g.kubeVersion.String())
-	}
-
-	var cv *csiVersions
+	var cv *CSIConfiguration
 	if g.pxVersion.GreaterThan(pxVer2_1) || g.pxVersion.Equal(pxVer2_1) {
 		// Portworx version >= 2.1
 		// Can only use Csi 1.0 in Kubernetes 1.13+
@@ -108,7 +103,7 @@ func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
 	// If it is  >=1.13.0 and and <1.14.0
 	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
-		cv.includeEndpointsAndConfigMapsForLeases = true
+		cv.IncludeEndpointsAndConfigMapsForLeases = true
 	}
 
 	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
@@ -116,76 +111,42 @@ func (g *csiGenerator) getSidecarContainerVersions() (csiVersions, error) {
 	// Resize support is Alpha starting k8s 1.14
 	if (g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2)) &&
 		(g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14)) {
-		cv.includeResizer = true
+		cv.IncludeResizer = true
 	}
 
 	// Check if we need to setup the CsiNodeInfo CRD
 	// If 1.12.0 <= KubeVer < 1.14.0 create the CRD
 	if (g.kubeVersion.GreaterThan(k8sVer1_12) || g.kubeVersion.Equal(k8sVer1_12)) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
-		cv.createCsiNodeCrd = true
+		cv.CreateCsiNodeCrd = true
 	}
 
 	// Setup registration correctly
 	if g.kubeVersion.LessThan(k8sVer1_13) {
-		cv.useOlderPluginsDirAsRegistration = true
+		cv.UseOlderPluginsDirAsRegistration = true
 	}
 
 	// Set the CSI driver name
-	cv.driverName = g.driverName()
+	cv.DriverName = g.driverName()
 
 	// If we have k8s version < v1.14, we include the attacher.
 	// This is because the CSIDriver object was alpha until 1.14+
 	// To enable the CSIDriver object support, a feature flag would be needed.
 	// Instead, we'll just include the attacher if k8s < 1.14.
 	if g.kubeVersion.LessThan(k8sVer1_14) {
-		cv.includeAttacher = true
-		cv.includeCsiDriverInfo = false
+		cv.IncludeAttacher = true
+		cv.IncludeCsiDriverInfo = false
 	} else {
 		// k8s >= 1.14 we can remove the attacher sidecar
 		// in favor of the CSIDriver object.
-		cv.includeAttacher = false
-		cv.includeCsiDriverInfo = true
+		cv.IncludeAttacher = false
+		cv.IncludeCsiDriverInfo = true
 	}
 
-	return *cv, nil
+	return cv
 }
 
-func (g *csiGenerator) setSidecarContainerVersionsV1_0() *csiVersions {
-	return &csiVersions{
-		attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
-		nodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
-		provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
-		snapshotter:   "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
-		resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
-		// Single registrar has been deprecated
-		registrar: "",
-		// Deployments are support in 1.x
-		useDeployment: true,
-	}
-}
-
-func (g *csiGenerator) setSidecarContainerVersionsV0_4() *csiVersions {
-	pxVer2_1, _ := version.NewVersion("2.1")
-	c := &csiVersions{
-		attacher:    "quay.io/k8scsi/csi-attacher:v0.4.2",
-		registrar:   "quay.io/k8scsi/driver-registrar:v0.4.2",
-		provisioner: "quay.io/k8scsi/csi-provisioner:v0.4.3",
-		snapshotter: "",
-		// no split driver registrars. These are for Csi 1.0 in Kube 1.13+
-		nodeRegistrar: "",
-		// Deployments not supported yet, so use statefulset
-		useDeployment: false,
-	}
-
-	// Force CSI 0.3 for Portworx version 2.1
-	if g.pxVersion.GreaterThan(pxVer2_1) || g.pxVersion.Equal(pxVer2_1) {
-		c.version = "0.3"
-	}
-	return c
-}
-
-func (g *csiGenerator) driverName() string {
+func (g *CSIGenerator) driverName() string {
 	pxVer2_2, _ := version.NewVersion("2.2")
 	// PX Versions <2.2.0 will always use the deprecated CSI Driver Name.
 	// PX Versions >=2.2.0 will default to the new name
@@ -193,4 +154,43 @@ func (g *csiGenerator) driverName() string {
 		return DeprecatedCSIDriverName
 	}
 	return CSIDriverName
+}
+
+func (g *CSIGenerator) setSidecarContainerVersionsV1_0() *CSIConfiguration {
+	return &CSIConfiguration{
+		Attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
+		NodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
+		Provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		Snapshotter:   "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		Resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
+		// Single registrar has been deprecated
+		Registrar: "",
+		// Deployments are support in 1.x
+		UseDeployment: true,
+	}
+}
+
+func (g *CSIGenerator) setSidecarContainerVersionsV0_4() *CSIConfiguration {
+	pxVer2_1, _ := version.NewVersion("2.1")
+	c := &CSIConfiguration{
+		Attacher:    "quay.io/k8scsi/csi-attacher:v0.4.2",
+		Registrar:   "quay.io/k8scsi/driver-registrar:v0.4.2",
+		Provisioner: "quay.io/k8scsi/csi-provisioner:v0.4.3",
+		Snapshotter: "",
+		// no split driver registrars. These are for Csi 1.0 in Kube 1.13+
+		NodeRegistrar: "",
+		// Deployments not supported yet, so use statefulset
+		UseDeployment: false,
+	}
+
+	// Force CSI 0.3 for Portworx version 2.1
+	if g.pxVersion.GreaterThan(pxVer2_1) || g.pxVersion.Equal(pxVer2_1) {
+		c.Version = "0.3"
+	}
+	return c
+}
+
+// DriverBasePath returns the basepath under which the CSI driver is stored
+func (c *CSIConfiguration) DriverBasePath() string {
+	return path.Join("/var/lib/kubelet/plugins", c.DriverName)
 }

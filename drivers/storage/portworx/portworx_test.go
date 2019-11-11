@@ -12,6 +12,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/dbg"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -36,7 +37,7 @@ import (
 
 func TestString(t *testing.T) {
 	driver := portworx{}
-	require.Equal(t, driverName, driver.String())
+	require.Equal(t, pxutil.DriverName, driver.String())
 }
 
 func TestInit(t *testing.T) {
@@ -65,7 +66,7 @@ func TestInit(t *testing.T) {
 
 func TestGetSelectorLabels(t *testing.T) {
 	driver := portworx{}
-	expectedLabels := map[string]string{labelKeyName: driverName}
+	expectedLabels := map[string]string{"name": pxutil.DriverName}
 	require.Equal(t, expectedLabels, driver.GetSelectorLabels())
 }
 
@@ -88,7 +89,7 @@ func TestGetStorkEnvList(t *testing.T) {
 	envVars := driver.GetStorkEnvList(cluster)
 
 	require.Len(t, envVars, 1)
-	require.Equal(t, envKeyPortworxNamespace, envVars[0].Name)
+	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
 	require.Equal(t, cluster.Namespace, envVars[0].Value)
 }
 
@@ -130,7 +131,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, "portworx/oci-monitor:2.1.5", cluster.Spec.Image)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
-	require.Equal(t, uint32(defaultStartPort), *cluster.Spec.StartPort)
+	require.Equal(t, uint32(pxutil.DefaultStartPort), *cluster.Spec.StartPort)
 	require.True(t, *cluster.Spec.Storage.UseAll)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
@@ -743,7 +744,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
-	require.Equal(t, uint32(defaultStartPort), *cluster.Spec.StartPort)
+	require.Equal(t, uint32(pxutil.DefaultStartPort), *cluster.Spec.StartPort)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
@@ -823,14 +824,14 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1053,14 +1054,14 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1403,14 +1404,14 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1522,7 +1523,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	// Fake client with a service that does not have cluster ip
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
@@ -1552,7 +1553,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
@@ -1599,14 +1600,14 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1684,14 +1685,14 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1796,14 +1797,14 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -1909,14 +1910,14 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -2104,14 +2105,14 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -2218,14 +2219,14 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	// to the mock sdk server address
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: "kube-test",
 		},
 		Spec: v1.ServiceSpec{
 			ClusterIP: sdkServerIP,
 			Ports: []v1.ServicePort{
 				{
-					Name: pxSDKPortName,
+					Name: pxutil.PortworxSDKPortName,
 					Port: int32(sdkServerPort),
 				},
 			},
@@ -2334,14 +2335,7 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 }
 
 func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
-	driver := portworx{
-		pxAPIDaemonSetCreated:             true,
-		volumePlacementStrategyCRDCreated: true,
-		pvcControllerDeploymentCreated:    true,
-		lhDeploymentCreated:               true,
-		csiApplicationCreated:             true,
-		csiNodeInfoCRDCreated:             true,
-	}
+	driver := portworx{}
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2357,26 +2351,12 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
 	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
 	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
-
-	// All components should be marked as not created
-	require.False(t, driver.pxAPIDaemonSetCreated)
-	require.False(t, driver.volumePlacementStrategyCRDCreated)
-	require.False(t, driver.pvcControllerDeploymentCreated)
-	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiApplicationCreated)
-	require.False(t, driver.csiNodeInfoCRDCreated)
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
-		k8sClient:                         k8sClient,
-		pxAPIDaemonSetCreated:             true,
-		volumePlacementStrategyCRDCreated: true,
-		pvcControllerDeploymentCreated:    true,
-		lhDeploymentCreated:               true,
-		csiApplicationCreated:             true,
-		csiNodeInfoCRDCreated:             true,
+		k8sClient: k8sClient,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2392,14 +2372,6 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
-
-	// All components should be marked as not created
-	require.False(t, driver.pxAPIDaemonSetCreated)
-	require.False(t, driver.volumePlacementStrategyCRDCreated)
-	require.False(t, driver.pvcControllerDeploymentCreated)
-	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiApplicationCreated)
-	require.False(t, driver.csiNodeInfoCRDCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
@@ -2519,12 +2491,7 @@ func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
-		k8sClient:                         k8sClient,
-		pxAPIDaemonSetCreated:             true,
-		volumePlacementStrategyCRDCreated: true,
-		pvcControllerDeploymentCreated:    true,
-		lhDeploymentCreated:               true,
-		csiApplicationCreated:             true,
+		k8sClient: k8sClient,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2543,13 +2510,6 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
-
-	// All components should be marked as not created
-	require.False(t, driver.pxAPIDaemonSetCreated)
-	require.False(t, driver.volumePlacementStrategyCRDCreated)
-	require.False(t, driver.pvcControllerDeploymentCreated)
-	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiApplicationCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
@@ -2571,12 +2531,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
-		k8sClient:                         k8sClient,
-		pxAPIDaemonSetCreated:             true,
-		volumePlacementStrategyCRDCreated: true,
-		pvcControllerDeploymentCreated:    true,
-		lhDeploymentCreated:               true,
-		csiApplicationCreated:             true,
+		k8sClient: k8sClient,
 	}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2592,13 +2547,6 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
-
-	// All components should be marked as not created
-	require.False(t, driver.pxAPIDaemonSetCreated)
-	require.False(t, driver.volumePlacementStrategyCRDCreated)
-	require.False(t, driver.pvcControllerDeploymentCreated)
-	require.False(t, driver.lhDeploymentCreated)
-	require.False(t, driver.csiApplicationCreated)
 
 	// Check condition
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)

@@ -3,7 +3,6 @@ package portworx
 import (
 	"context"
 	"fmt"
-	"math"
 	"path"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -25,29 +25,28 @@ import (
 )
 
 const (
-	pxContainerName               = "portworx"
-	pxAnnotationPrefix            = "portworx.io"
-	annotationIsPKS               = pxAnnotationPrefix + "/is-pks"
-	annotationIsGKE               = pxAnnotationPrefix + "/is-gke"
-	annotationIsAKS               = pxAnnotationPrefix + "/is-aks"
-	annotationIsEKS               = pxAnnotationPrefix + "/is-eks"
-	annotationIsOpenshift         = pxAnnotationPrefix + "/is-openshift"
-	annotationPVCController       = pxAnnotationPrefix + "/pvc-controller"
-	annotationLogFile             = pxAnnotationPrefix + "/log-file"
-	annotationMiscArgs            = pxAnnotationPrefix + "/misc-args"
-	annotationPVCControllerCPU    = pxAnnotationPrefix + "/pvc-controller-cpu"
-	annotationAutopilotCPU        = pxAnnotationPrefix + "/autopilot-cpu"
-	annotationServiceType         = pxAnnotationPrefix + "/service-type"
-	annotationPXVersion           = pxAnnotationPrefix + "/px-version"
-	templateVersion               = "v4"
-	secretKeyKvdbCA               = "kvdb-ca.crt"
-	secretKeyKvdbCert             = "kvdb.crt"
-	secretKeyKvdbCertKey          = "kvdb.key"
-	secretKeyKvdbUsername         = "username"
-	secretKeyKvdbPassword         = "password"
-	secretKeyKvdbACLToken         = "acl-token"
-	envKeyPXImage                 = "PX_IMAGE"
-	envKeyDeprecatedCSIDriverName = "PORTWORX_USEDEPRECATED_CSIDRIVERNAME"
+	pxContainerName            = "portworx"
+	pxAnnotationPrefix         = "portworx.io"
+	annotationIsPKS            = pxAnnotationPrefix + "/is-pks"
+	annotationIsGKE            = pxAnnotationPrefix + "/is-gke"
+	annotationIsAKS            = pxAnnotationPrefix + "/is-aks"
+	annotationIsEKS            = pxAnnotationPrefix + "/is-eks"
+	annotationIsOpenshift      = pxAnnotationPrefix + "/is-openshift"
+	annotationPVCController    = pxAnnotationPrefix + "/pvc-controller"
+	annotationLogFile          = pxAnnotationPrefix + "/log-file"
+	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
+	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
+	annotationAutopilotCPU     = pxAnnotationPrefix + "/autopilot-cpu"
+	annotationServiceType      = pxAnnotationPrefix + "/service-type"
+	annotationPXVersion        = pxAnnotationPrefix + "/px-version"
+	templateVersion            = "v4"
+	secretKeyKvdbCA            = "kvdb-ca.crt"
+	secretKeyKvdbCert          = "kvdb.crt"
+	secretKeyKvdbCertKey       = "kvdb.key"
+	secretKeyKvdbUsername      = "username"
+	secretKeyKvdbPassword      = "password"
+	secretKeyKvdbACLToken      = "acl-token"
+	envKeyPXImage              = "PX_IMAGE"
 )
 
 type volumeInfo struct {
@@ -169,21 +168,17 @@ var (
 )
 
 type template struct {
-	cluster            *corev1alpha1.StorageCluster
-	isPKS              bool
-	isGKE              bool
-	isAKS              bool
-	isEKS              bool
-	isOpenshift        bool
-	needsPVCController bool
-	imagePullPolicy    v1.PullPolicy
-	serviceType        v1.ServiceType
-	startPort          int
-	k8sVersion         *version.Version
-	pxVersion          *version.Version
-	csiVersions        csiVersions
-	kvdb               map[string]string
-	cloudConfig        *cloudstorage.Config
+	cluster         *corev1alpha1.StorageCluster
+	isPKS           bool
+	isOpenshift     bool
+	imagePullPolicy v1.PullPolicy
+	serviceType     v1.ServiceType
+	startPort       int
+	k8sVersion      *version.Version
+	pxVersion       *version.Version
+	csiConfig       *pxutil.CSIConfiguration
+	kvdb            map[string]string
+	cloudConfig     *cloudstorage.Config
 }
 
 func newTemplate(
@@ -196,73 +191,25 @@ func newTemplate(
 	t := &template{cluster: cluster}
 
 	var err error
-	t.k8sVersion, err = extractK8sVersion()
+	t.k8sVersion, err = k8sutil.GetVersion()
 	if err != nil {
 		return nil, err
 	}
 
-	t.pxVersion = extractPXVersion(cluster)
-	deprecatedCSIDriverName := useDeprecatedCSIDriverName(cluster)
-
-	csiGenerator := newCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
-	if FeatureCSI.isEnabled(cluster.Spec.FeatureGates) {
-		t.csiVersions, err = csiGenerator.getSidecarContainerVersions()
-		if err != nil {
-			return nil, err
-		}
+	t.pxVersion = pxutil.GetPortworxVersion(cluster)
+	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
+	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
+	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
+		t.csiConfig = csiGenerator.GetCSIConfiguration()
 	} else {
-		t.csiVersions = csiGenerator.basicCSIVersions()
+		t.csiConfig = csiGenerator.GetBasicCSIConfiguration()
 	}
 
-	enabled, err := strconv.ParseBool(cluster.Annotations[annotationIsPKS])
-	t.isPKS = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsGKE])
-	t.isGKE = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsAKS])
-	t.isAKS = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsEKS])
-	t.isEKS = err == nil && enabled
-
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationIsOpenshift])
-	t.isOpenshift = err == nil && enabled
-
-	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
-	// only if Portworx service is not deployed in kube-system namespace.
-	enabled, err = strconv.ParseBool(cluster.Annotations[annotationPVCController])
-	if err != nil {
-		t.needsPVCController = false
-	}
-	if enabled || t.isPKS || t.isEKS || t.isGKE || t.isAKS ||
-		(t.isOpenshift && cluster.Namespace != "kube-system") {
-		t.needsPVCController = true
-	}
-	// Do not run PVC controller if explicitly disabled
-	if err == nil && !enabled {
-		t.needsPVCController = false
-	}
-
-	if val, exists := cluster.Annotations[annotationServiceType]; exists {
-		serviceType := v1.ServiceType(val)
-		if serviceType == v1.ServiceTypeClusterIP ||
-			serviceType == v1.ServiceTypeNodePort ||
-			serviceType == v1.ServiceTypeLoadBalancer {
-			t.serviceType = serviceType
-		}
-	}
-
-	t.imagePullPolicy = v1.PullAlways
-	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
-		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
-		t.imagePullPolicy = cluster.Spec.ImagePullPolicy
-	}
-
-	t.startPort = defaultStartPort
-	if cluster.Spec.StartPort != nil {
-		t.startPort = int(*cluster.Spec.StartPort)
-	}
+	t.isPKS = pxutil.IsPKS(cluster)
+	t.isOpenshift = pxutil.IsOpenshift(cluster)
+	t.serviceType = pxutil.ServiceType(cluster)
+	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
+	t.startPort = pxutil.StartPort(cluster)
 
 	return t, nil
 }
@@ -288,7 +235,7 @@ func (p *portworx) generateCloudStorageSpecs(
 			cloudops.ProviderType(p.cloudProvider),
 			cluster.Namespace,
 			p.k8sClient,
-			metav1.NewControllerRef(cluster, controllerKind),
+			metav1.NewControllerRef(cluster, pxutil.StorageClusterKind()),
 		}
 
 		if err = cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
@@ -342,12 +289,12 @@ func (p *portworx) GetStoragePodSpec(
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
-		ServiceAccountName: pxServiceAccountName,
+		ServiceAccountName: pxutil.PortworxServiceAccountName,
 		Containers:         []v1.Container{containers},
 		Volumes:            t.getVolumes(),
 	}
 
-	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
@@ -373,7 +320,7 @@ func (p *portworx) GetStoragePodSpec(
 }
 
 func (p *portworx) createStorageNode(cluster *corev1alpha1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
-	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	storageNode := &corev1alpha1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
@@ -514,28 +461,28 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 		},
 	}
 
-	if t.csiVersions.nodeRegistrar != "" {
+	if t.csiConfig.NodeRegistrar != "" {
 		container.Name = "csi-node-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			t.csiVersions.nodeRegistrar,
+			t.csiConfig.NodeRegistrar,
 		)
 		container.Args = []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiBasePath()),
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
 		}
-	} else if t.csiVersions.registrar != "" {
+	} else if t.csiConfig.Registrar != "" {
 		container.Name = "csi-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			t.csiVersions.registrar,
+			t.csiConfig.Registrar,
 		)
 		container.Args = []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
 			"--mode=node-register",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiBasePath()),
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
 		}
 	}
 
@@ -705,7 +652,7 @@ func (t *template) getArguments() []string {
 		args = append(args, "-secret_type", *t.cluster.Spec.SecretsProvider)
 	}
 
-	if t.startPort != defaultStartPort {
+	if t.startPort != pxutil.DefaultStartPort {
 		args = append(args, "-r", strconv.Itoa(int(t.startPort)))
 	}
 
@@ -776,18 +723,18 @@ func (t *template) getEnvList() []v1.EnvVar {
 		)
 	}
 
-	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
 		envList = append(envList,
 			v1.EnvVar{
 				Name:  "CSI_ENDPOINT",
-				Value: "unix://" + t.csiBasePath() + "/csi.sock",
+				Value: "unix://" + t.csiConfig.DriverBasePath() + "/csi.sock",
 			},
 		)
-		if t.csiVersions.version != "" {
+		if t.csiConfig.Version != "" {
 			envList = append(envList,
 				v1.EnvVar{
 					Name:  "PORTWORX_CSIVERSION",
-					Value: t.csiVersions.version,
+					Value: t.csiConfig.Version,
 				},
 			)
 		}
@@ -819,10 +766,10 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	// TODO: Imp: add etcd certs to the volume mounts
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
 
-	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
 		volumeInfoList = append(volumeInfoList, volumeInfo{
 			name:      "csi-driver-path",
-			mountPath: t.csiBasePath(),
+			mountPath: t.csiConfig.DriverBasePath(),
 		})
 	}
 
@@ -857,7 +804,7 @@ func (t *template) getVolumes() []v1.Volume {
 	// TODO: Imp: add etcd certs to the volume list
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
 
-	if FeatureCSI.isEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
 		volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
 	}
 
@@ -926,7 +873,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		hostPath:     "/var/lib/kubelet/plugins_registry",
 		hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 	}
-	if t.csiVersions.useOlderPluginsDirAsRegistration {
+	if t.csiConfig.UseOlderPluginsDirAsRegistration {
 		registrationVol.hostPath = "/var/lib/kubelet/plugins"
 	}
 
@@ -934,7 +881,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 	volumeInfoList = append(volumeInfoList,
 		volumeInfo{
 			name:         "csi-driver-path",
-			hostPath:     t.csiBasePath(),
+			hostPath:     t.csiConfig.DriverBasePath(),
 			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 		},
 	)
@@ -963,67 +910,6 @@ func (t *template) loadKvdbAuth() map[string]string {
 		t.kvdb[k] = string(v)
 	}
 	return t.kvdb
-}
-
-func (t *template) csiBasePath() string {
-	return path.Join("/var/lib/kubelet/plugins", t.csiVersions.driverName)
-}
-
-func extractK8sVersion() (*version.Version, error) {
-	k8sVersion, err := k8s.Instance().GetVersion()
-	if err != nil {
-		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
-	}
-	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
-	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
-	}
-	return version.NewVersion(matches[1])
-}
-
-func extractPXVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
-	var (
-		err       error
-		pxVersion *version.Version
-	)
-
-	pxImage := cluster.Spec.Image
-	for _, env := range cluster.Spec.Env {
-		if env.Name == envKeyPXImage {
-			pxImage = env.Value
-			break
-		}
-	}
-
-	parts := strings.Split(pxImage, ":")
-	if len(parts) >= 2 {
-		pxVersionStr := parts[len(parts)-1]
-		pxVersion, err = version.NewSemver(pxVersionStr)
-		if err != nil {
-			logrus.Warnf("Invalid PX version %s extracted from image name: %v", pxVersionStr, err)
-			if pxVersionStr, exists := cluster.Annotations[annotationPXVersion]; exists {
-				pxVersion, err = version.NewSemver(pxVersionStr)
-				if err != nil {
-					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
-				}
-			}
-		}
-	}
-
-	if pxVersion == nil {
-		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
-	}
-	return pxVersion
-}
-
-func useDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {
-	for _, env := range cluster.Spec.Env {
-		if env.Name == envKeyDeprecatedCSIDriverName {
-			value, err := strconv.ParseBool(env.Value)
-			return err == nil && value
-		}
-	}
-	return false
 }
 
 func stringPtr(val string) *string {

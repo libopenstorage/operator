@@ -12,7 +12,9 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -31,21 +33,18 @@ import (
 )
 
 const (
-	// driverName is the name of the portworx storage driver implementation
-	driverName                        = "portworx"
 	storkDriverName                   = "pxd"
-	labelKeyName                      = "name"
 	defaultPortworxImage              = "portworx/oci-monitor"
 	defaultPortworxVersion            = "2.1.5"
 	edgePortworxVersion               = "edge"
 	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.4"
 	defaultAutopilotImage             = "portworx/autopilot:v0.6.0"
 	defaultStorkImage                 = "openstorage/stork:2.2.5"
-	defaultStartPort                  = 9001
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
 	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.2-rc1"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
+	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
@@ -53,23 +52,17 @@ const (
 )
 
 type portworx struct {
-	k8sClient                         client.Client
-	scheme                            *runtime.Scheme
-	recorder                          record.EventRecorder
-	pxAPIDaemonSetCreated             bool
-	volumePlacementStrategyCRDCreated bool
-	pvcControllerDeploymentCreated    bool
-	lhDeploymentCreated               bool
-	autopilotDeploymentCreated        bool
-	csiApplicationCreated             bool
-	csiNodeInfoCRDCreated             bool
-	sdkConn                           *grpc.ClientConn
-	zoneToInstancesMap                map[string]int
-	cloudProvider                     string
+	k8sClient          client.Client
+	k8sVersion         *version.Version
+	scheme             *runtime.Scheme
+	recorder           record.EventRecorder
+	sdkConn            *grpc.ClientConn
+	zoneToInstancesMap map[string]int
+	cloudProvider      string
 }
 
 func (p *portworx) String() string {
-	return driverName
+	return pxutil.DriverName
 }
 
 func (p *portworx) Init(
@@ -89,7 +82,20 @@ func (p *portworx) Init(
 		return fmt.Errorf("event recorder cannot be nil")
 	}
 	p.recorder = recorder
+	k8sVersion, err := k8sutil.GetVersion()
+	if err != nil {
+		return err
+	}
+	p.k8sVersion = k8sVersion
+
+	p.initializeComponents()
 	return nil
+}
+
+func (p *portworx) initializeComponents() {
+	for _, comp := range component.GetAll() {
+		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)
+	}
 }
 
 func (p *portworx) UpdateDriver(info *storage.UpdateDriverInfo) error {
@@ -105,16 +111,14 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
 	return []v1.EnvVar{
 		{
-			Name:  envKeyPortworxNamespace,
+			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
 		},
 	}
 }
 
 func (p *portworx) GetSelectorLabels() map[string]string {
-	return map[string]string{
-		labelKeyName: driverName,
-	}
+	return pxutil.SelectorLabels()
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
@@ -247,13 +251,30 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 }
 
 func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
-	return p.installComponents(cluster)
+	for componentName, comp := range component.GetAll() {
+		if comp.IsEnabled(cluster) {
+			err := comp.Reconcile(cluster)
+			if ce, ok := err.(*component.Error); ok &&
+				ce.Code() == component.ErrCritical {
+				return err
+			} else if err != nil {
+				msg := fmt.Sprintf("Failed to setup %s. %v", componentName, err)
+				p.warningEvent(cluster, util.FailedComponentReason, msg)
+			}
+		} else {
+			if err := comp.Delete(cluster); err != nil {
+				msg := fmt.Sprintf("Failed to cleanup %v. %v", componentName, err)
+				p.warningEvent(cluster, util.FailedComponentReason, msg)
+			}
+		}
+	}
+	return nil
 }
 
 func (p *portworx) DeleteStorage(
 	cluster *corev1alpha1.StorageCluster,
 ) (*corev1alpha1.ClusterCondition, error) {
-	p.unsetInstallParams()
+	p.markComponentsAsDeleted()
 
 	if cluster.Spec.DeleteStrategy == nil {
 		// No Delete strategy provided. Do not wipe portworx
@@ -277,7 +298,7 @@ func (p *portworx) DeleteStorage(
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
-		nodeWiperImage := getImageFromEnv(envKeyNodeWiperImage, cluster.Spec.Env)
+		nodeWiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, cluster.Spec.Env)
 		if err := u.RunNodeWiper(nodeWiperImage, removeData); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
@@ -320,6 +341,12 @@ func (p *portworx) DeleteStorage(
 		Status: corev1alpha1.ClusterOperationInProgress,
 		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
+}
+
+func (p *portworx) markComponentsAsDeleted() {
+	for _, comp := range component.GetAll() {
+		comp.MarkDeleted()
+	}
 }
 
 func (p *portworx) UpdateStorageClusterStatus(
@@ -370,7 +397,7 @@ func (p *portworx) updateStorageNodes(
 
 	currentNodes := make(map[string]bool)
 
-	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
 			k8sNode, err := k8s.Instance().SearchNodeByAddresses(
@@ -462,7 +489,7 @@ func (p *portworx) getPortworxClient(
 	err := p.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      pxServiceName,
+			Name:      pxutil.PortworxServiceName,
 			Namespace: cluster.Namespace,
 		},
 		pxService,
@@ -478,7 +505,7 @@ func (p *portworx) getPortworxClient(
 
 	// Get the ports from service
 	for _, pxServicePort := range pxService.Spec.Ports {
-		if pxServicePort.Name == pxSDKPortName && pxServicePort.Port != 0 {
+		if pxServicePort.Name == pxutil.PortworxSDKPortName && pxServicePort.Port != 0 {
 			sdkPort = int(pxServicePort.Port)
 		}
 	}
@@ -702,7 +729,7 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 }
 
 func init() {
-	if err := storage.Register(driverName, &portworx{}); err != nil {
+	if err := storage.Register(pxutil.DriverName, &portworx{}); err != nil {
 		logrus.Panicf("Error registering portworx storage driver: %v", err)
 	}
 }

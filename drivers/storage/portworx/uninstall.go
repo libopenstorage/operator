@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -172,7 +173,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 		args = append(args, "-r")
 	}
 
-	ownerRef := metav1.NewControllerRef(u.cluster, controllerKind)
+	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
 
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -253,7 +254,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						},
 					},
 					RestartPolicy:      "Always",
-					ServiceAccountName: pxServiceAccountName,
+					ServiceAccountName: pxutil.PortworxServiceAccountName,
 					Volumes: []v1.Volume{
 						{
 							Name: dsEtcPwxVolumeName,
