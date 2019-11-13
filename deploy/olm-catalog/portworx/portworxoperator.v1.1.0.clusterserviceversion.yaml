@@ -25,7 +25,7 @@ metadata:
             }
           },
           "spec": {
-            "image": "registry.connect.redhat.com/portworx/px-monitor:2.1.5",
+            "image": "registry.connect.redhat.com/portworx/px-monitor:2.2.0",
             "userInterface": {
               "enabled": true
             },
