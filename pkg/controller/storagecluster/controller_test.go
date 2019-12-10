@@ -2,6 +2,7 @@ package storagecluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -618,7 +619,11 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
-	expectedPod := &v1.Pod{
+	expectedPodSpec := v1.PodSpec{
+		Containers: []v1.Container{{Name: "test"}},
+	}
+	addOrUpdateStoragePodTolerations(&expectedPodSpec)
+	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
@@ -626,14 +631,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 				labelKeyDriverName: driverName,
 			},
 		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{{Name: "test"}},
-		},
-	}
-	addOrUpdateStoragePodTolerations(expectedPod)
-	expectedPodTemplate := &v1.PodTemplateSpec{
-		ObjectMeta: expectedPod.ObjectMeta,
-		Spec:       expectedPod.Spec,
+		Spec: expectedPodSpec,
 	}
 
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
@@ -647,7 +645,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 			expectedPodTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
 		})
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).
-		Return(expectedPodTemplate.Spec, nil).
+		Return(expectedPodSpec, nil).
 		AnyTimes()
 
 	request := reconcile.Request{
@@ -676,6 +674,238 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	require.Len(t, podControl.ControllerRefs, 2)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
+}
+
+func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			// Match using node name
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "k8s-node-1",
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"dev1"}),
+			},
+		},
+		{
+			// Match using a label selector
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node2",
+					},
+				},
+			},
+		},
+		{
+			// Duplicate selector with same node name. If the node has already
+			// matched a previous spec, then this spec will not be used by that node.
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "k8s-node-1",
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Even though the labels match a valid node, if the node has already
+			// matched a previous spec, then this spec will not be used by that node.
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test2": "node2",
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Even though the node name matches a valid node, if the node has already
+			// matched a previous spec, then this spec will not be used by that node.
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "k8s-node-2",
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Even though the labels match a valid node, if the node has already
+			// matched a previous spec, then this spec will not be used by that node.
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Selector with node name that does not exist. No pod should
+			// be deployed with this configuration
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "non-existent-node",
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Selector with requirements that do not match any node. No pod
+			// should be deployed with this configuration
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "not-matching-label",
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+		{
+			// Selector with invalid requirements. No pod should be
+			// deployed with this configuration
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "test",
+							Operator: "InvalidOperator",
+						},
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: stringSlicePtr([]string{"unused"}),
+			},
+		},
+	}
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	// Kubernetes node with resources to create a pod
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode1.Labels = map[string]string{
+		"test": "node1",
+	}
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
+	k8sNode2.Labels = map[string]string{
+		"test":  "node2",
+		"test2": "node2",
+	}
+	k8sNode3 := createK8sNode("k8s-node-3", 1)
+
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	expectedPodSpec := v1.PodSpec{
+		Containers: []v1.Container{{Name: "test"}},
+	}
+	addOrUpdateStoragePodTolerations(&expectedPodSpec)
+	expectedPodTemplate := &v1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				labelKeyName:       cluster.Name,
+				labelKeyDriverName: driverName,
+			},
+		},
+		Spec: expectedPodSpec,
+	}
+	expectedPodTemplates := []v1.PodTemplateSpec{
+		*expectedPodTemplate,
+		*expectedPodTemplate.DeepCopy(),
+		*expectedPodTemplate.DeepCopy(),
+	}
+
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
+		Do(func(c *corev1alpha1.StorageCluster) {
+			hash := computeHash(&c.Spec, nil)
+			expectedPodTemplates[0].Labels[defaultStorageClusterUniqueLabelKey] = hash
+			expectedPodTemplates[1].Labels[defaultStorageClusterUniqueLabelKey] = hash
+			expectedPodTemplates[2].Labels[defaultStorageClusterUniqueLabelKey] = hash
+		})
+	gomock.InOrder(
+		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
+			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
+				nodeLabels, _ := json.Marshal(k8sNode1.Labels)
+				expectedPodTemplates[0].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
+				return expectedPodSpec, nil
+			}).
+			Times(1),
+		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-2").
+			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+				require.Nil(t, cluster.Spec.Nodes[1].Storage)
+				nodeLabels, _ := json.Marshal(k8sNode2.Labels)
+				expectedPodTemplates[1].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
+				return expectedPodSpec, nil
+			}).
+			Times(1),
+		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-3").
+			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+				require.Equal(t, cluster.Spec.Storage, c.Spec.Storage)
+				return expectedPodSpec, nil
+			}).
+			Times(1),
+	)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Verify there is no event raised
+	require.Empty(t, recorder.Events)
+
+	// Verify there is one revision for the new StorageCluster object
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+
+	// Verify a pod is created for the given node with correct owner ref
+	require.Len(t, podControl.Templates, 3)
+	require.ElementsMatch(t, expectedPodTemplates, podControl.Templates)
+	require.Len(t, podControl.ControllerRefs, 3)
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[2])
 }
 
 func TestFailedStoragePodsGetRemoved(t *testing.T) {
@@ -956,6 +1186,23 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchFields: []v1.NodeSelectorRequirement{
+							{
+								Key:      schedulerapi.NodeFieldSelectorKeyNodeName,
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"k8s-node-1", "k8s-node-2"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 	storageLabels := map[string]string{
 		labelKeyName:       cluster.Name,
 		labelKeyDriverName: driverName,
@@ -974,29 +1221,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
-	podSpec := v1.PodSpec{
-		NodeSelector: map[string]string{
-			"test": "node2",
-		},
-		Affinity: &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
-						{
-							MatchFields: []v1.NodeSelectorRequirement{
-								{
-									Key:      schedulerapi.NodeFieldSelectorKeyNodeName,
-									Operator: v1.NodeSelectorOpIn,
-									Values:   []string{"k8s-node-1"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1046,20 +1271,31 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
 
-func TestStoragePodFailureDueToPodNotFitsHostPorts(t *testing.T) {
+func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll: &useAllDevices,
 	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "k8s-node-1",
+			},
+		},
+	}
+
+	// Kubernetes node with resources to create a pod
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
 
 	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
@@ -1070,45 +1306,14 @@ func TestStoragePodFailureDueToPodNotFitsHostPorts(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
-	podSpec := v1.PodSpec{
-		Containers: []v1.Container{
-			{
-				Ports: []v1.ContainerPort{{HostPort: int32(10001)}},
-			},
-		},
-	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
-
-	// This will create a revision which we will map to our pre-created pods
-	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
-	require.NoError(t, err)
-
-	// Kubernetes node with enough resources to create new pods
-	k8sNode1 := createK8sNode("k8s-node-1", 10)
-	k8sNode2 := createK8sNode("k8s-node-2", 10)
-
-	// Pods that are already running on the k8s nodes with same hash
-	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
-	runningPod := createStoragePod(cluster, "running-pod", k8sNode1.Name, storageLabels)
-	// Create a pod that uses the same ports as our storage pod
-	conflictingPod := createStoragePod(cluster, "conflicting-pod", k8sNode2.Name, nil)
-	conflictingPod.OwnerReferences = nil
-	conflictingPod.Spec.Containers = []v1.Container{
-		{
-			Ports: []v1.ContainerPort{{HostPort: int32(10001)}},
-		},
-	}
-
-	k8sClient.Create(context.TODO(), k8sNode1)
-	k8sClient.Create(context.TODO(), k8sNode2)
-	k8sClient.Create(context.TODO(), runningPod)
-	k8sClient.Create(context.TODO(), conflictingPod)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
+		Return(v1.PodSpec{}, fmt.Errorf("pod template error for k8s-node-1")).
+		Times(1)
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -1117,114 +1322,37 @@ func TestStoragePodFailureDueToPodNotFitsHostPorts(t *testing.T) {
 		},
 	}
 	result, err := controller.Reconcile(request)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "pod template error for k8s-node-1")
 	require.Empty(t, result)
 
-	// No need to raise events if pod couldn't fit hosts due to ports.
-	// Verify no pod is created due to port conflict on node2. Also pod from node1
-	// should get removed due to port conflict
-	require.Empty(t, recorder.Events)
-	require.Empty(t, podControl.Templates)
-	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
-}
+	// Verify there is event raised for failure to create pod templates for node spec
+	require.Len(t, recorder.Events, 1)
+	eventMsg := <-recorder.Events
+	require.Contains(t, eventMsg, fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
+	require.Contains(t, eventMsg, "pod template error for k8s-node-1")
 
-func TestStoragePodFailureDueToTaintsTolerationsNotMatch(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	driverName := "mock-driver"
-	cluster := createStorageCluster()
-	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
-	}
-
-	k8sVersion, _ := version.NewVersion("1.11.0")
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	podControl := &k8scontroller.FakePodControl{}
-	recorder := record.NewFakeRecorder(10)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).Times(5)
-
-	// This will create a revision which we will map to our pre-created pods
-	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
-	require.NoError(t, err)
-
-	// Kubernetes node with enough resources to create new pods
-	k8sNode1 := createK8sNode("k8s-node-1", 10)
-	k8sNode1.Spec.Taints = []v1.Taint{
-		{
-			Key:    "foo",
-			Value:  "bar",
-			Effect: v1.TaintEffectNoExecute,
-		},
-	}
-	k8sNode2 := createK8sNode("k8s-node-2", 10)
-	k8sNode2.Spec.Taints = []v1.Taint{
-		{
-			Key:    "foo",
-			Value:  "bar",
-			Effect: v1.TaintEffectNoSchedule,
-		},
-	}
-
-	// Pods that are already running on the k8s nodes with same hash
-	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
-	runningPod := createStoragePod(cluster, "running-pod", k8sNode1.Name, storageLabels)
-
-	k8sClient.Create(context.TODO(), k8sNode1)
-	k8sClient.Create(context.TODO(), k8sNode2)
-	k8sClient.Create(context.TODO(), runningPod)
-
-	request := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-	}
-	result, err := controller.Reconcile(request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-
-	// No need to raise events if pod cannot be scheduled due to node taints.
-	// Verify no pod is created due to node taints. Also existing pod should
-	// be removed if taint is NoExecute
-	require.Empty(t, recorder.Events)
-	require.Empty(t, podControl.Templates)
-	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
-
-	// Pod should get scheduled if there are tolerations for node taints
-	podSpec := v1.PodSpec{
-		Tolerations: []v1.Toleration{
-			{
-				Key:    "foo",
-				Value:  "bar",
-				Effect: v1.TaintEffectNoSchedule,
-			},
-		},
-	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(podSpec, nil).Times(4)
+	// When pod template creation passes for some and fails for others
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
+		Return(v1.PodSpec{}, nil).
+		Times(1)
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-2").
+		Return(v1.PodSpec{}, fmt.Errorf("pod template error for k8s-node-2")).
+		Times(1)
 
 	result, err = controller.Reconcile(request)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "pod template error for k8s-node-2")
 	require.Empty(t, result)
 
-	require.Empty(t, recorder.Events)
-	require.Len(t, podControl.Templates, 1)
+	// Verify there is event raised for failure to create pod templates for node spec
+	require.Len(t, recorder.Events, 1)
+	eventMsg = <-recorder.Events
+	require.Contains(t, eventMsg, fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
+	require.Contains(t, eventMsg, "pod template error for k8s-node-2")
 }
 
 func TestFailureDuringCreateDeletePods(t *testing.T) {
@@ -3240,6 +3368,287 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageClusterNodeSpec(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sNode.Labels = map[string]string{
+		"test":  "foo",
+		"extra": "label",
+	}
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	oldPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), oldPod)
+
+	// TestCase: Add node specific storage configuration.
+	// Should start that instead of cluster level configuration.
+	devices := []string{"dev1", "dev2"}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				Devices: &devices,
+			},
+		},
+		{
+			// Should ignore spec blocks if it has invalid label selectors
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "test",
+							Operator: "InvalidOperator",
+						},
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				ForceUseDisks: &useAllDevices,
+			},
+		},
+		{
+			Selector: corev1alpha1.NodeSelector{
+				NodeName: "k8s-node",
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				UseAllWithPartitions: &useAllDevices,
+			},
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated.
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change node specific storage configuration.
+	devices = append(devices, "spec3")
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs := &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change selector in node block such tha it still matches the same node.
+	// Should not restart the pod as the node level configuration is unchanged.
+	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["extra"] = "label"
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	// TestCase: Change selector in node block so it the block does not match
+	// the node. Start using configuration from another spec block that matches.
+	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["test"] = "bar"
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove node specific configuration.
+	// Should start using cluster level configuration.
+	cluster.Spec.Nodes = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+}
+
+func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	useAllDevices := true
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Selector: corev1alpha1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			Storage: &corev1alpha1.StorageSpec{
+				UseAll: &useAllDevices,
+			},
+		},
+	}
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sNode.Labels = map[string]string{
+		"test":  "foo",
+		"extra": "label",
+	}
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	oldPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	encodedNodeLabels, _ := json.Marshal(k8sNode.Labels)
+	oldPod.Annotations = map[string]string{annotationNodeLabels: string(encodedNodeLabels)}
+	k8sClient.Create(context.TODO(), oldPod)
+
+	// TestCase: Change node labels so that existing spec block does not match.
+	// Start using configuration from another spec block that matches.
+	k8sNode.Labels["test"] = "bar"
+	k8sClient.Update(context.TODO(), k8sNode)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated.
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove kubernetes nodes. The pod should be marked for deletion.
+	k8sClient.Delete(context.TODO(), k8sNode)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+}
+
 func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -4131,4 +4540,8 @@ func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 			},
 		},
 	}
+}
+
+func stringSlicePtr(slice []string) *[]string {
+	return &slice
 }

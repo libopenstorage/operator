@@ -466,14 +466,40 @@ func (c *Controller) isPodUpdated(
 	pod *v1.Pod,
 	hash string,
 ) bool {
+	node := &v1.Node{}
+	err := c.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name: pod.Spec.NodeName,
+		},
+		node,
+	)
+	if err != nil {
+		logrus.Warnf("Unable to get Kubernetes node %v for pod %v/%v. %v",
+			pod.Spec.NodeName, pod.Namespace, pod.Name, err)
+		return false
+	}
+
+	var oldNodeLabels map[string]string
+	if encodedLabels, exists := pod.Annotations[annotationNodeLabels]; exists {
+		if err := json.Unmarshal([]byte(encodedLabels), &oldNodeLabels); err != nil {
+			logrus.Warnf("Unable to decode old node labels stored on the pod. %v", err)
+		}
+	}
+	if oldNodeLabels == nil {
+		oldNodeLabels = node.Labels
+	}
+
 	podHash := pod.Labels[defaultStorageClusterUniqueLabelKey]
-	if len(hash) > 0 && podHash == hash {
+	// If the hash on pod is same as the current cluster's hash and node labels
+	// have not changed then there is no update needed for the pod.
+	if len(hash) > 0 && podHash == hash && reflect.DeepEqual(oldNodeLabels, node.Labels) {
 		return true
 	}
 
 	podHistory := &apps.ControllerRevision{}
 	podHistoryName := historyName(cluster.Name, podHash)
-	err := c.client.Get(
+	err = c.client.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      podHistoryName,
@@ -489,13 +515,118 @@ func (c *Controller) isPodUpdated(
 
 	logrus.Debugf("Checking if relevant fields in pod %v/%v have changed since %v",
 		pod.Namespace, pod.Name, podHash)
+
 	// If the selected fields match then the pods can be considered as updated
-	matched, err := matchSelectedFields(cluster, podHistory)
+	matched, err := matchSelectedFields(cluster, podHistory, node, oldNodeLabels)
 	if err != nil {
 		logrus.Warnf("Could not check the diff between current pod and latest spec. %v", err)
 		return false
 	}
 	return matched
+}
+
+// matchSelectedFields checks only whether certain fields in the spec have changed.
+// The pod does not need to restart on changes to fields like UpdateStrategy or
+// ImagePullPolicy. So only match fields that affect the storage pods.
+func matchSelectedFields(
+	cluster *corev1alpha1.StorageCluster,
+	history *apps.ControllerRevision,
+	node *v1.Node,
+	oldNodeLabels map[string]string,
+) (bool, error) {
+	var raw map[string]interface{}
+	err := json.Unmarshal(history.Data.Raw, &raw)
+	if err != nil {
+		return false, err
+	}
+
+	spec, ok := raw["spec"].(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+	delete(spec, "$patch")
+
+	rawHistory, err := json.Marshal(spec)
+	if err != nil {
+		return false, err
+	}
+
+	oldSpec := &corev1alpha1.StorageClusterSpec{}
+	err = json.Unmarshal(rawHistory, oldSpec)
+	if err != nil {
+		return false, err
+	}
+
+	oldNode := node.DeepCopy()
+	oldNode.Labels = oldNodeLabels
+	oldSpec = clusterSpecForNode(oldNode, oldSpec)
+	currentSpec := clusterSpecForNode(node, &cluster.Spec)
+
+	if oldSpec.Image != currentSpec.Image {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.Kvdb, currentSpec.Kvdb) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.CloudStorage, currentSpec.CloudStorage) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.SecretsProvider, currentSpec.SecretsProvider) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.StartPort, currentSpec.StartPort) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.FeatureGates, currentSpec.FeatureGates) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.CommonConfig, currentSpec.CommonConfig) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// clusterSpecForNode returns the corresponding StorageCluster spec for given node.
+// If there is node specific configuration in the cluster, it will merge it with
+// the top level cluster spec and return the updated cluster spec.
+func clusterSpecForNode(
+	node *v1.Node,
+	clusterSpec *corev1alpha1.StorageClusterSpec,
+) *corev1alpha1.StorageClusterSpec {
+	var (
+		nodeLabels       = labels.Set(node.Labels)
+		matchingNodeSpec *corev1alpha1.NodeSpec
+	)
+
+	for _, nodeSpec := range clusterSpec.Nodes {
+		if nodeSpec.Selector.NodeName == node.Name {
+			matchingNodeSpec = nodeSpec.DeepCopy()
+			break
+		} else if len(nodeSpec.Selector.NodeName) == 0 {
+			nodeSelector, err := metav1.LabelSelectorAsSelector(nodeSpec.Selector.LabelSelector)
+			if err != nil {
+				logrus.Warnf("Failed to parse label selector %#v: %v", nodeSpec.Selector.LabelSelector, err)
+				continue
+			}
+			if nodeSelector.Matches(nodeLabels) {
+				matchingNodeSpec = nodeSpec.DeepCopy()
+				break
+			}
+		}
+	}
+
+	newClusterSpec := clusterSpec.DeepCopy()
+	overwriteClusterSpecWithNodeSpec(newClusterSpec, matchingNodeSpec)
+	return newClusterSpec
+}
+
+// overwriteClusterSpecWithNodeSpec updates the input cluster spec configuration
+// with the given node spec. This makes it easy to have the complete node
+// configuration in one place at the cluster level.
+func overwriteClusterSpecWithNodeSpec(
+	clusterSpec *corev1alpha1.StorageClusterSpec,
+	nodeSpec *corev1alpha1.NodeSpec,
+) {
+	if nodeSpec == nil {
+		return
+	}
+	if nodeSpec.Storage != nil {
+		clusterSpec.Storage = nodeSpec.Storage.DeepCopy()
+	}
 }
 
 // splitByAvailablePods splits provided storage cluster pods by availability
@@ -534,54 +665,6 @@ func match(
 		return false, err
 	}
 	return bytes.Equal(patch, history.Data.Raw), nil
-}
-
-// matchSelectedFields checks only whether certain fields in the spec have changed.
-// The pod does not need to restart on changes to fields like UpdateStrategy or
-// ImagePullPolicy. So only match fields that affect the storage pods.
-func matchSelectedFields(
-	cluster *corev1alpha1.StorageCluster,
-	history *apps.ControllerRevision,
-) (bool, error) {
-	var raw map[string]interface{}
-	err := json.Unmarshal(history.Data.Raw, &raw)
-	if err != nil {
-		return false, err
-	}
-
-	spec, ok := raw["spec"].(map[string]interface{})
-	if !ok {
-		return false, nil
-	}
-	delete(spec, "$patch")
-
-	rawHistory, err := json.Marshal(spec)
-	if err != nil {
-		return false, err
-	}
-
-	oldSpec := &corev1alpha1.StorageClusterSpec{}
-	err = json.Unmarshal(rawHistory, oldSpec)
-	if err != nil {
-		return false, err
-	}
-
-	if oldSpec.Image != cluster.Spec.Image {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.Kvdb, cluster.Spec.Kvdb) {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.CloudStorage, cluster.Spec.CloudStorage) {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.SecretsProvider, cluster.Spec.SecretsProvider) {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.StartPort, cluster.Spec.StartPort) {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.FeatureGates, cluster.Spec.FeatureGates) {
-		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.CommonConfig, cluster.Spec.CommonConfig) {
-		return false, nil
-	}
-	return true, nil
 }
 
 // getPatch returns a strategic merge patch that can be applied to restore a StorageCluster

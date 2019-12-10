@@ -161,6 +161,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		}
 	}
 
+	setNodeSpecDefaults(toUpdate)
+
 	if toUpdate.Spec.Placement == nil || toUpdate.Spec.Placement.NodeAffinity == nil {
 		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
 			NodeAffinity: &v1.NodeAffinity{
@@ -650,6 +652,42 @@ func defaultPortworxImageVersion(releases *manifest.ReleaseManifest) string {
 		return releases.DefaultRelease
 	}
 	return defaultPortworxVersion
+}
+
+func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
+	if len(toUpdate.Spec.Nodes) == 0 {
+		return
+	}
+
+	updatedNodeSpecs := make([]corev1alpha1.NodeSpec, 0)
+	for _, nodeSpec := range toUpdate.Spec.Nodes {
+		nodeSpecCopy := nodeSpec.DeepCopy()
+		if nodeSpec.Storage == nil {
+			nodeSpecCopy.Storage = toUpdate.Spec.Storage.DeepCopy()
+		} else if toUpdate.Spec.Storage != nil {
+			if nodeSpecCopy.Storage.UseAll == nil && toUpdate.Spec.Storage.UseAll != nil {
+				nodeSpecCopy.Storage.UseAll = boolPtr(*toUpdate.Spec.Storage.UseAll)
+			}
+			if nodeSpecCopy.Storage.UseAllWithPartitions == nil && toUpdate.Spec.Storage.UseAllWithPartitions != nil {
+				nodeSpecCopy.Storage.UseAllWithPartitions = boolPtr(*toUpdate.Spec.Storage.UseAllWithPartitions)
+			}
+			if nodeSpecCopy.Storage.ForceUseDisks == nil && toUpdate.Spec.Storage.ForceUseDisks != nil {
+				nodeSpecCopy.Storage.ForceUseDisks = boolPtr(*toUpdate.Spec.Storage.ForceUseDisks)
+			}
+			if nodeSpecCopy.Storage.Devices == nil && toUpdate.Spec.Storage.Devices != nil {
+				devices := append(make([]string, 0), *toUpdate.Spec.Storage.Devices...)
+				nodeSpecCopy.Storage.Devices = &devices
+			}
+			if nodeSpecCopy.Storage.JournalDevice == nil && toUpdate.Spec.Storage.JournalDevice != nil {
+				nodeSpecCopy.Storage.JournalDevice = stringPtr(*toUpdate.Spec.Storage.JournalDevice)
+			}
+			if nodeSpecCopy.Storage.SystemMdDevice == nil && toUpdate.Spec.Storage.SystemMdDevice != nil {
+				nodeSpecCopy.Storage.SystemMdDevice = stringPtr(*toUpdate.Spec.Storage.SystemMdDevice)
+			}
+		}
+		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
+	}
+	toUpdate.Spec.Nodes = updatedNodeSpecs
 }
 
 func init() {

@@ -19,6 +19,7 @@ package storagecluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path"
 	"reflect"
@@ -70,6 +71,7 @@ const (
 	operatorPrefix                      = "operator.libopenstorage.org"
 	labelKeyName                        = operatorPrefix + "/name"
 	labelKeyDriverName                  = operatorPrefix + "/driver"
+	annotationNodeLabels                = operatorPrefix + "/node-labels"
 	deleteFinalizerName                 = operatorPrefix + "/delete"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
@@ -547,26 +549,21 @@ func (c *Controller) syncNodes(
 	podsToDelete, nodesNeedingStoragePods []string,
 	hash string,
 ) error {
+	nodesNeedingStoragePods, podTemplates, err := c.podTemplatesForNodes(cluster, nodesNeedingStoragePods, hash)
+	if err != nil {
+		return err
+	}
+
 	createDiff := len(nodesNeedingStoragePods)
 	deleteDiff := len(podsToDelete)
 
 	// Error channel to communicate back failures
 	// Make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
+	createWait := sync.WaitGroup{}
 
-	var podTemplate v1.PodTemplateSpec
-	var err error
-
-	if createDiff > 0 {
-		podTemplate, err = c.createPodTemplate(cluster, hash)
-		if err != nil {
-			return err
-		}
-	}
 	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
-
-	createWait := sync.WaitGroup{}
 
 	// Batch the pod creates. Batch sizes start at slowStartInitialBatchSize
 	// and double with each successful iteration in a kind of "slow start".
@@ -586,7 +583,7 @@ func (c *Controller) syncNodes(
 				err := c.podControl.CreatePodsOnNode(
 					nodesNeedingStoragePods[idx],
 					cluster.Namespace,
-					&podTemplate,
+					podTemplates[idx],
 					cluster,
 					metav1.NewControllerRef(cluster, controllerKind),
 				)
@@ -641,6 +638,120 @@ func (c *Controller) syncNodes(
 		errors = append(errors, err)
 	}
 	return utilerrors.NewAggregate(errors)
+}
+
+// podTemplatesForNodes returns a list storage pod templates for given list of
+// nodes where a storage pod needs to be created.
+func (c *Controller) podTemplatesForNodes(
+	cluster *corev1alpha1.StorageCluster,
+	nodesNeedingStoragePods []string,
+	hash string,
+) ([]string, []*v1.PodTemplateSpec, error) {
+	nodeList := &v1.NodeList{}
+	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	remainingNodes := make(map[string]*v1.Node)
+	for _, nodeName := range nodesNeedingStoragePods {
+		for _, node := range nodeList.Items {
+			if node.Name == nodeName {
+				remainingNodes[nodeName] = node.DeepCopy()
+				break
+			}
+		}
+	}
+
+	podTemplates := make([]*v1.PodTemplateSpec, 0)
+	nodesNeedingStoragePods = make([]string, 0)
+
+	for _, nodeSpec := range cluster.Spec.Nodes {
+		if len(remainingNodes) == 0 {
+			break
+		}
+
+		nodeGroup := make([]*v1.Node, 0)
+		// Group all nodes that match the current node spec
+		if nodeSpec.Selector.NodeName != "" {
+			if node, exists := remainingNodes[nodeSpec.Selector.NodeName]; exists {
+				nodeGroup = append(nodeGroup, node)
+			} else {
+				continue
+			}
+		} else {
+			nodeSelector, err := metav1.LabelSelectorAsSelector(nodeSpec.Selector.LabelSelector)
+			if err != nil {
+				logrus.Warnf("Failed to parse label selector %#v: %v", nodeSpec.Selector.LabelSelector, err)
+				continue
+			}
+			for _, node := range remainingNodes {
+				if nodeSelector.Matches(labels.Set(node.Labels)) {
+					nodeGroup = append(nodeGroup, node)
+				}
+			}
+		}
+
+		if len(nodeGroup) > 0 {
+			// Create a cluster spec where all node configuration is copied at the cluster
+			// level. As a result, the storage driver can just use the cluster spec to create
+			// a pod template for this node group. All nodes in a group will have the same
+			// configuration as they come from the same matching node spec.
+			clusterForNodeGroup := cluster.DeepCopy()
+			overwriteClusterSpecWithNodeSpec(&clusterForNodeGroup.Spec, nodeSpec.DeepCopy())
+
+			if err := c.createPodTemplateForNodeGroup(
+				clusterForNodeGroup, nodeGroup,
+				&nodesNeedingStoragePods, &podTemplates,
+				remainingNodes, hash,
+			); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	// If there are nodes that do not match any of the node specs, then create pod
+	// templates for those using just the cluster level configuration.
+	if len(remainingNodes) > 0 {
+		nodeGroup := make([]*v1.Node, 0)
+		for _, node := range remainingNodes {
+			nodeGroup = append(nodeGroup, node)
+		}
+
+		if err := c.createPodTemplateForNodeGroup(
+			cluster, nodeGroup,
+			&nodesNeedingStoragePods, &podTemplates,
+			remainingNodes, hash,
+		); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return nodesNeedingStoragePods, podTemplates, nil
+}
+
+// createPodTemplateForNodeGroup creates pod templates for the given list of nodes.
+// It creates a single pod template and makes a deep copy for each node so it is easier
+// during pod creation.
+func (c *Controller) createPodTemplateForNodeGroup(
+	cluster *corev1alpha1.StorageCluster,
+	nodeGroup []*v1.Node,
+	nodesNeedingStoragePods *[]string,
+	podTemplates *[]*v1.PodTemplateSpec,
+	remainingNodes map[string]*v1.Node,
+	hash string,
+) error {
+	podTemplate, err := c.createPodTemplate(cluster, nodeGroup[0], hash)
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodeGroup {
+		*nodesNeedingStoragePods = append(*nodesNeedingStoragePods, node.Name)
+		*podTemplates = append(*podTemplates, podTemplate.DeepCopy())
+		delete(remainingNodes, node.Name)
+	}
+	return nil
 }
 
 func (c *Controller) podsShouldBeOnNode(
@@ -703,7 +814,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
-	newPod, err := c.newPod(cluster, node.Name)
+	newPod, err := c.newSimulationPod(cluster, node.Name)
 	if err != nil {
 		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
 		return false, false, false, err
@@ -792,39 +903,59 @@ func (c *Controller) nodeShouldRunStoragePod(
 
 func (c *Controller) createPodTemplate(
 	cluster *corev1alpha1.StorageCluster,
+	node *v1.Node,
 	hash string,
 ) (v1.PodTemplateSpec, error) {
-	pod, err := c.newPod(cluster, "")
+	podSpec, err := c.Driver.GetStoragePodSpec(cluster, node.Name)
 	if err != nil {
 		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
 	}
+	addOrUpdateStoragePodTolerations(&podSpec)
+
 	newTemplate := v1.PodTemplateSpec{
-		ObjectMeta: pod.ObjectMeta,
-		Spec:       pod.Spec,
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: cluster.Namespace,
+			Labels:    c.storageClusterSelectorLabels(cluster),
+		},
+		Spec: podSpec,
 	}
 
+	if len(node.Labels) > 0 {
+		encodedNodeLabels, err := json.Marshal(node.Labels)
+		if err != nil {
+			return v1.PodTemplateSpec{}, fmt.Errorf("failed to encode node labels")
+		}
+		newTemplate.Annotations = map[string]string{annotationNodeLabels: string(encodedNodeLabels)}
+	}
 	if len(hash) > 0 {
-		newTemplate.ObjectMeta.Labels[defaultStorageClusterUniqueLabelKey] = hash
+		newTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
 	}
 	return newTemplate, nil
 }
 
-func (c *Controller) newPod(cluster *corev1alpha1.StorageCluster, nodeName string) (*v1.Pod, error) {
-	podSpec, err := c.Driver.GetStoragePodSpec(cluster, nodeName)
-	if err != nil {
-		return nil, err
-	}
+func (c *Controller) newSimulationPod(
+	cluster *corev1alpha1.StorageCluster,
+	nodeName string,
+) (*v1.Pod, error) {
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
 			Labels:    c.storageClusterSelectorLabels(cluster),
 		},
-		// TODO: add node specific spec here for heterogeneous config
-		Spec: podSpec,
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
 	}
-	newPod.Spec.NodeName = nodeName
+
+	// TODO: Add tolerations to the pod spec when StorageCluster supports it
+	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
+		newPod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+		}
+	}
+
 	// Add default tolerations for StorageCluster pods
-	addOrUpdateStoragePodTolerations(newPod)
+	addOrUpdateStoragePodTolerations(&newPod.Spec)
 	return newPod, nil
 }
 
