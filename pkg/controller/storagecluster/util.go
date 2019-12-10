@@ -15,11 +15,11 @@ import (
 )
 
 // TODO: make the storage cluster pod a critical pod to guarantee scheduling
-func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
+func addOrUpdateStoragePodTolerations(podSpec *v1.PodSpec) {
 	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
 	// Add infinite toleration for taint notReady:NoExecute here to survive taint-based
 	// eviction enforced by NodeController when node turns not ready.
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeNotReady,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoExecute,
@@ -28,7 +28,7 @@ func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
 	// StorageCluster pods shouldn't be deleted by NodeController in case of node problems.
 	// Add infinite toleration for taint unreachable:NoExecute here to survive taint-based
 	// eviction enforced by NodeController when node turns unreachable.
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeUnreachable,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoExecute,
@@ -36,31 +36,31 @@ func addOrUpdateStoragePodTolerations(pod *v1.Pod) {
 
 	// All StorageCluster pods should tolerate MemoryPressure, DiskPressure, Unschedulable
 	// and NetworkUnavailable and OutOfDisk taints.
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeDiskPressure,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
 	})
 
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeMemoryPressure,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
 	})
 
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodePIDPressure,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
 	})
 
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeUnschedulable,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,
 	})
 
-	v1helper.AddOrUpdateTolerationInPod(pod, &v1.Toleration{
+	v1helper.AddOrUpdateTolerationInPodSpec(podSpec, &v1.Toleration{
 		Key:      schedapi.TaintNodeNetworkUnavailable,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoSchedule,

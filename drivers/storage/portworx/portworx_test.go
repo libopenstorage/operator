@@ -524,6 +524,103 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, defaultStorkImage, cluster.Spec.Stork.Image)
 }
 
+func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
+	manifestSetup()
+	defer manifestCleanup()
+
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Node specs should be nil if already nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Nodes)
+
+	// Node specs should be empty if already empty
+	cluster.Spec.Nodes = make([]corev1alpha1.NodeSpec, 0)
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Len(t, cluster.Spec.Nodes, 0)
+
+	// Empty storage spec at node level should copy spec from cluster level
+	// - If cluster level config is empty, we should use the default storage config
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{{}}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, &corev1alpha1.StorageSpec{UseAll: boolPtr(true)}, cluster.Spec.Nodes[0].Storage)
+
+	// - If cluster level config is not empty, use it as is
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{{}}
+	clusterStorageSpec := &corev1alpha1.StorageSpec{
+		UseAllWithPartitions: boolPtr(true),
+	}
+	cluster.Spec.Storage = clusterStorageSpec.DeepCopy()
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, clusterStorageSpec, cluster.Spec.Nodes[0].Storage)
+
+	// Do not set node spec storage fields if not set at the cluster level
+	cluster.Spec.Storage = nil
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.JournalDevice)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+
+	// Set node spec storage fields from cluster storage spec, if empty at node level
+	clusterDevices := []string{"dev1", "dev2"}
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll:               boolPtr(true),
+		UseAllWithPartitions: boolPtr(true),
+		Devices:              &clusterDevices,
+		ForceUseDisks:        boolPtr(true),
+		JournalDevice:        stringPtr("journal"),
+		SystemMdDevice:       stringPtr("metadata"),
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.ElementsMatch(t, clusterDevices, *cluster.Spec.Nodes[0].Storage.Devices)
+	require.Equal(t, "journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
+	require.Equal(t, "metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+
+	// Set node spec storage fields from cluster storage spec, if empty at node level
+	nodeDevices := []string{"node-dev1", "node-dev2"}
+	cluster.Spec.Nodes[0].Storage = &corev1alpha1.StorageSpec{
+		UseAll:               boolPtr(false),
+		UseAllWithPartitions: boolPtr(false),
+		Devices:              &nodeDevices,
+		ForceUseDisks:        boolPtr(false),
+		JournalDevice:        stringPtr("node-journal"),
+		SystemMdDevice:       stringPtr("node-metadata"),
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAll)
+	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.False(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.ElementsMatch(t, nodeDevices, *cluster.Spec.Nodes[0].Storage.Devices)
+	require.Equal(t, "node-journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
+	require.Equal(t, "node-metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+}
+
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()

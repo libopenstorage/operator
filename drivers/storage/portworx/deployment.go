@@ -14,6 +14,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -317,7 +318,6 @@ func (p *portworx) GetStoragePodSpec(
 	}
 
 	if cluster.Spec.CloudStorage != nil && len(cluster.Spec.CloudStorage.CapacitySpecs) > 0 {
-
 		nodes, err := p.storageNodesList(cluster)
 		if err != nil {
 			return v1.PodSpec{}, err
@@ -388,7 +388,7 @@ func (p *portworx) createStorageNode(cluster *corev1alpha1.StorageCluster, nodeN
 	configureStorageNodeSpec(storageNode, cloudConfig)
 	if cluster.Status.Storage.StorageNodesPerZone != cloudConfig.StorageInstancesPerZone {
 		cluster.Status.Storage.StorageNodesPerZone = cloudConfig.StorageInstancesPerZone
-		err := p.k8sClient.Status().Update(context.TODO(), cluster)
+		err := k8sutil.UpdateStorageClusterStatus(p.k8sClient, cluster)
 		if err != nil {
 			return err
 		}
