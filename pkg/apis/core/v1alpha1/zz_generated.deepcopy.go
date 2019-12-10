@@ -354,12 +354,11 @@ func (in *NodeSelector) DeepCopy() *NodeSelector {
 func (in *NodeSpec) DeepCopyInto(out *NodeSpec) {
 	*out = *in
 	in.Selector.DeepCopyInto(&out.Selector)
-	if in.Geo != nil {
-		in, out := &in.Geo, &out.Geo
-		*out = new(Geography)
-		**out = **in
+	if in.Storage != nil {
+		in, out := &in.Storage, &out.Storage
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
 	}
-	in.CommonConfig.DeepCopyInto(&out.CommonConfig)
 	return
 }
 
@@ -602,6 +601,13 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		in, out := &in.Monitoring, &out.Monitoring
 		*out = new(MonitoringSpec)
 		**out = **in
+	}
+	if in.Nodes != nil {
+		in, out := &in.Nodes, &out.Nodes
+		*out = make([]NodeSpec, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	return
 }

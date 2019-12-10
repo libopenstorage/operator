@@ -611,6 +611,83 @@ spec:
                             type: string
                           optional:
                             type: boolean
+            nodes:
+              type: array
+              description: Node level configurations that will override the configuration at cluster level.
+                These configurations can be for individual nodes or can be grouped to override configuration
+                of multiple nodes based on label selectors.
+              items:
+                type: object
+                properties:
+                  selector:
+                    type: object
+                    description: Configuration in this node block is applied to nodes based on this selector.
+                      Use either nodeName of labelSelector, not both. If nodeName is used, labelSelector will
+                      be ignored.
+                    properties:
+                      nodeName:
+                        type: string
+                        description: Name of the Kubernetes node that is to be selected. If present then the
+                          labelSelector is ignored even if the node with the given name is absent and the
+                          labelSelector matches another node.
+                      labelSelector:
+                        type: object
+                        description: It is a label query over all the nodes. The result of matchLabels and
+                          matchExpressions is ANDed. An empty label selector matches all nodes. A null
+                          label selector matches no objects.
+                        properties:
+                          matchLabels:
+                            type: object
+                            description: It is a map of key-value pairs. A single key-value in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          matchExpressions:
+                            type: array
+                            description: It is a list of label selector requirements. The requirements are ANDed.
+                            items:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                  description: It is the label key that the selector applies to.
+                                operator:
+                                  type: string
+                                  description: "It represents a key's relationship to a set of values. Valid operators
+                                    are In, NotIn, Exists and DoesNotExist."
+                                values:
+                                  type: array
+                                  description: It is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty.
+                                  items:
+                                    type: string
+                  storage:
+                    type: object
+                    description: Details of the storage used by the storage driver.
+                    properties:
+                      useAll:
+                        type: boolean
+                        description: Use all available, unformatted, unpartitioned devices. This will be
+                          ignored if spec.storage.devices is not empty.
+                      useAllWithPartitions:
+                        type: boolean
+                        description: Use all available unformatted devices. This will be
+                          ignored if spec.storage.devices is not empty.
+                      forceUseDisks:
+                        type: boolean
+                        description: Flag indicating to use the devices even if there is file system present
+                          on it. Note that the devices may be wiped before using.
+                      devices:
+                        type: array
+                        description: List of devices to be used by the storage driver.
+                        items:
+                          type: string
+                      journalDevice:
+                        type: string
+                        description: Device used for journaling.
+                      systemMetadataDevice:
+                        type: string
+                        description: Device that will be used to store system metadata by the driver.
         status:
           type: object
           description: Most recently observed status of the storage cluster. This data may not be up to date.
