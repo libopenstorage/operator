@@ -90,7 +90,7 @@ type StorageClusterSpec struct {
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
-	// Nodes []NodeSpec `json:"nodes"`
+	Nodes []NodeSpec `json:"nodes,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -100,10 +100,8 @@ type NodeSpec struct {
 	// Selector rest of the attributes are applied to a node that matches
 	// the selector
 	Selector NodeSelector `json:"selector,omitempty"`
-	// Geo is topology information for the node
-	Geo *Geography `json:"geography,omitempty"`
-	// CommonConfig that is present at both cluster and node level
-	CommonConfig
+	// Storage details of storage used by the driver
+	Storage *StorageSpec `json:"storage,omitempty"`
 }
 
 // CommonConfig are common configurations that are exposed at both
