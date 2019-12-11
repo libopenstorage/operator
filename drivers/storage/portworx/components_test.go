@@ -3259,11 +3259,11 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3276,7 +3276,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 
 	// Change attacher image
@@ -3302,7 +3302,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3315,7 +3315,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	deployment.Spec.Template.Spec.Containers[2].Image = "my-csi-resizer:test"
@@ -3327,7 +3327,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
@@ -3364,7 +3364,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
@@ -3379,7 +3379,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
 
 	// Change attacher image
@@ -3429,7 +3429,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulSet, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
@@ -3455,7 +3455,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=endpoints",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
@@ -3463,7 +3463,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[4])
@@ -3485,15 +3485,15 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.3.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[1].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
@@ -3534,7 +3534,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.3.0-1",
+		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
@@ -3542,7 +3542,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -3557,7 +3557,7 @@ func TestCSIInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-resizer:v0.2.0-1",
+		customRegistry+"/quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
@@ -3599,7 +3599,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.3.0-1",
+		customRepo+"/csi-provisioner:v1.4.0-1",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
@@ -3607,7 +3607,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.0-1",
+		customRepo+"/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -3622,7 +3622,7 @@ func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/csi-resizer:v0.2.0-1",
+		customRepo+"/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }

@@ -155,9 +155,9 @@ func (g *csiGenerator) setSidecarContainerVersionsV1_0() *csiVersions {
 	return &csiVersions{
 		attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		nodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
-		provisioner:   "quay.io/openstorage/csi-provisioner:v1.3.0-1",
-		snapshotter:   "quay.io/openstorage/csi-snapshotter:v1.2.0-1",
-		resizer:       "quay.io/openstorage/csi-resizer:v0.2.0-1",
+		provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		snapshotter:   "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
 		// Single registrar has been deprecated
 		registrar: "",
 		// Deployments are support in 1.x
@@ -170,7 +170,7 @@ func (g *csiGenerator) setSidecarContainerVersionsV0_4() *csiVersions {
 	c := &csiVersions{
 		attacher:    "quay.io/k8scsi/csi-attacher:v0.4.2",
 		registrar:   "quay.io/k8scsi/driver-registrar:v0.4.2",
-		provisioner: "quay.io/k8scsi/csi-provisioner:v0.4.2",
+		provisioner: "quay.io/k8scsi/csi-provisioner:v0.4.3",
 		snapshotter: "",
 		// no split driver registrars. These are for Csi 1.0 in Kube 1.13+
 		nodeRegistrar: "",
