@@ -580,10 +580,12 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.SystemMdDevice)
 
 	// Set node spec storage fields from cluster storage spec, if empty at node level
+	// If devices is set, then no need to set UseAll and UseAllWithPartitions as it
+	// does not matter.
 	clusterDevices := []string{"dev1", "dev2"}
 	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
-		UseAll:               boolPtr(true),
-		UseAllWithPartitions: boolPtr(true),
+		UseAll:               boolPtr(false),
+		UseAllWithPartitions: boolPtr(false),
 		Devices:              &clusterDevices,
 		ForceUseDisks:        boolPtr(true),
 		JournalDevice:        stringPtr("journal"),
@@ -595,14 +597,88 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
-	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
 	require.ElementsMatch(t, clusterDevices, *cluster.Spec.Nodes[0].Storage.Devices)
 	require.Equal(t, "journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
 
-	// Set node spec storage fields from cluster storage spec, if empty at node level
+	// If devices is set and empty, even then no need to set UseAll and UseAllWithPartitions,
+	// as devices take precedence over them.
+	clusterDevices = make([]string, 0)
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll:               boolPtr(true),
+		UseAllWithPartitions: boolPtr(true),
+		Devices:              &clusterDevices,
+		ForceUseDisks:        boolPtr(true),
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.ElementsMatch(t, clusterDevices, *cluster.Spec.Nodes[0].Storage.Devices)
+
+	// If cluster devices is nil, then set UseAllWithPartitions at node level
+	// if set at cluster level. Do not set UseAll as UseAllWithPartitions takes
+	// precedence over it.
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll:               boolPtr(true),
+		UseAllWithPartitions: boolPtr(true),
+		ForceUseDisks:        boolPtr(true),
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
+
+	// If cluster devices is nil and UseAllWithPartitions is false, then set UseAll
+	// at node level if set at cluster level.
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll:               boolPtr(true),
+		UseAllWithPartitions: boolPtr(false),
+		ForceUseDisks:        boolPtr(true),
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
+	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
+
+	// If cluster devices is nil and UseAllWithPartitions is nil, then set UseAll
+	// at node level if set at cluster level.
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		UseAll:        boolPtr(true),
+		ForceUseDisks: boolPtr(true),
+	}
+	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+		{
+			Storage: &corev1alpha1.StorageSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
+	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
+
+	// Should not overwrite storage spec from cluster level, if present at node level
 	nodeDevices := []string{"node-dev1", "node-dev2"}
 	cluster.Spec.Nodes[0].Storage = &corev1alpha1.StorageSpec{
 		UseAll:               boolPtr(false),
