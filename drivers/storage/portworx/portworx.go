@@ -665,18 +665,29 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 		if nodeSpec.Storage == nil {
 			nodeSpecCopy.Storage = toUpdate.Spec.Storage.DeepCopy()
 		} else if toUpdate.Spec.Storage != nil {
-			if nodeSpecCopy.Storage.UseAll == nil && toUpdate.Spec.Storage.UseAll != nil {
-				nodeSpecCopy.Storage.UseAll = boolPtr(*toUpdate.Spec.Storage.UseAll)
+			// Devices, UseAll and UseAllWithPartitions should be set exclusive of each other, if not already
+			// set by the user in the node spec.
+			if nodeSpecCopy.Storage.Devices == nil &&
+				(nodeSpecCopy.Storage.UseAll == nil || !*nodeSpecCopy.Storage.UseAll) &&
+				(nodeSpecCopy.Storage.UseAllWithPartitions == nil || !*nodeSpecCopy.Storage.UseAllWithPartitions) &&
+				toUpdate.Spec.Storage.Devices != nil {
+				devices := append(make([]string, 0), *toUpdate.Spec.Storage.Devices...)
+				nodeSpecCopy.Storage.Devices = &devices
 			}
-			if nodeSpecCopy.Storage.UseAllWithPartitions == nil && toUpdate.Spec.Storage.UseAllWithPartitions != nil {
+			if nodeSpecCopy.Storage.UseAllWithPartitions == nil &&
+				(nodeSpecCopy.Storage.UseAll == nil || !*nodeSpecCopy.Storage.UseAll) &&
+				nodeSpecCopy.Storage.Devices == nil &&
+				toUpdate.Spec.Storage.UseAllWithPartitions != nil {
 				nodeSpecCopy.Storage.UseAllWithPartitions = boolPtr(*toUpdate.Spec.Storage.UseAllWithPartitions)
+			}
+			if nodeSpecCopy.Storage.UseAll == nil &&
+				(nodeSpecCopy.Storage.UseAllWithPartitions == nil || !*nodeSpecCopy.Storage.UseAllWithPartitions) &&
+				nodeSpecCopy.Storage.Devices == nil &&
+				toUpdate.Spec.Storage.UseAll != nil {
+				nodeSpecCopy.Storage.UseAll = boolPtr(*toUpdate.Spec.Storage.UseAll)
 			}
 			if nodeSpecCopy.Storage.ForceUseDisks == nil && toUpdate.Spec.Storage.ForceUseDisks != nil {
 				nodeSpecCopy.Storage.ForceUseDisks = boolPtr(*toUpdate.Spec.Storage.ForceUseDisks)
-			}
-			if nodeSpecCopy.Storage.Devices == nil && toUpdate.Spec.Storage.Devices != nil {
-				devices := append(make([]string, 0), *toUpdate.Spec.Storage.Devices...)
-				nodeSpecCopy.Storage.Devices = &devices
 			}
 			if nodeSpecCopy.Storage.JournalDevice == nil && toUpdate.Spec.Storage.JournalDevice != nil {
 				nodeSpecCopy.Storage.JournalDevice = stringPtr(*toUpdate.Spec.Storage.JournalDevice)
