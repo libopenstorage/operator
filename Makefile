@@ -67,7 +67,7 @@ pretest: check-fmt lint vet staticcheck
 test:
 	echo "" > coverage.txt
 	for pkg in $(PKGS);	do \
-		go test -v -coverprofile=profile.out -covermode=atomic $${pkg} || exit 1; \
+		go test -v -coverprofile=profile.out -covermode=atomic -coverpkg=$${pkg}/... $${pkg} || exit 1; \
 		if [ -f profile.out ]; then \
 			cat profile.out >> coverage.txt; \
 			rm profile.out; \
