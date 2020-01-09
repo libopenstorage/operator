@@ -75,7 +75,9 @@ type StorageClusterSpec struct {
 	// FeatureGates are a set of key-value pairs that describe what experimental
 	// features need to be enabled
 	FeatureGates map[string]string `json:"featureGates,omitempty"`
-	// CommonConfig that is present at both cluster and node level
+	// CommonConfig contains specifications for storage, network, environment
+	// variables, etc for all the nodes in the cluster. These config options
+	// can be overriden using the CommonConfig in NodeSpec.
 	CommonConfig
 	// UserInterface contains details of a user interface for the storage driver
 	UserInterface *UserInterfaceSpec `json:"userInterface,omitempty"`
@@ -100,8 +102,9 @@ type NodeSpec struct {
 	// Selector rest of the attributes are applied to a node that matches
 	// the selector
 	Selector NodeSelector `json:"selector,omitempty"`
-	// Storage details of storage used by the driver
-	Storage *StorageSpec `json:"storage,omitempty"`
+	// CommonConfig contains storage, network and other configuration specific
+	// to the group of nodes. This will override the cluster-level configuration.
+	CommonConfig
 }
 
 // CommonConfig are common configurations that are exposed at both

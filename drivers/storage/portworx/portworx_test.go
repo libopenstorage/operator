@@ -569,7 +569,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	cluster.Spec.Storage = nil
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -594,7 +596,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -616,7 +620,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -635,7 +641,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -653,7 +661,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -670,7 +680,9 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
-			Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{},
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)

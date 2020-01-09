@@ -688,6 +688,73 @@ spec:
                       systemMetadataDevice:
                         type: string
                         description: Device that will be used to store system metadata by the driver.
+                  network:
+                    type: object
+                    description: Contains network information that is needed by the storage driver.
+                    properties:
+                      dataInterface:
+                        type: string
+                        description: Name of the network interface used by the storage driver for data traffic.
+                      mgmtInterface:
+                        type: string
+                        description: Name of the network interface used by the storage driver for
+                          management traffic.
+                  runtimeOptions:
+                    type: object
+                    description: This is map of any runtime options that need to be sent to the storage
+                      driver. The value is a string. If runtime options are present here at node level,
+                      they will override the ones from cluster configuration.
+                  env:
+                    type: array
+                    description: List of environment variables used by the driver. This is an array
+                      of Kubernetes EnvVar where the value can be given directly or from a source
+                      like field, config map or secret. Environment variables specified here at the
+                      node level will be merged with the ones present in cluster configuration and
+                      sent to the nodes. If there is duplicate, the node level value will take precedence.
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                        valueFrom:
+                          type: object
+                          properties:
+                            configMapKeyRef:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                name:
+                                  type: string
+                                optional:
+                                  type: boolean
+                            fieldRef:
+                              type: object
+                              properties:
+                                apiVersion:
+                                  type: string
+                                fieldPath:
+                                  type: string
+                            resourceFieldRef:
+                              type: object
+                              properties:
+                                containerName:
+                                  type: string
+                                divisor:
+                                  type: string
+                                resource:
+                                  type: string
+                            secretKeyRef:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                name:
+                                  type: string
+                                optional:
+                                  type: boolean
         status:
           type: object
           description: Most recently observed status of the storage cluster. This data may not be up to date.
