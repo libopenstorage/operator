@@ -354,11 +354,7 @@ func (in *NodeSelector) DeepCopy() *NodeSelector {
 func (in *NodeSpec) DeepCopyInto(out *NodeSpec) {
 	*out = *in
 	in.Selector.DeepCopyInto(&out.Selector)
-	if in.Storage != nil {
-		in, out := &in.Storage, &out.Storage
-		*out = new(StorageSpec)
-		(*in).DeepCopyInto(*out)
-	}
+	in.CommonConfig.DeepCopyInto(&out.CommonConfig)
 	return
 }
 

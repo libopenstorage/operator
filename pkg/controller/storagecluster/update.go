@@ -574,7 +574,13 @@ func matchSelectedFields(
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.FeatureGates, currentSpec.FeatureGates) {
 		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.CommonConfig, currentSpec.CommonConfig) {
+	} else if !reflect.DeepEqual(oldSpec.Network, currentSpec.Network) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.Storage, currentSpec.Storage) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.RuntimeOpts, currentSpec.RuntimeOpts) {
+		return false, nil
+	} else if !isEnvEqual(oldSpec.Env, currentSpec.Env) {
 		return false, nil
 	}
 	return true, nil
@@ -626,6 +632,28 @@ func overwriteClusterSpecWithNodeSpec(
 	}
 	if nodeSpec.Storage != nil {
 		clusterSpec.Storage = nodeSpec.Storage.DeepCopy()
+	}
+	if nodeSpec.Network != nil {
+		clusterSpec.Network = nodeSpec.Network.DeepCopy()
+	}
+	if len(nodeSpec.Env) > 0 {
+		envMap := make(map[string]*v1.EnvVar)
+		for _, clusterEnv := range clusterSpec.Env {
+			envMap[clusterEnv.Name] = clusterEnv.DeepCopy()
+		}
+		for _, nodeEnv := range nodeSpec.Env {
+			envMap[nodeEnv.Name] = nodeEnv.DeepCopy()
+		}
+		clusterSpec.Env = make([]v1.EnvVar, 0)
+		for _, env := range envMap {
+			clusterSpec.Env = append(clusterSpec.Env, *env)
+		}
+	}
+	if len(nodeSpec.RuntimeOpts) > 0 {
+		clusterSpec.RuntimeOpts = make(map[string]string)
+		for k, v := range nodeSpec.RuntimeOpts {
+			clusterSpec.RuntimeOpts[k] = v
+		}
 	}
 }
 

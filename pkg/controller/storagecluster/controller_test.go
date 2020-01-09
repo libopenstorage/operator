@@ -686,14 +686,51 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
 		UseAll: &useAllDevices,
 	}
+	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+		DataInterface: stringPtr("cluster_data_intf"),
+		MgmtInterface: stringPtr("cluster_mgmt_intf"),
+	}
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  "ENV_CLUSTER",
+			Value: "cluster_value",
+		},
+		{
+			Name:  "ENV_OVERRIDE",
+			Value: "override_cluster_value",
+		},
+	}
+	cluster.Spec.RuntimeOpts = map[string]string{
+		"cluster_rt_one": "rt_val_1",
+	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
 			// Match using node name
 			Selector: corev1alpha1.NodeSelector{
 				NodeName: "k8s-node-1",
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"dev1"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"dev1"}),
+				},
+				Network: &corev1alpha1.NetworkSpec{
+					DataInterface: stringPtr("dface"),
+					MgmtInterface: stringPtr("mface"),
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "ENV_NODE",
+						Value: "node_value",
+					},
+					{
+						Name:  "ENV_OVERRIDE",
+						Value: "override_node_value",
+					},
+				},
+				RuntimeOpts: map[string]string{
+					"rt_one": "rt_val_1",
+					"rt_two": "rt_val_2",
+				},
 			},
 		},
 		{
@@ -712,8 +749,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Selector: corev1alpha1.NodeSelector{
 				NodeName: "k8s-node-1",
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -726,8 +765,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -736,8 +777,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Selector: corev1alpha1.NodeSelector{
 				NodeName: "k8s-node-2",
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -750,8 +793,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -760,8 +805,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Selector: corev1alpha1.NodeSelector{
 				NodeName: "non-existent-node",
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -774,8 +821,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 		{
@@ -791,8 +840,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: stringSlicePtr([]string{"unused"}),
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: stringSlicePtr([]string{"unused"}),
+				},
 			},
 		},
 	}
@@ -859,6 +910,23 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
 			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
+				require.Equal(t, cluster.Spec.Nodes[0].Network, c.Spec.Network)
+				require.Equal(t, cluster.Spec.Nodes[0].RuntimeOpts, c.Spec.RuntimeOpts)
+				expectedEnv := []v1.EnvVar{
+					{
+						Name:  "ENV_CLUSTER",
+						Value: "cluster_value",
+					},
+					{
+						Name:  "ENV_OVERRIDE",
+						Value: "override_node_value",
+					},
+					{
+						Name:  "ENV_NODE",
+						Value: "node_value",
+					},
+				}
+				require.ElementsMatch(t, expectedEnv, c.Spec.Env)
 				nodeLabels, _ := json.Marshal(k8sNode1.Labels)
 				expectedPodTemplates[0].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
 				return expectedPodSpec, nil
@@ -866,7 +934,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Times(1),
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-2").
 			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
-				require.Nil(t, cluster.Spec.Nodes[1].Storage)
+				require.Empty(t, cluster.Spec.Nodes[1].CommonConfig, c.Spec.CommonConfig)
 				nodeLabels, _ := json.Marshal(k8sNode2.Labels)
 				expectedPodTemplates[1].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
 				return expectedPodSpec, nil
@@ -874,7 +942,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Times(1),
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-3").
 			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
-				require.Equal(t, cluster.Spec.Storage, c.Spec.Storage)
+				require.Equal(t, cluster.Spec.CommonConfig, c.Spec.CommonConfig)
 				return expectedPodSpec, nil
 			}).
 			Times(1),
@@ -3378,6 +3446,12 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
 		UseAll: &useAllDevices,
 	}
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  "CLUSTER_ENV",
+			Value: "cluster_value",
+		},
+	}
 	k8sVersion, _ := version.NewVersion("1.11.0")
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
@@ -3427,7 +3501,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	k8sClient.Create(context.TODO(), oldPod)
 
 	// TestCase: Add node specific storage configuration.
-	// Should start that instead of cluster level configuration.
+	// Should start with that instead of cluster level configuration.
 	devices := []string{"dev1", "dev2"}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
@@ -3438,8 +3512,27 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				Devices: &devices,
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					Devices: &devices,
+				},
+				Network: &corev1alpha1.NetworkSpec{
+					DataInterface: stringPtr("dface_1"),
+					MgmtInterface: stringPtr("mface_1"),
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "NODE_ENV",
+						Value: "node_value_1",
+					},
+					{
+						Name:  "COMMON_ENV",
+						Value: "node_value_1",
+					},
+				},
+				RuntimeOpts: map[string]string{
+					"node_rt_1": "node_rt_value_1",
+				},
 			},
 		},
 		{
@@ -3454,16 +3547,37 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				ForceUseDisks: &useAllDevices,
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					ForceUseDisks: &useAllDevices,
+				},
 			},
 		},
 		{
 			Selector: corev1alpha1.NodeSelector{
 				NodeName: "k8s-node",
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				UseAllWithPartitions: &useAllDevices,
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					UseAllWithPartitions: &useAllDevices,
+				},
+				Network: &corev1alpha1.NetworkSpec{
+					DataInterface: stringPtr("dface_2"),
+					MgmtInterface: stringPtr("mface_2"),
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "NODE_ENV",
+						Value: "node_value_2",
+					},
+					{
+						Name:  "COMMON_ENV",
+						Value: "node_value_2",
+					},
+				},
+				RuntimeOpts: map[string]string{
+					"node_rt_2": "node_rt_value_2",
+				},
 			},
 		},
 	}
@@ -3499,6 +3613,153 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change node specific network configuration.
+	cluster.Spec.Nodes[0].Network.DataInterface = stringPtr("new_data_interface")
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change existing runtime option in node specific configuration.
+	cluster.Spec.Nodes[0].RuntimeOpts["node_rt_1"] = "changed_value"
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add runtime option in node specific configuration.
+	cluster.Spec.Nodes[0].RuntimeOpts["new_rt_option"] = "new_value"
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change env var value in node specific configuration.
+	cluster.Spec.Nodes[0].Env[0].Value = "changed_value"
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add env var in node specific configuration.
+	cluster.Spec.Nodes[0].Env = append(cluster.Spec.Nodes[0].Env, v1.EnvVar{
+		Name:  "ADD_ENV",
+		Value: "newly_added_env",
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change env var value in cluster configuration.
+	cluster.Spec.Env[0].Value = "changed_cluster_value"
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add env var in cluster configuration.
+	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+		Name:  "ADD_CLUSTER_ENV",
+		Value: "newly_added_cluster_env",
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change env var value in cluster configuration which is already
+	// overridden in node level configuration. As nothing will be changed in the final
+	// spec, pod should not restart.
+	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+		Name:  "COMMON_ENV",
+		Value: "cluster_value",
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change selector in node block such tha it still matches the same node.
 	// Should not restart the pod as the node level configuration is unchanged.
@@ -3563,8 +3824,10 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 					},
 				},
 			},
-			Storage: &corev1alpha1.StorageSpec{
-				UseAll: &useAllDevices,
+			CommonConfig: corev1alpha1.CommonConfig{
+				Storage: &corev1alpha1.StorageSpec{
+					UseAll: &useAllDevices,
+				},
 			},
 		},
 	}
@@ -4544,4 +4807,8 @@ func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 
 func stringSlicePtr(slice []string) *[]string {
 	return &slice
+}
+
+func stringPtr(str string) *string {
+	return &str
 }

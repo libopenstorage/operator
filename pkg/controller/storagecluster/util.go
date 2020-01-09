@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"reflect"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
@@ -120,4 +121,32 @@ func removeDeleteFinalizer(finalizers []string) []string {
 		newFinalizers = append(newFinalizers, finalizer)
 	}
 	return newFinalizers
+}
+
+func isEnvEqual(listA, listB []v1.EnvVar) bool {
+	if len(listA) != len(listB) {
+		return false
+	}
+
+	aLen := len(listA)
+	bLen := len(listB)
+	visited := make([]bool, aLen)
+
+	for i := 0; i < aLen; i++ {
+		found := false
+		for j := 0; j < bLen; j++ {
+			if visited[j] {
+				continue
+			}
+			if reflect.DeepEqual(listA[i], listB[j]) {
+				visited[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
