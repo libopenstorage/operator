@@ -27,12 +27,18 @@ import (
 
 const (
 	// CSIComponentName name of the CSI component
-	CSIComponentName            = "CSI"
-	csiServiceAccountName       = "px-csi"
-	csiClusterRoleName          = "px-csi"
-	csiClusterRoleBindingName   = "px-csi"
-	csiServiceName              = "px-csi-service"
-	csiApplicationName          = "px-csi-ext"
+	CSIComponentName = "CSI"
+	// CSIServiceAccountName name of the CSI service account
+	CSIServiceAccountName = "px-csi"
+	// CSIClusterRoleName name of the CSI cluster role
+	CSIClusterRoleName = "px-csi"
+	// CSIClusterRoleBindingName name of the CSI cluster role binding
+	CSIClusterRoleBindingName = "px-csi"
+	// CSIServiceName name of the CSI service
+	CSIServiceName = "px-csi-service"
+	// CSIApplicationName name of the CSI application (deployment/statefulset)
+	CSIApplicationName = "px-csi-ext"
+
 	csiProvisionerContainerName = "csi-external-provisioner"
 	csiAttacherContainerName    = "csi-attacher"
 	csiSnapshotterContainerName = "csi-snapshotter"
@@ -83,14 +89,14 @@ func (c *csi) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 		}
 	}
 	if csiConfig.UseDeployment {
-		if err := k8sutil.DeleteStatefulSet(c.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+		if err := k8sutil.DeleteStatefulSet(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
 		if err := c.createDeployment(cluster, csiConfig, ownerRef); err != nil {
 			return err
 		}
 	} else {
-		if err := k8sutil.DeleteDeployment(c.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+		if err := k8sutil.DeleteDeployment(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
 		if err := c.createStatefulSet(cluster, csiConfig, ownerRef); err != nil {
@@ -110,19 +116,19 @@ func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	// We don't delete the service account for CSI because it is part of CSV. If
 	// we disable CSI then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, csiClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, CSIClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, csiClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, CSIClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(c.k8sClient, csiServiceName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteService(c.k8sClient, CSIServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStatefulSet(c.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStatefulSet(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.k8sClient, csiApplicationName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDeployment(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isCreated = false
@@ -150,7 +156,7 @@ func (c *csi) createServiceAccount(
 		c.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            csiServiceAccountName,
+				Name:            CSIServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -166,7 +172,7 @@ func (c *csi) createClusterRole(
 ) error {
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            csiClusterRoleName,
+			Name:            CSIClusterRoleName,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -295,19 +301,19 @@ func (c *csi) createClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            csiClusterRoleBindingName,
+				Name:            CSIClusterRoleBindingName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      csiServiceAccountName,
+					Name:      CSIServiceAccountName,
 					Namespace: cluster.Namespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     csiClusterRoleName,
+				Name:     CSIClusterRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
@@ -323,7 +329,7 @@ func (c *csi) createService(
 		c.k8sClient,
 		&v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            csiServiceName,
+				Name:            CSIServiceName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -344,7 +350,7 @@ func (c *csi) createDeployment(
 	err := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      csiApplicationName,
+			Name:      CSIApplicationName,
 			Namespace: cluster.Namespace,
 		},
 		existingDeployment,
@@ -424,7 +430,7 @@ func getCSIDeploymentSpec(
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            csiApplicationName,
+			Name:            CSIApplicationName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
@@ -438,7 +444,7 @@ func getCSIDeploymentSpec(
 					Labels: labels,
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: csiServiceAccountName,
+					ServiceAccountName: CSIServiceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:            csiProvisionerContainerName,
@@ -598,7 +604,7 @@ func (c *csi) createStatefulSet(
 	err := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      csiApplicationName,
+			Name:      CSIApplicationName,
 			Namespace: cluster.Namespace,
 		},
 		existingSS,
@@ -649,12 +655,12 @@ func getCSIStatefulSetSpec(
 
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            csiApplicationName,
+			Name:            CSIApplicationName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: csiServiceName,
+			ServiceName: CSIServiceName,
 			Replicas:    &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -664,7 +670,7 @@ func getCSIStatefulSetSpec(
 					Labels: labels,
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: csiServiceAccountName,
+					ServiceAccountName: CSIServiceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:            csiProvisionerContainerName,

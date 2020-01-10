@@ -27,14 +27,21 @@ import (
 
 const (
 	// AutopilotComponentName name of the Autopilot component
-	AutopilotComponentName          = "Autopilot"
-	autopilotConfigMapName          = "autopilot-config"
-	autopilotServiceAccountName     = "autopilot"
-	autopilotClusterRoleName        = "autopilot"
-	autopilotClusterRoleBindingName = "autopilot"
-	autopilotDeploymentName         = "autopilot"
-	autopilotContainerName          = "autopilot"
-	defaultAutopilotCPU             = "0.1"
+	AutopilotComponentName = "Autopilot"
+	// AutopilotConfigMapName name of the autopilot config map
+	AutopilotConfigMapName = "autopilot-config"
+	// AutopilotServiceAccountName name of the autopilot service account
+	AutopilotServiceAccountName = "autopilot"
+	// AutopilotClusterRoleName name of the autopilot cluster role
+	AutopilotClusterRoleName = "autopilot"
+	// AutopilotClusterRoleBindingName name of the autopilot cluster role binding
+	AutopilotClusterRoleBindingName = "autopilot"
+	// AutopilotDeploymentName name of the autopilot deployment
+	AutopilotDeploymentName = "autopilot"
+	// AutopilotContainerName name of the autopilot container
+	AutopilotContainerName = "autopilot"
+
+	defaultAutopilotCPU = "0.1"
 )
 
 var (
@@ -83,19 +90,19 @@ func (c *autopilot) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 
 func (c *autopilot) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteConfigMap(c.k8sClient, autopilotConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteConfigMap(c.k8sClient, AutopilotConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteServiceAccount(c.k8sClient, autopilotServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteServiceAccount(c.k8sClient, AutopilotServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, autopilotClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, AutopilotClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, autopilotClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.k8sClient, autopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isCreated = false
@@ -140,7 +147,7 @@ func (c *autopilot) createConfigMap(
 		c.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            autopilotConfigMapName,
+				Name:            AutopilotConfigMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -160,7 +167,7 @@ func (c *autopilot) createServiceAccount(
 		c.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            autopilotServiceAccountName,
+				Name:            AutopilotServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -174,7 +181,7 @@ func (c *autopilot) createClusterRole(ownerRef *metav1.OwnerReference) error {
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            autopilotClusterRoleName,
+				Name:            AutopilotClusterRoleName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -197,19 +204,19 @@ func (c *autopilot) createClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            autopilotClusterRoleBindingName,
+				Name:            AutopilotClusterRoleBindingName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      autopilotServiceAccountName,
+					Name:      AutopilotServiceAccountName,
 					Namespace: clusterNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     autopilotClusterRoleName,
+				Name:     AutopilotClusterRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
@@ -229,7 +236,7 @@ func (c *autopilot) createDeployment(
 	err := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      autopilotDeploymentName,
+			Name:      AutopilotDeploymentName,
 			Namespace: cluster.Namespace,
 		},
 		existingDeployment,
@@ -285,7 +292,7 @@ func (c *autopilot) createDeployment(
 	var existingEnvs []v1.EnvVar
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
-		if c.Name == autopilotContainerName {
+		if c.Name == AutopilotContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
 			existingEnvs = append([]v1.EnvVar{}, c.Env...)
@@ -335,7 +342,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      autopilotDeploymentName,
+			Name:      AutopilotDeploymentName,
 			Namespace: cluster.Namespace,
 			Annotations: map[string]string{
 				"scheduler.alpha.kubernetes.io/critical-pod": "",
@@ -363,10 +370,10 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 					Labels: templateLabels,
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: autopilotServiceAccountName,
+					ServiceAccountName: AutopilotServiceAccountName,
 					Containers: []v1.Container{
 						{
-							Name:            autopilotContainerName,
+							Name:            AutopilotContainerName,
 							Image:           imageName,
 							ImagePullPolicy: imagePullPolicy,
 							Command:         command,
@@ -389,7 +396,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 							VolumeSource: v1.VolumeSource{
 								ConfigMap: &v1.ConfigMapVolumeSource{
 									LocalObjectReference: v1.LocalObjectReference{
-										Name: autopilotConfigMapName,
+										Name: AutopilotConfigMapName,
 									},
 									Items: []v1.KeyToPath{
 										{
@@ -412,7 +419,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 												Key:      "name",
 												Operator: metav1.LabelSelectorOpIn,
 												Values: []string{
-													autopilotDeploymentName,
+													AutopilotDeploymentName,
 												},
 											},
 										},

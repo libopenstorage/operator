@@ -18,8 +18,10 @@ import (
 const (
 	// PortworxAPIComponentName name of the Portworx API component
 	PortworxAPIComponentName = "Portworx API"
-	pxAPIServiceName         = "portworx-api"
-	pxAPIDaemonSetName       = "portworx-api"
+	// PxAPIServiceName name of the Portworx API service
+	PxAPIServiceName = "portworx-api"
+	// PxAPIDaemonSetName name of the Portworx API daemon set
+	PxAPIDaemonSetName = "portworx-api"
 )
 
 type portworxAPI struct {
@@ -71,7 +73,7 @@ func (c *portworxAPI) createService(
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxAPIServiceName,
+			Name:            PxAPIServiceName,
 			Namespace:       cluster.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
@@ -120,7 +122,7 @@ func (c *portworxAPI) createDaemonSet(
 
 	newDaemonSet := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxAPIDaemonSetName,
+			Name:            PxAPIDaemonSetName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
@@ -175,7 +177,7 @@ func (c *portworxAPI) createDaemonSet(
 
 func getPortworxAPIServiceLabels() map[string]string {
 	return map[string]string{
-		"name": pxAPIServiceName,
+		"name": PxAPIServiceName,
 	}
 }
 

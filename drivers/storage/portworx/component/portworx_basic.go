@@ -21,7 +21,6 @@ const (
 	pxClusterRoleBindingName   = "portworx"
 	pxRoleName                 = "portworx"
 	pxRoleBindingName          = "portworx"
-	pxServiceName              = "portworx-service"
 )
 
 type portworxBasic struct {
@@ -235,7 +234,7 @@ func (c *portworxBasic) createPortworxService(
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxServiceName,
+			Name:            pxutil.PortworxServiceName,
 			Namespace:       cluster.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
