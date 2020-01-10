@@ -22,9 +22,12 @@ import (
 const (
 	// MonitoringComponentName name of the Monitoring component
 	MonitoringComponentName = "Monitoring"
-	pxServiceMonitor        = "portworx"
-	pxPrometheusRule        = "portworx"
-	pxPrometheusRuleFile    = "portworx-prometheus-rule.yaml"
+	// PxServiceMonitor name of the Portworx service monitor
+	PxServiceMonitor = "portworx"
+	// PxPrometheusRule name of the prometheus rule object for Portworx
+	PxPrometheusRule = "portworx"
+
+	pxPrometheusRuleFile = "portworx-prometheus-rule.yaml"
 )
 
 type monitoring struct {
@@ -69,11 +72,11 @@ func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 
 func (c *monitoring) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	err := k8sutil.DeleteServiceMonitor(c.k8sClient, pxServiceMonitor, cluster.Namespace, *ownerRef)
+	err := k8sutil.DeleteServiceMonitor(c.k8sClient, PxServiceMonitor, cluster.Namespace, *ownerRef)
 	if err != nil && !metaerrors.IsNoMatchError(err) {
 		return err
 	}
-	err = k8sutil.DeletePrometheusRule(c.k8sClient, pxPrometheusRule, cluster.Namespace, *ownerRef)
+	err = k8sutil.DeletePrometheusRule(c.k8sClient, PxPrometheusRule, cluster.Namespace, *ownerRef)
 	if err != nil && !metaerrors.IsNoMatchError(err) {
 		return err
 	}
@@ -88,10 +91,10 @@ func (c *monitoring) createServiceMonitor(
 ) error {
 	svcMonitor := &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxServiceMonitor,
+			Name:      PxServiceMonitor,
 			Namespace: cluster.Namespace,
 			Labels: map[string]string{
-				"name": pxServiceMonitor,
+				"name": PxServiceMonitor,
 			},
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
@@ -131,7 +134,7 @@ func (c *monitoring) createPrometheusRule(
 		return err
 	}
 	prometheusRule.ObjectMeta = metav1.ObjectMeta{
-		Name:      pxPrometheusRule,
+		Name:      PxPrometheusRule,
 		Namespace: cluster.Namespace,
 		Labels: map[string]string{
 			"prometheus": "portworx",

@@ -15,16 +15,28 @@ import (
 
 const (
 	// PortworxStorageClassComponentName name of the Portworx StorageClass component
-	PortworxStorageClassComponentName      = "Portworx StorageClass"
-	pxDbStorageClass                       = "px-db"
-	pxReplicatedStorageClass               = "px-replicated"
-	pxDbLocalSnapshotStorageClass          = "px-db-local-snapshot"
-	pxDbCloudSnapshotStorageClass          = "px-db-cloud-snapshot"
-	pxDbEncryptedStorageClass              = "px-db-encrypted"
-	pxReplicatedEncryptedStorageClass      = "px-replicated-encrypted"
-	pxDbLocalSnapshotEncryptedStorageClass = "px-db-local-snapshot-encrypted"
-	pxDbCloudSnapshotEncryptedStorageClass = "px-db-cloud-snapshot-encrypted"
-	portworxProvisioner                    = "kubernetes.io/portworx-volume"
+	PortworxStorageClassComponentName = "Portworx StorageClass"
+	// PxDbStorageClass name of the storage class for DB workloads
+	PxDbStorageClass = "px-db"
+	// PxReplicatedStorageClass name of the replicated storage class
+	PxReplicatedStorageClass = "px-replicated"
+	// PxDbLocalSnapshotStorageClass name of the storage class for local snapshots
+	PxDbLocalSnapshotStorageClass = "px-db-local-snapshot"
+	// PxDbCloudSnapshotStorageClass name of the storage class for cloud snapshots
+	PxDbCloudSnapshotStorageClass = "px-db-cloud-snapshot"
+	// PxDbEncryptedStorageClass name of the storage class for encrypted DB workloads
+	PxDbEncryptedStorageClass = "px-db-encrypted"
+	// PxReplicatedEncryptedStorageClass name of the replicated storage class with
+	// encryption enabled
+	PxReplicatedEncryptedStorageClass = "px-replicated-encrypted"
+	// PxDbLocalSnapshotEncryptedStorageClass name of the storage class for local
+	// snapshots with encryption enabled
+	PxDbLocalSnapshotEncryptedStorageClass = "px-db-local-snapshot-encrypted"
+	// PxDbCloudSnapshotEncryptedStorageClass name of the storage class for cloud
+	// snapshots with encryption enabled
+	PxDbCloudSnapshotEncryptedStorageClass = "px-db-cloud-snapshot-encrypted"
+
+	portworxProvisioner = "kubernetes.io/portworx-volume"
 )
 
 type portworxStorageClass struct {
@@ -63,7 +75,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 	storageClasses := []*storagev1.StorageClass{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxDbStorageClass,
+				Name:            PxDbStorageClass,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				Annotations:     docAnnotations,
 			},
@@ -75,7 +87,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxDbEncryptedStorageClass,
+				Name:            PxDbEncryptedStorageClass,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				Annotations: map[string]string{
 					"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
@@ -90,7 +102,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxReplicatedStorageClass,
+				Name:            PxReplicatedStorageClass,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Provisioner: portworxProvisioner,
@@ -100,7 +112,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxReplicatedEncryptedStorageClass,
+				Name:            PxReplicatedEncryptedStorageClass,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Provisioner: portworxProvisioner,
@@ -115,7 +127,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		storageClasses = append(storageClasses,
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            pxDbLocalSnapshotStorageClass,
+					Name:            PxDbLocalSnapshotStorageClass,
 					OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				},
 				Provisioner: portworxProvisioner,
@@ -129,7 +141,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            pxDbLocalSnapshotEncryptedStorageClass,
+					Name:            PxDbLocalSnapshotEncryptedStorageClass,
 					OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				},
 				Provisioner: portworxProvisioner,
@@ -144,7 +156,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            pxDbCloudSnapshotStorageClass,
+					Name:            PxDbCloudSnapshotStorageClass,
 					OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				},
 				Provisioner: portworxProvisioner,
@@ -158,7 +170,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            pxDbCloudSnapshotEncryptedStorageClass,
+					Name:            PxDbCloudSnapshotEncryptedStorageClass,
 					OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				},
 				Provisioner: portworxProvisioner,

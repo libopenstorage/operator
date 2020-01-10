@@ -1,12 +1,18 @@
 package component
 
 import (
+	"sync"
+
 	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+var (
+	registerLock sync.Mutex
 )
 
 // PortworxComponent interface that any Portworx component should be implement.
@@ -36,6 +42,8 @@ var (
 // Register registers a PortworxComponent and stores in the global map of components
 func Register(name string, c PortworxComponent) {
 	logrus.Debugf("Registering component %v with Portworx driver", name)
+	registerLock.Lock()
+	defer registerLock.Unlock()
 	components[name] = c
 }
 
@@ -57,5 +65,7 @@ func GetAll() map[string]PortworxComponent {
 // DeregisterAllComponents removes all registered components from the list.
 // This is used only for testing.
 func DeregisterAllComponents() {
+	registerLock.Lock()
+	defer registerLock.Unlock()
 	components = make(map[string]PortworxComponent)
 }

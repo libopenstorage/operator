@@ -26,12 +26,17 @@ import (
 const (
 	// PVCControllerComponentName name of the PVC controller component
 	PVCControllerComponentName = "PVC Controller"
-	pvcServiceAccountName      = "portworx-pvc-controller"
-	pvcClusterRoleName         = "portworx-pvc-controller"
-	pvcClusterRoleBindingName  = "portworx-pvc-controller"
-	pvcDeploymentName          = "portworx-pvc-controller"
-	pvcContainerName           = "portworx-pvc-controller-manager"
-	defaultPVCControllerCPU    = "200m"
+	// PVCServiceAccountName name of the PVC controller service account
+	PVCServiceAccountName = "portworx-pvc-controller"
+	// PVCClusterRoleName name of the PVC controller cluster role
+	PVCClusterRoleName = "portworx-pvc-controller"
+	// PVCClusterRoleBindingName name of the PVC controller cluster role binding
+	PVCClusterRoleBindingName = "portworx-pvc-controller"
+	// PVCDeploymentName name of the PVC controller deployment
+	PVCDeploymentName = "portworx-pvc-controller"
+
+	pvcContainerName        = "portworx-pvc-controller-manager"
+	defaultPVCControllerCPU = "200m"
 )
 
 type pvcController struct {
@@ -87,13 +92,13 @@ func (c *pvcController) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	// We don't delete the service account for PVC controller because it is part of CSV. If
 	// we disable PVC controller then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, pvcClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, PVCClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, pvcClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PVCClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.k8sClient, pvcDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDeployment(c.k8sClient, PVCDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isCreated = false
@@ -112,7 +117,7 @@ func (c *pvcController) createServiceAccount(
 		c.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pvcServiceAccountName,
+				Name:            PVCServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -126,7 +131,7 @@ func (c *pvcController) createClusterRole(ownerRef *metav1.OwnerReference) error
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pvcClusterRoleName,
+				Name:            PVCClusterRoleName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -204,19 +209,19 @@ func (c *pvcController) createClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pvcClusterRoleBindingName,
+				Name:            PVCClusterRoleBindingName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      pvcServiceAccountName,
+					Name:      PVCServiceAccountName,
 					Namespace: clusterNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     pvcClusterRoleName,
+				Name:     PVCClusterRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
@@ -257,7 +262,7 @@ func (c *pvcController) createDeployment(
 	err = c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      pvcDeploymentName,
+			Name:      PVCDeploymentName,
 			Namespace: cluster.Namespace,
 		},
 		existingDeployment,
@@ -303,13 +308,13 @@ func getPVCControllerDeploymentSpec(
 	maxSurge := intstr.FromInt(1)
 
 	labels := map[string]string{
-		"name": pvcDeploymentName,
+		"name": PVCDeploymentName,
 		"tier": "control-plane",
 	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pvcDeploymentName,
+			Name:            PVCDeploymentName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			Labels: map[string]string{
@@ -339,7 +344,7 @@ func getPVCControllerDeploymentSpec(
 					},
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: pvcServiceAccountName,
+					ServiceAccountName: PVCServiceAccountName,
 					HostNetwork:        true,
 					Containers: []v1.Container{
 						{
@@ -377,7 +382,7 @@ func getPVCControllerDeploymentSpec(
 												Key:      "name",
 												Operator: metav1.LabelSelectorOpIn,
 												Values: []string{
-													pvcDeploymentName,
+													PVCDeploymentName,
 												},
 											},
 										},

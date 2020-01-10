@@ -24,21 +24,35 @@ import (
 
 const (
 	// LighthouseComponentName name of the Lighthouse component
-	LighthouseComponentName       = "Lighthouse"
-	lhServiceAccountName          = "px-lighthouse"
-	lhClusterRoleName             = "px-lighthouse"
-	lhClusterRoleBindingName      = "px-lighthouse"
-	lhServiceName                 = "px-lighthouse"
-	lhDeploymentName              = "px-lighthouse"
-	lhContainerName               = "px-lighthouse"
-	lhConfigInitContainerName     = "config-init"
-	lhConfigSyncContainerName     = "config-sync"
-	lhStorkConnectorContainerName = "stork-connector"
-	envKeyLhConfigSyncImage       = "LIGHTHOUSE_CONFIG_SYNC_IMAGE"
-	envKeyLhStorkConnectorImage   = "LIGHTHOUSE_STORK_CONNECTOR_IMAGE"
-	defaultLhConfigSyncImage      = "portworx/lh-config-sync"
-	defaultLhStorkConnectorImage  = "portworx/lh-stork-connector"
-	defaultLighthouseImageTag     = "2.0.4"
+	LighthouseComponentName = "Lighthouse"
+	// LhServiceAccountName name of the Lighthouse service account
+	LhServiceAccountName = "px-lighthouse"
+	// LhClusterRoleName name of the Lighthouse cluster role
+	LhClusterRoleName = "px-lighthouse"
+	// LhClusterRoleBindingName name of the Lighthouse cluster role binding
+	LhClusterRoleBindingName = "px-lighthouse"
+	// LhServiceName name of the Lighthouse service
+	LhServiceName = "px-lighthouse"
+	// LhDeploymentName name of the Lighthouse deployment
+	LhDeploymentName = "px-lighthouse"
+	// LhContainerName name of the Lighthouse container
+	LhContainerName = "px-lighthouse"
+	// LhConfigInitContainerName name of the config-init container
+	LhConfigInitContainerName = "config-init"
+	// LhConfigSyncContainerName name of the config-sync container
+	LhConfigSyncContainerName = "config-sync"
+	// LhStorkConnectorContainerName name of the stork-connector container
+	LhStorkConnectorContainerName = "stork-connector"
+	// EnvKeyLhConfigSyncImage env variable name used to override the default
+	// config-sync container image
+	EnvKeyLhConfigSyncImage = "LIGHTHOUSE_CONFIG_SYNC_IMAGE"
+	// EnvKeyLhStorkConnectorImage env variable name used to override the default
+	// stork-connector container image
+	EnvKeyLhStorkConnectorImage = "LIGHTHOUSE_STORK_CONNECTOR_IMAGE"
+
+	defaultLhConfigSyncImage     = "portworx/lh-config-sync"
+	defaultLhStorkConnectorImage = "portworx/lh-stork-connector"
+	defaultLighthouseImageTag    = "2.0.4"
 )
 
 type lighthouse struct {
@@ -83,16 +97,16 @@ func (c *lighthouse) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	// We don't delete the service account for Lighthouse because it is part of CSV. If
 	// we disable Lighthouse then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, lhClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, LhClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, lhClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, LhClusterRoleBindingName, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(c.k8sClient, lhServiceName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteService(c.k8sClient, LhServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.k8sClient, lhDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDeployment(c.k8sClient, LhDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.isCreated = false
@@ -111,7 +125,7 @@ func (c *lighthouse) createServiceAccount(
 		c.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            lhServiceAccountName,
+				Name:            LhServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -125,7 +139,7 @@ func (c *lighthouse) createClusterRole(ownerRef *metav1.OwnerReference) error {
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            lhClusterRoleName,
+				Name:            LhClusterRoleName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -189,19 +203,19 @@ func (c *lighthouse) createClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            lhClusterRoleBindingName,
+				Name:            LhClusterRoleBindingName,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      lhServiceAccountName,
+					Name:      LhServiceAccountName,
 					Namespace: clusterNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     lhClusterRoleName,
+				Name:     LhClusterRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
@@ -217,7 +231,7 @@ func (c *lighthouse) createService(
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            lhServiceName,
+			Name:            LhServiceName,
 			Namespace:       cluster.Namespace,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
@@ -262,7 +276,7 @@ func (c *lighthouse) createDeployment(
 	err := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      lhDeploymentName,
+			Name:      LhDeploymentName,
 			Namespace: cluster.Namespace,
 		},
 		existingDeployment,
@@ -271,10 +285,10 @@ func (c *lighthouse) createDeployment(
 		return err
 	}
 
-	existingLhImage := k8sutil.GetImageFromDeployment(existingDeployment, lhContainerName)
-	existingConfigInitImage := k8sutil.GetImageFromDeployment(existingDeployment, lhConfigInitContainerName)
-	existingConfigSyncImage := k8sutil.GetImageFromDeployment(existingDeployment, lhConfigSyncContainerName)
-	existingStorkConnectorImage := k8sutil.GetImageFromDeployment(existingDeployment, lhStorkConnectorContainerName)
+	existingLhImage := k8sutil.GetImageFromDeployment(existingDeployment, LhContainerName)
+	existingConfigInitImage := k8sutil.GetImageFromDeployment(existingDeployment, LhConfigInitContainerName)
+	existingConfigSyncImage := k8sutil.GetImageFromDeployment(existingDeployment, LhConfigSyncContainerName)
+	existingStorkConnectorImage := k8sutil.GetImageFromDeployment(existingDeployment, LhStorkConnectorContainerName)
 
 	imageTag := defaultLighthouseImageTag
 	partitions := strings.Split(cluster.Spec.UserInterface.Image, ":")
@@ -282,11 +296,11 @@ func (c *lighthouse) createDeployment(
 		imageTag = partitions[len(partitions)-1]
 	}
 
-	configSyncImage := k8sutil.GetValueFromEnv(envKeyLhConfigSyncImage, cluster.Spec.UserInterface.Env)
+	configSyncImage := k8sutil.GetValueFromEnv(EnvKeyLhConfigSyncImage, cluster.Spec.UserInterface.Env)
 	if len(configSyncImage) == 0 {
 		configSyncImage = fmt.Sprintf("%s:%s", defaultLhConfigSyncImage, imageTag)
 	}
-	storkConnectorImage := k8sutil.GetValueFromEnv(envKeyLhStorkConnectorImage, cluster.Spec.UserInterface.Env)
+	storkConnectorImage := k8sutil.GetValueFromEnv(EnvKeyLhStorkConnectorImage, cluster.Spec.UserInterface.Env)
 	if len(storkConnectorImage) == 0 {
 		storkConnectorImage = fmt.Sprintf("%s:%s", defaultLhStorkConnectorImage, imageTag)
 	}
@@ -326,7 +340,7 @@ func getLighthouseDeploymentSpec(
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            lhDeploymentName,
+			Name:            LhDeploymentName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			Labels:          labels,
@@ -348,10 +362,10 @@ func getLighthouseDeploymentSpec(
 					Labels: labels,
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: lhServiceAccountName,
+					ServiceAccountName: LhServiceAccountName,
 					InitContainers: []v1.Container{
 						{
-							Name:            lhConfigInitContainerName,
+							Name:            LhConfigInitContainerName,
 							Image:           configSyncImageName,
 							ImagePullPolicy: imagePullPolicy,
 							Args:            []string{"init"},
@@ -371,7 +385,7 @@ func getLighthouseDeploymentSpec(
 					},
 					Containers: []v1.Container{
 						{
-							Name:            lhContainerName,
+							Name:            LhContainerName,
 							Image:           lhImageName,
 							ImagePullPolicy: imagePullPolicy,
 							Args:            []string{"-kubernetes", "true"},
@@ -391,7 +405,7 @@ func getLighthouseDeploymentSpec(
 							},
 						},
 						{
-							Name:            lhConfigSyncContainerName,
+							Name:            LhConfigSyncContainerName,
 							Image:           configSyncImageName,
 							ImagePullPolicy: imagePullPolicy,
 							Args:            []string{"sync"},
@@ -409,7 +423,7 @@ func getLighthouseDeploymentSpec(
 							},
 						},
 						{
-							Name:            lhStorkConnectorContainerName,
+							Name:            LhStorkConnectorContainerName,
 							Image:           storkConnectorImageName,
 							ImagePullPolicy: imagePullPolicy,
 						},
