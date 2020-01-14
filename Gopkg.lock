@@ -398,16 +398,29 @@
   version = "v1.0.1"
 
 [[projects]]
-  branch = "openstorage-5.1"
-  digest = "1:e77c9766c913e28a0887f851bbe55be019e0a595842dfa3bb70a53f46c6618d1"
+  digest = "1:66e76e647024f770efc20e5342707478875e980c402f31b6487f31d4637e8312"
   name = "github.com/kubernetes-incubator/external-storage"
   packages = [
     "snapshot/pkg/apis/crd/v1",
     "snapshot/pkg/client",
   ]
   pruneopts = "UT"
-  revision = "9394ee8dd5361cfe8fee25c233721e4060ff0473"
-  source = "github.com/libopenstorage/external-storage"
+  revision = "88aaa1c2ed58bcfef55572bbe937f2813d6d4d1d"
+  version = "v5.5.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:b1a2174f403a649902689eb558b99f536e51fe65a268c1ac827ee9580d26769f"
+  name = "github.com/libopenstorage/autopilot-api"
+  packages = [
+    "pkg/apis/autopilot",
+    "pkg/apis/autopilot/v1alpha1",
+    "pkg/client/clientset/versioned",
+    "pkg/client/clientset/versioned/scheme",
+    "pkg/client/clientset/versioned/typed/autopilot/v1alpha1",
+  ]
+  pruneopts = "UT"
+  revision = "cfb5c56369046a09d692ebf62cca836f82866e16"
 
 [[projects]]
   branch = "master"
@@ -579,14 +592,14 @@
 
 [[projects]]
   branch = "operator"
-  digest = "1:aa052984093fba92b40cc07f0017652661d2a18b005036b6d2481cc025f6c46b"
+  digest = "1:512207bed541db738949b5411fecb00b15423055ca455e0158500121a99eb5f9"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "624ff4304bc06608347f066fd389556502524dce"
+  revision = "81a74c790db98bea9df0aed063b59c9beedbe134"
 
 [[projects]]
   branch = "master"
@@ -1522,6 +1535,7 @@
     "github.com/portworx/kvdb/etcd/v3",
     "github.com/portworx/kvdb/mem",
     "github.com/portworx/sched-ops/k8s",
+    "github.com/portworx/sched-ops/task",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",

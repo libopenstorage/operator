@@ -6,6 +6,7 @@ import (
 
 	prometheusclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	snap_client "github.com/kubernetes-incubator/external-storage/snapshot/pkg/client"
+	autopilotclientset "github.com/libopenstorage/autopilot-api/pkg/client/clientset/versioned"
 	ostclientset "github.com/libopenstorage/operator/pkg/client/clientset/versioned"
 	ocp_clientset "github.com/openshift/client-go/apps/clientset/versioned"
 	ocp_security_clientset "github.com/openshift/client-go/security/clientset/versioned"
@@ -31,6 +32,7 @@ type ClientSetter interface {
 		dynamic.Interface,
 		ocp_clientset.Interface,
 		ocp_security_clientset.Interface,
+		autopilotclientset.Interface,
 	)
 	// SetBaseClient sets the kubernetes clientset
 	SetBaseClient(kubernetes.Interface)
@@ -48,6 +50,8 @@ type ClientSetter interface {
 	SetOpenshiftSecurityClient(ocp_security_clientset.Interface)
 	// SetTalismanClient sets the talisman clientset
 	SetTalismanClient(talismanclientset.Interface)
+	// SetAutopilotClient sets the autopilot clientset
+	SetAutopilotClient(autopilotclientset.Interface)
 	// SetPrometheusClient sets the prometheus clientset
 	SetPrometheusClient(prometheusclient.Interface)
 }
@@ -82,6 +86,7 @@ func (k *k8sOps) SetClient(
 	dynamicInterface dynamic.Interface,
 	ocpClient ocp_clientset.Interface,
 	ocpSecurityClient ocp_security_clientset.Interface,
+	autopilotClient autopilotclientset.Interface,
 ) {
 	k.client = client
 	k.snapClient = snapClient
@@ -89,6 +94,7 @@ func (k *k8sOps) SetClient(
 	k.dynamicInterface = dynamicInterface
 	k.ocpClient = ocpClient
 	k.ocpSecurityClient = ocpSecurityClient
+	k.autopilotClient = autopilotClient
 }
 
 // SetBaseClient sets the kubernetes clientset
@@ -124,6 +130,11 @@ func (k *k8sOps) SetOpenshiftAppsClient(ocpAppsClient ocp_clientset.Interface) {
 // SetOpenshiftSecurityClient sets the openshift security clientset
 func (k *k8sOps) SetOpenshiftSecurityClient(ocpSecurityClient ocp_security_clientset.Interface) {
 	k.ocpSecurityClient = ocpSecurityClient
+}
+
+// SetAutopilotClient sets the autopilot clientset
+func (k *k8sOps) SetAutopilotClient(autopilotClient autopilotclientset.Interface) {
+	k.autopilotClient = autopilotClient
 }
 
 // SetTalismanClient sets the talisman clientset
@@ -249,6 +260,11 @@ func (k *k8sOps) loadClientFor(config *rest.Config) error {
 	}
 
 	k.ocpSecurityClient, err = ocp_security_clientset.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	k.autopilotClient, err = autopilotclientset.NewForConfig(config)
 	if err != nil {
 		return err
 	}
