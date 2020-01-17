@@ -1,0 +1,5 @@
+apiVersion: core.libopenstorage.org/v1alpha1
+kind: StorageCluster
+metadata:
+  name: portworx
+  namespace: kube-system
