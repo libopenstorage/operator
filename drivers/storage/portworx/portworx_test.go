@@ -2390,6 +2390,13 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
+	// Check wiper service account
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiper.yaml")
 	wiperDS := &appsv1.DaemonSet{}
@@ -2528,6 +2535,13 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
+	// Check wiper service account
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperPKS.yaml")
 	wiperDS := &appsv1.DaemonSet{}
@@ -2564,6 +2578,13 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
 	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+
+	// Check wiper service account
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
 
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperWithWipe.yaml")

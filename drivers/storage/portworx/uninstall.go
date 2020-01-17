@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,31 +32,32 @@ var (
 )
 
 const (
-	dsOptPwxVolumeName           = "optpwx"
-	dsEtcPwxVolumeName           = "etcpwx"
-	dsHostProcVolumeName         = "hostproc"
-	dsDbusVolumeName             = "dbus"
-	dsSysdVolumeName             = "sysdmount"
-	dsDevVolumeName              = "dev"
-	dsMultipathVolumeName        = "etc-multipath"
-	dsLvmVolumeName              = "lvm"
-	dsSysVolumeName              = "sys"
-	dsUdevVolumeName             = "run-udev-data"
-	sysdmount                    = "/etc/systemd/system"
-	devMount                     = "/dev"
-	multipathMount               = "/etc/multipath"
-	lvmMount                     = "/run/lvm"
-	sysMount                     = "/sys"
-	udevMount                    = "/run/udev/data"
-	dbusPath                     = "/var/run/dbus"
-	pksPersistentStoreRoot       = "/var/vcap/store"
-	pxOptPwx                     = "/opt/pwx"
-	pxEtcPwx                     = "/etc/pwx"
-	pxNodeWiperDaemonSetName     = "px-node-wiper"
-	pxKvdbPrefix                 = "pwx/"
-	internalEtcdConfigMapPrefix  = "px-bootstrap-"
-	cloudDriveConfigMapPrefix    = "px-cloud-drive-"
-	bootstrapCloudDriveNamespace = "kube-system"
+	dsOptPwxVolumeName            = "optpwx"
+	dsEtcPwxVolumeName            = "etcpwx"
+	dsHostProcVolumeName          = "hostproc"
+	dsDbusVolumeName              = "dbus"
+	dsSysdVolumeName              = "sysdmount"
+	dsDevVolumeName               = "dev"
+	dsMultipathVolumeName         = "etc-multipath"
+	dsLvmVolumeName               = "lvm"
+	dsSysVolumeName               = "sys"
+	dsUdevVolumeName              = "run-udev-data"
+	sysdmount                     = "/etc/systemd/system"
+	devMount                      = "/dev"
+	multipathMount                = "/etc/multipath"
+	lvmMount                      = "/run/lvm"
+	sysMount                      = "/sys"
+	udevMount                     = "/run/udev/data"
+	dbusPath                      = "/var/run/dbus"
+	pksPersistentStoreRoot        = "/var/vcap/store"
+	pxOptPwx                      = "/opt/pwx"
+	pxEtcPwx                      = "/etc/pwx"
+	pxNodeWiperServiceAccountName = "px-node-wiper"
+	pxNodeWiperDaemonSetName      = "px-node-wiper"
+	pxKvdbPrefix                  = "pwx/"
+	internalEtcdConfigMapPrefix   = "px-bootstrap-"
+	cloudDriveConfigMapPrefix     = "px-cloud-drive-"
+	bootstrapCloudDriveNamespace  = "kube-system"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -175,6 +177,11 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
 
+	err = u.createServiceAccount(ownerRef)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pxNodeWiperDaemonSetName,
@@ -254,7 +261,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						},
 					},
 					RestartPolicy:      "Always",
-					ServiceAccountName: pxutil.PortworxServiceAccountName,
+					ServiceAccountName: pxNodeWiperServiceAccountName,
 					Volumes: []v1.Volume{
 						{
 							Name: dsEtcPwxVolumeName,
@@ -351,6 +358,22 @@ func (u *uninstallPortworx) RunNodeWiper(
 	}
 
 	return u.k8sClient.Create(context.TODO(), ds)
+}
+
+func (u *uninstallPortworx) createServiceAccount(
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		u.k8sClient,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxNodeWiperServiceAccountName,
+				Namespace:       u.cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
 }
 
 func getKVDBClient(endpoints []string, opts map[string]string) (kvdb.Kvdb, error) {
