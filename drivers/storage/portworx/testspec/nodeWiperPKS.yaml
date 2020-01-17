@@ -51,7 +51,7 @@ spec:
         - name: sys
           mountPath: /sys
       restartPolicy: Always
-      serviceAccountName: portworx
+      serviceAccountName: px-node-wiper
       volumes:
       - name: etcpwx
         hostPath:
