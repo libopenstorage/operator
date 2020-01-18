@@ -106,7 +106,8 @@ func validateUninstallStorageCluster(
 			return "", true, fmt.Errorf("%v pods are still present", len(pods))
 		}
 
-		return "", false, nil
+		return "", true, fmt.Errorf("pods are deleted, but StorageCluster %v/%v still present",
+			cluster.Namespace, cluster.Name)
 	}
 
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
