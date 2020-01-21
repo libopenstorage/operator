@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: px-prometheus-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: px-prometheus-operator
+subjects:
+  - kind: ServiceAccount
+    name: px-prometheus-operator
+    namespace: kube-test

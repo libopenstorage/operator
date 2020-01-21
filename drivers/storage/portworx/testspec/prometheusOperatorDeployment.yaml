@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: px-prometheus-operator
+  name: px-prometheus-operator
+  namespace: kube-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: px-prometheus-operator
+  template:
+    metadata:
+      labels:
+        k8s-app: px-prometheus-operator
+    spec:
+      containers:
+        - args:
+            - --kubelet-service=kube-test/kubelet
+            - --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1
+          image: quay.io/coreos/prometheus-operator:v0.29.0
+          name: px-prometheus-operator
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 200m
+              memory: 100Mi
+            requests:
+              cpu: 100m
+              memory: 50Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: px-prometheus-operator

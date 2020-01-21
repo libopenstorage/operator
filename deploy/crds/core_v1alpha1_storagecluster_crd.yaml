@@ -561,8 +561,18 @@ spec:
               properties:
                 enableMetrics:
                   type: boolean
-                  description: This flag is enabled will expose the storage cluster metrics to external
+                  description: If this flag is enabled it will expose the storage cluster metrics to external
                     monitoring solutions like Prometheus.
+                prometheus:
+                  type: object
+                  description: Contains configuration of Prometheus to monitor the storage cluster.
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicating whether prometheus needs to be enabled.
+                    remoteWriteEndpoint:
+                      type: string
+                      description: Specifies the remote write endpoint for Prometheus.
             env:
               type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes

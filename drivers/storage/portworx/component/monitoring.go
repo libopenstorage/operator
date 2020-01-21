@@ -48,7 +48,9 @@ func (c *monitoring) Initialize(
 }
 
 func (c *monitoring) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
-	return cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.EnableMetrics
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.EnableMetrics != nil &&
+		*cluster.Spec.Monitoring.EnableMetrics
 }
 
 func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
@@ -91,11 +93,9 @@ func (c *monitoring) createServiceMonitor(
 ) error {
 	svcMonitor := &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PxServiceMonitor,
-			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"name": PxServiceMonitor,
-			},
+			Name:            PxServiceMonitor,
+			Namespace:       cluster.Namespace,
+			Labels:          serviceMonitorLabels(),
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
@@ -134,11 +134,9 @@ func (c *monitoring) createPrometheusRule(
 		return err
 	}
 	prometheusRule.ObjectMeta = metav1.ObjectMeta{
-		Name:      PxPrometheusRule,
-		Namespace: cluster.Namespace,
-		Labels: map[string]string{
-			"prometheus": "portworx",
-		},
+		Name:            PxPrometheusRule,
+		Namespace:       cluster.Namespace,
+		Labels:          prometheusRuleLabels(),
 		OwnerReferences: []metav1.OwnerReference{*ownerRef},
 	}
 	return k8sutil.CreateOrUpdatePrometheusRule(c.k8sClient, prometheusRule, ownerRef)
@@ -150,6 +148,18 @@ func (c *monitoring) warningEvent(
 ) {
 	logrus.Warn(message)
 	c.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+}
+
+func serviceMonitorLabels() map[string]string {
+	return map[string]string{
+		"name": PxServiceMonitor,
+	}
+}
+
+func prometheusRuleLabels() map[string]string {
+	return map[string]string{
+		"prometheus": "portworx",
+	}
 }
 
 // RegisterMonitoringComponent registers the Monitoring component

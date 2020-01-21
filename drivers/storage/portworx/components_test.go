@@ -1964,81 +1964,6 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	require.Equal(t, "foo", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
 }
 
-func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	customRepo := "test-registry:1111/test-repo"
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			CustomImageRegistry: customRepo,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-
-	require.NoError(t, err)
-
-	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
-
-	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v0.0.0",
-		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
-	)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/autopilot:test",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-}
-
 func TestAutopilotImageChange(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
@@ -2323,6 +2248,232 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
+func TestPrometheusInstall(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Prometheus operator ServiceAccount
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusOperatorServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Prometheus operator ClusterRole
+	expectedCR := testutil.GetExpectedClusterRole(t, "prometheusOperatorClusterRole.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.PrometheusOperatorClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// Prometheus operator ClusterRoleBinding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "prometheusOperatorClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.PrometheusOperatorClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Prometheus operator Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "prometheusOperatorDeployment.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, autopilotDeployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, autopilotDeployment.Namespace)
+	require.Len(t, autopilotDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotDeployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Labels, autopilotDeployment.Labels)
+	require.Equal(t, expectedDeployment.Annotations, autopilotDeployment.Annotations)
+	require.Equal(t, expectedDeployment.Spec, autopilotDeployment.Spec)
+
+	// Prometheus ServiceAccount
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Prometheus ClusterRole
+	expectedCR = testutil.GetExpectedClusterRole(t, "prometheusClusterRole.yaml")
+	actualCR = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.PrometheusClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Len(t, actualCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// Prometheus ClusterRoleBinding
+	expectedCRB = testutil.GetExpectedClusterRoleBinding(t, "prometheusClusterRoleBinding.yaml")
+	actualCRB = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.PrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Prometheus Service
+	expectedService := testutil.GetExpectedService(t, "prometheusService.yaml")
+	actualService := &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, component.PrometheusServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Name, actualService.Name)
+	require.Equal(t, expectedService.Namespace, actualService.Namespace)
+	require.Len(t, actualService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualService.OwnerReferences[0].Name)
+	require.Equal(t, expectedService.Labels, actualService.Labels)
+	require.Equal(t, expectedService.Spec, actualService.Spec)
+
+	// Prometheus instance
+	prometheusList := &monitoringv1.PrometheusList{}
+	err = testutil.List(k8sClient, prometheusList)
+	require.NoError(t, err)
+	require.Len(t, prometheusList.Items, 1)
+
+	expectedPrometheus := testutil.GetExpectedPrometheus(t, "prometheusInstance.yaml")
+	prometheus := prometheusList.Items[0]
+	require.Equal(t, expectedPrometheus.Name, prometheus.Name)
+	require.Equal(t, expectedPrometheus.Namespace, prometheus.Namespace)
+	require.Len(t, prometheus.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, prometheus.OwnerReferences[0].Name)
+	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
+
+	cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint = "test.endpoint:1234"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedPrometheus = testutil.GetExpectedPrometheus(t, "prometheusInstanceWithRemoteWriteEndpoint.yaml")
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheus.Name, prometheus.Name)
+	require.Equal(t, expectedPrometheus.Namespace, prometheus.Namespace)
+	require.Len(t, prometheus.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, prometheus.OwnerReferences[0].Name)
+	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
+
+}
+
+func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	customRepo := "test-registry:1111/test-repo"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRepo,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v0.0.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/prometheus-operator:v0.29.0",
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
 func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
@@ -2349,6 +2500,11 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 			Autopilot: &corev1alpha1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
 			},
 		},
 	}
@@ -2410,6 +2566,14 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	)
 	require.Equal(t, v1.PullIfNotPresent,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/quay.io/coreos/prometheus-operator:v0.29.0",
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
 }
 
 func TestRemovePVCController(t *testing.T) {
@@ -4054,7 +4218,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Monitoring: &corev1alpha1.MonitoringSpec{
-				EnableMetrics: true,
+				EnableMetrics: boolPtr(true),
 			},
 			Kvdb: &corev1alpha1.KvdbSpec{
 				Internal: false,
@@ -4148,7 +4312,7 @@ func TestDisableMonitoring(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Monitoring: &corev1alpha1.MonitoringSpec{
-				EnableMetrics: true,
+				EnableMetrics: boolPtr(true),
 			},
 		},
 	}
@@ -4165,7 +4329,7 @@ func TestDisableMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable metrics monitoring
-	cluster.Spec.Monitoring.EnableMetrics = false
+	cluster.Spec.Monitoring.EnableMetrics = boolPtr(false)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -4188,6 +4352,208 @@ func TestDisableMonitoring(t *testing.T) {
 
 	pr = &monitoringv1.PrometheusRule{}
 	err = testutil.Get(k8sClient, pr, component.PxPrometheusRule, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestRemovePrometheus(t *testing.T) {
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusOperatorServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusOperatorClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusOperatorClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	service := &v1.Service{}
+	err = testutil.Get(k8sClient, service, component.PrometheusServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	prom := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prom, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Remove prometheus config
+	cluster.Spec.Monitoring.Prometheus = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusOperatorServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusOperatorClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusOperatorClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	service = &v1.Service{}
+	err = testutil.Get(k8sClient, service, component.PrometheusServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prom = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prom, component.PrometheusInstanceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestDisablePrometheus(t *testing.T) {
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusOperatorServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusOperatorClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusOperatorClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	service := &v1.Service{}
+	err = testutil.Get(k8sClient, service, component.PrometheusServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	prom := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prom, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable prometheus
+	cluster.Spec.Monitoring.Prometheus.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusOperatorServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusOperatorClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusOperatorClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PrometheusServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PrometheusClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PrometheusClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	service = &v1.Service{}
+	err = testutil.Get(k8sClient, service, component.PrometheusServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prom = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prom, component.PrometheusInstanceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -4216,4 +4582,5 @@ func reregisterComponents() {
 	component.RegisterLighthouseComponent()
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
+	component.RegisterPrometheusComponent()
 }

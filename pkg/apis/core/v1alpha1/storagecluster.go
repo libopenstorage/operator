@@ -348,7 +348,18 @@ type DataProviderSpec struct {
 type MonitoringSpec struct {
 	// EnableMetrics this exposes the storage cluster metrics to external
 	// monitoring solutions like Prometheus.
-	EnableMetrics bool `json:"enableMetrics,omitempty"`
+	EnableMetrics *bool `json:"enableMetrics,omitempty"`
+	// Prometheus contains the details of the Prometheus stack deployed to monitor
+	// metrics from the storage cluster.
+	Prometheus *PrometheusSpec `json:"prometheus,omitempty"`
+}
+
+// PrometheusSpec contains configuration of Prometheus stack
+type PrometheusSpec struct {
+	// Enabled decides whether prometheus needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// RemoteWriteEndpoint specifies the remote write endpoint
+	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster

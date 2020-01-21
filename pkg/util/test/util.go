@@ -154,6 +154,14 @@ func GetExpectedCRD(t *testing.T, fileName string) *apiextensionsv1beta1.CustomR
 	return crd
 }
 
+// GetExpectedPrometheus returns the Prometheus object from given yaml spec file
+func GetExpectedPrometheus(t *testing.T, fileName string) *monitoringv1.Prometheus {
+	obj := getKubernetesObject(t, fileName)
+	prometheus, ok := obj.(*monitoringv1.Prometheus)
+	assert.True(t, ok, "Expected Prometheus object")
+	return prometheus
+}
+
 // GetExpectedServiceMonitor returns the ServiceMonitor object from given yaml spec file
 func GetExpectedServiceMonitor(t *testing.T, fileName string) *monitoringv1.ServiceMonitor {
 	obj := getKubernetesObject(t, fileName)
