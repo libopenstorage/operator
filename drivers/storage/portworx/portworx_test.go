@@ -248,6 +248,29 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+
+	// By defaul monitoring is not enabled
+	require.Nil(t, cluster.Spec.Monitoring)
+
+	// If prometheus is enabled and metrics is nil, then enable it
+	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
+		Prometheus: &corev1alpha1.PrometheusSpec{
+			Enabled: true,
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, *cluster.Spec.Monitoring.EnableMetrics)
+
+	// If prometheus is enabled but metrics is explicitly disabled,
+	// then do no enable it
+	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
+		EnableMetrics: boolPtr(false),
+		Prometheus: &corev1alpha1.PrometheusSpec{
+			Enabled: true,
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.False(t, *cluster.Spec.Monitoring.EnableMetrics)
 }
 
 func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {

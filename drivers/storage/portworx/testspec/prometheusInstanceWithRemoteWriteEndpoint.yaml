@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: px-prometheus
+  namespace: kube-test
+spec:
+  replicas: 1
+  logLevel: debug
+  serviceAccountName: px-prometheus
+  serviceMonitorSelector:
+    matchLabels:
+      name: portworx
+  remoteWrite:
+  - url: "http://test.endpoint:1234/api/prom/push"
+  resources:
+    requests:
+      memory: 400Mi
+  ruleSelector:
+    matchLabels:
+      prometheus: portworx

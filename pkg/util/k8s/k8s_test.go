@@ -1163,6 +1163,156 @@ func TestDeleteServiceMonitor(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPrometheusChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedPrometheus := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: monitoringv1.PrometheusSpec{
+			Tag: "foo",
+		},
+	}
+
+	err := CreateOrUpdatePrometheus(k8sClient, expectedPrometheus, nil)
+	require.NoError(t, err)
+
+	actualPrometheus := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, actualPrometheus, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "foo", actualPrometheus.Spec.Tag)
+
+	// Change spec
+	expectedPrometheus.Spec.Tag = "bar"
+
+	err = CreateOrUpdatePrometheus(k8sClient, expectedPrometheus, nil)
+	require.NoError(t, err)
+
+	actualPrometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, actualPrometheus, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "bar", actualPrometheus.Spec.Tag)
+}
+
+func TestPrometheusWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedPrometheus := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdatePrometheus(k8sClient, expectedPrometheus, nil)
+	require.NoError(t, err)
+
+	actualPrometheus := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, actualPrometheus, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPrometheus.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdatePrometheus(k8sClient, expectedPrometheus, &firstOwner)
+	require.NoError(t, err)
+
+	actualPrometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, actualPrometheus, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPrometheus.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedPrometheus.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdatePrometheus(k8sClient, expectedPrometheus, &secondOwner)
+	require.NoError(t, err)
+
+	actualPrometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, actualPrometheus, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualPrometheus.OwnerReferences)
+}
+
+func TestDeletePrometheus(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(expected)
+
+	// Don't delete or throw error if the prometheus is not present
+	err := DeletePrometheus(k8sClient, "not-present-prometheus", namespace)
+	require.NoError(t, err)
+
+	prometheus := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheus)
+
+	// Don't delete when there is no owner in the prometheus
+	// but trying to delete for specific owners
+	err = DeletePrometheus(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheus)
+
+	// Delete when there is no owner in the prometheus
+	err = DeletePrometheus(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the prometheus is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeletePrometheus(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, prometheus)
+
+	// Don't delete when the prometheus is owned by objects
+	// more than what are passed on delete call
+	err = DeletePrometheus(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, prometheus.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), prometheus.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), prometheus.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the prometheus
+	err = DeletePrometheus(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestPrometheusRuleChangeSpec(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	expectedRule := &monitoringv1.PrometheusRule{
