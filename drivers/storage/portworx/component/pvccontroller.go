@@ -61,6 +61,11 @@ func (c *pvcController) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 		return enabled
 	}
 
+	// If portworx is disabled, then do not run pvc controller unless explicitly told to.
+	if !pxutil.IsPortworxEnabled(cluster) {
+		return false
+	}
+
 	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
 	// only if Portworx service is not deployed in kube-system namespace.
 	if pxutil.IsPKS(cluster) || pxutil.IsEKS(cluster) ||

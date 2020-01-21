@@ -9,6 +9,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -73,7 +74,6 @@ func TestBasicComponentsInstall(t *testing.T) {
 	}
 
 	err := driver.PreInstall(cluster)
-
 	require.NoError(t, err)
 
 	// Portworx ServiceAccount
@@ -187,6 +187,65 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Len(t, ds.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
+}
+
+func TestBasicInstallWithPortworxDisabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				storagecluster.AnnotationDisableStorage: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx RBAC objects should not be created
+	serviceAccountList := &v1.ServiceAccountList{}
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.Empty(t, serviceAccountList.Items)
+
+	clusterRoleList := &rbacv1.ClusterRoleList{}
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.Empty(t, clusterRoleList.Items)
+
+	crbList := &rbacv1.ClusterRoleBindingList{}
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.Empty(t, crbList.Items)
+
+	roleList := &rbacv1.RoleList{}
+	err = testutil.List(k8sClient, roleList)
+	require.NoError(t, err)
+	require.Empty(t, roleList.Items)
+
+	rbList := &rbacv1.RoleBindingList{}
+	err = testutil.List(k8sClient, rbList)
+	require.NoError(t, err)
+	require.Empty(t, rbList.Items)
+
+	// Portworx Services should not be created
+	serviceList := &v1.ServiceList{}
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.Empty(t, serviceList.Items)
+
+	// Portworx API DaemonSet should not be created
+	dsList := &appsv1.DaemonSetList{}
+	err = testutil.List(k8sClient, dsList)
+	require.NoError(t, err)
+	require.Empty(t, dsList.Items)
 }
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
@@ -362,6 +421,32 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, actualSC, component.PxReplicatedEncryptedStorageClass, "")
 	require.NoError(t, err)
+}
+
+func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				storagecluster.AnnotationDisableStorage: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Empty(t, storageClassList.Items)
 }
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
@@ -735,6 +820,48 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 				annotationIsGKE:         "true",
 				annotationIsAKS:         "true",
 				annotationIsOpenshift:   "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PVCClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PVCClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationIsPKS:                         "true",
+				annotationIsEKS:                         "true",
+				annotationIsGKE:                         "true",
+				annotationIsAKS:                         "true",
+				annotationIsOpenshift:                   "true",
+				storagecluster.AnnotationDisableStorage: "true",
 			},
 		},
 	}

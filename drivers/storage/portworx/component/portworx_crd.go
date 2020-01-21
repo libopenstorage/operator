@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
@@ -35,7 +36,7 @@ func (c *portworxCRD) Initialize(
 }
 
 func (c *portworxCRD) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
-	return true
+	return pxutil.IsPortworxEnabled(cluster)
 }
 
 func (c *portworxCRD) Reconcile(cluster *corev1alpha1.StorageCluster) error {

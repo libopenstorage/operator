@@ -14,6 +14,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
@@ -128,7 +129,10 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Use default image if could not get it from release manifest
-	require.Equal(t, "portworx/oci-monitor:2.1.5", cluster.Spec.Image)
+	require.Equal(t,
+		fmt.Sprintf("%s:%s", defaultPortworxImage, defaultPortworxVersion),
+		cluster.Spec.Image,
+	)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
 	require.Equal(t, uint32(pxutil.DefaultStartPort), *cluster.Spec.StartPort)
@@ -244,6 +248,53 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+}
+
+func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				storagecluster.AnnotationDisableStorage: "true",
+			},
+		},
+	}
+
+	// Only portworx image should be set
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t,
+		fmt.Sprintf("%s:%s", defaultPortworxImage, defaultPortworxVersion),
+		cluster.Spec.Image,
+	)
+	cluster.Spec.Image = ""
+	require.Empty(t, cluster.Spec)
+
+	// Use default image from release manifest when spec.image has empty value
+	manifestSetup()
+	defer manifestCleanup()
+	cluster.Spec.Image = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/oci-monitor:2.1.5.1", cluster.Spec.Image)
+	cluster.Spec.Image = ""
+	require.Empty(t, cluster.Spec)
+
+	// Use default component versions if components are enabled
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Enabled: true,
+	}
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Spec.UserInterface.Image)
+	require.Equal(t, "openstorage/stork:2.3.4", cluster.Spec.Stork.Image)
+	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Spec.Autopilot.Image)
 }
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
@@ -812,6 +863,33 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	// Status should be set to initializing if not set
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
 	require.Equal(t, "Initializing", cluster.Status.Phase)
+}
+
+func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				storagecluster.AnnotationDisableStorage: "True",
+			},
+		},
+	}
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
+	require.Equal(t, "Initializing", cluster.Status.Phase)
+
+	// If portworx is disabled, change status as online
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
+	require.Equal(t, "Online", cluster.Status.Phase)
 }
 
 func TestUpdateClusterStatus(t *testing.T) {
@@ -3184,6 +3262,44 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 	require.Contains(t, condition.Reason, "kvdb initialize error")
+}
+
+func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				storagecluster.AnnotationDisableStorage: "1",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+
+	// Uninstall delete strategy
+	cluster.Spec.DeleteStrategy.Type = corev1alpha1.UninstallStorageClusterStrategyType
+	cluster.Status = corev1alpha1.StorageClusterStatus{}
+
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+
 }
 
 func fakeClientWithWiperPod(namespace string) client.Client {
