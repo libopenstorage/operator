@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -72,6 +73,12 @@ var (
 	// variable for testing. DO NOT change the value of the function unless for testing.
 	SpecsBaseDir = getSpecsBaseDir
 )
+
+// IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
+func IsPortworxEnabled(cluster *corev1alpha1.StorageCluster) bool {
+	disabled, err := strconv.ParseBool(cluster.Annotations[storagecluster.AnnotationDisableStorage])
+	return err != nil || !disabled
+}
 
 // IsPKS returns true if the annotation has a PKS annotation and is true value
 func IsPKS(cluster *corev1alpha1.StorageCluster) bool {

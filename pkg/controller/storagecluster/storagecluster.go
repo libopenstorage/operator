@@ -24,6 +24,7 @@ import (
 	"path"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +65,10 @@ import (
 
 const (
 	// ControllerName is the name of the controller
-	ControllerName                      = "storagecluster-controller"
+	ControllerName = "storagecluster-controller"
+	// AnnotationDisableStorage annotation to disable the storage pods from running.
+	// Defaults to false value.
+	AnnotationDisableStorage            = operatorPrefix + "/disable-storage-pods"
 	slowStartInitialBatchSize           = 1
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
@@ -814,11 +818,16 @@ func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1alpha1.StorageCluster,
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
+	if !storagePodsEnabled(cluster) {
+		return false, false, false, nil
+	}
+
 	newPod, err := c.newSimulationPod(cluster, node.Name)
 	if err != nil {
 		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
 		return false, false, false, err
 	}
+
 	wantToRun, shouldSchedule, shouldContinueRunning = true, true, true
 
 	// TODO: We should get rid of simulate and let the scheduler try to deploy
@@ -1159,6 +1168,13 @@ func (c *Controller) warningEvent(
 ) {
 	logrus.Warn(message)
 	c.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+}
+
+func storagePodsEnabled(
+	cluster *corev1alpha1.StorageCluster,
+) bool {
+	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableStorage])
+	return err != nil || !disabled
 }
 
 func getCRDFromFile(

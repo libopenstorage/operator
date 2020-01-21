@@ -53,7 +53,7 @@ func (c *portworxStorageClass) Initialize(
 }
 
 func (c *portworxStorageClass) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
-	return true
+	return pxutil.IsPortworxEnabled(cluster)
 }
 
 func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) error {

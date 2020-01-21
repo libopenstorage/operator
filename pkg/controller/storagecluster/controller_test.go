@@ -594,6 +594,62 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 	require.Contains(t, actualEvent, "preinstall error")
 }
 
+func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Annotations = map[string]string{
+		AnnotationDisableStorage: "true",
+	}
+
+	// Kubernetes node with resources to create a pod
+	k8sNode := createK8sNode("k8s-node-1", 10)
+
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Verify there is no event raised
+	require.Empty(t, recorder.Events)
+
+	// Verify there is one revision for the new StorageCluster object
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+
+	// Verify no storage pods are created
+	require.Empty(t, podControl.Templates)
+}
+
 func TestStoragePodGetsScheduled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -1167,6 +1223,71 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 		[]string{runningPod2.Name, unscheduledPod1.Name, unscheduledPod2.Name, extraRunningPod.Name},
 		podControl.DeletePodName,
 	)
+}
+
+func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Annotations = map[string]string{
+		AnnotationDisableStorage: "1",
+	}
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+
+	k8sVersion, _ := version.NewVersion("1.11.0")
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	runningPod := createStoragePod(cluster, "running-pod", k8sNode.Name, storageLabels)
+
+	k8sClient.Create(context.TODO(), k8sNode)
+	k8sClient.Create(context.TODO(), runningPod)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Verify there is no event raised for the extra pods
+	require.Empty(t, recorder.Events)
+
+	require.Empty(t, podControl.Templates)
+	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
 
 func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
