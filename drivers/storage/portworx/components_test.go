@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -2465,11 +2466,13 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
+	parts := strings.Split(component.DefaultPrometheusOperatorImage, "/")
+	expectedPrometheusImage := parts[len(parts)-1]
 	prometheusOperatorDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/prometheus-operator:v0.29.0",
+		customRepo+"/"+expectedPrometheusImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -2571,7 +2574,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/quay.io/coreos/prometheus-operator:v0.29.0",
+		customRegistry+"/"+component.DefaultPrometheusOperatorImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -4218,7 +4221,9 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Monitoring: &corev1alpha1.MonitoringSpec{
-				EnableMetrics: boolPtr(true),
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					ExportMetrics: true,
+				},
 			},
 			Kvdb: &corev1alpha1.KvdbSpec{
 				Internal: false,
@@ -4312,7 +4317,9 @@ func TestDisableMonitoring(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Monitoring: &corev1alpha1.MonitoringSpec{
-				EnableMetrics: boolPtr(true),
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					ExportMetrics: true,
+				},
 			},
 		},
 	}
@@ -4329,7 +4336,7 @@ func TestDisableMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable metrics monitoring
-	cluster.Spec.Monitoring.EnableMetrics = boolPtr(false)
+	cluster.Spec.Monitoring.Prometheus.ExportMetrics = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 

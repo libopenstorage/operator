@@ -561,15 +561,19 @@ spec:
               properties:
                 enableMetrics:
                   type: boolean
-                  description: If this flag is enabled it will expose the storage cluster metrics to external
-                    monitoring solutions like Prometheus.
+                  description: "If this flag is enabled it will expose the storage cluster metrics to external
+                    monitoring solutions like Prometheus. DEPRECATED - use prometheus.exportMetrics instead"
                 prometheus:
                   type: object
                   description: Contains configuration of Prometheus to monitor the storage cluster.
                   properties:
+                    exportMetrics:
+                      type: boolean
+                      description: If this flag is enabled it will expose the storage cluster metrics to Prometheus.
                     enabled:
                       type: boolean
-                      description: Flag indicating whether prometheus needs to be enabled.
+                      description: Flag indicating whether Prometheus stack needs to be enabled and deployed
+                        by the Storage operator.
                     remoteWriteEndpoint:
                       type: string
                       description: Specifies the remote write endpoint for Prometheus.

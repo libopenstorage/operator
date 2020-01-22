@@ -249,20 +249,20 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
-	// By defaul monitoring is not enabled
+	// By default monitoring is not enabled
 	require.Nil(t, cluster.Spec.Monitoring)
 
-	// If prometheus is enabled and metrics is nil, then enable it
+	// If metrics was enabled previosly, enable it in prometheus spec
+	// and remove the enableMetrics config
 	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
-		Prometheus: &corev1alpha1.PrometheusSpec{
-			Enabled: true,
-		},
+		EnableMetrics: boolPtr(true),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.True(t, *cluster.Spec.Monitoring.EnableMetrics)
+	require.True(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
+	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
 
 	// If prometheus is enabled but metrics is explicitly disabled,
-	// then do no enable it
+	// then do no enable it and remove it from config
 	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
 		EnableMetrics: boolPtr(false),
 		Prometheus: &corev1alpha1.PrometheusSpec{
@@ -270,7 +270,8 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.False(t, *cluster.Spec.Monitoring.EnableMetrics)
+	require.False(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
+	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
 }
 
 func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
