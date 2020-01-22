@@ -141,15 +141,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		setPortworxDefaults(toUpdate, t)
 	}
 
-	// If prometheus is enabled and metrics are not enabled explicitly, then
-	// enabled exporting of metrics
-	if toUpdate.Spec.Monitoring != nil &&
-		toUpdate.Spec.Monitoring.Prometheus != nil &&
-		toUpdate.Spec.Monitoring.Prometheus.Enabled &&
-		toUpdate.Spec.Monitoring.EnableMetrics == nil {
-		toUpdate.Spec.Monitoring.EnableMetrics = boolPtr(true)
-	}
-
 	components, err := componentVersions(releases, t.pxVersion)
 	if err != nil {
 		logrus.Warnf(err.Error())
@@ -761,6 +752,19 @@ func setComponentDefaults(
 		} else if len(toUpdate.Spec.Stork.Image) == 0 {
 			toUpdate.Spec.Stork.Image = defaultStorkImage
 		}
+	}
+
+	// If the deprecated metrics flag is set, then remove it and set the corresponding
+	// exportMetrics flag in Prometheus spec.
+	if toUpdate.Spec.Monitoring != nil &&
+		toUpdate.Spec.Monitoring.EnableMetrics != nil {
+		if *toUpdate.Spec.Monitoring.EnableMetrics {
+			if toUpdate.Spec.Monitoring.Prometheus == nil {
+				toUpdate.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
+			}
+			toUpdate.Spec.Monitoring.Prometheus.ExportMetrics = true
+		}
+		toUpdate.Spec.Monitoring.EnableMetrics = nil
 	}
 }
 

@@ -46,6 +46,8 @@ const (
 	PrometheusServiceName = "px-prometheus"
 	// PrometheusInstanceName name of the prometheus instance
 	PrometheusInstanceName = "px-prometheus"
+	// DefaultPrometheusOperatorImage is the default prometheus operator image
+	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.29.0"
 )
 
 type prometheus struct {
@@ -368,7 +370,7 @@ func getPrometheusOperatorDeploymentSpec(
 	labels := map[string]string{
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
-	operatorImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, "quay.io/coreos/prometheus-operator:v0.29.0")
+	operatorImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, DefaultPrometheusOperatorImage)
 	args := make([]string, 0)
 	args = append(args,
 		fmt.Sprintf("--kubelet-service=%s/kubelet", cluster.Namespace),
@@ -402,16 +404,6 @@ func getPrometheusOperatorDeploymentSpec(
 								{
 									Name:          "http",
 									ContainerPort: int32(8080),
-								},
-							},
-							Resources: v1.ResourceRequirements{
-								Limits: map[v1.ResourceName]resource.Quantity{
-									v1.ResourceCPU:    resource.MustParse("200m"),
-									v1.ResourceMemory: resource.MustParse("100Mi"),
-								},
-								Requests: map[v1.ResourceName]resource.Quantity{
-									v1.ResourceCPU:    resource.MustParse("100m"),
-									v1.ResourceMemory: resource.MustParse("50Mi"),
 								},
 							},
 						},

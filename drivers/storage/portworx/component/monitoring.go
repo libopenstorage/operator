@@ -49,8 +49,8 @@ func (c *monitoring) Initialize(
 
 func (c *monitoring) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
-		cluster.Spec.Monitoring.EnableMetrics != nil &&
-		*cluster.Spec.Monitoring.EnableMetrics
+		cluster.Spec.Monitoring.Prometheus != nil &&
+		cluster.Spec.Monitoring.Prometheus.ExportMetrics
 }
 
 func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
