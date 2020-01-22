@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"path"
 	"testing"
@@ -216,4 +217,9 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 		}
 		return false, nil
 	})
+}
+
+// ValidateStorageCluster validates a StorageCluster spec
+func ValidateStorageCluster(cluster *corev1alpha1.StorageCluster) error {
+	return fmt.Errorf("not implemented yet")
 }

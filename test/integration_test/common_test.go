@@ -3,12 +3,14 @@
 package integrationtest
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
@@ -70,11 +72,45 @@ func validateStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 	timeout, interval time.Duration,
 ) error {
-	// Validate expected portworx pods are running and no more, no less
-	return validateStorageClusterPods(cluster, timeout, interval)
+	var err error
+	cluster, err = k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
 
-	// TODO: Validate expected number of portworx nodes are online (using sdk)
+	if err = validateStorageClusterPods(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	svc, err := k8s.Instance().GetService("portworx-service", cluster.Namespace)
+	pxEndpoint := ""
+	if err == nil {
+		pxEndpoint = svc.Spec.ClusterIP
+	}
+
+	conn, err := grpc.Dial(pxEndpoint, grpc.WithInsecure())
+	if err != nil {
+		return err
+	}
+	nodeClient := api.NewOpenStorageNodeClient(conn)
+	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return err
+	}
+	expectedNodes := len(cluster.Spec.Nodes)
+	actualNodes := len(nodeEnumerateResp.GetNodeIds())
+	if actualNodes != expectedNodes {
+		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	}
+
 	// TODO: Validate portworx is started with correct params. Check individual options
+	for _, n := range nodeEnumerateResp.GetNodeIds() {
+		nodeResp, err := nodeClient.Inspect(d.getContext(), &api.SdkNodeInspectRequest{NodeId: n})
+		if err != nil {
+			return nodes, err
+		}
+	}
+
 }
 
 func validateStorageClusterComponents(cluster *corev1alpha1.StorageCluster) error {
