@@ -788,7 +788,7 @@ func CreateOrUpdateDeployment(
 		existingDeployment,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s deployment", deployment.Name)
+		logrus.Debugf("Creating %s Deployment", deployment.Name)
 		return k8sClient.Create(context.TODO(), deployment)
 	} else if err != nil {
 		return err
@@ -800,7 +800,7 @@ func CreateOrUpdateDeployment(
 		}
 	}
 
-	logrus.Debugf("Updating %s deployment", deployment.Name)
+	logrus.Debugf("Updating %s Deployment", deployment.Name)
 	return k8sClient.Update(context.TODO(), deployment)
 }
 
@@ -859,7 +859,7 @@ func CreateOrUpdateStatefulSet(
 		existingSS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s stateful set", ss.Name)
+		logrus.Debugf("Creating %s StatefulSet", ss.Name)
 		return k8sClient.Create(context.TODO(), ss)
 	} else if err != nil {
 		return err
@@ -871,7 +871,7 @@ func CreateOrUpdateStatefulSet(
 		}
 	}
 
-	logrus.Debugf("Updating %s stateful set", ss.Name)
+	logrus.Debugf("Updating %s StatefulSet", ss.Name)
 	return k8sClient.Update(context.TODO(), ss)
 }
 
@@ -930,7 +930,7 @@ func CreateOrUpdateDaemonSet(
 		existingDS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s daemon set", ds.Name)
+		logrus.Debugf("Creating %s DaemonSet", ds.Name)
 		return k8sClient.Create(context.TODO(), ds)
 	} else if err != nil {
 		return err
@@ -953,8 +953,47 @@ func CreateOrUpdateDaemonSet(
 	existingDS.Labels = ds.Labels
 	existingDS.Spec = ds.Spec
 
-	logrus.Debugf("Updating %s daemon set", ds.Name)
+	logrus.Debugf("Updating %s DaemonSet", ds.Name)
 	return k8sClient.Update(context.TODO(), existingDS)
+}
+
+// DeleteDaemonSet deletes a DaemonSet if present and owned
+func DeleteDaemonSet(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	ds := &appsv1.DaemonSet{}
+	err := k8sClient.Get(context.TODO(), resource, ds)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(ds.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(ds.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(ds.OwnerReferences) > 0 && len(ds.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete DaemonSet %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s DaemonSet", namespace, name)
+		return k8sClient.Delete(context.TODO(), ds)
+	}
+	ds.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s DaemonSet", namespace, name)
+	return k8sClient.Update(context.TODO(), ds)
 }
 
 // UpdateStorageClusterStatus updates the status of given StorageCluster object

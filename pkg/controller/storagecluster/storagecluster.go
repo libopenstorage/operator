@@ -68,7 +68,7 @@ const (
 	ControllerName = "storagecluster-controller"
 	// AnnotationDisableStorage annotation to disable the storage pods from running.
 	// Defaults to false value.
-	AnnotationDisableStorage            = operatorPrefix + "/disable-storage-pods"
+	AnnotationDisableStorage            = operatorPrefix + "/disable-storage"
 	slowStartInitialBatchSize           = 1
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
