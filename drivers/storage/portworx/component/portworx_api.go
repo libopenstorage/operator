@@ -57,6 +57,14 @@ func (c *portworxAPI) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 }
 
 func (c *portworxAPI) Delete(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	if err := k8sutil.DeleteService(c.k8sClient, PxAPIServiceName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxAPIDaemonSetName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	c.isCreated = false
 	return nil
 }
 

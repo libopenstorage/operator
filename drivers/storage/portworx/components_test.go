@@ -248,6 +248,95 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, dsList.Items)
 }
 
+func TestDisablePortworx(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PxClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PxClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	role := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.PxRoleName, "")
+	require.NoError(t, err)
+
+	rb := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, "")
+	require.NoError(t, err)
+
+	pxSvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxSvc, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	pxAPISvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPISvc, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable Portworx
+	cluster.Annotations = map[string]string{
+		storagecluster.AnnotationDisableStorage: "true",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PxClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PxClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	role = &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.PxRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	rb = &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxSvc, pxutil.PortworxServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxAPISvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPISvc, component.PxAPIServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestDefaultStorageClassesWithStork(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	reregisterComponents()

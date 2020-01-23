@@ -902,6 +902,82 @@ func TestDeleteStatefulSet(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestDeleteDaemonSet(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := fake.NewFakeClient(expected)
+
+	// Don't delete or throw error if the daemonset is not present
+	err := DeleteDaemonSet(k8sClient, "not-present-daemonset", namespace)
+	require.NoError(t, err)
+
+	daemonset := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, daemonset)
+
+	// Don't delete when there is no owner in the daemonset
+	// but trying to delete for specific owners
+	err = DeleteDaemonSet(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	daemonset = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, daemonset)
+
+	// Delete when there is no owner in the daemonset
+	err = DeleteDaemonSet(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	daemonset = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the daemonset is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeleteDaemonSet(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	daemonset = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, daemonset)
+
+	// Don't delete when the daemonset is owned by objects
+	// more than what are passed on delete call
+	err = DeleteDaemonSet(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	daemonset = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, daemonset.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), daemonset.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), daemonset.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the daemonset
+	err = DeleteDaemonSet(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	daemonset = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestUpdateStorageClusterStatus(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	cluster := &corev1alpha1.StorageCluster{
