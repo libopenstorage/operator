@@ -2,7 +2,13 @@ package test
 
 import (
 	"context"
+	"fmt"
+	"github.com/libopenstorage/openstorage/api"
+	"github.com/portworx/sched-ops/k8s"
+	"github.com/portworx/sched-ops/task"
+	"google.golang.org/grpc"
 	"io/ioutil"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"path"
 	"testing"
 	"time"
@@ -25,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -224,4 +231,195 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 		}
 		return false, nil
 	})
+}
+
+// UninstallStorageCluster uninstalls and wipe storagecluster from k8s
+func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster) error {
+	var err error
+	cluster, err = k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if cluster.Spec.DeleteStrategy == nil ||
+		(cluster.Spec.DeleteStrategy.Type != corev1alpha1.UninstallAndWipeStorageClusterStrategyType &&
+			cluster.Spec.DeleteStrategy.Type != corev1alpha1.UninstallStorageClusterStrategyType) {
+		cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
+			Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+		}
+		if _, err = k8s.Instance().UpdateStorageCluster(cluster); err != nil {
+			return err
+		}
+	}
+
+	return k8s.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+}
+
+// ValidateStorageCluster validates a StorageCluster spec
+func ValidateStorageCluster(
+	cluster *corev1alpha1.StorageCluster,
+	timeout, interval time.Duration,
+) error {
+	var err error
+	cluster, err = k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	if err = validateStorageClusterPods(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	svc, err := k8s.Instance().GetService("portworx-service", cluster.Namespace)
+	pxEndpoint := ""
+	if err != nil {
+		return err
+	}
+
+	servicePort := int32(0)
+	for _, port := range svc.Spec.Ports {
+		if port.Name == "px-sdk" {
+			servicePort = port.Port
+			break
+		}
+	}
+	if servicePort == 0 {
+		return fmt.Errorf("px-sdk port not found in service")
+	}
+
+	pxEndpoint = fmt.Sprintf("%s:%d", svc.Spec.ClusterIP, servicePort)
+
+	conn, err := grpc.Dial(pxEndpoint, grpc.WithInsecure())
+	if err != nil {
+		return err
+	}
+	nodeClient := api.NewOpenStorageNodeClient(conn)
+	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return err
+	}
+	expectedNodes, err := expectedPods(cluster)
+	if err != nil {
+		return err
+	}
+	actualNodes := len(nodeEnumerateResp.GetNodeIds())
+	if actualNodes != expectedNodes {
+		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	}
+
+	// TODO: Validate portworx is started with correct params. Check individual options
+	for _, n := range nodeEnumerateResp.GetNodeIds() {
+		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
+		if err != nil {
+			return err
+		}
+		if nodeResp.Node.Status != api.Status_STATUS_OK {
+			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
+				nodeResp.Node.Status)
+		}
+
+	}
+	return nil
+}
+
+// ValidateUninstallStorageCluster validates if storagecluster and its related objects
+// were properly uninstalled and cleaned
+func ValidateUninstallStorageCluster(
+	cluster *corev1alpha1.StorageCluster,
+	timeout, interval time.Duration,
+) error {
+	t := func() (interface{}, bool, error) {
+		cluster, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return "", false, nil
+			}
+			return "", true, err
+		}
+
+		pods, err := k8s.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		if err != nil && err != k8s.ErrPodsNotFound {
+			return "", true, fmt.Errorf("failed to get pods for StorageCluster %s/%s. Err: %v",
+				cluster.Namespace, cluster.Name, err)
+		}
+
+		if len(pods) > 0 {
+			return "", true, fmt.Errorf("%v pods are still present", len(pods))
+		}
+
+		return "", true, fmt.Errorf("pods are deleted, but StorageCluster %v/%v still present",
+			cluster.Namespace, cluster.Name)
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateStorageClusterPods(
+	cluster *corev1alpha1.StorageCluster,
+	timeout, interval time.Duration,
+) error {
+	expectedPodCount, err := expectedPods(cluster)
+	if err != nil {
+		return err
+	}
+
+	t := func() (interface{}, bool, error) {
+		cluster, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil {
+			return "", true, err
+		}
+
+		pods, err := k8s.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		if err != nil || pods == nil {
+			return "", true, fmt.Errorf("failed to get pods for StorageCluster %s/%s. Err: %v",
+				cluster.Namespace, cluster.Name, err)
+		}
+
+		if len(pods) != expectedPodCount {
+			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", expectedPodCount, len(pods))
+		}
+
+		for _, pod := range pods {
+			if !k8s.Instance().IsPodReady(pod) {
+				return "", true, fmt.Errorf("pod %v/%v is not yet ready", pod.Namespace, pod.Name)
+			}
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
+	nodeList, err := k8s.Instance().GetNodes()
+	if err != nil {
+		return 0, err
+	}
+
+	dummyPod := &v1.Pod{}
+	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
+		dummyPod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+		}
+	}
+
+	podCount := 0
+	for _, node := range nodeList.Items {
+		if k8s.Instance().IsNodeMaster(node) {
+			continue
+		}
+		nodeInfo := schedulernodeinfo.NewNodeInfo()
+		nodeInfo.SetNode(&node)
+		if ok, _, _ := predicates.PodMatchNodeSelector(dummyPod, nil, nodeInfo); ok {
+			podCount++
+		}
+	}
+
+	return podCount, nil
 }
