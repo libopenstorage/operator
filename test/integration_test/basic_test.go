@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,11 +17,11 @@ func TestBasic(t *testing.T) {
 func testInstallWithEmptySpecWithAllDefaults(t *testing.T) {
 	cluster, err := createStorageClusterFromSpec("empty_spec.yaml")
 	require.NoError(t, err)
-	err = validateStorageCluster(cluster, 15*time.Minute, 15*time.Second)
+	err = testutil.ValidateStorageCluster(cluster, 15*time.Minute, 15*time.Second)
 	require.NoError(t, err)
 
-	err = uninstallStorageCluster(cluster)
+	err = testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
-	err = validateUninstallStorageCluster(cluster, 15*time.Minute, 30*time.Second)
+	err = testutil.ValidateUninstallStorageCluster(cluster, 15*time.Minute, 30*time.Second)
 	require.NoError(t, err)
 }
