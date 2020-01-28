@@ -2,7 +2,10 @@ sudo: required
 dist: trusty
 language: go
 go:
-  - 1.11.2
+  - 1.13.x
+cache:
+  directories:
+    - $GOPATH/pkg/mod
 script:
   - |
     if [ "${TRAVIS_BRANCH}" == "master" ]; then
@@ -11,7 +14,7 @@ script:
     else
       export DOCKER_HUB_STORAGE_OPERATOR_TAG=`git rev-parse --short HEAD`
     fi
-    make && make downloads && make test && make verify-catalog && make container &&
+    make vendor-update && make && make downloads && make test && make verify-catalog && make container &&
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
       docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
       make deploy;
