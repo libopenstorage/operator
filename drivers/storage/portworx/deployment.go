@@ -394,6 +394,11 @@ func configureStorageNodeSpec(node *corev1alpha1.StorageNode, config *cloudstora
 
 func (t *template) portworxContainer() v1.Container {
 	pxImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, t.cluster.Spec.Image)
+
+	readinessPort := intstr.FromInt(9015)
+	if t.startPort != pxutil.DefaultStartPort {
+		readinessPort = intstr.FromInt(t.startPort + 11)
+	}
 	return v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
@@ -417,7 +422,7 @@ func (t *template) portworxContainer() v1.Container {
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/health",
-					Port: intstr.FromInt(t.startPort + 14),
+					Port: readinessPort,
 				},
 			},
 		},

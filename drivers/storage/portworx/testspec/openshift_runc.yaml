@@ -37,7 +37,7 @@ spec:
           imagePullPolicy: Always
           args:
             ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b",
-             "-x", "kubernetes"]
+             "-r", "9011", "-x", "kubernetes"]
           env:
             - name: "PX_SECRETS_NAMESPACE"
               value: "kube-system"
@@ -51,13 +51,13 @@ spec:
             httpGet:
               host: 127.0.0.1
               path: /status
-              port: 9001
+              port: 9011
           readinessProbe:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 9015
+              port: 9022
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
             privileged: true

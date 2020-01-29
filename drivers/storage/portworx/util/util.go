@@ -18,6 +18,8 @@ const (
 	DriverName = "portworx"
 	// DefaultStartPort is the default start port for Portworx
 	DefaultStartPort = 9001
+	// DefaultOpenshiftStartPort is the default start port for Portworx on OpenShift
+	DefaultOpenshiftStartPort = 9011
 	// PortworxSpecsDir is the directory where all the Portworx specs are stored
 	PortworxSpecsDir = "/configs"
 
@@ -141,6 +143,8 @@ func StartPort(cluster *corev1alpha1.StorageCluster) int {
 	startPort := DefaultStartPort
 	if cluster.Spec.StartPort != nil {
 		startPort = int(*cluster.Spec.StartPort)
+	} else if IsOpenshift(cluster) {
+		startPort = DefaultOpenshiftStartPort
 	}
 	return startPort
 }
