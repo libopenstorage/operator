@@ -1450,6 +1450,15 @@ func (p *portworx) createPortworxService(
 ) error {
 	labels := p.GetSelectorLabels()
 
+	kvdbTargetPort := intstr.FromInt(9019)
+	sdkTargetPort := intstr.FromInt(9020)
+	restGatewayTargetPort := intstr.FromInt(9021)
+	if t.startPort != defaultStartPort {
+		kvdbTargetPort = intstr.FromInt(t.startPort + 15)
+		sdkTargetPort = intstr.FromInt(t.startPort + 16)
+		restGatewayTargetPort = intstr.FromInt(t.startPort + 17)
+	}
+
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pxServiceName,
@@ -1471,19 +1480,19 @@ func (p *portworx) createPortworxService(
 					Name:       pxKVDBPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9019),
-					TargetPort: intstr.FromInt(t.startPort + 18),
+					TargetPort: kvdbTargetPort,
 				},
 				{
 					Name:       pxSDKPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9020),
-					TargetPort: intstr.FromInt(t.startPort + 19),
+					TargetPort: sdkTargetPort,
 				},
 				{
 					Name:       "px-rest-gateway",
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9021),
-					TargetPort: intstr.FromInt(t.startPort + 20),
+					TargetPort: restGatewayTargetPort,
 				},
 			},
 		},
@@ -1501,6 +1510,13 @@ func (p *portworx) createPortworxAPIService(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	labels := getPortworxAPIServiceLabels()
+
+	sdkTargetPort := intstr.FromInt(9020)
+	restGatewayTargetPort := intstr.FromInt(9021)
+	if t.startPort != defaultStartPort {
+		sdkTargetPort = intstr.FromInt(t.startPort + 16)
+		restGatewayTargetPort = intstr.FromInt(t.startPort + 17)
+	}
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1523,13 +1539,13 @@ func (p *portworx) createPortworxAPIService(
 					Name:       pxSDKPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9020),
-					TargetPort: intstr.FromInt(t.startPort + 19),
+					TargetPort: sdkTargetPort,
 				},
 				{
 					Name:       "px-rest-gateway",
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9021),
-					TargetPort: intstr.FromInt(t.startPort + 20),
+					TargetPort: restGatewayTargetPort,
 				},
 			},
 		},

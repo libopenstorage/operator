@@ -42,6 +42,7 @@ const (
 	defaultAutopilotImage             = "portworx/autopilot:v0.6.0"
 	defaultStorkImage                 = "openstorage/stork:2.2.5"
 	defaultStartPort                  = 9001
+	defaultOpenshiftStartPort         = 9011
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
 	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.2-rc1"
