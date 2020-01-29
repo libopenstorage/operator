@@ -570,7 +570,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
-	require.Equal(t, uint32(defaultStartPort), *cluster.Spec.StartPort)
+	require.Equal(t, uint32(defaultOpenshiftStartPort), *cluster.Spec.StartPort)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
