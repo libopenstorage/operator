@@ -45,7 +45,7 @@ spec:
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 10012
+              port: 10015
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
             privileged: true
