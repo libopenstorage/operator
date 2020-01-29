@@ -104,7 +104,7 @@ var (
 			hostPath:  "/etc/crictl.yaml",
 			mountPath: "/etc/crictl.yaml",
 			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/etc/crictl.yaml",
+				hostPath: "/var/vcap/store/crictl.yaml",
 			},
 			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
 		},

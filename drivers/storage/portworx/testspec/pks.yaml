@@ -104,7 +104,7 @@ spec:
             path: /var/vcap/sys/run/crio
         - name: crioconf
           hostPath:
-            path: /var/vcap/store/etc/crictl.yaml
+            path: /var/vcap/store/crictl.yaml
             type: FileOrCreate
         - name: containerdsock
           hostPath:
