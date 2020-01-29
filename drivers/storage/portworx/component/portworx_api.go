@@ -77,7 +77,14 @@ func (c *portworxAPI) createService(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	labels := getPortworxAPIServiceLabels()
+
 	startPort := pxutil.StartPort(cluster)
+	sdkTargetPort := 9020
+	restGatewayTargetPort := 9021
+	if startPort != pxutil.DefaultStartPort {
+		sdkTargetPort = startPort + 16
+		restGatewayTargetPort = startPort + 17
+	}
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -100,13 +107,13 @@ func (c *portworxAPI) createService(
 					Name:       pxutil.PortworxSDKPortName,
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9020),
-					TargetPort: intstr.FromInt(startPort + 19),
+					TargetPort: intstr.FromInt(sdkTargetPort),
 				},
 				{
 					Name:       "px-rest-gateway",
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9021),
-					TargetPort: intstr.FromInt(startPort + 20),
+					TargetPort: intstr.FromInt(restGatewayTargetPort),
 				},
 			},
 		},

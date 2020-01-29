@@ -17,8 +17,8 @@ spec:
     - name: px-sdk
       protocol: TCP
       port: 9020
-      targetPort: 10020
+      targetPort: 10017
     - name: px-rest-gateway
       protocol: TCP
       port: 9021
-      targetPort: 10021
+      targetPort: 10018
