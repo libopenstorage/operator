@@ -1701,7 +1701,7 @@ func getPVCControllerDeploymentSpec(
 		"tier": "control-plane",
 	}
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pvcDeploymentName,
 			Namespace:       t.cluster.Namespace,
@@ -1737,9 +1737,10 @@ func getPVCControllerDeploymentSpec(
 					HostNetwork:        true,
 					Containers: []v1.Container{
 						{
-							Name:    pvcContainerName,
-							Image:   imageName,
-							Command: command,
+							Name:            pvcContainerName,
+							Image:           imageName,
+							ImagePullPolicy: t.imagePullPolicy,
+							Command:         command,
 							LivenessProbe: &v1.Probe{
 								FailureThreshold:    8,
 								TimeoutSeconds:      15,
@@ -1784,6 +1785,17 @@ func getPVCControllerDeploymentSpec(
 			},
 		},
 	}
+
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment
 }
 
 func (p *portworx) createLighthouseDeployment(
@@ -1859,7 +1871,7 @@ func getLighthouseDeploymentSpec(
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            lhDeploymentName,
 			Namespace:       t.cluster.Namespace,
@@ -1961,6 +1973,17 @@ func getLighthouseDeploymentSpec(
 			},
 		},
 	}
+
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment
 }
 
 func (p *portworx) createAutopilotDeployment(
@@ -2435,6 +2458,15 @@ func getCSIDeploymentSpec(
 		}
 	}
 
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	return deployment
 }
 
@@ -2584,6 +2616,15 @@ func getCSIStatefulSetSpec(
 		}
 	}
 
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		statefulSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	return statefulSet
 }
 
@@ -2622,7 +2663,7 @@ func (p *portworx) createPortworxAPIDaemonSet(
 						{
 							Name:            "portworx-api",
 							Image:           imageName,
-							ImagePullPolicy: v1.PullAlways,
+							ImagePullPolicy: t.imagePullPolicy,
 							ReadinessProbe: &v1.Probe{
 								PeriodSeconds: int32(10),
 								Handler: v1.Handler{
@@ -2644,6 +2685,15 @@ func (p *portworx) createPortworxAPIDaemonSet(
 		newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: t.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
+	}
+
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
 	}
 
 	return k8sutil.CreateOrUpdateDaemonSet(p.k8sClient, newDaemonSet, ownerRef)

@@ -1695,43 +1695,6 @@ func TestAutopilotWithoutImage(t *testing.T) {
 	)
 }
 
-func TestAutopilotWithImagePullSecret(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := testutil.FakeK8sClient()
-	recorder := record.NewFakeRecorder(0)
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
-
-	imagePullSecret := "registry-secret"
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			ImagePullSecret: &imagePullSecret,
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t,
-		imagePullSecret,
-		autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
-	)
-}
-
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
@@ -1776,82 +1739,6 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	require.Equal(t, "bar", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 	require.Equal(t, "FOO", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	require.Equal(t, "foo", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
-}
-
-func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-	}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	customRepo := "test-registry:1111/test-repo"
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			CustomImageRegistry: customRepo,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-
-	require.NoError(t, err)
-
-	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
-
-	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v0.0.0",
-		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
-		getImageFromDeployment(lhDeployment, lhContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigSyncContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
-		getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
-	)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/autopilot:test",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
 }
 
 func TestAutopilotImageChange(t *testing.T) {
@@ -2143,11 +2030,155 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
-func TestCompleteInstallWithCustomRegistry(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetBaseClient(versionClient)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
 		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	customRepo := "test-registry:1111/test-repo"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRepo,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/px-lighthouse:test",
+		getImageFromDeployment(lhDeployment, lhContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		getImageFromDeployment(lhDeployment, lhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-stork-connector:test",
+		getImageFromDeployment(lhDeployment, lhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
+	)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v1.3.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v1.2.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Change the k8s version to 1.14, so that resizer sidecar is deployed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/csi-resizer:v0.2.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+}
+
+func TestCompleteInstallWithCustomRegistry(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetBaseClient(versionClient)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
 	}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
@@ -2161,8 +2192,8 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
+			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
-			ImagePullPolicy:     v1.PullIfNotPresent,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
@@ -2170,6 +2201,9 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 			Autopilot: &corev1alpha1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
+			},
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
 			},
 		},
 	}
@@ -2190,7 +2224,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0",
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -2213,6 +2247,126 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		customRegistry+"/portworx/lh-config-sync:test",
 		getImageFromDeployment(lhDeployment, lhConfigInitContainerName),
 	)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.3.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/quay.io/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Change the k8s version to 1.14, so that resizer sidecar is deployed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/quay.io/openstorage/csi-resizer:v0.2.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/quay.io/k8scsi/csi-provisioner:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/quay.io/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+}
+
+func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetBaseClient(versionClient)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ImagePullPolicy: v1.PullIfNotPresent,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.PullIfNotPresent,
+		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].ImagePullPolicy)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.PullIfNotPresent,
+		pvcDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
 	require.Equal(t, v1.PullIfNotPresent,
 		testutil.GetPullPolicyForContainer(lhDeployment, lhContainerName))
 	require.Equal(t, v1.PullIfNotPresent,
@@ -2225,12 +2379,156 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/portworx/autopilot:test",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
 	require.Equal(t, v1.PullIfNotPresent,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+	)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiDeployment.Spec.Template.Spec.Containers[1].ImagePullPolicy,
+	)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiDeployment.Spec.Template.Spec.Containers[2].ImagePullPolicy,
+	)
+
+	// Change the k8s version to 1.14, so that resizer sidecar is deployed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiDeployment.Spec.Template.Spec.Containers[2].ImagePullPolicy,
+	)
+
+	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiStatefulSet.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+	)
+	require.Equal(t, v1.PullIfNotPresent,
+		csiStatefulSet.Spec.Template.Spec.Containers[1].ImagePullPolicy,
+	)
+}
+
+func TestCompleteInstallWithImagePullSecret(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	k8s.Instance().SetBaseClient(versionClient)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		volumePlacementStrategyCRDCreated: true,
+		csiNodeInfoCRDCreated:             true,
+	}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	imagePullSecret := "registry-secret"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image:           "portworx/image:2.2",
+			ImagePullSecret: &imagePullSecret,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			FeatureGates: map[string]string{
+				string(FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, pxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, pvcDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		pvcDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, lhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		lhDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, autopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
+
+	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, csiApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		imagePullSecret,
+		csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name,
+	)
 }
 
 func TestRemovePVCController(t *testing.T) {
@@ -3495,136 +3793,6 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Args[4])
 	require.Equal(t, "quay.io/openstorage/csi-resizer:v0.2.0-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
-}
-
-func TestCSIInstallWithCustomRegistry(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(versionClient)
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	customRegistry := "test-registry:1111"
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
-			CustomImageRegistry: customRegistry,
-			ImagePullPolicy:     v1.PullIfNotPresent,
-			FeatureGates: map[string]string{
-				string(FeatureCSI): "1",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.3.0-1",
-		deployment.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-attacher:v1.2.1-1",
-		deployment.Spec.Template.Spec.Containers[1].Image,
-	)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.0-1",
-		deployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.14, so that resizer sidecar is deployed
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.14.0",
-	}
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[2].Image,
-	)
-}
-
-func TestCSIInstallWithCustomRepoRegistry(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(versionClient)
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		volumePlacementStrategyCRDCreated: true,
-		csiNodeInfoCRDCreated:             true,
-	}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	customRepo := "test-registry:1111/test-repo"
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
-			CustomImageRegistry: customRepo,
-			ImagePullPolicy:     v1.PullIfNotPresent,
-			FeatureGates: map[string]string{
-				string(FeatureCSI): "1",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.3.0-1",
-		deployment.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.1-1",
-		deployment.Spec.Template.Spec.Containers[1].Image,
-	)
-	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.0-1",
-		deployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.14, so that resizer sidecar is deployed
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.14.6",
-	}
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, deployment, csiApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/csi-resizer:v0.2.0-1",
-		deployment.Spec.Template.Spec.Containers[2].Image,
-	)
 }
 
 func TestDisableCSI_0_3(t *testing.T) {

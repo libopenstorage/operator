@@ -548,12 +548,7 @@ func (c *Controller) getStorkDeploymentSpec(
 	envVars []v1.EnvVar,
 	cpuQuantity resource.Quantity,
 ) *apps.Deployment {
-	imagePullPolicy := v1.PullAlways
-	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
-		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
-		imagePullPolicy = cluster.Spec.ImagePullPolicy
-	}
-
+	pullPolicy := imagePullPolicy(cluster)
 	deploymentLabels := map[string]string{
 		"tier": "control-plane",
 	}
@@ -601,7 +596,7 @@ func (c *Controller) getStorkDeploymentSpec(
 						{
 							Name:            storkContainerName,
 							Image:           imageName,
-							ImagePullPolicy: imagePullPolicy,
+							ImagePullPolicy: pullPolicy,
 							Command:         command,
 							Env:             envVars,
 							Resources: v1.ResourceRequirements{
@@ -719,6 +714,7 @@ func getStorkSchedDeploymentSpec(
 	command []string,
 	cpuQuantity resource.Quantity,
 ) *apps.Deployment {
+	pullPolicy := imagePullPolicy(cluster)
 	templateLabels := map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
@@ -753,9 +749,10 @@ func getStorkSchedDeploymentSpec(
 					ServiceAccountName: storkSchedServiceAccountName,
 					Containers: []v1.Container{
 						{
-							Name:    storkSchedDeploymentName,
-							Image:   imageName,
-							Command: command,
+							Name:            storkSchedDeploymentName,
+							Image:           imageName,
+							ImagePullPolicy: pullPolicy,
+							Command:         command,
 							LivenessProbe: &v1.Probe{
 								InitialDelaySeconds: 15,
 								Handler: v1.Handler{
@@ -821,6 +818,15 @@ func getStorkServiceLabels() map[string]string {
 	return map[string]string{
 		"name": "stork",
 	}
+}
+
+func imagePullPolicy(cluster *corev1alpha1.StorageCluster) v1.PullPolicy {
+	imagePullPolicy := v1.PullAlways
+	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
+		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
+		imagePullPolicy = cluster.Spec.ImagePullPolicy
+	}
+	return imagePullPolicy
 }
 
 type envByName []v1.EnvVar
