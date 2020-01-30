@@ -35,6 +35,7 @@ spec:
         - --use-service-account-credentials=true
         - --leader-elect-resource-lock=configmaps
         image: gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0
+        imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 8
           httpGet:
