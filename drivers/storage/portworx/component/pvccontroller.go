@@ -317,7 +317,7 @@ func getPVCControllerDeploymentSpec(
 		"tier": "control-plane",
 	}
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            PVCDeploymentName,
 			Namespace:       cluster.Namespace,
@@ -353,9 +353,10 @@ func getPVCControllerDeploymentSpec(
 					HostNetwork:        true,
 					Containers: []v1.Container{
 						{
-							Name:    pvcContainerName,
-							Image:   imageName,
-							Command: command,
+							Name:            pvcContainerName,
+							Image:           imageName,
+							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
+							Command:         command,
 							LivenessProbe: &v1.Probe{
 								FailureThreshold:    8,
 								TimeoutSeconds:      15,
@@ -400,6 +401,17 @@ func getPVCControllerDeploymentSpec(
 			},
 		},
 	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment
 }
 
 // RegisterPVCControllerComponent registers the PVC Controller component

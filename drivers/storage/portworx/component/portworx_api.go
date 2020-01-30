@@ -163,7 +163,7 @@ func (c *portworxAPI) createDaemonSet(
 						{
 							Name:            "portworx-api",
 							Image:           imageName,
-							ImagePullPolicy: v1.PullAlways,
+							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
 							ReadinessProbe: &v1.Probe{
 								PeriodSeconds: int32(10),
 								Handler: v1.Handler{
@@ -185,6 +185,15 @@ func (c *portworxAPI) createDaemonSet(
 		newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
 	}
 
 	return k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, newDaemonSet, ownerRef)

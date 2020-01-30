@@ -915,6 +915,10 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v1.11.0",
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
+	require.Equal(t,
+		v1.PullIfNotPresent,
+		schedDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+	)
 }
 
 func TestStorkInstallWithImagePullSecret(t *testing.T) {

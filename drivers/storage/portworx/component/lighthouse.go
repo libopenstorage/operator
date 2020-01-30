@@ -338,7 +338,7 @@ func getLighthouseDeploymentSpec(
 	maxSurge := intstr.FromInt(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            LhDeploymentName,
 			Namespace:       cluster.Namespace,
@@ -440,6 +440,17 @@ func getLighthouseDeploymentSpec(
 			},
 		},
 	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment
 }
 
 func getLighthouseLabels() map[string]string {

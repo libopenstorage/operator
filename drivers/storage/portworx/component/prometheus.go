@@ -377,7 +377,7 @@ func getPrometheusOperatorDeploymentSpec(
 		"--config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1",
 	)
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            PrometheusOperatorDeploymentName,
 			Namespace:       cluster.Namespace,
@@ -397,9 +397,10 @@ func getPrometheusOperatorDeploymentSpec(
 					ServiceAccountName: PrometheusOperatorServiceAccountName,
 					Containers: []v1.Container{
 						{
-							Name:  "px-prometheus-operator",
-							Image: operatorImage,
-							Args:  args,
+							Name:            "px-prometheus-operator",
+							Image:           operatorImage,
+							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
+							Args:            args,
 							Ports: []v1.ContainerPort{
 								{
 									Name:          "http",
@@ -416,6 +417,17 @@ func getPrometheusOperatorDeploymentSpec(
 			},
 		},
 	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return deployment
 }
 
 func (c *prometheus) createPrometheusService(
