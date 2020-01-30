@@ -592,6 +592,15 @@ func getCSIDeploymentSpec(
 		}
 	}
 
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	return deployment
 }
 
@@ -742,6 +751,15 @@ func getCSIStatefulSetSpec(
 		statefulSet.Spec.Template.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		statefulSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
 	}
 
 	return statefulSet
