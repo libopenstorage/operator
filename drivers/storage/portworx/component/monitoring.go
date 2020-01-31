@@ -105,7 +105,7 @@ func (c *monitoring) createServiceMonitor(
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
-				MatchNames: []string{cluster.Namespace},
+				Any: true,
 			},
 			Selector: metav1.LabelSelector{
 				MatchLabels: pxutil.SelectorLabels(),
