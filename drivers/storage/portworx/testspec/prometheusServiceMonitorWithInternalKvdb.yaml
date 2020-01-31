@@ -10,8 +10,7 @@ spec:
     matchLabels:
       name: portworx
   namespaceSelector:
-    matchNames:
-    - kube-test
+    any: true
   endpoints:
   - port: px-api
   - port: px-kvdb
