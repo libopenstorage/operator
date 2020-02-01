@@ -349,6 +349,15 @@ func (u *uninstallPortworx) RunNodeWiper(
 		}
 	}
 
+	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
+		ds.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *u.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	return u.k8sClient.Create(context.TODO(), ds)
 }
 
