@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
@@ -78,6 +79,7 @@ type Ops interface {
 	PrometheusOps
 	ClientSetter
 	GetVersion() (*version.Info, error)
+	ResourceExists(schema.GroupVersionKind) (bool, error)
 	// private methods for unit tests
 	privateMethods
 }
@@ -535,6 +537,26 @@ func (k *k8sOps) GetVersion() (*version.Info, error) {
 	}
 
 	return k.client.Discovery().ServerVersion()
+}
+
+func (k *k8sOps) ResourceExists(gvk schema.GroupVersionKind) (bool, error) {
+	if err := k.initK8sClient(); err != nil {
+		return false, err
+	}
+	_, apiLists, err := k.client.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		return false, err
+	}
+	for _, apiList := range apiLists {
+		if apiList.GroupVersion == gvk.GroupVersion().String() {
+			for _, r := range apiList.APIResources {
+				if r.Kind == gvk.Kind {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 // Namespace APIs - BEGIN

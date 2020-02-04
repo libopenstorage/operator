@@ -592,14 +592,14 @@
 
 [[projects]]
   branch = "operator"
-  digest = "1:512207bed541db738949b5411fecb00b15423055ca455e0158500121a99eb5f9"
+  digest = "1:42e1e2c5d64ece7e31d4dde2649e61a11d8d7e1c7aae70e16dc91a384bc135a3"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "task",
   ]
   pruneopts = "UT"
-  revision = "81a74c790db98bea9df0aed063b59c9beedbe134"
+  revision = "5bcbebe37c6abe8f2e1b3461b9024d8d0054ec5e"
 
 [[projects]]
   branch = "master"
@@ -1515,6 +1515,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/coreos/prometheus-operator/pkg/apis/monitoring",
     "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1",
     "github.com/golang/mock/gomock",
     "github.com/golang/protobuf/protoc-gen-go",
