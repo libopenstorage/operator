@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	monitoringapi "github.com/coreos/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -19,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
@@ -101,10 +104,24 @@ func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 		return err
 	}
 	if err := c.createPrometheusInstance(cluster, ownerRef); metaerrors.IsNoMatchError(err) {
-		c.warningEvent(cluster, util.FailedComponentReason,
-			fmt.Sprintf("Failed to create Prometheus instance for Portworx."+
-				" Waiting for prometheus operator to start. %v", err))
-		return nil
+		gvk := schema.GroupVersionKind{
+			Group:   monitoringapi.GroupName,
+			Version: monitoringv1.Version,
+			Kind:    monitoringv1.PrometheusesKind,
+		}
+		if resourcePresent, _ := k8s.Instance().ResourceExists(gvk); resourcePresent {
+			var clnt client.Client
+			clnt, err = k8sutil.NewK8sClient(c.scheme)
+			if err == nil {
+				c.k8sClient = clnt
+				err = c.createPrometheusInstance(cluster, ownerRef)
+			}
+		}
+		if err != nil {
+			c.warningEvent(cluster, util.FailedComponentReason,
+				fmt.Sprintf("Failed to create Prometheus object for Portworx. Ensure Prometheus is deployed correctly. %v", err))
+			return nil
+		}
 	} else if err != nil {
 		return err
 	}

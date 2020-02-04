@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"path"
 
+	monitoringapi "github.com/coreos/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	metaerrors "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -56,16 +59,16 @@ func (c *monitoring) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createServiceMonitor(cluster, ownerRef); metaerrors.IsNoMatchError(err) {
-		c.warningEvent(cluster, util.FailedComponentReason,
-			fmt.Sprintf("Failed to create ServiceMonitor for Portworx. Ensure Prometheus is deployed correctly. %v", err))
-		return nil
+		if success := c.retryCreate(monitoringv1.ServiceMonitorsKind, c.createServiceMonitor, cluster, err); !success {
+			return nil
+		}
 	} else if err != nil {
 		return err
 	}
 	if err := c.createPrometheusRule(cluster, ownerRef); metaerrors.IsNoMatchError(err) {
-		c.warningEvent(cluster, util.FailedComponentReason,
-			fmt.Sprintf("Failed to create PrometheusRule for Portworx. Ensure Prometheus is deployed correctly. %v", err))
-		return nil
+		if success := c.retryCreate(monitoringv1.PrometheusRuleKind, c.createPrometheusRule, cluster, err); !success {
+			return nil
+		}
 	} else if err != nil {
 		return err
 	}
@@ -148,6 +151,34 @@ func (c *monitoring) warningEvent(
 ) {
 	logrus.Warn(message)
 	c.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+}
+
+func (c *monitoring) retryCreate(
+	kind string,
+	createFunc func(*corev1alpha1.StorageCluster, *metav1.OwnerReference) error,
+	cluster *corev1alpha1.StorageCluster,
+	err error,
+) bool {
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	gvk := schema.GroupVersionKind{
+		Group:   monitoringapi.GroupName,
+		Version: monitoringv1.Version,
+		Kind:    kind,
+	}
+	if resourcePresent, _ := k8s.Instance().ResourceExists(gvk); resourcePresent {
+		var clnt client.Client
+		clnt, err = k8sutil.NewK8sClient(c.scheme)
+		if err == nil {
+			c.k8sClient = clnt
+			err = createFunc(cluster, ownerRef)
+		}
+	}
+	if err != nil {
+		c.warningEvent(cluster, util.FailedComponentReason,
+			fmt.Sprintf("Failed to create %s object for Portworx. Ensure Prometheus is deployed correctly. %v", kind, err))
+		return false
+	}
+	return true
 }
 
 func serviceMonitorLabels() map[string]string {

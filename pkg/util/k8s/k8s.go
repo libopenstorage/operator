@@ -22,12 +22,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
 	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 )
+
+// NewK8sClient returns a new controller runtime Kubernetes client
+func NewK8sClient(scheme *runtime.Scheme) (client.Client, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error getting Kubernetes config. %v", err)
+	}
+
+	clientOptions := client.Options{
+		Scheme: scheme,
+	}
+	cl, err := client.New(config, clientOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error creating a new Kubernetes client. %v", err)
+	}
+	return cl, nil
+}
 
 // GetVersion returns the kubernetes server version
 func GetVersion() (*version.Version, error) {
