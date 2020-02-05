@@ -183,7 +183,7 @@ func (c *pvcController) createClusterRole(ownerRef *metav1.OwnerReference) error
 				{
 					APIGroups: []string{""},
 					Resources: []string{"nodes"},
-					Verbs:     []string{"get", "list"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
 					APIGroups: []string{""},
