@@ -289,10 +289,10 @@ func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference
 				{
 					APIGroups: []string{""},
 					Resources: []string{"configmaps"},
-					Verbs:     []string{"get"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
-					APIGroups: []string{""},
+					APIGroups: []string{"", "events.k8s.io"},
 					Resources: []string{"events"},
 					Verbs:     []string{"create", "update", "patch"},
 				},
@@ -351,6 +351,11 @@ func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference
 					APIGroups: []string{"storage.k8s.io"},
 					Resources: []string{"storageclasses", "csinodes"},
 					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"coordination.k8s.io"},
+					Resources: []string{"leases"},
+					Verbs:     []string{"get", "list", "watch", "create", "update"},
 				},
 			},
 		},
