@@ -3,8 +3,6 @@ kind: Deployment
 metadata:
   name: portworx-operator
   namespace: kube-system
-  initializers:
-    pending: []
 spec:
   strategy:
     rollingUpdate:
