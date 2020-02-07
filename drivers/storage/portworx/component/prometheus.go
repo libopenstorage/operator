@@ -14,7 +14,7 @@ import (
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metaerrors "k8s.io/apimachinery/pkg/api/meta"
@@ -50,7 +50,7 @@ const (
 	// PrometheusInstanceName name of the prometheus instance
 	PrometheusInstanceName = "px-prometheus"
 	// DefaultPrometheusOperatorImage is the default prometheus operator image
-	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.29.0"
+	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.35.0"
 )
 
 type prometheus struct {
@@ -226,6 +226,7 @@ func (c *prometheus) createOperatorClusterRole(ownerRef *metav1.OwnerReference) 
 						"prometheuses/finalizers",
 						"servicemonitors",
 						"prometheusrules",
+						"podmonitors",
 					},
 					Verbs: []string{"*"},
 				},
