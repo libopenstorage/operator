@@ -56,6 +56,9 @@ const (
 	AnnotationServiceType = pxAnnotationPrefix + "/service-type"
 	// AnnotationPXVersion annotation indicating the portworx semantic version
 	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
+	// AnnotationDisableStorageClass annotation to disable installing default portworx
+	// storage classes
+	AnnotationDisableStorageClass = pxAnnotationPrefix + "/disable-storage-class"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -110,6 +113,12 @@ func IsEKS(cluster *corev1alpha1.StorageCluster) bool {
 func IsOpenshift(cluster *corev1alpha1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOpenshift])
 	return err == nil && enabled
+}
+
+// StorageClassEnabled returns true if default portworx storage classes are disabled
+func StorageClassEnabled(cluster *corev1alpha1.StorageCluster) bool {
+	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableStorageClass])
+	return err != nil || !disabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present

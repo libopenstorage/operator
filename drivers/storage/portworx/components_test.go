@@ -536,6 +536,65 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
 	require.Empty(t, storageClassList.Items)
+
+	// Invalid annotation value should result in creating storage classes
+	cluster.Annotations[storagecluster.AnnotationDisableStorage] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList = &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.NotEmpty(t, storageClassList.Items)
+}
+
+func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
+	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationDisableStorageClass: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Empty(t, storageClassList.Items)
+
+	// Invalid annotation value should result in creating storage classes
+	cluster.Annotations[pxutil.AnnotationDisableStorageClass] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList = &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.NotEmpty(t, storageClassList.Items)
+
+	// Remove storage classes even if already deployed
+	cluster.Annotations[pxutil.AnnotationDisableStorageClass] = "1"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storageClassList = &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Empty(t, storageClassList.Items)
 }
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
