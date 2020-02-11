@@ -19,7 +19,7 @@ const (
 	// DefaultStartPort is the default start port for Portworx
 	DefaultStartPort = 9001
 	// DefaultOpenshiftStartPort is the default start port for Portworx on OpenShift
-	DefaultOpenshiftStartPort = 9011
+	DefaultOpenshiftStartPort = 17001
 	// PortworxSpecsDir is the directory where all the Portworx specs are stored
 	PortworxSpecsDir = "/configs"
 
