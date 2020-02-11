@@ -53,7 +53,7 @@ func (c *portworxStorageClass) Initialize(
 }
 
 func (c *portworxStorageClass) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
-	return pxutil.IsPortworxEnabled(cluster)
+	return pxutil.IsPortworxEnabled(cluster) && pxutil.StorageClassEnabled(cluster)
 }
 
 func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) error {
@@ -195,6 +195,31 @@ annotations:
 }
 
 func (c *portworxStorageClass) Delete(cluster *corev1alpha1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbEncryptedStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedEncryptedStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotEncryptedStorageClass, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotEncryptedStorageClass, *ownerRef); err != nil {
+		return err
+	}
 	return nil
 }
 
