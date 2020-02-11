@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -2533,10 +2534,12 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 	_, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	parts := strings.Split(defaultNodeWiperImage, "/")
+	expectedNodeWiperImage := parts[len(parts)-1]
 	wiperDS := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, customRepo+"/px-node-wiper:2.1.2-rc1",
+	require.Equal(t, customRepo+"/"+expectedNodeWiperImage,
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -2566,7 +2569,7 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	wiperDS := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, customRegistry+"/portworx/px-node-wiper:2.1.2-rc1",
+	require.Equal(t, customRegistry+"/"+defaultNodeWiperImage,
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
 	)
 }

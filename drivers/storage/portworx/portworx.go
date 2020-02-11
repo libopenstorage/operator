@@ -42,7 +42,7 @@ const (
 	defaultStorkImage                 = "openstorage/stork:2.3.1"
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
-	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.2-rc1"
+	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.4"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
