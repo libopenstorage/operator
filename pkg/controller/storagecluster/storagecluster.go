@@ -86,7 +86,7 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
 	storageNodeCRDFile                  = "core_v1alpha1_storagenode_crd.yaml"
-	minSupportedK8sVersion              = "1.11.0"
+	minSupportedK8sVersion              = "1.12.0"
 )
 
 var _ reconcile.Reconciler = &Controller{}
