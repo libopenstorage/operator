@@ -37,5 +37,8 @@ rules:
   resources: ["serviceaccounts"]
   verbs: ["get", "create"]
 - apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  verbs: ["create"]
+- apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "create", "update"]
