@@ -3,21 +3,22 @@ package test
 import (
 	"context"
 	"fmt"
-	"github.com/libopenstorage/openstorage/api"
-	"github.com/portworx/sched-ops/k8s"
-	"github.com/portworx/sched-ops/task"
-	"google.golang.org/grpc"
 	"io/ioutil"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"path"
 	"testing"
 	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	k8serrors "github.com/portworx/sched-ops/k8s/errors"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	"github.com/portworx/sched-ops/task"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -236,7 +238,7 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 // UninstallStorageCluster uninstalls and wipe storagecluster from k8s
 func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster) error {
 	var err error
-	cluster, err = k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
@@ -246,12 +248,12 @@ func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster) error {
 		cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
 			Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
 		}
-		if _, err = k8s.Instance().UpdateStorageCluster(cluster); err != nil {
+		if _, err = operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
 			return err
 		}
 	}
 
-	return k8s.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+	return operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
 }
 
 // ValidateStorageCluster validates a StorageCluster spec
@@ -260,7 +262,7 @@ func ValidateStorageCluster(
 	timeout, interval time.Duration,
 ) error {
 	var err error
-	cluster, err = k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	if err != nil {
 		return err
 	}
@@ -269,7 +271,7 @@ func ValidateStorageCluster(
 		return err
 	}
 
-	svc, err := k8s.Instance().GetService("portworx-service", cluster.Namespace)
+	svc, err := coreops.Instance().GetService("portworx-service", cluster.Namespace)
 	pxEndpoint := ""
 	if err != nil {
 		return err
@@ -328,7 +330,7 @@ func ValidateUninstallStorageCluster(
 	timeout, interval time.Duration,
 ) error {
 	t := func() (interface{}, bool, error) {
-		cluster, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return "", false, nil
@@ -336,8 +338,8 @@ func ValidateUninstallStorageCluster(
 			return "", true, err
 		}
 
-		pods, err := k8s.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
-		if err != nil && err != k8s.ErrPodsNotFound {
+		pods, err := coreops.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		if err != nil && err != k8serrors.ErrPodsNotFound {
 			return "", true, fmt.Errorf("failed to get pods for StorageCluster %s/%s. Err: %v",
 				cluster.Namespace, cluster.Name, err)
 		}
@@ -366,12 +368,12 @@ func validateStorageClusterPods(
 	}
 
 	t := func() (interface{}, bool, error) {
-		cluster, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return "", true, err
 		}
 
-		pods, err := k8s.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		pods, err := coreops.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
 		if err != nil || pods == nil {
 			return "", true, fmt.Errorf("failed to get pods for StorageCluster %s/%s. Err: %v",
 				cluster.Namespace, cluster.Name, err)
@@ -382,7 +384,7 @@ func validateStorageClusterPods(
 		}
 
 		for _, pod := range pods {
-			if !k8s.Instance().IsPodReady(pod) {
+			if !coreops.Instance().IsPodReady(pod) {
 				return "", true, fmt.Errorf("pod %v/%v is not yet ready", pod.Namespace, pod.Name)
 			}
 		}
@@ -397,7 +399,7 @@ func validateStorageClusterPods(
 }
 
 func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
-	nodeList, err := k8s.Instance().GetNodes()
+	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
 		return 0, err
 	}
@@ -411,7 +413,7 @@ func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
 
 	podCount := 0
 	for _, node := range nodeList.Items {
-		if k8s.Instance().IsNodeMaster(node) {
+		if coreops.Instance().IsNodeMaster(node) {
 			continue
 		}
 		nodeInfo := schedulernodeinfo.NewNodeInfo()

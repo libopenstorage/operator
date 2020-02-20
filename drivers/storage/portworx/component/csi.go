@@ -10,7 +10,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -788,7 +788,7 @@ func (c *csi) createCSIDriver(
 func createCSINodeInfoCRD() error {
 	logrus.Debugf("Creating CSINodeInfo CRD")
 
-	resource := k8s.CustomResource{
+	resource := apiextensionsops.CustomResource{
 		Plural: "csinodeinfos",
 		Group:  "csi.storage.k8s.io",
 	}
@@ -878,11 +878,11 @@ func createCSINodeInfoCRD() error {
 		},
 	}
 
-	err := k8s.Instance().RegisterCRD(crd)
+	err := apiextensionsops.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
-	return k8s.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+	return apiextensionsops.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
 }
 
 func (c *csi) getCSIConfiguration(

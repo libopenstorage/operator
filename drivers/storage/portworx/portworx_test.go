@@ -23,7 +23,7 @@ import (
 	e2 "github.com/portworx/kvdb/etcd/v2"
 	e3 "github.com/portworx/kvdb/etcd/v3"
 	"github.com/portworx/kvdb/mem"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -96,7 +96,7 @@ func TestGetStorkEnvList(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -276,7 +276,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -326,7 +326,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -419,7 +419,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -512,7 +512,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -605,7 +605,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -790,7 +790,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	manifestSetup()
 	defer manifestCleanup()
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -841,7 +841,7 @@ func TestSetDefaultsOnStorageClusterOnError(t *testing.T) {
 	defer manifestCleanup()
 
 	versionClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(versionClient)
+	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "invalid",
 	}
@@ -2079,12 +2079,14 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		AnyTimes()
 
 	// Fake a node object without matching ip address or hostname to storage node
-	k8s.Instance().SetBaseClient(
-		fakek8sclient.NewSimpleClientset(&v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-name",
-			},
-		}),
+	coreops.SetInstance(
+		coreops.New(
+			fakek8sclient.NewSimpleClientset(&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-name",
+				},
+			}),
+		),
 	)
 
 	err := driver.UpdateStorageClusterStatus(cluster)
@@ -2096,20 +2098,22 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.Empty(t, nodeStatusList.Items)
 
 	// Fake a node object with matching data ip address
-	k8s.Instance().SetBaseClient(
-		fakek8sclient.NewSimpleClientset(&v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-name",
-			},
-			Status: v1.NodeStatus{
-				Addresses: []v1.NodeAddress{
-					{
-						Type:    v1.NodeInternalIP,
-						Address: "1.1.1.1",
+	coreops.SetInstance(
+		coreops.New(
+			fakek8sclient.NewSimpleClientset(&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-name",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    v1.NodeInternalIP,
+							Address: "1.1.1.1",
+						},
 					},
 				},
-			},
-		}),
+			}),
+		),
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2123,20 +2127,22 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching mgmt ip address
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetBaseClient(
-		fakek8sclient.NewSimpleClientset(&v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-name",
-			},
-			Status: v1.NodeStatus{
-				Addresses: []v1.NodeAddress{
-					{
-						Type:    v1.NodeExternalIP,
-						Address: "2.2.2.2",
+	coreops.SetInstance(
+		coreops.New(
+			fakek8sclient.NewSimpleClientset(&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-name",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    v1.NodeExternalIP,
+							Address: "2.2.2.2",
+						},
 					},
 				},
-			},
-		}),
+			}),
+		),
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2150,20 +2156,22 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching hostname
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetBaseClient(
-		fakek8sclient.NewSimpleClientset(&v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-name",
-			},
-			Status: v1.NodeStatus{
-				Addresses: []v1.NodeAddress{
-					{
-						Type:    v1.NodeHostName,
-						Address: "node-hostname",
+	coreops.SetInstance(
+		coreops.New(
+			fakek8sclient.NewSimpleClientset(&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-name",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    v1.NodeHostName,
+							Address: "node-hostname",
+						},
 					},
 				},
-			},
-		}),
+			}),
+		),
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2177,15 +2185,17 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Fake a node object with matching hostname from labels
 	testutil.Delete(k8sClient, &nodeStatusList.Items[0])
-	k8s.Instance().SetBaseClient(
-		fakek8sclient.NewSimpleClientset(&v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-name",
-				Labels: map[string]string{
-					"kubernetes.io/hostname": "node-hostname",
+	coreops.SetInstance(
+		coreops.New(
+			fakek8sclient.NewSimpleClientset(&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-name",
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "node-hostname",
+					},
 				},
-			},
-		}),
+			}),
+		),
 	)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2311,7 +2321,7 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 
 func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *testing.T) {
 	// Create fake k8s client without any nodes to lookup
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

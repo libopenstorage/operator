@@ -26,7 +26,7 @@ import (
 	"sort"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/portworx/sched-ops/k8s"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -171,7 +171,7 @@ func (c *Controller) controlledHistories(
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing histories
 	canAdoptFunc := controller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
-		fresh, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +249,7 @@ func (c *Controller) snapshot(
 
 		// Handle name collisions between different history. Get the latest StorageCluster
 		// from the API server to make sure collision count is only increased when necessary.
-		currSC, getErr := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		currSC, getErr := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if getErr != nil {
 			return nil, fmt.Errorf("error getting StorageCluster %v/%v to get the latest "+
 				"collision count: %v", cluster.Namespace, cluster.Name, getErr)

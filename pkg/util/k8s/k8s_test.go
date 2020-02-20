@@ -7,7 +7,7 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -26,7 +26,7 @@ import (
 
 func TestGetVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	// Valid version
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{

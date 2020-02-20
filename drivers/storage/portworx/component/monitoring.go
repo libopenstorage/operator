@@ -11,7 +11,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	metaerrors "k8s.io/apimachinery/pkg/api/meta"
@@ -165,7 +165,7 @@ func (c *monitoring) retryCreate(
 		Version: monitoringv1.Version,
 		Kind:    kind,
 	}
-	if resourcePresent, _ := k8s.Instance().ResourceExists(gvk); resourcePresent {
+	if resourcePresent, _ := coreops.Instance().ResourceExists(gvk); resourcePresent {
 		var clnt client.Client
 		clnt, err = k8sutil.NewK8sClient(c.scheme)
 		if err == nil {

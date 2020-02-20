@@ -19,7 +19,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -305,7 +305,7 @@ func (p *portworx) updateStorageNodes(
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
-			k8sNode, err := k8s.Instance().SearchNodeByAddresses(
+			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
 				[]string{node.DataIp, node.MgmtIp, node.Hostname},
 			)
 			if err != nil {

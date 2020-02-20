@@ -35,7 +35,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -286,16 +287,16 @@ func (c *Controller) RegisterCRD() error {
 	if err != nil {
 		return err
 	}
-	err = k8s.Instance().RegisterCRD(crd)
+	err = apiextensionsops.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
-	resource := k8s.CustomResource{
+	resource := apiextensionsops.CustomResource{
 		Plural: corev1alpha1.StorageClusterResourcePlural,
 		Group:  corev1alpha1.SchemeGroupVersion.Group,
 	}
-	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
 		return err
 	}
@@ -305,16 +306,16 @@ func (c *Controller) RegisterCRD() error {
 	if err != nil {
 		return err
 	}
-	err = k8s.Instance().RegisterCRD(crd)
+	err = apiextensionsops.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
-	resource = k8s.CustomResource{
+	resource = apiextensionsops.CustomResource{
 		Plural: corev1alpha1.StorageNodeResourcePlural,
 		Group:  corev1alpha1.SchemeGroupVersion.Group,
 	}
-	err = k8s.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
 		return err
 	}
@@ -324,7 +325,7 @@ func (c *Controller) RegisterCRD() error {
 		storageNodeStatusPlural,
 		corev1alpha1.SchemeGroupVersion.Group,
 	)
-	err = k8s.Instance().DeleteCRD(nodeStatusCRDName)
+	err = apiextensionsops.Instance().DeleteCRD(nodeStatusCRDName)
 	if err != nil && !errors.IsNotFound(err) {
 		logrus.Warnf("Failed to delete CRD %s: %v", nodeStatusCRDName, err)
 	}
@@ -1127,7 +1128,7 @@ func (c *Controller) getStoragePods(
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing Pods
 	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
-		fresh, err := k8s.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
 		}

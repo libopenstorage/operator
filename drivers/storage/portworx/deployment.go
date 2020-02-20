@@ -15,7 +15,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -899,7 +899,7 @@ func (t *template) loadKvdbAuth() map[string]string {
 	if secretName == "" {
 		return nil
 	}
-	auth, err := k8s.Instance().GetSecret(secretName, t.cluster.Namespace)
+	auth, err := coreops.Instance().GetSecret(secretName, t.cluster.Namespace)
 	if err != nil {
 		logrus.Warnf("Could not get kvdb auth secret %v/%v: %v",
 			secretName, t.cluster.Namespace, err)
