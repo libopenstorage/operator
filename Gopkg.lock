@@ -80,12 +80,11 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:a80dd73b64585bfa4c84e44e277d95ed163e9d73dedfc7e32030eba648e36efb"
+  digest = "1:3d89924c8f89318d81c5d21a5d704bba9ab821f0580a5afcae2b3172f7b1156a"
   name = "github.com/coreos/prometheus-operator"
   packages = [
     "pkg/apis/monitoring",
     "pkg/apis/monitoring/v1",
-    "pkg/client/versioned",
     "pkg/client/versioned/scheme",
     "pkg/client/versioned/typed/monitoring/v1",
   ]
@@ -210,14 +209,6 @@
   pruneopts = "UT"
   revision = "4cbf7e384e768b4e01799441fdf2a706a5635ae7"
   version = "v1.2.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
-  name = "github.com/golang/glog"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 
 [[projects]]
   branch = "master"
@@ -374,12 +365,12 @@
   version = "v0.8.3"
 
 [[projects]]
-  digest = "1:8eb1de8112c9924d59bf1d3e5c26f5eaa2bfc2a5fcbb92dc1c2e4546d695f277"
+  digest = "1:78d28d5b84a26159c67ea51996a230da4bc07cac648adaae1dfb5fc0ec8e40d3"
   name = "github.com/imdario/mergo"
   packages = ["."]
   pruneopts = "UT"
-  revision = "9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4"
-  version = "v0.3.6"
+  revision = "1afb36080aec31e0d1528973ebe6721b191b0369"
+  version = "v0.3.8"
 
 [[projects]]
   digest = "1:3e551bbb3a7c0ab2a2bf4660e7fcad16db089fdcfbb44b0199e62838038623ea"
@@ -396,31 +387,6 @@
   pruneopts = "UT"
   revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
   version = "v1.0.1"
-
-[[projects]]
-  digest = "1:66e76e647024f770efc20e5342707478875e980c402f31b6487f31d4637e8312"
-  name = "github.com/kubernetes-incubator/external-storage"
-  packages = [
-    "snapshot/pkg/apis/crd/v1",
-    "snapshot/pkg/client",
-  ]
-  pruneopts = "UT"
-  revision = "88aaa1c2ed58bcfef55572bbe937f2813d6d4d1d"
-  version = "v5.5.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:b1a2174f403a649902689eb558b99f536e51fe65a268c1ac827ee9580d26769f"
-  name = "github.com/libopenstorage/autopilot-api"
-  packages = [
-    "pkg/apis/autopilot",
-    "pkg/apis/autopilot/v1alpha1",
-    "pkg/client/clientset/versioned",
-    "pkg/client/clientset/versioned/scheme",
-    "pkg/client/clientset/versioned/typed/autopilot/v1alpha1",
-  ]
-  pruneopts = "UT"
-  revision = "cfb5c56369046a09d692ebf62cca836f82866e16"
 
 [[projects]]
   branch = "master"
@@ -522,32 +488,6 @@
   version = "v1.0.0-rc1"
 
 [[projects]]
-  branch = "release-3.11"
-  digest = "1:9d9940dc42930d44ab32d69336bb12cf4711b8a0bbb04cb7f3b00c98f37951ba"
-  name = "github.com/openshift/api"
-  packages = [
-    "apps/v1",
-    "security/v1",
-  ]
-  pruneopts = "UT"
-  revision = "8741ff068a473be041d7bafb4502c12e4f10aab5"
-
-[[projects]]
-  branch = "release-3.11"
-  digest = "1:5c14cd12dc22716dfe17ef3f2e74b5d6f5ff290a2324c9850b7fc08b43486ee3"
-  name = "github.com/openshift/client-go"
-  packages = [
-    "apps/clientset/versioned",
-    "apps/clientset/versioned/scheme",
-    "apps/clientset/versioned/typed/apps/v1",
-    "security/clientset/versioned",
-    "security/clientset/versioned/scheme",
-    "security/clientset/versioned/typed/security/v1",
-  ]
-  pruneopts = "UT"
-  revision = "431ec9a26e5021f35fa41ee9a89842db9bfdb370"
-
-[[projects]]
   digest = "1:9379d8380639104788b9c46b08ea0c3762bf0a49ef9d53b8786a8b34343716e9"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
@@ -591,31 +531,20 @@
   revision = "d281ecddf165aa0bf45849c8505387bf5662b4c7"
 
 [[projects]]
-  branch = "operator"
-  digest = "1:42e1e2c5d64ece7e31d4dde2649e61a11d8d7e1c7aae70e16dc91a384bc135a3"
+  branch = "master"
+  digest = "1:18c9cfdf7a9898906c8d95f4cbfe2063896a675040519ecaaeffe75369027be7"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
+    "k8s/apiextensions",
+    "k8s/common",
+    "k8s/core",
+    "k8s/errors",
+    "k8s/operator",
     "task",
   ]
   pruneopts = "UT"
-  revision = "5bcbebe37c6abe8f2e1b3461b9024d8d0054ec5e"
-
-[[projects]]
-  branch = "master"
-  digest = "1:5b1a5dd8d7969a4476afbc74b4418888185f2f82184cd3a9640b3af044dcbba3"
-  name = "github.com/portworx/talisman"
-  packages = [
-    "pkg/apis/portworx",
-    "pkg/apis/portworx/v1beta1",
-    "pkg/apis/portworx/v1beta2",
-    "pkg/client/clientset/versioned",
-    "pkg/client/clientset/versioned/scheme",
-    "pkg/client/clientset/versioned/typed/portworx/v1beta1",
-    "pkg/client/clientset/versioned/typed/portworx/v1beta2",
-  ]
-  pruneopts = "UT"
-  revision = "421b4b009ce0445d14fdadd302878b6f783b7451"
+  revision = "9205a51a1fee3ede5c193d1813b356a14f4b5ccf"
 
 [[projects]]
   branch = "master"
@@ -1536,6 +1465,10 @@
     "github.com/portworx/kvdb/etcd/v3",
     "github.com/portworx/kvdb/mem",
     "github.com/portworx/sched-ops/k8s",
+    "github.com/portworx/sched-ops/k8s/apiextensions",
+    "github.com/portworx/sched-ops/k8s/core",
+    "github.com/portworx/sched-ops/k8s/errors",
+    "github.com/portworx/sched-ops/k8s/operator",
     "github.com/portworx/sched-ops/task",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
