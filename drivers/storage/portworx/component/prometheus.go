@@ -11,7 +11,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -109,7 +109,7 @@ func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 			Version: monitoringv1.Version,
 			Kind:    monitoringv1.PrometheusesKind,
 		}
-		if resourcePresent, _ := k8s.Instance().ResourceExists(gvk); resourcePresent {
+		if resourcePresent, _ := coreops.Instance().ResourceExists(gvk); resourcePresent {
 			var clnt client.Client
 			clnt, err = k8sutil.NewK8sClient(c.scheme)
 			if err == nil {

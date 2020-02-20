@@ -10,7 +10,7 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -49,7 +49,7 @@ func NewK8sClient(scheme *runtime.Scheme) (client.Client, error) {
 
 // GetVersion returns the kubernetes server version
 func GetVersion() (*version.Version, error) {
-	k8sVersion, err := k8s.Instance().GetVersion()
+	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
 	}

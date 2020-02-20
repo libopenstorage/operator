@@ -11,7 +11,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -59,7 +59,7 @@ func TestStorkInstallation(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -307,7 +307,7 @@ func TestStorkImageChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -361,7 +361,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -431,7 +431,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -498,7 +498,7 @@ func TestStorkCPUChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -555,7 +555,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -703,7 +703,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -765,7 +765,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -823,7 +823,7 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -878,7 +878,7 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -940,7 +940,7 @@ func TestStorkInstallWithImagePullSecret(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -994,7 +994,7 @@ func TestDisableStork(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -1124,7 +1124,7 @@ func TestRemoveStork(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -1254,7 +1254,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 		},
 	}
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)

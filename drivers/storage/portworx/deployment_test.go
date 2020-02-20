@@ -9,7 +9,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/sched-ops/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -23,7 +23,7 @@ import (
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpec(t, "testspec/runc.yaml")
 	nodeName := "testNode"
 
@@ -85,7 +85,7 @@ func TestBasicRuncPodSpec(t *testing.T) {
 }
 
 func TestPodSpecWithImagePullSecrets(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -125,7 +125,7 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 }
 
 func TestPodSpecWithKvdbSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -194,7 +194,7 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 }
 
 func TestPodSpecWithNetworkSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -311,7 +311,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 }
 
 func TestPodSpecWithStorageSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -534,7 +534,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -845,7 +845,7 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -953,7 +953,7 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 }
 
 func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -988,7 +988,7 @@ func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
 }
 
 func TestPodSpecWithSecretsProvider(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -1031,7 +1031,7 @@ func TestPodSpecWithSecretsProvider(t *testing.T) {
 
 func TestPodSpecWithCustomStartPort(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1079,7 +1079,7 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 
 func TestPodSpecWithLogAnnotation(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1110,7 +1110,7 @@ func TestPodSpecWithLogAnnotation(t *testing.T) {
 
 func TestPodSpecWithRuntimeOptions(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1167,7 +1167,7 @@ func TestPodSpecWithRuntimeOptions(t *testing.T) {
 
 func TestPodSpecWithMiscArgs(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1198,7 +1198,7 @@ func TestPodSpecWithMiscArgs(t *testing.T) {
 
 func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1229,7 +1229,7 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 
 func TestPodSpecWithImagePullPolicy(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
@@ -1277,7 +1277,7 @@ func TestPodSpecWithNilStorageCluster(t *testing.T) {
 
 func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "invalid-version",
 	}
@@ -1297,7 +1297,7 @@ func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 }
 
 func TestPKSPodSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpec(t, "testspec/pks.yaml")
 
 	nodeName := "testNode"
@@ -1353,7 +1353,7 @@ func TestPKSPodSpec(t *testing.T) {
 }
 
 func TestOpenshiftRuncPodSpec(t *testing.T) {
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpec(t, "testspec/openshift_runc.yaml")
 
 	nodeName := "testNode"
@@ -1414,7 +1414,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	// Should use 0.3 csi version for k8s version less than 1.13
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
@@ -1455,7 +1455,7 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 
 func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	// Should use 0.3 csi version for k8s version less than 1.13
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.2",
@@ -1496,7 +1496,7 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 
 func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
@@ -1565,7 +1565,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 
 func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
@@ -1638,7 +1638,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "invalid-version",
 	}
@@ -1680,7 +1680,7 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 			},
 		},
 	)
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs.yaml")
 
@@ -1723,7 +1723,7 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 			},
 		},
 	)
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_ca.yaml")
 
@@ -1765,7 +1765,7 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 			},
 		},
 	)
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_key.yaml")
 
@@ -1806,7 +1806,7 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 			},
 		},
 	)
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	nodeName := "testNode"
 
@@ -1852,7 +1852,7 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 			},
 		},
 	)
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	nodeName := "testNode"
 
@@ -1888,7 +1888,7 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
 	// Create fake client without kvdb auth secret
 	fakeClient := fakek8sclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
 
@@ -1961,7 +1961,7 @@ func TestStorageNodeConfig(t *testing.T) {
 
 	_, yamlData := generateValidYamlData(t)
 
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{

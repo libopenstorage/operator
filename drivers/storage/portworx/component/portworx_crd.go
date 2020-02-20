@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/portworx/sched-ops/k8s"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	"github.com/sirupsen/logrus"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,7 +60,7 @@ func (c *portworxCRD) MarkDeleted() {
 func createVolumePlacementStrategyCRD() error {
 	logrus.Debugf("Creating VolumePlacementStrategy CRD")
 
-	resource := k8s.CustomResource{
+	resource := apiextensionsops.CustomResource{
 		Plural: "volumeplacementstrategies",
 		Group:  "portworx.io",
 	}
@@ -93,12 +93,12 @@ func createVolumePlacementStrategyCRD() error {
 		},
 	}
 
-	err := k8s.Instance().RegisterCRD(crd)
+	err := apiextensionsops.Instance().RegisterCRD(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
-	return k8s.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+	return apiextensionsops.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
 }
 
 // RegisterPortworxCRDComponent registers the Portworx CRD component

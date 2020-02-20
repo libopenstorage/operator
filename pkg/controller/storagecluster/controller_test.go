@@ -16,7 +16,9 @@ import (
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/sched-ops/k8s"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -41,8 +43,8 @@ import (
 func TestRegisterCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeExtClient := fakeextclient.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakeClient)
-	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	coreops.SetInstance(coreops.New(fakeClient))
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
 	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
@@ -147,8 +149,8 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	}
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeExtClient := fakeextclient.NewSimpleClientset(nodeStatusCRD)
-	k8s.Instance().SetBaseClient(fakeClient)
-	k8s.Instance().SetAPIExtensionsClient(fakeExtClient)
+	coreops.SetInstance(coreops.New(fakeClient))
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	crdBaseDir = func() string {
 		return "../../../deploy/crds"
 	}
@@ -191,7 +193,7 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
 		GitVersion: "v1.11.99",
 	}
-	k8s.Instance().SetBaseClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakeClient))
 
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4430,8 +4432,8 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	}
 
 	fakeClient := fake.NewSimpleClientset()
-	k8s.Instance().SetBaseClient(fakek8sclient.NewSimpleClientset())
-	k8s.Instance().SetOpenstorageOperatorClient(fakeClient)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	operatorops.SetInstance(operatorops.New(fakeClient))
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
