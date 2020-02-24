@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
@@ -236,8 +240,11 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 }
 
 // UninstallStorageCluster uninstalls and wipe storagecluster from k8s
-func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster) error {
+func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster, kubeconfig ...string) error {
 	var err error
+	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
+		os.Setenv("KUBECONFIG", kubeconfig[0])
+	}
 	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
@@ -260,8 +267,12 @@ func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster) error {
 func ValidateStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 	timeout, interval time.Duration,
+	kubeconfig ...string,
 ) error {
 	var err error
+	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
+		os.Setenv("KUBECONFIG", kubeconfig[0])
+	}
 	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	if err != nil {
 		return err
@@ -271,38 +282,31 @@ func ValidateStorageCluster(
 		return err
 	}
 
-	svc, err := coreops.Instance().GetService("portworx-service", cluster.Namespace)
-	pxEndpoint := ""
-	if err != nil {
+	if err = validateComponents(cluster, timeout, interval); err != nil {
 		return err
 	}
 
-	servicePort := int32(0)
-	for _, port := range svc.Spec.Ports {
-		if port.Name == "px-sdk" {
-			servicePort = port.Port
-			break
-		}
-	}
-	if servicePort == 0 {
-		return fmt.Errorf("px-sdk port not found in service")
-	}
+	// TODO validate monitoring
+	//if cluster.Spec.Monitoring != nil && *cluster.Spec.Monitoring.EnableMetrics {
+	//
+	//}
 
-	pxEndpoint = fmt.Sprintf("%s:%d", svc.Spec.ClusterIP, servicePort)
-
-	conn, err := grpc.Dial(pxEndpoint, grpc.WithInsecure())
+	conn, err := getSdkConnection(cluster)
 	if err != nil {
-		return err
+		return nil
 	}
+
 	nodeClient := api.NewOpenStorageNodeClient(conn)
 	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
 	if err != nil {
 		return err
 	}
+
 	expectedNodes, err := expectedPods(cluster)
 	if err != nil {
 		return err
 	}
+
 	actualNodes := len(nodeEnumerateResp.GetNodeIds())
 	if actualNodes != expectedNodes {
 		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
@@ -323,12 +327,70 @@ func ValidateStorageCluster(
 	return nil
 }
 
+func getSdkConnection(cluster *corev1alpha1.StorageCluster) (*grpc.ClientConn, error) {
+	pxEndpoint, err := coreops.Instance().GetServiceEndpoint("portworx-service", cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	svc, err := coreops.Instance().GetService("portworx-service", cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	servicePort := int32(0)
+	nodePort := ""
+	for _, port := range svc.Spec.Ports {
+		if port.Name == "px-sdk" {
+			servicePort = port.Port
+			nodePort = port.TargetPort.StrVal
+			break
+		}
+	}
+
+	if servicePort == 0 {
+		return nil, fmt.Errorf("px-sdk port not found in service")
+	}
+
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", pxEndpoint, servicePort), grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	// try over the service endpoint
+	cli := api.NewOpenStorageIdentityClient(conn)
+	if _, err = cli.Version(context.Background(), &api.SdkIdentityVersionRequest{}); err == nil {
+		return conn, nil
+	}
+
+	// if  service endpoint IP is not accessible, we pick one node IP
+	if nodes, err := coreops.Instance().GetNodes(); err == nil {
+		for _, node := range nodes.Items {
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == v1.NodeInternalIP {
+					conn, err := grpc.Dial(fmt.Sprintf("%s:%s", addr.Address, nodePort), grpc.WithInsecure())
+					if err != nil {
+						return nil, err
+					}
+					if _, err = cli.Version(context.Background(), &api.SdkIdentityVersionRequest{}); err == nil {
+						return conn, nil
+					}
+				}
+			}
+		}
+	}
+	return nil, err
+}
+
 // ValidateUninstallStorageCluster validates if storagecluster and its related objects
 // were properly uninstalled and cleaned
 func ValidateUninstallStorageCluster(
 	cluster *corev1alpha1.StorageCluster,
 	timeout, interval time.Duration,
+	kubeconfig ...string,
 ) error {
+	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
+		os.Setenv("KUBECONFIG", kubeconfig[0])
+	}
 	t := func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
@@ -424,4 +486,210 @@ func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
 	}
 
 	return podCount, nil
+}
+
+func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
+	k8sVersion, err := coreops.Instance().GetVersion()
+	if err != nil {
+		return err
+	}
+
+	if isPVCControllerEnabled(cluster) {
+		pvcControllerDp := &appsv1.Deployment{}
+		pvcControllerDp.Name = "portworx-pvc-controller"
+		pvcControllerDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(pvcControllerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		if err = validateImageTag(k8sVersion.String(), cluster.Namespace, map[string]string{"name": "portworx-pvc-controller"}); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+		storkDp := &appsv1.Deployment{}
+		storkDp.Name = "stork"
+		storkDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(storkDp, timeout, interval); err != nil {
+			return err
+		}
+
+		err := validateImageOnPods(cluster.Spec.Stork.Image, cluster.Namespace, map[string]string{"name": "stork"})
+		if err != nil {
+			return err
+		}
+
+		storkSchedulerDp := &appsv1.Deployment{}
+		storkSchedulerDp.Name = "stork-scheduler"
+		storkSchedulerDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(storkSchedulerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		if err = validateImageTag(k8sVersion.String(), cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled {
+		autopilotDp := &appsv1.Deployment{}
+		autopilotDp.Name = "autopilot"
+		autopilotDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(autopilotDp, timeout, interval); err != nil {
+			return err
+		}
+		if err = validateImageOnPods(cluster.Spec.Autopilot.Image, cluster.Namespace, map[string]string{"name": "autopilot"}); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled {
+		lighthouseDp := &appsv1.Deployment{}
+		lighthouseDp.Name = "px-lighthouse"
+		lighthouseDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(lighthouseDp, timeout, interval); err != nil {
+			return err
+		}
+		if err = validateImageOnPods(cluster.Spec.UserInterface.Image, cluster.Namespace, map[string]string{"name": "lighthouse"}); err != nil {
+			return err
+		}
+	}
+
+	if csi, _ := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"]); csi {
+		// check if all px containers are up since csi has extra containers alongside oci monitor
+		if err = validatePodsByName(cluster.Namespace, "portworx", timeout, interval); err != nil {
+			return err
+		}
+
+		pxCsiDp := &appsv1.Deployment{}
+		pxCsiDp.Name = "px-csi-ext"
+		pxCsiDp.Namespace = cluster.Namespace
+		if err = appops.Instance().ValidateDeployment(pxCsiDp, timeout, interval); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePodsByName(namespace, name string, timeout, interval time.Duration) error {
+	listOptions := map[string]string{"name": name}
+	return validatePods(namespace, listOptions, timeout, interval)
+}
+
+func validatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		pods, err := coreops.Instance().GetPods(namespace, listOptions)
+		if err != nil {
+			return nil, true, err
+		}
+		podReady := 0
+		for _, pod := range pods.Items {
+			for _, c := range pod.Status.InitContainerStatuses {
+				if !c.Ready {
+					continue
+				}
+			}
+			for _, c := range pod.Status.ContainerStatuses {
+				if c.Ready {
+					podReady++
+					continue
+				}
+			}
+		}
+		if len(pods.Items) == podReady {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("pods %+v not ready. Expected: %d Got: %d", listOptions, len(pods.Items), podReady)
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateImageOnPods(image, namespace string, listOptions map[string]string) error {
+	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			if container.Image != image {
+				return fmt.Errorf("failed to validade image on pod %s container %s, Expected: %s Got: %s",
+					pod.Name, container.Name, image, container.Image)
+			}
+		}
+	}
+	return nil
+}
+
+func validateImageTag(tag, namespace string, listOptions map[string]string) error {
+	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			imageTag := strings.Split(container.Image, ":")[0]
+			if imageTag != tag {
+				return fmt.Errorf("failed to validade image tag on pod %s container %s, Expected: %s Got: %s",
+					pod.Name, container.Name, tag, imageTag)
+			}
+		}
+	}
+	return nil
+}
+
+func isPVCControllerEnabled(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/pvc-controller"])
+	if err == nil {
+		return enabled
+	}
+
+	// If portworx is disabled, then do not run pvc controller unless explicitly told to.
+	if !isPortworxEnabled(cluster) {
+		return false
+	}
+
+	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
+	// only if Portworx service is not deployed in kube-system namespace.
+	if isPKS(cluster) || isEKS(cluster) ||
+		isGKE(cluster) || isAKS(cluster) ||
+		(isOpenshift(cluster) && cluster.Namespace != "kube-system") {
+		return true
+	}
+	return false
+}
+
+func isPortworxEnabled(cluster *corev1alpha1.StorageCluster) bool {
+	disabled, err := strconv.ParseBool(cluster.Annotations["operator.libopenstorage.org/disable-storage"])
+	return err != nil || !disabled
+}
+
+func isPKS(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-pks"])
+	return err == nil && enabled
+}
+
+func isGKE(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-gke"])
+	return err == nil && enabled
+}
+
+func isAKS(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-aks"])
+	return err == nil && enabled
+}
+
+func isEKS(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-eks"])
+	return err == nil && enabled
+}
+
+func isOpenshift(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-openshift"])
+	return err == nil && enabled
 }
