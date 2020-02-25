@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -38,15 +37,6 @@ const (
 )
 
 func main() {
-	err := flag.CommandLine.Parse([]string{})
-	if err != nil {
-		log.Warnf("Error parsing flag: %v", err)
-	}
-	err = flag.Set("logtostderr", "true")
-	if err != nil {
-		log.Fatalf("Error setting glog flag: %v", err)
-	}
-
 	app := cli.NewApp()
 	app.Name = "openstorage-operator"
 	app.Usage = "Operator to manage openstorage clusters"
