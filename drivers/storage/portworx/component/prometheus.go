@@ -446,6 +446,18 @@ func getPrometheusOperatorDeploymentSpec(
 		)
 	}
 
+	if cluster.Spec.Placement != nil {
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				deployment.Spec.Template.Spec.Tolerations = append(
+					deployment.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
+	}
+
 	return deployment
 }
 
@@ -513,6 +525,18 @@ func (c *prometheus) createPrometheusInstance(
 			{
 				URL: fmt.Sprintf("http://%s/api/prom/push", cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint),
 			},
+		}
+	}
+
+	if cluster.Spec.Placement != nil {
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			prometheusInst.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				prometheusInst.Spec.Tolerations = append(
+					prometheusInst.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
 		}
 	}
 

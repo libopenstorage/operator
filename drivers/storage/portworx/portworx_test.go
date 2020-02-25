@@ -2636,6 +2636,51 @@ func TestDeleteClusterWithImagePullSecret(t *testing.T) {
 	)
 }
 
+func TestDeleteClusterWithTolerations(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	tolerations := []v1.Toleration{
+		{
+			Key:      "must-exist",
+			Operator: v1.TolerationOpExists,
+			Effect:   v1.TaintEffectNoExecute,
+		},
+		{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Placement: &corev1alpha1.PlacementSpec{
+				Tolerations: tolerations,
+			},
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t,
+		tolerations,
+		wiperDS.Spec.Template.Spec.Tolerations,
+	)
+}
+
 func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{

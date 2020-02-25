@@ -87,7 +87,6 @@ spec:
                   description: Spec to control the desired behavior of storage cluster rolling update.
                   properties:
                     maxUnavailable:
-                      # x-kubernetes-int-or-string: true
                       description: >-
                         The maximum number of StorageCluster pods that can be unavailable
                         during the update. Value can be an absolute number (ex: 5) or a percentage of
@@ -100,6 +99,7 @@ spec:
                         their place. Once the new pods are available, it then proceeds onto other
                         StorageCluster pods, thus ensuring that at least 70% of original number of
                         StorageCluster pods are available at all times during the update.
+                      # x-kubernetes-int-or-string: true
                       oneOf:
                       - type: integer
                       - type: string
@@ -228,6 +228,40 @@ spec:
                         required:
                         - preference
                         - weight
+                tolerations:
+                  type: array
+                  description: Tolerations for all the pods deployed by the StorageCluster controller.
+                    The pod with this toleration attached will tolerate any taint that matches the
+                    triple <key,value,effect> using the matching operator <operator>.
+                  items:
+                    type: object
+                    properties:
+                      effect:
+                        type: string
+                        description: Effect indicates the taint effect to match. Empty means match
+                          all taint effects. When specified, allowed values are NoSchedule,
+                          PreferNoSchedule and NoExecute.
+                      key:
+                        type: string
+                        description: Key is the taint key that the toleration applies to. Empty means
+                          match all taint keys. If the key is empty, operator must be Exists; this
+                          combination means to match all values and all keys.
+                      operator:
+                        type: string
+                        description: "Operator represents a key's relationship to the value. Valid
+                          operators are Exists and Equal. Defaults to Equal. Exists is equivalent to
+                          wildcard for value, so that a pod can tolerate all taints of a particular category."
+                      value:
+                        type: string
+                        description: Value is the taint value the toleration matches to. If the operator
+                          is Exists, the value should be empty, otherwise just a regular string.
+                      tolerationSeconds:
+                        type: integer
+                        description: TolerationSeconds represents the period of time the toleration
+                          (which must be of effect NoExecute, otherwise this field is ignored) tolerates
+                          the taint. By default, it is not set, which means tolerate the taint forever
+                          (do not evict). Zero and negative values will be treated as 0 (evict
+                          immediately) by the system.
             kvdb:
               type: object
               description: Details of KVDB that the storage driver will use.

@@ -301,9 +301,17 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
-	if t.cluster.Spec.Placement != nil && t.cluster.Spec.Placement.NodeAffinity != nil {
-		podSpec.Affinity = &v1.Affinity{
-			NodeAffinity: t.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if t.cluster.Spec.Placement != nil {
+		if t.cluster.Spec.Placement.NodeAffinity != nil {
+			podSpec.Affinity = &v1.Affinity{
+				NodeAffinity: t.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+		if len(t.cluster.Spec.Placement.Tolerations) > 0 {
+			podSpec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range t.cluster.Spec.Placement.Tolerations {
+				podSpec.Tolerations = append(podSpec.Tolerations, *(toleration.DeepCopy()))
+			}
 		}
 	}
 

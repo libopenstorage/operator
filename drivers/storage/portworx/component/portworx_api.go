@@ -201,9 +201,23 @@ func (c *portworxAPI) createDaemonSet(
 		},
 	}
 
-	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
-		newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if cluster.Spec.Placement != nil {
+			if len(cluster.Spec.Placement.Tolerations) > 0 {
+				newDaemonSet.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+				for _, toleration := range cluster.Spec.Placement.Tolerations {
+					newDaemonSet.Spec.Template.Spec.Tolerations = append(
+						newDaemonSet.Spec.Template.Spec.Tolerations,
+						*(toleration.DeepCopy()),
+					)
+				}
+			}
 		}
 	}
 
