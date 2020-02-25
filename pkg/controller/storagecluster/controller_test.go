@@ -1462,6 +1462,136 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
 
+func TestStoragePodSchedulingWithTolerations(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
+		Tolerations: []v1.Toleration{
+			{
+				Key:      "must-exist",
+				Operator: v1.TolerationOpExists,
+				Effect:   v1.TaintEffectNoExecute,
+			},
+			{
+				Key:      "foo",
+				Operator: v1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   v1.TaintEffectNoSchedule,
+			},
+		},
+	}
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).Times(3)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).Times(3)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).Times(3)
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).Times(3)
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode1 := createK8sNode("k8s-node-1", 10)
+	k8sNode1.Spec.Taints = []v1.Taint{
+		{
+			Key:    "must-exist",
+			Value:  "anything",
+			Effect: v1.TaintEffectNoExecute,
+		},
+		{
+			Key:    "foo",
+			Value:  "bar",
+			Effect: v1.TaintEffectNoSchedule,
+		},
+	}
+	k8sNode2 := createK8sNode("k8s-node-2", 10)
+	k8sNode2.Spec.Taints = []v1.Taint{
+		{
+			Key:    "foo",
+			Value:  "bar",
+			Effect: v1.TaintEffectNoSchedule,
+		},
+	}
+	k8sNode3 := createK8sNode("k8s-node-3", 10)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	runningPod1 := createStoragePod(cluster, "running-pod-1", k8sNode1.Name, storageLabels)
+	runningPod2 := createStoragePod(cluster, "running-pod-2", k8sNode2.Name, storageLabels)
+	runningPod3 := createStoragePod(cluster, "running-pod-3", k8sNode3.Name, storageLabels)
+
+	k8sClient.Create(context.TODO(), k8sNode1)
+	k8sClient.Create(context.TODO(), k8sNode2)
+	k8sClient.Create(context.TODO(), k8sNode3)
+	k8sClient.Create(context.TODO(), runningPod1)
+	k8sClient.Create(context.TODO(), runningPod2)
+	k8sClient.Create(context.TODO(), runningPod3)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// No pods should be deleted as they have tolerations for the node taints
+	require.Empty(t, recorder.Events)
+	require.Empty(t, podControl.Templates)
+	require.Empty(t, podControl.DeletePodName)
+
+	// Case: Remove tolerations and the pods on nodes with NoExecute should be removed.
+	// Pods on nodes with NoSchedule should NOT be removed
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Empty(t, recorder.Events)
+	require.Empty(t, podControl.Templates)
+	require.ElementsMatch(t, []string{runningPod1.Name}, podControl.DeletePodName)
+
+	// Case: Delete a pod lacking NoSchedule toleration and it should not be started again
+	k8sClient.Delete(context.TODO(), runningPod2)
+	k8sClient.Delete(context.TODO(), runningPod1)
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Empty(t, recorder.Events)
+	require.Empty(t, podControl.Templates)
+	require.Empty(t, podControl.DeletePodName)
+}
+
 func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

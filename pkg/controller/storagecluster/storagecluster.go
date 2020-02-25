@@ -957,10 +957,17 @@ func (c *Controller) newSimulationPod(
 		},
 	}
 
-	// TODO: Add tolerations to the pod spec when StorageCluster supports it
-	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
-		newPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			newPod.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			newPod.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, t := range cluster.Spec.Placement.Tolerations {
+				newPod.Spec.Tolerations = append(newPod.Spec.Tolerations, *(t.DeepCopy()))
+			}
 		}
 	}
 

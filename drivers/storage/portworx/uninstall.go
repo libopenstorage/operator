@@ -364,9 +364,21 @@ func (u *uninstallPortworx) RunNodeWiper(
 		},
 	}
 
-	if u.cluster.Spec.Placement != nil && u.cluster.Spec.Placement.NodeAffinity != nil {
-		ds.Spec.Template.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if u.cluster.Spec.Placement != nil {
+		if u.cluster.Spec.Placement.NodeAffinity != nil {
+			ds.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(u.cluster.Spec.Placement.Tolerations) > 0 {
+			ds.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range u.cluster.Spec.Placement.Tolerations {
+				ds.Spec.Template.Spec.Tolerations = append(
+					ds.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
 		}
 	}
 

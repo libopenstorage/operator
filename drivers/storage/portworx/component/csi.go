@@ -586,9 +586,21 @@ func getCSIDeploymentSpec(
 		)
 	}
 
-	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
-		deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				deployment.Spec.Template.Spec.Tolerations = append(
+					deployment.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
 		}
 	}
 
@@ -747,9 +759,21 @@ func getCSIStatefulSetSpec(
 		},
 	}
 
-	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
-		statefulSet.Spec.Template.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			statefulSet.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			statefulSet.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				statefulSet.Spec.Template.Spec.Tolerations = append(
+					statefulSet.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
 		}
 	}
 

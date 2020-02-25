@@ -135,6 +135,8 @@ type NodeSelector struct {
 type PlacementSpec struct {
 	// NodeAffinity describes node affinity scheduling rules for the pods
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty"`
+	// Tolerations for the storage pods to tolerate node taints
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 // StorageClusterUpdateStrategy is used to control the update strategy for a StorageCluster

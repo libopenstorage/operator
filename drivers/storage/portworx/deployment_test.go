@@ -124,6 +124,42 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	assert.Equal(t, expectedRegistryEnv, actual.Containers[0].Env[3])
 }
 
+func TestPodSpecWithTolerations(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "must-exist",
+			Operator: v1.TolerationOpExists,
+			Effect:   v1.TaintEffectNoExecute,
+		},
+		{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.0.3.4",
+			Placement: &corev1alpha1.PlacementSpec{
+				Tolerations: tolerations,
+			},
+		},
+	}
+
+	driver := portworx{}
+	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.ElementsMatch(t, tolerations, podSpec.Tolerations)
+}
+
 func TestPodSpecWithKvdbSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
