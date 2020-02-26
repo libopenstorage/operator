@@ -532,11 +532,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:18c9cfdf7a9898906c8d95f4cbfe2063896a675040519ecaaeffe75369027be7"
+  digest = "1:4043cbf34d4c219bef2865d0f296a37c77c5152dc869e97d42989167392b4d6a"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
     "k8s/apiextensions",
+    "k8s/apps",
     "k8s/common",
     "k8s/core",
     "k8s/errors",
@@ -1466,6 +1467,7 @@
     "github.com/portworx/kvdb/mem",
     "github.com/portworx/sched-ops/k8s",
     "github.com/portworx/sched-ops/k8s/apiextensions",
+    "github.com/portworx/sched-ops/k8s/apps",
     "github.com/portworx/sched-ops/k8s/core",
     "github.com/portworx/sched-ops/k8s/errors",
     "github.com/portworx/sched-ops/k8s/operator",
