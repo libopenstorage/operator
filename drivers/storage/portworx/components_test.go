@@ -249,6 +249,64 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, dsList.Items)
 }
 
+func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Case: Delete the daemon set and ensure it gets recreated
+	k8sClient.Delete(context.TODO(), ds)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Case: Change the daemon set, but it should not be recreated/updated as
+	// it is already deployed
+	ds.Spec.Template.Spec.Containers[0].Image = "new/image"
+	k8sClient.Update(context.TODO(), ds)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
+
+	// Case: If the daemon set was marked as deleted, the it should be recreated,
+	// even if it is already present
+	pxAPIComponent, _ := component.Get(component.PortworxAPIComponentName)
+	pxAPIComponent.MarkDeleted()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.NotEqual(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestDisablePortworx(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
