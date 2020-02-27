@@ -189,6 +189,12 @@ func (c *lighthouse) createClusterRole(ownerRef *metav1.OwnerReference) error {
 					},
 					Verbs: []string{"*"},
 				},
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{"privileged", "anyuid"},
+					Verbs:         []string{"use"},
+				},
 			},
 		},
 		ownerRef,

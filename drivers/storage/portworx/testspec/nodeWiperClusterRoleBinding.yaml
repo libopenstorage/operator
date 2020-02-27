@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: px-node-wiper
+subjects:
+- kind: ServiceAccount
+  name: px-node-wiper
+  namespace: kube-test
+roleRef:
+  kind: ClusterRole
+  name: px-node-wiper
+  apiGroup: rbac.authorization.k8s.io

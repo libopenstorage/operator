@@ -28,3 +28,7 @@ rules:
   - apiGroups: ["monitoring.coreos.com"]
     resources: ["alertmanagers", "prometheuses", "prometheuses/finalizers", "servicemonitors", "prometheusrules"]
     verbs: ["*"]
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["privileged", "anyuid"]
+    verbs: ["use"]
