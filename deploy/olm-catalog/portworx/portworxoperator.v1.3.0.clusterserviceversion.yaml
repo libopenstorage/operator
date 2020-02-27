@@ -163,36 +163,6 @@ spec:
           resources:
           - securitycontextconstraints
           resourceNames:
-          - privileged
-          verbs:
-          - use
-      - serviceAccountName: portworx
-        rules:
-        - apiGroups:
-          - security.openshift.io
-          resources:
-          - securitycontextconstraints
-          resourceNames:
-          - privileged
-          verbs:
-          - use
-      - serviceAccountName: portworx-pvc-controller
-        rules:
-        - apiGroups:
-          - security.openshift.io
-          resources:
-          - securitycontextconstraints
-          resourceNames:
-          - privileged
-          verbs:
-          - use
-      - serviceAccountName: px-lighthouse
-        rules:
-        - apiGroups:
-          - security.openshift.io
-          resources:
-          - securitycontextconstraints
-          resourceNames:
           - anyuid
           - privileged
           verbs:
