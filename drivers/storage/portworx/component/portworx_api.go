@@ -1,6 +1,8 @@
 package component
 
 import (
+	"context"
+
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -8,8 +10,10 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,11 +51,8 @@ func (c *portworxAPI) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createService(cluster, ownerRef); err != nil {
 		return err
 	}
-	if !c.isCreated {
-		if err := c.createDaemonSet(cluster, ownerRef); err != nil {
-			return err
-		}
-		c.isCreated = true
+	if err := c.createDaemonSet(cluster, ownerRef); err != nil {
+		return err
 	}
 	return nil
 }
@@ -131,6 +132,25 @@ func (c *portworxAPI) createDaemonSet(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	existingDaemonSet := &appsv1.DaemonSet{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      PxAPIDaemonSetName,
+			Namespace: cluster.Namespace,
+		},
+		existingDaemonSet,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// If the DaemonSet is found and already marked as created, we return
+	// without error, else proceed to create it.
+	if !errors.IsNotFound(err) && c.isCreated {
+		return nil
+	}
+
 	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, "k8s.gcr.io/pause:3.1")
 	maxUnavailable := intstr.FromString("100%")
 	startPort := pxutil.StartPort(cluster)
@@ -196,7 +216,11 @@ func (c *portworxAPI) createDaemonSet(
 		)
 	}
 
-	return k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, newDaemonSet, ownerRef)
+	if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, newDaemonSet, ownerRef); err != nil {
+		return err
+	}
+	c.isCreated = true
+	return nil
 }
 
 func getPortworxAPIServiceLabels() map[string]string {
