@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -2510,6 +2511,27 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
 
+	// Check wiper cluster role
+	expectedCR := testutil.GetExpectedClusterRole(t, "nodeWiperClusterRole.yaml")
+	wiperCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, wiperCR.Name)
+	require.Len(t, wiperCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
+
+	// Check wiper cluster role binding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "nodeWiperClusterRoleBinding.yaml")
+	wiperCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
+	require.Len(t, wiperCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
+
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiper.yaml")
 	wiperDS := &appsv1.DaemonSet{}
@@ -2687,6 +2709,27 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
 
+	// Check wiper cluster role
+	expectedCR := testutil.GetExpectedClusterRole(t, "nodeWiperClusterRole.yaml")
+	wiperCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, wiperCR.Name)
+	require.Len(t, wiperCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
+
+	// Check wiper cluster role binding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "nodeWiperClusterRoleBinding.yaml")
+	wiperCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
+	require.Len(t, wiperCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
+
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperPKS.yaml")
 	wiperDS := &appsv1.DaemonSet{}
@@ -2730,6 +2773,27 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Check wiper cluster role
+	expectedCR := testutil.GetExpectedClusterRole(t, "nodeWiperClusterRole.yaml")
+	wiperCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, wiperCR.Name)
+	require.Len(t, wiperCR.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
+
+	// Check wiper cluster role binding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "nodeWiperClusterRoleBinding.yaml")
+	wiperCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
+	require.Len(t, wiperCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
 
 	// Check wiper daemonset
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "nodeWiperWithWipe.yaml")

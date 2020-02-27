@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,32 +33,34 @@ var (
 )
 
 const (
-	dsOptPwxVolumeName            = "optpwx"
-	dsEtcPwxVolumeName            = "etcpwx"
-	dsHostProcVolumeName          = "hostproc"
-	dsDbusVolumeName              = "dbus"
-	dsSysdVolumeName              = "sysdmount"
-	dsDevVolumeName               = "dev"
-	dsMultipathVolumeName         = "etc-multipath"
-	dsLvmVolumeName               = "lvm"
-	dsSysVolumeName               = "sys"
-	dsUdevVolumeName              = "run-udev-data"
-	sysdmount                     = "/etc/systemd/system"
-	devMount                      = "/dev"
-	multipathMount                = "/etc/multipath"
-	lvmMount                      = "/run/lvm"
-	sysMount                      = "/sys"
-	udevMount                     = "/run/udev/data"
-	dbusPath                      = "/var/run/dbus"
-	pksPersistentStoreRoot        = "/var/vcap/store"
-	pxOptPwx                      = "/opt/pwx"
-	pxEtcPwx                      = "/etc/pwx"
-	pxNodeWiperServiceAccountName = "px-node-wiper"
-	pxNodeWiperDaemonSetName      = "px-node-wiper"
-	pxKvdbPrefix                  = "pwx/"
-	internalEtcdConfigMapPrefix   = "px-bootstrap-"
-	cloudDriveConfigMapPrefix     = "px-cloud-drive-"
-	bootstrapCloudDriveNamespace  = "kube-system"
+	dsOptPwxVolumeName                = "optpwx"
+	dsEtcPwxVolumeName                = "etcpwx"
+	dsHostProcVolumeName              = "hostproc"
+	dsDbusVolumeName                  = "dbus"
+	dsSysdVolumeName                  = "sysdmount"
+	dsDevVolumeName                   = "dev"
+	dsMultipathVolumeName             = "etc-multipath"
+	dsLvmVolumeName                   = "lvm"
+	dsSysVolumeName                   = "sys"
+	dsUdevVolumeName                  = "run-udev-data"
+	sysdmount                         = "/etc/systemd/system"
+	devMount                          = "/dev"
+	multipathMount                    = "/etc/multipath"
+	lvmMount                          = "/run/lvm"
+	sysMount                          = "/sys"
+	udevMount                         = "/run/udev/data"
+	dbusPath                          = "/var/run/dbus"
+	pksPersistentStoreRoot            = "/var/vcap/store"
+	pxOptPwx                          = "/opt/pwx"
+	pxEtcPwx                          = "/etc/pwx"
+	pxNodeWiperServiceAccountName     = "px-node-wiper"
+	pxNodeWiperClusterRoleName        = "px-node-wiper"
+	pxNodeWiperClusterRoleBindingName = "px-node-wiper"
+	pxNodeWiperDaemonSetName          = "px-node-wiper"
+	pxKvdbPrefix                      = "pwx/"
+	internalEtcdConfigMapPrefix       = "px-bootstrap-"
+	cloudDriveConfigMapPrefix         = "px-cloud-drive-"
+	bootstrapCloudDriveNamespace      = "kube-system"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -178,6 +181,16 @@ func (u *uninstallPortworx) RunNodeWiper(
 	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
 
 	err = u.createServiceAccount(ownerRef)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	err = u.createClusterRole(ownerRef)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	err = u.createClusterRoleBinding(ownerRef)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
@@ -379,6 +392,56 @@ func (u *uninstallPortworx) createServiceAccount(
 				Name:            pxNodeWiperServiceAccountName,
 				Namespace:       u.cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (u *uninstallPortworx) createClusterRole(
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateClusterRole(
+		u.k8sClient,
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxNodeWiperClusterRoleName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{"privileged"},
+					Verbs:         []string{"use"},
+				},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (u *uninstallPortworx) createClusterRoleBinding(
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		u.k8sClient,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            pxNodeWiperClusterRoleBindingName,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      pxNodeWiperServiceAccountName,
+					Namespace: u.cluster.Namespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     pxNodeWiperClusterRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
 		ownerRef,
