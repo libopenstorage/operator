@@ -95,8 +95,9 @@ func (c *pvcController) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 
 func (c *pvcController) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	// We don't delete the service account for PVC controller because it is part of CSV. If
-	// we disable PVC controller then the CSV upgrades would fail as requirements are not met.
+	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PVCServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
 	if err := k8sutil.DeleteClusterRole(c.k8sClient, PVCClusterRoleName, *ownerRef); err != nil {
 		return err
 	}
