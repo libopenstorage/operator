@@ -3954,7 +3954,7 @@ func TestRemovePVCController(t *testing.T) {
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.PVCClusterRoleName, "")
@@ -4015,7 +4015,7 @@ func TestDisablePVCController(t *testing.T) {
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.PVCClusterRoleName, "")
@@ -4082,7 +4082,7 @@ func TestRemoveLighthouse(t *testing.T) {
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.LhServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.LhClusterRoleName, "")
@@ -4153,7 +4153,7 @@ func TestDisableLighthouse(t *testing.T) {
 	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.LhServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.LhClusterRoleName, "")
