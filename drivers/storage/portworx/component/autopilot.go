@@ -443,6 +443,11 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	}
 
 	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			deployment.Spec.Template.Spec.Affinity.NodeAffinity =
+				cluster.Spec.Placement.NodeAffinity.DeepCopy()
+		}
+
 		if len(cluster.Spec.Placement.Tolerations) > 0 {
 			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
 			for _, toleration := range cluster.Spec.Placement.Tolerations {

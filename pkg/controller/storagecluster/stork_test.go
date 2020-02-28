@@ -1039,6 +1039,70 @@ func TestStorkInstallWithTolerations(t *testing.T) {
 	require.ElementsMatch(t, tolerations, schedDeployment.Spec.Template.Spec.Tolerations)
 }
 
+func TestStorkInstallWithNodeAffinity(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "foo",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"bar"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: nodeAffinity,
+			},
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	schedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, schedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+}
+
 func TestDisableStork(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

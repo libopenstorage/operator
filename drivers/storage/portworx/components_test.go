@@ -4074,6 +4074,121 @@ func TestCompleteInstallWithTolerations(t *testing.T) {
 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 }
 
+func TestCompleteInstallWithNodeAffinity(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "foo",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"bar"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.2",
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: nodeAffinity,
+			},
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, lhDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusOperatorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusInst := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+}
+
 func TestRemovePVCController(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
