@@ -66,11 +66,11 @@ func (c *pvcController) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 		return false
 	}
 
-	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
-	// only if Portworx service is not deployed in kube-system namespace.
+	// Enable PVC controller for managed kubernetes services. Also enable it
+	// if Portworx is not deployed in kube-system namespace.
 	if pxutil.IsPKS(cluster) || pxutil.IsEKS(cluster) ||
 		pxutil.IsGKE(cluster) || pxutil.IsAKS(cluster) ||
-		(pxutil.IsOpenshift(cluster) && cluster.Namespace != "kube-system") {
+		cluster.Namespace != "kube-system" {
 		return true
 	}
 	return false

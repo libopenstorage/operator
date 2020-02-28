@@ -47,6 +47,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			StartPort: &startPort,
@@ -748,7 +751,7 @@ func TestPVCControllerInstall(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationPVCController: "true",
 			},
@@ -772,7 +775,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationPVCController: "invalid",
 			},
@@ -799,42 +802,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestPVCControllerInstallForOpenshift(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationIsOpenshift: "true",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	verifyPVCControllerInstall(t, cluster, k8sClient)
-	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
-
-	// Despite invalid pvc controller annotation, install for openshift
-	cluster.Annotations[annotationPVCController] = "invalid"
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	verifyPVCControllerInstall(t, cluster, k8sClient)
-	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
-}
-
-func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
-	// Set fake kubernetes client for k8s version
+func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -873,8 +841,7 @@ func TestPVCControllerInstallForOpenshiftInKubeSystem(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestPVCControllerInstallForPKS(t *testing.T) {
-	// Set fake kubernetes client for k8s version
+func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -885,6 +852,89 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PVCClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PVCClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Despite invalid pvc controller annotation, install for non kube-system namespace
+	cluster.Annotations = map[string]string{
+		annotationPVCController: "invalid",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+
+	cr = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, cr, component.PVCClusterRoleName, "")
+	require.NoError(t, err)
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PVCClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+}
+
+func TestPVCControllerInstallForOpenshift(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+				annotationIsOpenshift:   "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
+}
+
+func TestPVCControllerInstallForPKS(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationIsPKS: "true",
 			},
@@ -908,7 +958,6 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 }
 
 func TestPVCControllerInstallForEKS(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -918,7 +967,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationIsEKS: "true",
 			},
@@ -942,7 +991,6 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 }
 
 func TestPVCControllerInstallForGKE(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -952,7 +1000,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationIsGKE: "true",
 			},
@@ -976,7 +1024,6 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 }
 
 func TestPVCControllerInstallForAKS(t *testing.T) {
-	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -986,7 +1033,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationIsAKS: "true",
 			},
@@ -2345,6 +2392,9 @@ func TestCSIInstall(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
@@ -2482,6 +2532,9 @@ func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "portworx/image:2.0.3",
@@ -3919,7 +3972,7 @@ func TestRemovePVCController(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-test",
+			Namespace: "kube-system",
 			Annotations: map[string]string{
 				annotationPVCController: "true",
 			},

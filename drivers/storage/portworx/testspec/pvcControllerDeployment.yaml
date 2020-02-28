@@ -6,7 +6,7 @@ metadata:
   labels:
     tier: control-plane
   name: portworx-pvc-controller
-  namespace: kube-test
+  namespace: kube-system
 spec:
   replicas: 3
   strategy:
