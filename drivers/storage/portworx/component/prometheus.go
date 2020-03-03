@@ -258,7 +258,7 @@ func (c *prometheus) createOperatorClusterRole(ownerRef *metav1.OwnerReference) 
 				{
 					APIGroups: []string{""},
 					Resources: []string{"namespaces"},
-					Verbs:     []string{"list", "watch"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 			},
 		},
@@ -391,6 +391,7 @@ func getPrometheusOperatorDeploymentSpec(
 	operatorImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, DefaultPrometheusOperatorImage)
 	args := make([]string, 0)
 	args = append(args,
+		fmt.Sprintf("-namespaces=%s", cluster.Namespace),
 		fmt.Sprintf("--kubelet-service=%s/kubelet", cluster.Namespace),
 		"--config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1",
 	)
