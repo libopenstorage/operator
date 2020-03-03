@@ -481,6 +481,437 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 }
 
+func TestStorkImagePullSecretChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	imagePullSecret := "pull-secret"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:v1",
+			},
+			ImagePullSecret: &imagePullSecret,
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// Case: Image pull secret should be applied to the deployment
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	storkSchedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: Updated image pull secet should be applied to the deployment
+	imagePullSecret = "new-secret"
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: If empty, remove image pull secret from the deployment
+	imagePullSecret = ""
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: If nil, remove image pull secret from the deployment
+	cluster.Spec.ImagePullSecret = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: Image pull secret should be added back if not present in deployment
+	imagePullSecret = "pull-secret"
+	cluster.Spec.ImagePullSecret = &imagePullSecret
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, storkSchedDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+}
+
+func TestStorkTolerationsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "foo",
+			Value:    "bar",
+			Operator: v1.TolerationOpEqual,
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:v1",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				Tolerations: tolerations,
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// Case: Tolerations should be applied to the deployment
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Updated tolerations should be applied to the deployment
+	tolerations[0].Value = "baz"
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: New tolerations should be applied to the deployment
+	tolerations = append(tolerations, v1.Toleration{
+		Key:      "must-exist",
+		Operator: v1.TolerationOpExists,
+		Effect:   v1.TaintEffectNoExecute,
+	})
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Removed tolerations should be removed from the deployment
+	tolerations = []v1.Toleration{tolerations[0]}
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: If tolerations are empty, should be removed from the deployment
+	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Tolerations should be added back if not present in deployment
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: If placement is empty, deployment should not have tolerations
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Tolerations)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkSchedDeployment.Spec.Template.Spec.Tolerations)
+}
+
+func TestStorkNodeAffinityChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:v1",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: nodeAffinity,
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// Case: Node affinity should be applied to the deployment
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	storkSchedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: Updated node affinity should be applied to the deployment
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+		NodeSelectorTerms[0].
+		MatchExpressions[0].
+		Key = "px/disabled"
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If node affinity is removed, it should be removed from the deployment
+	cluster.Spec.Placement.NodeAffinity = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: Node affinity should be added back if not present in deployment
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If placement is nil, node affinity should be removed from the deployment
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	storkSchedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+}
+
 func TestStorkCPUChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

@@ -356,7 +356,7 @@ func (c *prometheus) createOperatorDeployment(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDeployment := &appsv1.Deployment{}
-	err := c.k8sClient.Get(
+	getErr := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      PrometheusOperatorDeploymentName,
@@ -364,13 +364,17 @@ func (c *prometheus) createOperatorDeployment(
 		},
 		existingDeployment,
 	)
-	if err != nil && !errors.IsNotFound(err) {
-		return err
+	if getErr != nil && !errors.IsNotFound(getErr) {
+		return getErr
 	}
 
-	if !c.isOperatorCreated || errors.IsNotFound(err) {
+	modified := util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+
+	if !c.isOperatorCreated || errors.IsNotFound(getErr) || modified {
 		deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef)
-		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
+		if err := k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
 	}

@@ -301,7 +301,10 @@ func (c *pvcController) createDeployment(
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
 		deployment := getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)

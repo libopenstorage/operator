@@ -3255,6 +3255,331 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
+func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	imagePullSecret := "pull-secret"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.1.0",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			ImagePullSecret: &imagePullSecret,
+		},
+	}
+
+	// Case: Image pull secret should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: Updated image pull secet should be applied to the deployment
+	imagePullSecret = "new-secret"
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: If empty, remove image pull secret from the deployment
+	imagePullSecret = ""
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: If nil, remove image pull secret from the deployment
+	cluster.Spec.ImagePullSecret = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: Image pull secret should be added back if not present in deployment
+	imagePullSecret = "pull-secret"
+	cluster.Spec.ImagePullSecret = &imagePullSecret
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+}
+
+func TestCSI_0_3_TolerationsChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "foo",
+			Value:    "bar",
+			Operator: v1.TolerationOpEqual,
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.1.0",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				Tolerations: tolerations,
+			},
+		},
+	}
+
+	// Case: Tolerations should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: Updated tolerations should be applied to the deployment
+	tolerations[0].Value = "baz"
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: New tolerations should be applied to the deployment
+	tolerations = append(tolerations, v1.Toleration{
+		Key:      "must-exist",
+		Operator: v1.TolerationOpExists,
+		Effect:   v1.TaintEffectNoExecute,
+	})
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: Removed tolerations should be removed from the deployment
+	tolerations = []v1.Toleration{tolerations[0]}
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: If tolerations are empty, should be removed from the deployment
+	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: Tolerations should be added back if not present in deployment
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+
+	// Case: If placement is empty, deployment should not have tolerations
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
+}
+
+func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.1.0",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: nodeAffinity,
+			},
+		},
+	}
+
+	// Case: Node affinity should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: Updated node affinity should be applied to the deployment
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+		NodeSelectorTerms[0].
+		MatchExpressions[0].
+		Key = "px/disabled"
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If node affinity is removed, it should be removed from the deployment
+	cluster.Spec.Placement.NodeAffinity = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
+
+	// Case: Node affinity should be added back if not present in deployment
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If placement is nil, node affinity should be removed from the deployment
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
+}
+
 func TestPrometheusInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -3312,16 +3637,16 @@ func TestPrometheusInstall(t *testing.T) {
 
 	// Prometheus operator Deployment
 	expectedDeployment := testutil.GetExpectedDeployment(t, "prometheusOperatorDeployment.yaml")
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, expectedDeployment.Name, autopilotDeployment.Name)
-	require.Equal(t, expectedDeployment.Namespace, autopilotDeployment.Namespace)
-	require.Len(t, autopilotDeployment.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, autopilotDeployment.OwnerReferences[0].Name)
-	require.Equal(t, expectedDeployment.Labels, autopilotDeployment.Labels)
-	require.Equal(t, expectedDeployment.Annotations, autopilotDeployment.Annotations)
-	require.Equal(t, expectedDeployment.Spec, autopilotDeployment.Spec)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Labels, deployment.Labels)
+	require.Equal(t, expectedDeployment.Annotations, deployment.Annotations)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// Prometheus ServiceAccount
 	sa = &v1.ServiceAccount{}
@@ -4187,6 +4512,875 @@ func TestCompleteInstallWithNodeAffinity(t *testing.T) {
 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+}
+
+func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	imagePullSecret := "pull-secret"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ImagePullSecret: &imagePullSecret,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Image pull secret should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pvcDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pvcDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, lhDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, lhDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: Updated image pull secet should be applied to the deployment
+	imagePullSecret = "new-secret"
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pvcDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pvcDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, lhDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, lhDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	// Case: If empty, remove image pull secret from the deployment
+	imagePullSecret = ""
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pvcDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, lhDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: If nil, remove image pull secret from the deployment
+	cluster.Spec.ImagePullSecret = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pvcDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, lhDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	// Case: Image pull secret should be added back if not present in deployment
+	imagePullSecret = "pull-secret"
+	cluster.Spec.ImagePullSecret = &imagePullSecret
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pvcDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pvcDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, lhDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, lhDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+}
+
+func TestCompleteInstallWithTolerationsChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "foo",
+			Value:    "bar",
+			Operator: v1.TolerationOpEqual,
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.2",
+			Placement: &corev1alpha1.PlacementSpec{
+				Tolerations: tolerations,
+			},
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Tolerations should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Updated tolerations should be applied to the deployment
+	tolerations[0].Value = "baz"
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: New tolerations should be applied to the deployment
+	tolerations = append(tolerations, v1.Toleration{
+		Key:      "must-exist",
+		Operator: v1.TolerationOpExists,
+		Effect:   v1.TaintEffectNoExecute,
+	})
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Removed tolerations should be removed from the deployment
+	tolerations = []v1.Toleration{tolerations[0]}
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: If tolerations are empty, should be removed from the deployment
+	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: Tolerations should be added back if not present in deployment
+	cluster.Spec.Placement.Tolerations = tolerations
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// Case: If placement is empty, deployment should not have tolerations
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pvcDeployment.Spec.Template.Spec.Tolerations)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, lhDeployment.Spec.Template.Spec.Tolerations)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusInst.Spec.Tolerations)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+}
+
+func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.2",
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: nodeAffinity,
+			},
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Node affinity should be applied to the deployment
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, lhDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusOperatorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusInst := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: Updated node affinity should be applied to the deployment
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+		NodeSelectorTerms[0].
+		MatchExpressions[0].
+		Key = "px/disabled"
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, lhDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusOperatorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If node affinity is removed, it should be removed from the deployment
+	cluster.Spec.Placement.NodeAffinity = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Affinity)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, lhDeployment.Spec.Template.Spec.Affinity)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusOperatorDeployment.Spec.Template.Spec.Affinity)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusInst.Spec.Affinity)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	// Case: Node affinity should be added back if not present in deployment
+	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, lhDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusOperatorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// Case: If placement is nil, node affinity should be removed from the deployment
+	cluster.Spec.Placement = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Affinity)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, lhDeployment.Spec.Template.Spec.Affinity)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusOperatorDeployment.Spec.Template.Spec.Affinity)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, prometheusInst.Spec.Affinity)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
 }
 
 func TestRemovePVCController(t *testing.T) {

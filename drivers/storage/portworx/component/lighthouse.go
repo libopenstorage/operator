@@ -320,7 +320,10 @@ func (c *lighthouse) createDeployment(
 	modified := lhImage != existingLhImage ||
 		configSyncImage != existingConfigInitImage ||
 		configSyncImage != existingConfigSyncImage ||
-		storkConnectorImage != existingStorkConnectorImage
+		storkConnectorImage != existingStorkConnectorImage ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
 		deployment := getLighthouseDeploymentSpec(cluster, ownerRef, lhImage, configSyncImage, storkConnectorImage)

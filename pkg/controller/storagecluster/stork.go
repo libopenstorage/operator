@@ -532,7 +532,10 @@ func (c *Controller) createStorkDeployment(
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isStorkDeploymentCreated || modified {
 		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
@@ -717,7 +720,10 @@ func (c *Controller) createStorkSchedDeployment(
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isStorkSchedDeploymentCreated || modified {
 		deployment := getStorkSchedDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)

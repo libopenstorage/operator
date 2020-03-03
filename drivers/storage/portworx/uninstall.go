@@ -364,6 +364,15 @@ func (u *uninstallPortworx) RunNodeWiper(
 		},
 	}
 
+	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
+		ds.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *u.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	if u.cluster.Spec.Placement != nil {
 		if u.cluster.Spec.Placement.NodeAffinity != nil {
 			ds.Spec.Template.Spec.Affinity = &v1.Affinity{
@@ -380,15 +389,6 @@ func (u *uninstallPortworx) RunNodeWiper(
 				)
 			}
 		}
-	}
-
-	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
-		ds.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *u.cluster.Spec.ImagePullSecret,
-			},
-		)
 	}
 
 	return u.k8sClient.Create(context.TODO(), ds)
