@@ -393,11 +393,15 @@ func (c *csi) createDeployment(
 		)
 	}
 
-	if !c.isCreated ||
-		provisionerImage != existingProvisionerImage ||
+	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		snapshotterImage != existingSnapshotterImage ||
-		resizerImage != existingResizerImage {
+		resizerImage != existingResizerImage ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+
+	if !c.isCreated || modified {
 		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef,
 			provisionerImage, attacherImage, snapshotterImage, resizerImage)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
@@ -586,6 +590,15 @@ func getCSIDeploymentSpec(
 		)
 	}
 
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	if cluster.Spec.Placement != nil {
 		if cluster.Spec.Placement.NodeAffinity != nil {
 			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
@@ -602,15 +615,6 @@ func getCSIDeploymentSpec(
 				)
 			}
 		}
-	}
-
-	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		deployment.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *cluster.Spec.ImagePullSecret,
-			},
-		)
 	}
 
 	return deployment
@@ -650,9 +654,13 @@ func (c *csi) createStatefulSet(
 		csiConfig.Attacher,
 	)
 
-	if !c.isCreated ||
-		provisionerImage != existingProvisionerImage ||
-		attacherImage != existingAttacherImage {
+	modified := provisionerImage != existingProvisionerImage ||
+		attacherImage != existingAttacherImage ||
+		util.HasPullSecretChanged(cluster, existingSS.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingSS.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingSS.Spec.Template.Spec.Tolerations)
+
+	if !c.isCreated || modified {
 		statefulSet := getCSIStatefulSetSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage)
 		if err = k8sutil.CreateOrUpdateStatefulSet(c.k8sClient, statefulSet, ownerRef); err != nil {
 			return err
@@ -759,6 +767,15 @@ func getCSIStatefulSetSpec(
 		},
 	}
 
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		statefulSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	if cluster.Spec.Placement != nil {
 		if cluster.Spec.Placement.NodeAffinity != nil {
 			statefulSet.Spec.Template.Spec.Affinity = &v1.Affinity{
@@ -775,15 +792,6 @@ func getCSIStatefulSetSpec(
 				)
 			}
 		}
-	}
-
-	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		statefulSet.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *cluster.Spec.ImagePullSecret,
-			},
-		)
 	}
 
 	return statefulSet

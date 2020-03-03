@@ -302,11 +302,14 @@ func (c *autopilot) createDeployment(
 		}
 	}
 
-	// Check if image, envs, cpu or args are modified
+	// Check if the deployment has changed
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0
+		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
 		deployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,

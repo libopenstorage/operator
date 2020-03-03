@@ -2,7 +2,11 @@ package util
 
 import (
 	"path"
+	"reflect"
 	"strings"
+
+	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"k8s.io/api/core/v1"
 )
 
 // Reasons for controller events
@@ -56,4 +60,43 @@ func GetImageURN(registryAndRepo, image string) string {
 		imgParts = imgParts[len(imgParts)-1:]
 	}
 	return registryAndRepo + "/" + path.Join(imgParts...)
+}
+
+// HasPullSecretChanged checks if the imagePullSecret in the cluster is the only one
+// in the given list of pull secrets
+func HasPullSecretChanged(
+	cluster *corev1alpha1.StorageCluster,
+	existingPullSecrets []v1.LocalObjectReference,
+) bool {
+	return len(existingPullSecrets) > 1 ||
+		(len(existingPullSecrets) == 1 &&
+			cluster.Spec.ImagePullSecret != nil && existingPullSecrets[0].Name != *cluster.Spec.ImagePullSecret) ||
+		(len(existingPullSecrets) == 0 &&
+			cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "")
+}
+
+// HaveTolerationsChanged checks if the tolerations in the cluster are same as the
+// given list of tolerations
+func HaveTolerationsChanged(
+	cluster *corev1alpha1.StorageCluster,
+	existingTolerations []v1.Toleration,
+) bool {
+	if cluster.Spec.Placement == nil {
+		return len(existingTolerations) != 0
+	}
+	return !reflect.DeepEqual(cluster.Spec.Placement.Tolerations, existingTolerations)
+}
+
+// HasNodeAffinityChanged checks if the nodeAffinity in the cluster is same as the
+// node affinity in the given affinity
+func HasNodeAffinityChanged(
+	cluster *corev1alpha1.StorageCluster,
+	existingAffinity *v1.Affinity,
+) bool {
+	if cluster.Spec.Placement == nil {
+		return existingAffinity != nil && existingAffinity.NodeAffinity != nil
+	} else if existingAffinity == nil {
+		return cluster.Spec.Placement.NodeAffinity != nil
+	}
+	return !reflect.DeepEqual(cluster.Spec.Placement.NodeAffinity, existingAffinity.NodeAffinity)
 }

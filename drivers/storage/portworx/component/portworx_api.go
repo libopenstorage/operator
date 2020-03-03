@@ -133,7 +133,7 @@ func (c *portworxAPI) createDaemonSet(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDaemonSet := &appsv1.DaemonSet{}
-	err := c.k8sClient.Get(
+	getErr := c.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      PxAPIDaemonSetName,
@@ -141,16 +141,28 @@ func (c *portworxAPI) createDaemonSet(
 		},
 		existingDaemonSet,
 	)
-	if err != nil && !errors.IsNotFound(err) {
-		return err
+	if getErr != nil && !errors.IsNotFound(getErr) {
+		return getErr
 	}
 
-	// If the DaemonSet is found and already marked as created, we return
-	// without error, else proceed to create it.
-	if !errors.IsNotFound(err) && c.isCreated {
-		return nil
-	}
+	modified := util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 
+	if !c.isCreated || errors.IsNotFound(getErr) || modified {
+		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef)
+		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
+			return err
+		}
+	}
+	c.isCreated = true
+	return nil
+}
+
+func getPortworxAPIDaemonSetSpec(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) *appsv1.DaemonSet {
 	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, "k8s.gcr.io/pause:3.1")
 	maxUnavailable := intstr.FromString("100%")
 	startPort := pxutil.StartPort(cluster)
@@ -201,6 +213,15 @@ func (c *portworxAPI) createDaemonSet(
 		},
 	}
 
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
 	if cluster.Spec.Placement != nil {
 		if cluster.Spec.Placement.NodeAffinity != nil {
 			newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
@@ -221,20 +242,7 @@ func (c *portworxAPI) createDaemonSet(
 		}
 	}
 
-	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *cluster.Spec.ImagePullSecret,
-			},
-		)
-	}
-
-	if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, newDaemonSet, ownerRef); err != nil {
-		return err
-	}
-	c.isCreated = true
-	return nil
+	return newDaemonSet
 }
 
 func getPortworxAPIServiceLabels() map[string]string {
