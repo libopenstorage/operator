@@ -17,6 +17,7 @@ spec:
     spec:
       containers:
         - args:
+            - -namespaces=kube-test
             - --kubelet-service=kube-test/kubelet
             - --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1
           image: quay.io/coreos/prometheus-operator:v0.35.0
