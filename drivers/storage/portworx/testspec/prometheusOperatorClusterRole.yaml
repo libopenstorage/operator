@@ -50,4 +50,4 @@ rules:
   - apiGroups: [""]
     resources:
       - namespaces
-    verbs: ["list", "watch"]
+    verbs: ["get", "list", "watch"]
