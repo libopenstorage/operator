@@ -204,7 +204,7 @@ func (c *pvcController) createClusterRole(ownerRef *metav1.OwnerReference) error
 				{
 					APIGroups: []string{""},
 					Resources: []string{"configmaps"},
-					Verbs:     []string{"get", "create", "update"},
+					Verbs:     []string{"get", "list", "watch", "create", "update"},
 				},
 				{
 					APIGroups:     []string{"security.openshift.io"},
