@@ -252,6 +252,12 @@ func (c *csi) createClusterRole(
 				Resources: []string{"leases"},
 				Verbs:     []string{"*"},
 			},
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				ResourceNames: []string{"privileged"},
+				Verbs:         []string{"use"},
+			},
 		},
 	}
 
