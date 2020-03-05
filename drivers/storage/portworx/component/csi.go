@@ -386,7 +386,7 @@ func (c *csi) createDeployment(
 			csiConfig.Attacher,
 		)
 	}
-	if csiConfig.Snapshotter != "" {
+	if csiConfig.IncludeSnapshotter && csiConfig.Snapshotter != "" {
 		snapshotterImage = util.GetImageURN(
 			cluster.Spec.CustomImageRegistry,
 			csiConfig.Snapshotter,
@@ -532,7 +532,7 @@ func getCSIDeploymentSpec(
 		)
 	}
 
-	if snapshotterImage != "" {
+	if csiConfig.IncludeSnapshotter && snapshotterImage != "" {
 		deployment.Spec.Template.Spec.Containers = append(
 			deployment.Spec.Template.Spec.Containers,
 			v1.Container{
@@ -928,7 +928,9 @@ func (c *csi) getCSIConfiguration(
 	pxVersion *version.Version,
 ) *pxutil.CSIConfiguration {
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
-	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion, deprecatedCSIDriverName)
+	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion,
+		deprecatedCSIDriverName, disableCSIAlpha)
 	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
 		return csiGenerator.GetCSIConfiguration()
 	}

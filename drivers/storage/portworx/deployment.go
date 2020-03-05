@@ -198,7 +198,9 @@ func newTemplate(
 
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
-	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion, deprecatedCSIDriverName)
+	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion,
+		deprecatedCSIDriverName, disableCSIAlpha)
 	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
 		t.csiConfig = csiGenerator.GetCSIConfiguration()
 	} else {

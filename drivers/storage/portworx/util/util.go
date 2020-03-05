@@ -68,6 +68,9 @@ const (
 	// EnvKeyDeprecatedCSIDriverName key for the env var that can force Portworx
 	// to use the deprecated CSI driver name
 	EnvKeyDeprecatedCSIDriverName = "PORTWORX_USEDEPRECATED_CSIDRIVERNAME"
+	// EnvKeyDisableCSIAlpha key for the env var that is used to disable CSI
+	// alpha features
+	EnvKeyDisableCSIAlpha = "PORTWORX_DISABLE_CSI_ALPHA"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
@@ -163,6 +166,18 @@ func StartPort(cluster *corev1alpha1.StorageCluster) int {
 func UseDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyDeprecatedCSIDriverName {
+			value, err := strconv.ParseBool(env.Value)
+			return err == nil && value
+		}
+	}
+	return false
+}
+
+// DisableCSIAlpha returns true if the cluster env variables has a variable to disable
+// CSI alpha features, else returns false.
+func DisableCSIAlpha(cluster *corev1alpha1.StorageCluster) bool {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == EnvKeyDisableCSIAlpha {
 			value, err := strconv.ParseBool(env.Value)
 			return err == nil && value
 		}
