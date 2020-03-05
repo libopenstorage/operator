@@ -709,6 +709,10 @@ func (t *template) getArguments() []string {
 func (t *template) getEnvList() []v1.EnvVar {
 	envList := []v1.EnvVar{
 		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: t.cluster.Namespace,
+		},
+		{
 			Name:  "PX_SECRETS_NAMESPACE",
 			Value: t.cluster.Namespace,
 		},

@@ -24,6 +24,8 @@ spec:
             ["-c", "px-cluster",
              "-x", "kubernetes"]
           env:
+            - name: "PX_NAMESPACE"
+              value: "kube-test"
             - name: "PX_SECRETS_NAMESPACE"
               value: "kube-test"
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"

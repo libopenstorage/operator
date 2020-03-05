@@ -120,8 +120,8 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
-	assert.Len(t, actual.Containers[0].Env, 4)
-	assert.Equal(t, expectedRegistryEnv, actual.Containers[0].Env[3])
+	assert.Len(t, actual.Containers[0].Env, 5)
+	assert.Equal(t, expectedRegistryEnv, actual.Containers[0].Env[4])
 }
 
 func TestPodSpecWithTolerations(t *testing.T) {

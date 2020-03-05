@@ -39,6 +39,8 @@ spec:
             ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b",
              "-r", "17001", "-x", "kubernetes"]
           env:
+            - name: "PX_NAMESPACE"
+              value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"
               value: "kube-system"
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
