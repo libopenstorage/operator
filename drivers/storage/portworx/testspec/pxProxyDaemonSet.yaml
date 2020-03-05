@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: portworx-api
-  namespace: kube-test
+  name: portworx-proxy
+  namespace: kube-system
 spec:
   updateStrategy:
     type: RollingUpdate
@@ -10,11 +10,11 @@ spec:
       maxUnavailable: 100%
   selector:
     matchLabels:
-      name: portworx-api
+      name: portworx-proxy
   template:
     metadata:
       labels:
-        name: portworx-api
+        name: portworx-proxy
     spec:
       affinity:
         nodeAffinity:
@@ -30,7 +30,7 @@ spec:
       hostNetwork: true
       hostPID: false
       containers:
-        - name: portworx-api
+        - name: portworx-proxy
           image: k8s.gcr.io/pause:3.1
           imagePullPolicy: Always
           readinessProbe:
@@ -40,4 +40,4 @@ spec:
               path: /status
               port: 10001
       restartPolicy: Always
-      serviceAccountName: portworx
+      serviceAccountName: portworx-proxy
