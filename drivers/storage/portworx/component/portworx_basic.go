@@ -258,8 +258,15 @@ func (c *portworxBasic) createPortworxService(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	labels := pxutil.SelectorLabels()
+	service := getPortworxServiceSpec(cluster, ownerRef)
+	return k8sutil.CreateOrUpdateService(c.k8sClient, service, ownerRef)
+}
 
+func getPortworxServiceSpec(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) *v1.Service {
+	labels := pxutil.SelectorLabels()
 	startPort := pxutil.StartPort(cluster)
 	kvdbTargetPort := 9019
 	sdkTargetPort := 9020
@@ -314,7 +321,7 @@ func (c *portworxBasic) createPortworxService(
 		newService.Spec.Type = serviceType
 	}
 
-	return k8sutil.CreateOrUpdateService(c.k8sClient, newService, ownerRef)
+	return newService
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component

@@ -32,6 +32,7 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -81,38 +82,27 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.NoError(t, err)
 
 	// Portworx ServiceAccount
-	serviceAccountList := &v1.ServiceAccountList{}
-	err = testutil.List(k8sClient, serviceAccountList)
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, serviceAccountList.Items, 1)
-
-	sa := serviceAccountList.Items[0]
-	require.Equal(t, pxutil.PortworxServiceAccountName, sa.Name)
-	require.Equal(t, cluster.Namespace, sa.Namespace)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
 
 	// Portworx ClusterRole
-	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = testutil.List(k8sClient, clusterRoleList)
-	require.NoError(t, err)
-	require.Len(t, clusterRoleList.Items, 1)
-
 	expectedCR := testutil.GetExpectedClusterRole(t, "portworxClusterRole.yaml")
-	actualCR := clusterRoleList.Items[0]
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.PxClusterRoleName, "")
+	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Len(t, actualCR.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Portworx ClusterRoleBinding
-	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = testutil.List(k8sClient, crbList)
-	require.NoError(t, err)
-	require.Len(t, crbList.Items, 1)
-
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "portworxClusterRoleBinding.yaml")
-	actualCRB := crbList.Items[0]
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.PxClusterRoleBindingName, "")
+	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
 	require.Len(t, actualCRB.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
@@ -120,13 +110,10 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
 	// Portworx Role
-	roleList := &rbacv1.RoleList{}
-	err = testutil.List(k8sClient, roleList)
-	require.NoError(t, err)
-	require.Len(t, roleList.Items, 1)
-
 	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
-	actualRole := roleList.Items[0]
+	actualRole := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, cluster.Namespace)
+	require.NoError(t, err)
 	require.Equal(t, expectedRole.Name, actualRole.Name)
 	require.Equal(t, expectedRole.Namespace, actualRole.Namespace)
 	require.Len(t, actualRole.OwnerReferences, 1)
@@ -134,25 +121,16 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
 
 	// Portworx RoleBinding
-	rbList := &rbacv1.RoleBindingList{}
-	err = testutil.List(k8sClient, rbList)
-	require.NoError(t, err)
-	require.Len(t, rbList.Items, 1)
-
 	expectedRB := testutil.GetExpectedRoleBinding(t, "portworxRoleBinding.yaml")
-	actualRB := rbList.Items[0]
+	actualRB := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
 	require.Equal(t, expectedRB.Name, actualRB.Name)
 	require.Equal(t, expectedRB.Namespace, actualRB.Namespace)
 	require.Len(t, actualRB.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
 	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
-
-	// Portworx Services
-	serviceList := &v1.ServiceList{}
-	err = testutil.List(k8sClient, serviceList)
-	require.NoError(t, err)
-	require.Len(t, serviceList.Items, 2)
 
 	// Portworx Service
 	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
@@ -179,13 +157,51 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
 
 	// Portworx API DaemonSet
-	dsList := &appsv1.DaemonSetList{}
-	err = testutil.List(k8sClient, dsList)
-	require.NoError(t, err)
-	require.Len(t, dsList.Items, 1)
-
 	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "portworxAPIDaemonSet.yaml")
-	ds := dsList.Items[0]
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDaemonSet.Name, ds.Name)
+	require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
+	require.Len(t, ds.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
+
+	// Portworx Proxy ServiceAccount
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Portworx Proxy ClusterRoleBinding
+	expectedCRB = testutil.GetExpectedClusterRoleBinding(t, "pxProxyClusterRoleBinding.yaml")
+	actualCRB = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.PxProxyClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Len(t, actualCRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Portworx Proxy Service
+	expectedPxProxyService := testutil.GetExpectedService(t, "pxProxyService.yaml")
+	pxProxyService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxProxyService.Name, pxProxyService.Name)
+	require.Equal(t, expectedPxProxyService.Namespace, pxProxyService.Namespace)
+	require.Len(t, pxProxyService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxProxyService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPxProxyService.Labels, pxProxyService.Labels)
+	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
+
+	// Portworx Proxy DaemonSet
+	expectedDaemonSet = testutil.GetExpectedDaemonSet(t, "pxProxyDaemonSet.yaml")
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
 	require.Equal(t, expectedDaemonSet.Name, ds.Name)
 	require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
 	require.Len(t, ds.OwnerReferences, 1)
@@ -310,7 +326,46 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	require.NotEqual(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
 }
 
-func TestDisablePortworx(t *testing.T) {
+func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			StartPort: &startPort,
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxProxySA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	// Portworx service should be deployed as part of basic deployment
+	pxSvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxSvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+}
+
+func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -321,6 +376,44 @@ func TestDisablePortworx(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxProxySA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxySvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestDisablePortworx(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			StartPort: &startPort,
 		},
 	}
 
@@ -355,8 +448,24 @@ func TestDisablePortworx(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPISvc, component.PxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
-	ds := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	pxAPIDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDS, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	pxProxySA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	pxProxySvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 
 	// Disable Portworx
@@ -394,8 +503,24 @@ func TestDisablePortworx(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPISvc, component.PxAPIServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	ds = &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	pxAPIDS = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDS, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxySA = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyCRB = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxySvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyDS = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -6379,6 +6504,7 @@ func reregisterComponents() {
 	component.DeregisterAllComponents()
 	component.RegisterPortworxBasicComponent()
 	component.RegisterPortworxAPIComponent()
+	component.RegisterPortworxProxyComponent()
 	component.RegisterPortworxStorageClassComponent()
 	component.RegisterAutopilotComponent()
 	component.RegisterCSIComponent()
