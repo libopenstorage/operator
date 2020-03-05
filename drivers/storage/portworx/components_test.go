@@ -3064,6 +3064,160 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.2",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PORTWORX_DISABLE_CSI_ALPHA",
+						Value: "true",
+					},
+				},
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Case: Should not deploy resizer and snapshotter as they are alpha in k8s 1.14
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentAlphaDisabledK8s_1_14.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Case: Should not deploy snapshotter as it is alpha in k8s 1.16
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.16.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentAlphaDisabledK8s_1_16.yaml")
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Case: Should deploy all sidecars in k8s 1.17 as they are not in alpha
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1.0.yaml")
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Case: Should deploy all sidecars even in k8s 1.14, as alpha features are not disabled
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+	cluster.Spec.Env[0].Value = "false"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1.0.yaml")
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Case: Should deploy all sidecars even in k8s 1.14, as invalid value is passed in env
+	// and the default behavior is to allow alpha features
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+	cluster.Spec.Env[0].Value = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1.0.yaml")
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+}
+
 func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -3138,7 +3292,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3177,7 +3331,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3344,7 +3498,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[4])
@@ -3372,7 +3526,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[1].Args[4])
@@ -3954,7 +4108,7 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.2-1",
+		customRepo+"/csi-snapshotter:v2.0.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4113,7 +4267,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		customRegistry+"/quay.io/openstorage/csi-snapshotter:v2.0.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 

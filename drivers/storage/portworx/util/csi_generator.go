@@ -31,17 +31,19 @@ type CSIConfiguration struct {
 	// Before Kube v1.13 the registration directory must be /var/lib/kubelet/plugins instead
 	// of /var/lib/kubelet/plugins_registry
 	UseOlderPluginsDirAsRegistration bool
-	// driverName is decided based on the PX Version unless the deprecated flag is provided.
+	// DriverName is decided based on the PX Version unless the deprecated flag is provided.
 	DriverName string
-	// useDeployment decides whether to use a StatefulSet or Deployment for the CSI side cars.
+	// UseDeployment decides whether to use a StatefulSet or Deployment for the CSI side cars.
 	UseDeployment bool
-	// includeAttacher dictates whether we include the csi-attacher sidecar or not.
+	// IncludeAttacher dictates whether we include the csi-attacher sidecar or not.
 	IncludeAttacher bool
-	// includeResizer dicates whether or not to include the resizer sidecar.
+	// IncludeResizer dicates whether or not to include the resizer sidecar.
 	IncludeResizer bool
-	// includeCsiDriverInfo dictates whether or not to add the CSIDriver object.
+	// IncludeSnapshotter dicates whether or not to include the snapshotter sidecar.
+	IncludeSnapshotter bool
+	// IncludeCsiDriverInfo dictates whether or not to add the CSIDriver object.
 	IncludeCsiDriverInfo bool
-	// includeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
+	// IncludeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
 	// In Kubernetes Kubernetes 1.14+ leader election does not use configmaps.
 	IncludeEndpointsAndConfigMapsForLeases bool
 }
@@ -51,6 +53,7 @@ type CSIGenerator struct {
 	kubeVersion             version.Version
 	pxVersion               version.Version
 	useDeprecatedDriverName bool
+	disableAlpha            bool
 }
 
 // NewCSIGenerator returns a version generator
@@ -58,11 +61,13 @@ func NewCSIGenerator(
 	kubeVersion version.Version,
 	pxVersion version.Version,
 	useDeprecatedDriverName bool,
+	disableAlpha bool,
 ) *CSIGenerator {
 	return &CSIGenerator{
 		kubeVersion:             kubeVersion,
 		pxVersion:               pxVersion,
 		useDeprecatedDriverName: useDeprecatedDriverName,
+		disableAlpha:            disableAlpha,
 	}
 }
 
@@ -83,6 +88,8 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	k8sVer1_12, _ := version.NewVersion("1.12")
 	k8sVer1_13, _ := version.NewVersion("1.13")
 	k8sVer1_14, _ := version.NewVersion("1.14")
+	k8sVer1_16, _ := version.NewVersion("1.16")
+	k8sVer1_17, _ := version.NewVersion("1.17")
 	pxVer2_1, _ := version.NewVersion("2.1")
 	pxVer2_2, _ := version.NewVersion("2.2")
 
@@ -109,9 +116,21 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
 	// Our CSI driver only supports resizing in PX 2.2.
 	// Resize support is Alpha starting k8s 1.14
-	if (g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2)) &&
-		(g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14)) {
-		cv.IncludeResizer = true
+	if g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2) {
+		if g.kubeVersion.GreaterThan(k8sVer1_16) || g.kubeVersion.Equal(k8sVer1_16) {
+			cv.IncludeResizer = true
+		} else if (g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14)) && !g.disableAlpha {
+			cv.IncludeResizer = true
+		}
+	}
+
+	// Snapshotter alpha support in k8s 1.16
+	if (g.kubeVersion.GreaterThan(k8sVer1_12) || g.kubeVersion.Equal(k8sVer1_12)) && !g.disableAlpha {
+		// Snapshotter support is alpha starting k8s 1.12
+		cv.IncludeSnapshotter = true
+	} else if g.kubeVersion.GreaterThan(k8sVer1_17) || g.kubeVersion.Equal(k8sVer1_17) {
+		// Snapshotter support is beta starting k8s 1.17
+		cv.IncludeSnapshotter = true
 	}
 
 	// Check if we need to setup the CsiNodeInfo CRD
@@ -161,7 +180,7 @@ func (g *CSIGenerator) setSidecarContainerVersionsV1_0() *CSIConfiguration {
 		Attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		NodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
 		Provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
-		Snapshotter:   "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		Snapshotter:   "quay.io/openstorage/csi-snapshotter:v2.0.0",
 		Resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
 		// Single registrar has been deprecated
 		Registrar: "",

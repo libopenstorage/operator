@@ -31,10 +31,10 @@ spec:
           image: quay.io/openstorage/csi-provisioner:v1.4.0-1
           args:
             - "--v=3"
-            - "--provisioner=com.openstorage.pxd"
+            - "--provisioner=pxd.portworx.com"
             - "--csi-address=$(ADDRESS)"
             - "--enable-leader-election"
-            - "--leader-election-type=endpoints"
+            - "--leader-election-type=leases"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -43,31 +43,13 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
-        - name: csi-attacher
+        - name: csi-resizer
           imagePullPolicy: Always
-          image: quay.io/openstorage/csi-attacher:v1.2.1-1
+          image: quay.io/k8scsi/csi-resizer:v0.3.0
           args:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"
             - "--leader-election=true"
-            - "--leader-election-type=configmaps"
-          env:
-            - name: ADDRESS
-              value: /csi/csi.sock
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
-        - name: csi-snapshotter
-          imagePullPolicy: Always
-          image: quay.io/openstorage/csi-snapshotter:v2.0.0
-          args:
-            - "--v=3"
-            - "--csi-address=$(ADDRESS)"
-            - "--snapshotter=com.openstorage.pxd"
-            - "--leader-election=true"
-            - "--leader-election-type=configmaps"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -79,5 +61,5 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            path: /var/lib/kubelet/plugins/pxd.portworx.com
             type: DirectoryOrCreate
