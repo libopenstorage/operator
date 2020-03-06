@@ -564,6 +564,10 @@ func matchSelectedFields(
 
 	if oldSpec.Image != currentSpec.Image {
 		return false, nil
+	} else if oldSpec.CustomImageRegistry != currentSpec.CustomImageRegistry {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.ImagePullSecret, currentSpec.ImagePullSecret) {
+		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.Kvdb, currentSpec.Kvdb) {
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.CloudStorage, currentSpec.CloudStorage) {

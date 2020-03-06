@@ -2795,6 +2795,194 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 	require.Equal(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := &Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
+	storagePod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), storagePod)
+
+	// TestCase: Add imagePullSecret
+	cluster.Spec.ImagePullSecret = stringPtr("pull-secret")
+	k8sClient.Update(context.TODO(), cluster)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+
+	// TestCase: Update imagePullSecret
+	// Replace old pod with new configuration so that it has the image pull secret
+	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
+
+	// Change the image pull secret
+	cluster.Spec.ImagePullSecret = stringPtr("new-pull-secret")
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove imagePullSecret
+	// Replace old pod with new configuration so that it has the new image pull secret
+	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
+
+	cluster.Spec.ImagePullSecret = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+}
+
+func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := &Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
+	storagePod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), storagePod)
+
+	// TestCase: Add customImageRegistry
+	cluster.Spec.CustomImageRegistry = "registry.first"
+	k8sClient.Update(context.TODO(), cluster)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+
+	// TestCase: Update customImageRegistry
+	// Replace old pod with new configuration so that it has the custom image registry
+	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
+
+	// Change the custom image registry
+	cluster.Spec.CustomImageRegistry = "registry.second"
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove customImageRegistry
+	// Replace old pod with new configuration so that it has the new custom image registry
+	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
+
+	cluster.Spec.CustomImageRegistry = ""
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
+}
+
 func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -4285,36 +4473,6 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
 
-	// TestCase: Change spec.imagePullSecret
-	imagePullSecret := "pull-secret"
-	cluster.Spec.ImagePullSecret = &imagePullSecret
-	k8sClient.Update(context.TODO(), cluster)
-
-	podControl.DeletePodName = nil
-
-	result, err = controller.Reconcile(request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, podControl.DeletePodName)
-
-	// TestCase: Change spec.customImageRegistry
-	cluster.Spec.CustomImageRegistry = "custom-registry"
-	k8sClient.Update(context.TODO(), cluster)
-
-	podControl.DeletePodName = nil
-
-	result, err = controller.Reconcile(request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, podControl.DeletePodName)
-
-	podControl.DeletePodName = nil
-
-	result, err = controller.Reconcile(request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, podControl.DeletePodName)
-
 	// TestCase: Change spec.userInterface
 	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{Enabled: true}
 	k8sClient.Update(context.TODO(), cluster)
@@ -4956,6 +5114,47 @@ func TestHistoryCleanup(t *testing.T) {
 	require.Len(t, revisions.Items, 2)
 	require.Equal(t, int64(3), revisions.Items[0].Revision)
 	require.Equal(t, int64(5), revisions.Items[1].Revision)
+}
+
+func replaceOldPod(
+	oldPod *v1.Pod,
+	cluster *corev1alpha1.StorageCluster,
+	controller *Controller,
+	podControl *k8scontroller.FakePodControl,
+) *v1.Pod {
+	// Delete the old pod
+	controller.client.Delete(context.TODO(), oldPod)
+
+	// Reconcile once to let the controller create a template for the new pod
+	podControl.Templates = nil
+	podControl.ControllerRefs = nil
+	podControl.DeletePodName = nil
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	controller.Reconcile(request)
+
+	// Create the new pod from the template that fake pod controller received
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+	newPod, _ := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
+	newPod.Name = oldPod.Name
+	newPod.Namespace = cluster.Namespace
+	newPod.Spec.NodeName = oldPod.Spec.NodeName
+	newPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	controller.client.Create(context.TODO(), newPod)
+
+	podControl.Templates = nil
+	podControl.ControllerRefs = nil
+	podControl.DeletePodName = nil
+	return newPod
 }
 
 func createStorageCluster() *corev1alpha1.StorageCluster {
