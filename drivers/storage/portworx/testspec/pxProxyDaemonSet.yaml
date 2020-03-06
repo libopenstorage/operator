@@ -37,7 +37,7 @@ spec:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
-              path: /status
-              port: 10001
+              path: /health
+              port: 10015
       restartPolicy: Always
       serviceAccountName: portworx-proxy
