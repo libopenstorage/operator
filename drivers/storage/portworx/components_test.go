@@ -4652,6 +4652,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 
 	imagePullSecret := "pull-secret"
 	cluster := &corev1alpha1.StorageCluster{
@@ -4664,6 +4665,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			ImagePullSecret: &imagePullSecret,
+			StartPort:       &startPort,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
@@ -4692,6 +4694,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pxProxyDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Len(t, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -4735,6 +4743,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Len(t, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -4776,6 +4790,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Empty(t, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -4812,6 +4831,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Empty(t, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -4851,6 +4875,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Len(t, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxProxyDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -4895,6 +4925,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 
 	tolerations := []v1.Toleration{
 		{
@@ -4913,7 +4944,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/image:2.2",
+			Image:     "portworx/image:2.2",
+			StartPort: &startPort,
 			Placement: &corev1alpha1.PlacementSpec{
 				Tolerations: tolerations,
 			},
@@ -4944,6 +4976,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pxProxyDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -4987,6 +5024,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -5035,6 +5077,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5078,6 +5125,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5119,6 +5171,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Nil(t, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -5162,6 +5219,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5203,6 +5265,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Nil(t, pxProxyDaemonSet.Spec.Template.Spec.Tolerations)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -5248,6 +5315,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 
 	nodeAffinity := &v1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -5273,7 +5341,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/image:2.2",
+			Image:     "portworx/image:2.2",
+			StartPort: &startPort,
 			Placement: &corev1alpha1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
 			},
@@ -5304,6 +5373,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pxProxyDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxProxyDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -5351,6 +5425,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxProxyDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5392,6 +5471,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Affinity)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Nil(t, pxProxyDaemonSet.Spec.Template.Spec.Affinity)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -5435,6 +5519,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxProxyDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5476,6 +5565,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxAPIDaemonSet.Spec.Template.Spec.Affinity)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Nil(t, pxProxyDaemonSet.Spec.Template.Spec.Affinity)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)

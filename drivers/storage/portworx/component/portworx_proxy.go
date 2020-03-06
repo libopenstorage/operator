@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,7 +24,7 @@ import (
 const (
 	// PortworxProxyComponent name of the Portworx Proxy component. This component
 	// runs in the kube-system namespace if the cluster is running outside. This
-	// ensures that k8s in-tree driver traffic gets routed the Portworx nodes.
+	// ensures that k8s in-tree driver traffic gets routed to the Portworx nodes.
 	PortworxProxyComponent = "Portworx Proxy"
 	// PxProxyServiceAccountName name of the Portworx proxy service account
 	PxProxyServiceAccountName = "portworx-proxy"
@@ -169,22 +171,104 @@ func (c *portworxProxy) createDaemonSet(
 		return getErr
 	}
 
-	if !c.isCreated || errors.IsNotFound(getErr) {
-		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef)
+	modified := util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
+		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
+		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 
-		daemonSet.Name = PxProxyDaemonSetName
-		daemonSet.Namespace = api.NamespaceSystem
-		daemonSet.Spec.Selector.MatchLabels = getPortworxProxyServiceLabels()
-		daemonSet.Spec.Template.Labels = getPortworxProxyServiceLabels()
-		daemonSet.Spec.Template.Spec.ServiceAccountName = PxProxyServiceAccountName
-		daemonSet.Spec.Template.Spec.Containers[0].Name = pxProxyContainerName
-
+	if !c.isCreated || errors.IsNotFound(getErr) || modified {
+		daemonSet := getPortworxProxyDaemonSetSpec(cluster, ownerRef)
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
 	}
 	c.isCreated = true
 	return nil
+}
+
+func getPortworxProxyDaemonSetSpec(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) *appsv1.DaemonSet {
+	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, "k8s.gcr.io/pause:3.1")
+	maxUnavailable := intstr.FromString("100%")
+	startPort := pxutil.StartPort(cluster)
+
+	newDaemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            PxProxyDaemonSetName,
+			Namespace:       api.NamespaceSystem,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getPortworxProxyServiceLabels(),
+			},
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: getPortworxProxyServiceLabels(),
+				},
+				Spec: v1.PodSpec{
+					ServiceAccountName: PxProxyServiceAccountName,
+					RestartPolicy:      v1.RestartPolicyAlways,
+					HostNetwork:        true,
+					Containers: []v1.Container{
+						{
+							Name:            pxProxyContainerName,
+							Image:           imageName,
+							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
+							ReadinessProbe: &v1.Probe{
+								PeriodSeconds: 10,
+								Handler: v1.Handler{
+									HTTPGet: &v1.HTTPGetAction{
+										Host: "127.0.0.1",
+										Path: "/health",
+										Port: intstr.FromInt(startPort + 14),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			newDaemonSet.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if cluster.Spec.Placement != nil {
+			if len(cluster.Spec.Placement.Tolerations) > 0 {
+				newDaemonSet.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+				for _, toleration := range cluster.Spec.Placement.Tolerations {
+					newDaemonSet.Spec.Template.Spec.Tolerations = append(
+						newDaemonSet.Spec.Template.Spec.Tolerations,
+						*(toleration.DeepCopy()),
+					)
+				}
+			}
+		}
+	}
+
+	return newDaemonSet
 }
 
 func getPortworxProxyServiceLabels() map[string]string {
