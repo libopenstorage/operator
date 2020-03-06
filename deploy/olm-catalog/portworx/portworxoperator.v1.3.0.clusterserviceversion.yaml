@@ -104,7 +104,11 @@ spec:
     ### How to install StorageCluster
 
     To customize your cluster's configuration (specification), use the
-    [Openshift Spec Generator](https://openshift4.install.portworx.com/)
+    [Spec Generator](https://central.portworx.com/) from PX-Central.
+
+    ### Prerequisite
+
+    Ensure ports 17001-17020 on worker nodes are reachable from master and other worker nodes.
 
     ### Tutorials
 
