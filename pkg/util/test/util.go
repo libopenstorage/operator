@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -312,7 +313,6 @@ func ValidateStorageCluster(
 		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
 	}
 
-	// TODO: Validate portworx is started with correct params. Check individual options
 	for _, n := range nodeEnumerateResp.GetNodeIds() {
 		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
 		if err != nil {
@@ -321,6 +321,18 @@ func ValidateStorageCluster(
 		if nodeResp.Node.Status != api.Status_STATUS_OK {
 			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
 				nodeResp.Node.Status)
+		}
+
+		pods, err := coreops.Instance().GetPodsByNode(nodeResp.Node.SchedulerNodeName, cluster.Namespace)
+		if err != nil {
+			return err
+		}
+		for _, pod := range pods.Items {
+			for labelKey, labelVal := range pod.Labels {
+				if labelKey == "name" && labelVal == "portworx" {
+					return validatePodArgs(cluster, pod)
+				}
+			}
 		}
 
 	}
@@ -638,6 +650,102 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 				return fmt.Errorf("failed to validade image tag on pod %s container %s, Expected: %s Got: %s",
 					pod.Name, container.Name, tag, imageTag)
 			}
+		}
+	}
+	return nil
+}
+
+func validatePodArgs(cluster *corev1alpha1.StorageCluster, pod v1.Pod) error {
+	args := pod.Spec.Containers[0].Args
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-d":
+			if cluster.Spec.Network != nil && cluster.Spec.Network.DataInterface != nil {
+				if *cluster.Spec.Network.DataInterface != args[i+1] {
+					return fmt.Errorf("data network interface does not match. expected: %s, got: %s",
+						*cluster.Spec.Network.DataInterface, args[i+1])
+				}
+			} else {
+				return fmt.Errorf("data network interface expected to be set")
+			}
+			i++
+		case "-s":
+			devices := strings.Join(*cluster.Spec.Storage.Devices, ",")
+			if !strings.Contains(devices, args[i+1]) {
+				return fmt.Errorf("expected device %s to be in %v", args[i+1], devices)
+			}
+			i++
+		case "-T":
+			// TODO validate backend storage type
+			i++
+		case "-cache":
+			// TODO validate cache
+			i++
+		case "-dedicated_cache":
+			// TODO validate dedicated cache
+		case "-j":
+			if *cluster.Spec.Storage.JournalDevice != args[i+1] {
+				return fmt.Errorf("expected journal device %s to be %v", args[i+1],
+					*cluster.Spec.Storage.JournalDevice)
+			}
+		case "-metadata":
+			if *cluster.Spec.Storage.SystemMdDevice != args[i+1] {
+				return fmt.Errorf("expected metadata device %s to be %v", args[i+1],
+					*cluster.Spec.Storage.SystemMdDevice)
+			}
+		case "-z":
+			// TODO validate storageless node
+		case "-r":
+			port, _ := strconv.ParseUint(args[i+1], 10, 32)
+			if *cluster.Spec.StartPort != uint32(port) {
+				return fmt.Errorf("expected port %d to be %d", port, *cluster.Spec.StartPort)
+			}
+		case "-m":
+			if cluster.Spec.Network != nil && cluster.Spec.Network.MgmtInterface != nil {
+				if *cluster.Spec.Network.MgmtInterface != args[i+1] {
+					return fmt.Errorf("mgmt network interface does not match. expected: %s, got: %s",
+						*cluster.Spec.Network.MgmtInterface, args[i+1])
+				}
+			} else {
+				return fmt.Errorf("data network interface expected to be set")
+			}
+			i++
+		case "-k":
+			expectedEndpoints := strings.Split(args[i+1], ",")
+			sort.Strings(expectedEndpoints)
+			existingEndpoints := cluster.Spec.Kvdb.Endpoints
+			sort.Strings(existingEndpoints)
+			for j := 0; j < len(existingEndpoints); j++ {
+				if expectedEndpoints[j] != existingEndpoints[j] {
+					return fmt.Errorf("kvdb endpoints do not match, expected: %s, existing: %s",
+						expectedEndpoints[j], existingEndpoints[j])
+				}
+			}
+			i++
+		case "-f":
+			if !*cluster.Spec.Storage.ForceUseDisks {
+				return fmt.Errorf("cluster expected to force use all disks")
+			}
+		case "-a":
+			if !*cluster.Spec.Storage.UseAll {
+				return fmt.Errorf("cluster expected to use all disks")
+			}
+		case "-A":
+			if !*cluster.Spec.Storage.UseAllWithPartitions {
+				return fmt.Errorf("cluster expected to use all disks and partitions")
+			}
+		case "-c":
+			if cluster.Name != args[i+1] {
+				return fmt.Errorf("cluster name does not match, expected: %s, existing: %s",
+					cluster.Name, args[i+1])
+			}
+			i++
+		case "-x":
+			if args[i+1] != "kubernetes" {
+				return fmt.Errorf("cluster scheduler expected to be kubernetes. got: %s", args[i+1])
+			}
+
+		default:
 		}
 	}
 	return nil
