@@ -777,16 +777,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	// TODO: Imp: add etcd certs to the volume mounts
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
-
-	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
-		volumeInfoList = append(volumeInfoList, volumeInfo{
-			name:      "csi-driver-path",
-			mountPath: t.csiConfig.DriverBasePath(),
-		})
-	}
-
 	volumeMounts := make([]v1.VolumeMount, 0)
 	for _, v := range volumeInfoList {
 		volMount := v1.VolumeMount{
@@ -815,7 +806,6 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	// TODO: Imp: add etcd certs to the volume list
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
 
 	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
