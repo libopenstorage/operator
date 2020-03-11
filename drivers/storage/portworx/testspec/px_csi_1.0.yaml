@@ -65,8 +65,6 @@ spec:
               mountPath: /etc/crictl.yaml
             - name: etcpwx
               mountPath: /etc/pwx
-            - name: csi-driver-path
-              mountPath: /var/lib/kubelet/plugins/com.openstorage.pxd
             - name: optpwx
               mountPath: /opt/pwx
             - name: procmount
