@@ -4250,7 +4250,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+component.DefaultPrometheusOperatorImage,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4259,15 +4259,15 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-attacher:v1.2.1-1",
+		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4285,7 +4285,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-resizer:v0.3.0",
+		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4304,11 +4304,11 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-provisioner:v0.4.3",
+		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-attacher:v0.4.2",
+		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 }
