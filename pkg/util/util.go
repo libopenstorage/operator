@@ -27,6 +27,7 @@ var (
 	// commonDockerRegistries is a map of commonly used Docker registries
 	commonDockerRegistries = map[string]bool{
 		"docker.io":                   true,
+		"quay.io":                     true,
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
