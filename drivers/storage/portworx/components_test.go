@@ -3292,7 +3292,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3331,7 +3331,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3498,7 +3498,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[4])
@@ -3526,7 +3526,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[1].Args[4])
@@ -4267,7 +4267,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-snapshotter:v2.0.0",
+		customRegistry+"/quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
