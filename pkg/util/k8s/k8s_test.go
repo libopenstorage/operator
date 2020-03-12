@@ -1011,6 +1011,97 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 	require.Equal(t, "200", actualCluster.ResourceVersion)
 }
 
+func TestStorageNodeChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			ResourceVersion: "200",
+		},
+		Spec: corev1alpha1.StorageNodeSpec{
+			Version: "1.0.0",
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: "Running",
+		},
+	}
+
+	err := CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
+	require.NoError(t, err)
+
+	actualNode := &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "1.0.0", actualNode.Spec.Version)
+
+	// Change spec
+	expectedNode.Spec.Version = "2.0.0"
+	expectedNode.ResourceVersion = "100"
+
+	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
+	require.NoError(t, err)
+
+	actualNode = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "2.0.0", actualNode.Spec.Version)
+	require.Equal(t, "200", actualNode.ResourceVersion)
+
+	// Change status
+	expectedNode.Status.Phase = "Failed"
+
+	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
+	require.NoError(t, err)
+
+	actualNode = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "Failed", actualNode.Status.Phase)
+}
+
+func TestStorageNodeWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
+	require.NoError(t, err)
+
+	actualNode := &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualNode.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, &firstOwner)
+	require.NoError(t, err)
+
+	actualNode = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualNode.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedNode.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, &secondOwner)
+	require.NoError(t, err)
+
+	actualNode = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualNode.OwnerReferences)
+}
+
 func TestServiceMonitorChangeSpec(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	expectedMonitor := &monitoringv1.ServiceMonitor{
