@@ -26,6 +26,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -300,23 +301,22 @@ func (p *portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	currentNodes := make(map[string]bool)
-
+	currentPxNodes := make(map[string]bool)
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
 			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
 				[]string{node.DataIp, node.MgmtIp, node.Hostname},
 			)
 			if err != nil {
-				msg := fmt.Sprintf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
-				p.warningEvent(cluster, util.FailedSyncReason, msg)
+				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
 				continue
 			}
 			node.SchedulerNodeName = k8sNode.Name
 		}
 
-		currentNodes[node.SchedulerNodeName] = true
+		currentPxNodes[node.SchedulerNodeName] = true
 
 		phase := mapNodeStatus(node.Status)
 		storageNode := &corev1alpha1.StorageNode{
@@ -363,20 +363,60 @@ func (p *portworx) updateStorageNodes(
 		}
 	}
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
-	if err = p.k8sClient.List(context.TODO(), nodeStatusList, &client.ListOptions{}); err != nil {
+	pxLabels := p.GetSelectorLabels()
+	portworxPodList := &v1.PodList{}
+	err = p.k8sClient.List(
+		context.TODO(),
+		portworxPodList,
+		&client.ListOptions{
+			Namespace:     cluster.Namespace,
+			LabelSelector: labels.SelectorFromSet(pxLabels),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get list of portworx pods. %v", err)
+	}
+
+	currentPxPodNodes := make(map[string]bool)
+	for _, pod := range portworxPodList.Items {
+		controllerRef := metav1.GetControllerOf(&pod)
+		if controllerRef != nil && controllerRef.UID == cluster.UID && len(pod.Spec.NodeName) != 0 {
+			currentPxPodNodes[pod.Spec.NodeName] = true
+		}
+	}
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	if err = p.k8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
 		return fmt.Errorf("failed to get a list of StorageNode: %v", err)
 	}
 
-	for _, nodeStatus := range nodeStatusList.Items {
-		if _, exists := currentNodes[nodeStatus.Name]; !exists {
+	for _, storageNode := range storageNodes.Items {
+		pxNodeExists := currentPxNodes[storageNode.Name]
+		pxPodExists := currentPxPodNodes[storageNode.Name]
+		if !pxNodeExists && !pxPodExists {
 			logrus.Debugf("Deleting orphan StorageNode %v/%v",
-				nodeStatus.Namespace, nodeStatus.Name)
-			err = p.k8sClient.Delete(context.TODO(), nodeStatus.DeepCopy())
+				storageNode.Namespace, storageNode.Name)
+
+			err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
 			if err != nil && !errors.IsNotFound(err) {
 				msg := fmt.Sprintf("Failed to delete StorageNode %v/%v: %v",
-					nodeStatus.Namespace, nodeStatus.Name, err)
+					storageNode.Namespace, storageNode.Name, err)
 				p.warningEvent(cluster, util.FailedSyncReason, msg)
+			}
+		} else if !pxNodeExists && pxPodExists {
+			// If the portworx pod exists, but corresponding portworx node is missing
+			// in enumerate, then it's either still initializing or removed from cluster
+			if storageNode.Status.Phase != string(corev1alpha1.NodeInitStatus) &&
+				storageNode.Status.Phase != string(corev1alpha1.NodeUnknownStatus) {
+				storageNodeCopy := storageNode.DeepCopy()
+				storageNodeCopy.Status.Phase = string(corev1alpha1.NodeUnknownStatus)
+
+				err = p.k8sClient.Status().Update(context.TODO(), storageNodeCopy)
+				if err != nil && !errors.IsNotFound(err) {
+					msg := fmt.Sprintf("Failed to update StorageNode %v/%v: %v",
+						storageNode.Namespace, storageNode.Name, err)
+					p.warningEvent(cluster, util.FailedSyncReason, msg)
+				}
 			}
 		}
 	}
