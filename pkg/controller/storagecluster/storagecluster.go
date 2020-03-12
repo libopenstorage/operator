@@ -604,6 +604,8 @@ func (c *Controller) syncNodes(
 				if err != nil {
 					logrus.Warnf("Failed creation of storage pod on node %v: %v", nodesNeedingStoragePods[idx], err)
 					errCh <- err
+				} else {
+					c.createStorageNode(cluster, nodesNeedingStoragePods[idx])
 				}
 			}(i)
 		}
@@ -1158,6 +1160,34 @@ func (c *Controller) getStoragePods(
 		undeletedCluster,
 	)
 	return cm.ClaimPods(allPods)
+}
+
+func (c *Controller) createStorageNode(
+	cluster *corev1alpha1.StorageCluster,
+	nodeName string,
+) {
+	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            nodeName,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Labels:          c.Driver.GetSelectorLabels(),
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+		},
+	}
+	err := c.client.Create(context.TODO(), storageNode)
+	if err == nil {
+		err = c.client.Status().Update(context.TODO(), storageNode)
+		if err != nil {
+			logrus.Warnf("Failed to update status of StorageNode %s/%s. %v",
+				nodeName, cluster.Namespace, err)
+		}
+	} else if err != nil && !errors.IsAlreadyExists(err) {
+		logrus.Warnf("Failed to create StorageNode %s/%s. %v", nodeName, cluster.Namespace, err)
+	}
 }
 
 func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
