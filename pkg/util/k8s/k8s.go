@@ -1058,27 +1058,26 @@ func CreateOrUpdateStorageNode(
 		return err
 	}
 
-	ownerRefs := make([]metav1.OwnerReference, 0)
-	if ownerRef != nil {
-		ownerRefs = append(ownerRefs, *ownerRef)
-		for _, o := range existingNode.OwnerReferences {
-			if o.UID != ownerRef.UID {
-				ownerRefs = append(ownerRefs, o)
-			}
+	for _, o := range existingNode.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			node.OwnerReferences = append(node.OwnerReferences, o)
 		}
 	}
 
 	modified := !reflect.DeepEqual(node.Status, existingNode.Status) ||
 		!reflect.DeepEqual(node.Spec, existingNode.Spec)
 
-	if modified || len(ownerRefs) > len(existingNode.OwnerReferences) {
-		existingNode.Spec = node.Spec
-		existingNode.Status = node.Status
+	if modified || len(node.OwnerReferences) > len(existingNode.OwnerReferences) {
+		// Create a copy of node as Update() will change the object,
+		// but we need the original to update the status
+		nodeStatus := node.DeepCopy()
+		node.ResourceVersion = existingNode.ResourceVersion
 		logrus.Debugf("Updating StorageNode %s/%s", node.Namespace, node.Name)
-		if err := k8sClient.Update(context.TODO(), existingNode); err != nil {
+		if err := k8sClient.Update(context.TODO(), node); err != nil {
 			return err
 		}
-		return k8sClient.Status().Update(context.TODO(), existingNode)
+		nodeStatus.ResourceVersion = node.ResourceVersion
+		return k8sClient.Status().Update(context.TODO(), nodeStatus)
 	}
 	return nil
 }
