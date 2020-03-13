@@ -533,35 +533,40 @@ func getCSIDeploymentSpec(
 	}
 
 	if csiConfig.IncludeSnapshotter && snapshotterImage != "" {
-		deployment.Spec.Template.Spec.Containers = append(
-			deployment.Spec.Template.Spec.Containers,
-			v1.Container{
-				Name:            csiSnapshotterContainerName,
-				Image:           snapshotterImage,
-				ImagePullPolicy: imagePullPolicy,
-				Args: []string{
-					"--v=3",
-					"--csi-address=$(ADDRESS)",
-					"--snapshotter=" + csiConfig.DriverName,
-					"--leader-election=true",
-					"--leader-election-type=" + leaderElectionType,
-				},
-				Env: []v1.EnvVar{
-					{
-						Name:  "ADDRESS",
-						Value: "/csi/csi.sock",
-					},
-				},
-				SecurityContext: &v1.SecurityContext{
-					Privileged: boolPtr(true),
-				},
-				VolumeMounts: []v1.VolumeMount{
-					{
-						Name:      "socket-dir",
-						MountPath: "/csi",
-					},
+		snapshotterContainer := v1.Container{
+			Name:            csiSnapshotterContainerName,
+			Image:           snapshotterImage,
+			ImagePullPolicy: imagePullPolicy,
+			Args: []string{
+				"--v=3",
+				"--csi-address=$(ADDRESS)",
+				"--leader-election=true",
+			},
+			Env: []v1.EnvVar{
+				{
+					Name:  "ADDRESS",
+					Value: "/csi/csi.sock",
 				},
 			},
+			SecurityContext: &v1.SecurityContext{
+				Privileged: boolPtr(true),
+			},
+			VolumeMounts: []v1.VolumeMount{
+				{
+					Name:      "socket-dir",
+					MountPath: "/csi",
+				},
+			},
+		}
+		if csiConfig.IncludeEndpointsAndConfigMapsForLeases {
+			snapshotterContainer.Args = append(
+				snapshotterContainer.Args,
+				"--leader-election-type=configmaps",
+			)
+		}
+		deployment.Spec.Template.Spec.Containers = append(
+			deployment.Spec.Template.Spec.Containers,
+			snapshotterContainer,
 		)
 	}
 

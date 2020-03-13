@@ -3292,7 +3292,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3331,7 +3331,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3360,6 +3360,24 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
+
+	// Change snapshotter image with k8s 1.14+
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		deployment.Spec.Template.Spec.Containers[1].Image)
+
+	deployment.Spec.Template.Spec.Containers[1].Image = "my-csi-snapshotter:test"
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		deployment.Spec.Template.Spec.Containers[1].Image)
 }
 
 func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
@@ -3498,10 +3516,10 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
-		deployment.Spec.Template.Spec.Containers[2].Args[4])
+		deployment.Spec.Template.Spec.Containers[2].Args[3])
 
 	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar
 	// and add the resizer sidecar
@@ -3528,8 +3546,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
 	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "--leader-election-type=leases",
-		deployment.Spec.Template.Spec.Containers[1].Args[4])
+	require.Len(t, deployment.Spec.Template.Spec.Containers[1].Args, 3)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
@@ -4108,7 +4125,7 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v2.0.0",
+		customRepo+"/csi-snapshotter:v1.2.2-1",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4125,6 +4142,10 @@ func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
 	require.Equal(t,
 		customRepo+"/csi-resizer:v0.3.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
@@ -4267,7 +4288,7 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4284,6 +4305,10 @@ func TestCompleteInstallWithCustomRegistry(t *testing.T) {
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
 	require.Equal(t,
 		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
