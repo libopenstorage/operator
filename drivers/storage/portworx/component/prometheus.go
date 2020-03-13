@@ -50,7 +50,7 @@ const (
 	// PrometheusInstanceName name of the prometheus instance
 	PrometheusInstanceName = "px-prometheus"
 	// DefaultPrometheusOperatorImage is the default prometheus operator image
-	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.35.0"
+	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.34.0"
 )
 
 type prometheus struct {
