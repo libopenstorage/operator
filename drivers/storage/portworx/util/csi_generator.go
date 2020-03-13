@@ -111,6 +111,7 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
 		cv.IncludeEndpointsAndConfigMapsForLeases = true
+		cv.Snapshotter = "quay.io/openstorage/csi-snapshotter:v1.2.2-1"
 	}
 
 	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
