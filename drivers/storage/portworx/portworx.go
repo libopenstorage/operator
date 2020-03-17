@@ -336,7 +336,7 @@ func (p *portworx) updateStorageNodes(
 				// TODO: Add a human readable reason with the status
 				Conditions: []corev1alpha1.NodeCondition{
 					{
-						Type:   corev1alpha1.NodeState,
+						Type:   corev1alpha1.NodeStateCondition,
 						Status: phase,
 					},
 				},
@@ -513,7 +513,7 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	}
 }
 
-func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
+func mapNodeStatus(status api.Status) corev1alpha1.NodeConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -522,36 +522,36 @@ func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
 	case api.Status_STATUS_ERROR:
 		fallthrough
 	case api.Status_STATUS_NEEDS_REBOOT:
-		return corev1alpha1.NodeOffline
+		return corev1alpha1.NodeOfflineStatus
 
 	case api.Status_STATUS_INIT:
-		return corev1alpha1.NodeInit
+		return corev1alpha1.NodeInitStatus
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.NodeNotInQuorum
+		return corev1alpha1.NodeNotInQuorumStatus
 
 	case api.Status_STATUS_MAINTENANCE:
-		return corev1alpha1.NodeMaintenance
+		return corev1alpha1.NodeMaintenanceStatus
 
 	case api.Status_STATUS_OK:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DOWN:
-		return corev1alpha1.NodeOnline
+		return corev1alpha1.NodeOnlineStatus
 
 	case api.Status_STATUS_DECOMMISSION:
-		return corev1alpha1.NodeDecommissioned
+		return corev1alpha1.NodeDecommissionedStatus
 
 	case api.Status_STATUS_STORAGE_DEGRADED:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.NodeDegraded
+		return corev1alpha1.NodeDegradedStatus
 
 	default:
-		return corev1alpha1.NodeUnknown
+		return corev1alpha1.NodeUnknownStatus
 	}
 }
 

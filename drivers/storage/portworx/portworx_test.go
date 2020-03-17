@@ -1251,8 +1251,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
@@ -1265,8 +1265,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Return only one node in enumerate for future tests
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -1287,7 +1287,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeInit, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeInitStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
 	expectedNodeOne.Status = api.Status_STATUS_OFFLINE
@@ -1303,7 +1303,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Error
 	expectedNodeOne.Status = api.Status_STATUS_ERROR
@@ -1319,7 +1319,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorum
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM
@@ -1335,7 +1335,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorumNoStorage
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
@@ -1351,7 +1351,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NeedsReboot
 	expectedNodeOne.Status = api.Status_STATUS_NEEDS_REBOOT
@@ -1367,7 +1367,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Decommission
 	expectedNodeOne.Status = api.Status_STATUS_DECOMMISSION
@@ -1383,7 +1383,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDecommissionedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Maintenance
 	expectedNodeOne.Status = api.Status_STATUS_MAINTENANCE
@@ -1399,7 +1399,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Ok
 	expectedNodeOne.Status = api.Status_STATUS_OK
@@ -1415,7 +1415,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDown
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DOWN
@@ -1431,7 +1431,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -1447,7 +1447,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageRebalance
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_REBALANCE
@@ -1463,7 +1463,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDriveReplace
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
@@ -1479,7 +1479,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Invalid
 	expectedNodeOne.Status = api.Status(9999)
@@ -1495,7 +1495,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeUnknown, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeUnknownStatus, nodeStatus.Status.Conditions[0].Status)
 }
 
 func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
@@ -1975,7 +1975,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "1.1.1.1", nodeStatusList.Items[0].Status.Network.DataIP)
 
 	// Update status based on the latest object
@@ -2000,7 +2000,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "2.2.2.2", nodeStatusList.Items[0].Status.Network.DataIP)
 }
 
