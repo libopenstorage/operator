@@ -86,9 +86,13 @@ type NodeCondition struct {
 	// Type of the node condition
 	Type NodeConditionType `json:"type,omitempty"`
 	// Status of the condition
-	Status ConditionStatus `json:"status,omitempty"`
-	// Reason is human readable message indicating details about the condition status
+	Status NodeConditionStatus `json:"status,omitempty"`
+	// LastTransitionTime the condition transitioned from one status to another
+	LastTransitionTime meta.Time `json:"lastTransitionTime,omitempty"`
+	// Reason is unique one-word, CamelCase reason for the condition's last transition
 	Reason string `json:"reason,omitempty"`
+	// Message is human readable message indicating details about the last transition
+	Message string `json:"message,omitempty"`
 }
 
 // NodeConditionType is the enum type for different node conditions
@@ -97,33 +101,37 @@ type NodeConditionType string
 // These are valid conditions of the storage node. They correspond to different
 // components in the storage cluster node.
 const (
-	// NodeState is used for overall state of the node
-	NodeState NodeConditionType = "NodeState"
-	// StorageState is used for the state of storage in the node
-	StorageState NodeConditionType = "StorageState"
+	// NodeInitCondition is used for initialization state of the node
+	NodeInitCondition NodeConditionType = "NodeInit"
+	// NodeStateCondition is used for overall state of the node
+	NodeStateCondition NodeConditionType = "NodeState"
 )
 
-// ConditionStatus is the enum type for node condition statuses
-type ConditionStatus string
+// NodeConditionStatus is the enum type for node condition statuses
+type NodeConditionStatus string
 
 // These are valid statuses of different node conditions.
 const (
-	// NodeOnline means the node condition is online and healthy
-	NodeOnline ConditionStatus = "Online"
-	// NodeInit means the node condition is in initializing state
-	NodeInit ConditionStatus = "Initializing"
-	// NodeNotInQuorum means the node is not in quorum
-	NodeNotInQuorum ConditionStatus = "NotInQuorum"
-	// NodeMaintenance means the node condition is in maintenance state
-	NodeMaintenance ConditionStatus = "Maintenance"
-	// NodeDecommissioned means the node condition is in decommissioned state
-	NodeDecommissioned ConditionStatus = "Decommissioned"
-	// NodeDegraded means the node condition is in degraded state
-	NodeDegraded ConditionStatus = "Degraded"
-	// NodeOffline means the node condition is in offline state
-	NodeOffline ConditionStatus = "Offline"
-	// NodeUnknown means the node condition is not known
-	NodeUnknown ConditionStatus = "Unknown"
+	// NodeSucceeded means the node condition status is succeeded
+	NodeSucceededStatus NodeConditionStatus = "Succeeded"
+	// NodeFailed means the node condition status is failed
+	NodeFailedStatus NodeConditionStatus = "Failed"
+	// NodeOnlineStatus means the node condition is online and healthy
+	NodeOnlineStatus NodeConditionStatus = "Online"
+	// NodeInitStatus means the node condition is in initializing state
+	NodeInitStatus NodeConditionStatus = "Initializing"
+	// NodeNotInQuorumStatus means the node is not in quorum
+	NodeNotInQuorumStatus NodeConditionStatus = "NotInQuorum"
+	// NodeMaintenanceStatus means the node condition is in maintenance state
+	NodeMaintenanceStatus NodeConditionStatus = "Maintenance"
+	// NodeDecommissionedStatus means the node condition is in decommissioned state
+	NodeDecommissionedStatus NodeConditionStatus = "Decommissioned"
+	// NodeDegradedStatus means the node condition is in degraded state
+	NodeDegradedStatus NodeConditionStatus = "Degraded"
+	// NodeOfflineStatus means the node condition is in offline state
+	NodeOfflineStatus NodeConditionStatus = "Offline"
+	// NodeUnknownStatus means the node condition is not known
+	NodeUnknownStatus NodeConditionStatus = "Unknown"
 )
 
 func init() {
