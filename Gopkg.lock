@@ -532,7 +532,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4043cbf34d4c219bef2865d0f296a37c77c5152dc869e97d42989167392b4d6a"
+  digest = "1:6345ba6c7d202ab5f749e3b1f5bdc3e22317474506e776526bc63c167309c676"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
@@ -545,7 +545,7 @@
     "task",
   ]
   pruneopts = "UT"
-  revision = "9205a51a1fee3ede5c193d1813b356a14f4b5ccf"
+  revision = "a47eff4118aae6f6f1e471970e4498ce2b5e741c"
 
 [[projects]]
   branch = "master"
@@ -1522,6 +1522,7 @@
     "k8s.io/gengo/examples/defaulter-gen/generators",
     "k8s.io/gengo/generator",
     "k8s.io/kubernetes/pkg/api/v1/pod",
+    "k8s.io/kubernetes/pkg/apis/core",
     "k8s.io/kubernetes/pkg/apis/core/v1/helper",
     "k8s.io/kubernetes/pkg/controller",
     "k8s.io/kubernetes/pkg/controller/daemon/util",
