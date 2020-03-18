@@ -5,8 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
@@ -20,6 +22,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -266,6 +269,7 @@ func (p *portworx) UpdateStorageClusterStatus(
 
 	clientConn, err := p.getPortworxClient(cluster)
 	if err != nil {
+		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		return err
 	}
 
@@ -276,8 +280,10 @@ func (p *portworx) UpdateStorageClusterStatus(
 			logrus.Warnf("Failed to close grpc connection. %v", closeErr)
 		}
 		p.sdkConn = nil
+		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		return fmt.Errorf("failed to inspect cluster: %v", err)
 	} else if pxCluster.Cluster == nil {
+		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		return fmt.Errorf("empty ClusterInspect response")
 	}
 
@@ -298,12 +304,12 @@ func (p *portworx) updateStorageNodes(
 		&api.SdkNodeEnumerateWithFiltersRequest{},
 	)
 	if err != nil {
+		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
+	// Find all k8s nodes where Portworx is actually running
 	currentPxNodes := make(map[string]bool)
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
 			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
@@ -318,54 +324,40 @@ func (p *portworx) updateStorageNodes(
 
 		currentPxNodes[node.SchedulerNodeName] = true
 
-		phase := mapNodeStatus(node.Status)
-		storageNode := &corev1alpha1.StorageNode{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            node.SchedulerNodeName,
-				Namespace:       cluster.Namespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				Labels:          p.GetSelectorLabels(),
-			},
-			Status: corev1alpha1.NodeStatus{
-				NodeUID: node.Id,
-				Network: corev1alpha1.NetworkStatus{
-					DataIP: node.DataIp,
-					MgmtIP: node.MgmtIp,
-				},
-				Phase: string(phase),
-				// TODO: Add a human readable reason with the status
-				Conditions: []corev1alpha1.NodeCondition{
-					{
-						Type:   corev1alpha1.NodeStateCondition,
-						Status: phase,
-					},
-				},
-			},
-		}
-
-		if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
-			storageNode.Spec = corev1alpha1.StorageNodeSpec{
-				Version: version,
-			}
-		} else {
-			partitions := strings.Split(cluster.Spec.Image, ":")
-			if len(partitions) > 1 {
-				storageNode.Spec = corev1alpha1.StorageNodeSpec{
-					Version: partitions[len(partitions)-1],
-				}
-			}
-		}
-
-		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, storageNode, ownerRef)
+		storageNode, err := p.updateStorageNodeSpec(cluster, node)
 		if err != nil {
-			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
+			msg := fmt.Sprintf("Failed to update StorageNode for nodeID %v: %v", node.Id, err)
+			p.warningEvent(cluster, util.FailedSyncReason, msg)
+			continue
+		}
+
+		err = p.updateStorageNodeStatus(storageNode, node)
+		if err != nil {
+			msg := fmt.Sprintf("Failed to update StorageNode status for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, util.FailedSyncReason, msg)
 		}
 	}
 
+	return p.updateRemainingStorageNodes(cluster, currentPxNodes)
+}
+
+func (p *portworx) updateRemainingStorageNodesWithoutError(
+	cluster *corev1alpha1.StorageCluster,
+	currentPxNodes map[string]bool,
+) {
+	if err := p.updateRemainingStorageNodes(cluster, nil); err != nil {
+		logrus.Warn(err)
+	}
+}
+
+func (p *portworx) updateRemainingStorageNodes(
+	cluster *corev1alpha1.StorageCluster,
+	currentPxNodes map[string]bool,
+) error {
+	// Find all k8s nodes where Portworx pods are running
 	pxLabels := p.GetSelectorLabels()
 	portworxPodList := &v1.PodList{}
-	err = p.k8sClient.List(
+	err := p.k8sClient.List(
 		context.TODO(),
 		portworxPodList,
 		&client.ListOptions{
@@ -404,13 +396,19 @@ func (p *portworx) updateStorageNodes(
 				p.warningEvent(cluster, util.FailedSyncReason, msg)
 			}
 		} else if !pxNodeExists && pxPodExists {
-			// If the portworx pod exists, but corresponding portworx node is missing
-			// in enumerate, then it's either still initializing or removed from cluster
-			if storageNode.Status.Phase != string(corev1alpha1.NodeInitStatus) &&
-				storageNode.Status.Phase != string(corev1alpha1.NodeUnknownStatus) {
+			// If the portworx pod exists, but corresponding portworx node is missing in
+			// enumerate, then it's either still initializing, failed or removed from cluster.
+			// If it's not initializing or failed, then change the node phase to Unknown.
+			newPhase := getStorageNodePhase(&storageNode.Status)
+			if newPhase != string(corev1alpha1.NodeInitStatus) &&
+				newPhase != string(corev1alpha1.NodeFailedStatus) {
+				newPhase = string(corev1alpha1.NodeUnknownStatus)
+			}
+			if storageNode.Status.Phase != newPhase {
 				storageNodeCopy := storageNode.DeepCopy()
-				storageNodeCopy.Status.Phase = string(corev1alpha1.NodeUnknownStatus)
-
+				storageNodeCopy.Status.Phase = newPhase
+				logrus.Debugf("Updating StorageNode %v/%v status",
+					storageNode.Namespace, storageNode.Name)
 				err = p.k8sClient.Status().Update(context.TODO(), storageNodeCopy)
 				if err != nil && !errors.IsNotFound(err) {
 					msg := fmt.Sprintf("Failed to update StorageNode %v/%v: %v",
@@ -419,6 +417,75 @@ func (p *portworx) updateStorageNodes(
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func (p *portworx) updateStorageNodeSpec(
+	cluster *corev1alpha1.StorageCluster,
+	node *api.StorageNode,
+) (*corev1alpha1.StorageNode, error) {
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	storageNode := &corev1alpha1.StorageNode{}
+	getErr := p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      node.SchedulerNodeName,
+			Namespace: cluster.Namespace,
+		},
+		storageNode,
+	)
+	if getErr != nil && !errors.IsNotFound(getErr) {
+		return nil, getErr
+	}
+
+	originalStorageNode := storageNode.DeepCopy()
+	storageNode.Name = node.SchedulerNodeName
+	storageNode.Namespace = cluster.Namespace
+	storageNode.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	storageNode.Labels = p.GetSelectorLabels()
+
+	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
+		storageNode.Spec.Version = version
+	} else {
+		partitions := strings.Split(cluster.Spec.Image, ":")
+		if len(partitions) > 1 {
+			storageNode.Spec.Version = partitions[len(partitions)-1]
+		}
+	}
+
+	var err error
+	if errors.IsNotFound(getErr) {
+		logrus.Debugf("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
+		err = p.k8sClient.Create(context.TODO(), storageNode)
+	} else if !reflect.DeepEqual(originalStorageNode, storageNode) {
+		logrus.Debugf("Updating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
+		err = p.k8sClient.Update(context.TODO(), storageNode)
+	}
+	return storageNode, err
+}
+
+func (p *portworx) updateStorageNodeStatus(
+	storageNode *corev1alpha1.StorageNode,
+	node *api.StorageNode,
+) error {
+	originalStorageNodeStatus := storageNode.Status.DeepCopy()
+	storageNode.Status.NodeUID = node.Id
+	storageNode.Status.Network = corev1alpha1.NetworkStatus{
+		DataIP: node.DataIp,
+		MgmtIP: node.MgmtIp,
+	}
+	nodeStateCondition := &corev1alpha1.NodeCondition{
+		Type:   corev1alpha1.NodeStateCondition,
+		Status: mapNodeStatus(node.Status),
+	}
+	operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
+	storageNode.Status.Phase = getStorageNodePhase(&storageNode.Status)
+
+	if !reflect.DeepEqual(originalStorageNodeStatus, &storageNode.Status) {
+		logrus.Debugf("Updating StorageNode %s/%s status",
+			storageNode.Namespace, storageNode.Name)
+		return p.k8sClient.Status().Update(context.TODO(), storageNode)
 	}
 	return nil
 }
@@ -806,6 +873,29 @@ func setComponentDefaults(
 		}
 		toUpdate.Spec.Monitoring.EnableMetrics = nil
 	}
+}
+
+func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
+	latestTime := metav1.NewTime(time.Time{})
+	var latestCondition *corev1alpha1.NodeCondition
+
+	for _, condition := range status.Conditions {
+		if latestTime.Before(&condition.LastTransitionTime) ||
+			latestTime.Equal(&condition.LastTransitionTime) {
+			latestCondition = condition.DeepCopy()
+			latestTime = condition.LastTransitionTime
+		}
+	}
+
+	// If no condition or status found return Initializing phase.
+	// Also if the InitCondition is the latest condition and it has succeeded,
+	// then keep the node phase as Initializing
+	if latestCondition == nil || latestCondition.Status == "" ||
+		(latestCondition.Type == corev1alpha1.NodeInitCondition &&
+			latestCondition.Status == corev1alpha1.NodeSucceededStatus) {
+		return string(corev1alpha1.NodeInitStatus)
+	}
+	return string(latestCondition.Status)
 }
 
 func init() {
