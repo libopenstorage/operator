@@ -1600,8 +1600,19 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
 
-	// If the PX imgae does not have a tag then don't add version to status object
+	// If the PX image does not have a tag then don't update the version
 	cluster.Spec.Image = "test/image"
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatus = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
+
+	// If the PX image does not have a tag then create without version
+	k8sClient.Delete(context.TODO(), nodeStatus)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -2453,7 +2464,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 
-	storageNodeList.Items[0].Status.Phase = string(corev1alpha1.NodeInitStatus)
+	// No conditions means the node is initializing state
+	storageNodeList.Items[0].Status.Conditions = nil
 	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2852,7 +2864,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 
-	storageNodeList.Items[0].Status.Phase = string(corev1alpha1.NodeInitStatus)
+	// No conditions means the node is initializing state
+	storageNodeList.Items[0].Status.Conditions = nil
 	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 
 	err = driver.UpdateStorageClusterStatus(cluster)
