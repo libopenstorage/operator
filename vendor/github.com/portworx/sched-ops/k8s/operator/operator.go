@@ -21,6 +21,7 @@ var (
 // Ops is an interface to Operator operations.
 type Ops interface {
 	StorageClusterOps
+	StorageNodeOps
 
 	// SetConfig sets the config and resets the client
 	SetConfig(config *rest.Config)
