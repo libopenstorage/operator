@@ -118,6 +118,7 @@ func (c *Client) GetVersion() (*version.Info, error) {
 	return c.kubernetes.Discovery().ServerVersion()
 }
 
+// ResourceExists checks if resource already exists
 func (c *Client) ResourceExists(gvk schema.GroupVersionKind) (bool, error) {
 	if err := c.initClient(); err != nil {
 		return false, err
@@ -162,7 +163,6 @@ func (c *Client) setClient() error {
 		}
 
 	}
-
 	return err
 }
 
@@ -228,6 +228,8 @@ func (c *Client) handleWatch(
 						err = c.WatchConfigMap(cm, fn)
 					} else if _, ok := object.(*corev1.Pod); ok {
 						err = c.WatchPods(namespace, fn, listOptions)
+					} else if sc, ok := object.(*corev1.Secret); ok {
+						err = c.WatchSecret(sc, fn)
 					} else {
 						return "", false, fmt.Errorf("unsupported object: %v given to handle watch", object)
 					}
