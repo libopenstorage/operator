@@ -620,6 +620,10 @@ func (t *template) getArguments() []string {
 			*t.cluster.Spec.Storage.SystemMdDevice != "" {
 			args = append(args, "-metadata", *t.cluster.Spec.Storage.SystemMdDevice)
 		}
+		if t.cluster.Spec.Storage.KvdbDevice != nil &&
+			*t.cluster.Spec.Storage.KvdbDevice != "" {
+			args = append(args, "-kvdb_dev", *t.cluster.Spec.Storage.KvdbDevice)
+		}
 
 	} else if t.cluster.Spec.CloudStorage != nil {
 		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
@@ -639,6 +643,10 @@ func (t *template) getArguments() []string {
 		if t.cluster.Spec.CloudStorage.SystemMdDeviceSpec != nil &&
 			len(*t.cluster.Spec.CloudStorage.SystemMdDeviceSpec) > 0 {
 			args = append(args, "-metadata", *t.cluster.Spec.CloudStorage.SystemMdDeviceSpec)
+		}
+		if t.cluster.Spec.CloudStorage.KvdbDeviceSpec != nil &&
+			*t.cluster.Spec.CloudStorage.KvdbDeviceSpec != "" {
+			args = append(args, "-kvdb_dev", *t.cluster.Spec.CloudStorage.KvdbDeviceSpec)
 		}
 		if t.cluster.Spec.CloudStorage.MaxStorageNodes != nil &&
 			*t.cluster.Spec.CloudStorage.MaxStorageNodes > 0 {

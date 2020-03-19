@@ -784,6 +784,9 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 			if nodeSpecCopy.Storage.SystemMdDevice == nil && toUpdate.Spec.Storage.SystemMdDevice != nil {
 				nodeSpecCopy.Storage.SystemMdDevice = stringPtr(*toUpdate.Spec.Storage.SystemMdDevice)
 			}
+			if nodeSpecCopy.Storage.KvdbDevice == nil && toUpdate.Spec.Storage.KvdbDevice != nil {
+				nodeSpecCopy.Storage.KvdbDevice = stringPtr(*toUpdate.Spec.Storage.KvdbDevice)
+			}
 		}
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}

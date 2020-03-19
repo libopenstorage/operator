@@ -658,6 +658,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.KvdbDevice)
 
 	// Set node spec storage fields from cluster storage spec, if empty at node level
 	// If devices is set, then no need to set UseAll and UseAllWithPartitions as it
@@ -670,6 +671,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		ForceUseDisks:        boolPtr(true),
 		JournalDevice:        stringPtr("journal"),
 		SystemMdDevice:       stringPtr("metadata"),
+		KvdbDevice:           stringPtr("kvdb"),
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
@@ -685,6 +687,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.ElementsMatch(t, clusterDevices, *cluster.Spec.Nodes[0].Storage.Devices)
 	require.Equal(t, "journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Equal(t, "kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 
 	// If devices is set and empty, even then no need to set UseAll and UseAllWithPartitions,
 	// as devices take precedence over them.
@@ -777,6 +780,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		ForceUseDisks:        boolPtr(false),
 		JournalDevice:        stringPtr("node-journal"),
 		SystemMdDevice:       stringPtr("node-metadata"),
+		KvdbDevice:           stringPtr("node-kvdb"),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAll)
@@ -785,6 +789,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.ElementsMatch(t, nodeDevices, *cluster.Spec.Nodes[0].Storage.Devices)
 	require.Equal(t, "node-journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "node-metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
