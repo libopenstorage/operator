@@ -758,7 +758,9 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	storageLabels := map[string]string{"foo": "bar"}
+
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(storageLabels).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -778,20 +780,28 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
+	expectedStorageNode1 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            k8sNode1.Name,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+			Labels:          storageLabels,
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+		},
+	}
+	expectedStorageNode2 := expectedStorageNode1.DeepCopy()
+	expectedStorageNode2.Name = k8sNode2.Name
+	expectedStorageNodes := []corev1alpha1.StorageNode{*expectedStorageNode1, *expectedStorageNode2}
+
 	storageNodes := &corev1alpha1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
-	require.Len(t, storageNodes.Items, 2)
-
-	require.Equal(t, k8sNode1.Name, storageNodes.Items[0].Name)
-	require.Equal(t, cluster.Namespace, storageNodes.Items[0].Namespace)
-	require.Equal(t, storageLabels, storageNodes.Items[0].Labels)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
-
-	require.Equal(t, k8sNode2.Name, storageNodes.Items[1].Name)
-	require.Equal(t, cluster.Namespace, storageNodes.Items[1].Namespace)
-	require.Equal(t, storageLabels, storageNodes.Items[1].Labels)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[1].Status.Phase)
+	require.ElementsMatch(t,
+		expectedStorageNodes,
+		storageNodes.Items,
+	)
 
 	// TestCase: Recreating the pods should not affect the created storage nodes
 	pods := &v1.PodList{}
