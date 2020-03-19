@@ -116,6 +116,11 @@ func (in *CloudStorageSpec) DeepCopyInto(out *CloudStorageSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.KvdbDeviceSpec != nil {
+		in, out := &in.KvdbDeviceSpec, &out.KvdbDeviceSpec
+		*out = new(string)
+		**out = **in
+	}
 	if in.MaxStorageNodes != nil {
 		in, out := &in.MaxStorageNodes, &out.MaxStorageNodes
 		*out = new(uint32)
@@ -860,6 +865,11 @@ func (in *StorageSpec) DeepCopyInto(out *StorageSpec) {
 	}
 	if in.SystemMdDevice != nil {
 		in, out := &in.SystemMdDevice, &out.SystemMdDevice
+		*out = new(string)
+		**out = **in
+	}
+	if in.KvdbDevice != nil {
+		in, out := &in.KvdbDevice, &out.KvdbDevice
 		*out = new(string)
 		**out = **in
 	}

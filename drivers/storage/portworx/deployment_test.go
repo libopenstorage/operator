@@ -476,6 +476,35 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
+	// Kvdb device
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		KvdbDevice: stringPtr("/dev/kvdb"),
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-kvdb_dev", "/dev/kvdb",
+	}
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// No kvdb device if empty
+	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+		KvdbDevice: stringPtr(""),
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+	}
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
 	// Storage devices
 	devices := []string{"/dev/one", "/dev/two", "/dev/three"}
 	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
@@ -645,6 +674,32 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	// Empty metadata device
 	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
 		SystemMdDeviceSpec: stringPtr(""),
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Kvdb device
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		KvdbDeviceSpec: stringPtr("type=kvdb"),
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-kvdb_dev", "type=kvdb",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Empty kvdb device
+	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+		KvdbDeviceSpec: stringPtr(""),
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
