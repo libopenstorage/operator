@@ -306,6 +306,9 @@ spec:
                 systemMetadataDevice:
                   type: string
                   description: Device that will be used to store system metadata by the driver.
+                kvdbDevice:
+                  type: string
+                  description: Device used for internal KVDB.
             cloudStorage:
               type: object
               description: Details of storage used in cloud environment.
@@ -367,6 +370,9 @@ spec:
                   type: string
                   description: Device spec for the metadata device. This device will be used to store
                     system metadata by the driver.
+                kvdbDeviceSpec:
+                  type: string
+                  description: Device spec for internal KVDB device.
             network:
               type: object
               description: Contains network information that is needed by the storage driver.
@@ -736,6 +742,9 @@ spec:
                       systemMetadataDevice:
                         type: string
                         description: Device that will be used to store system metadata by the driver.
+                      kvdbDevice:
+                        type: string
+                        description: Device used for internal KVDB.
                   network:
                     type: object
                     description: Contains network information that is needed by the storage driver.

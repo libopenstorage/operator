@@ -234,6 +234,8 @@ type StorageSpec struct {
 	JournalDevice *string `json:"journalDevice,omitempty"`
 	// SystemMdDevice device that will be used to store system metadata
 	SystemMdDevice *string `json:"systemMetadataDevice,omitempty"`
+	// KvdbDevice device for internal kvdb
+	KvdbDevice *string `json:"kvdbDevice,omitempty"`
 }
 
 // CloudStorageCapacitySpec details the minimum and maximum amount of storage
@@ -271,6 +273,8 @@ type CloudStorageSpec struct {
 	JournalDeviceSpec *string `json:"journalDeviceSpec,omitempty"`
 	// SystemMdDeviceSpec spec for the metadata device
 	SystemMdDeviceSpec *string `json:"systemMetadataDeviceSpec,omitempty"`
+	// KvdbDeviceSpec spec for the internal kvdb device
+	KvdbDeviceSpec *string `json:"kvdbDeviceSpec,omitempty"`
 	// MaxStorageNodes maximum nodes that will have storage in the cluster
 	MaxStorageNodes *uint32 `json:"maxStorageNodes,omitempty"`
 	// MaxStorageNodesPerZone maximum nodes in every zone that will have
