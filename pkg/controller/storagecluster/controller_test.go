@@ -3326,6 +3326,18 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
+	// TestCase: Change spec.cloudStorage.kvdbDeviceSpec
+	kvdbDeviceSpec := "kvdb-dev-spec"
+	cluster.Spec.CloudStorage.KvdbDeviceSpec = &kvdbDeviceSpec
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
 	// TestCase: Change spec.cloudStorage.maxStorageNodes
 	maxStorageNodes := uint32(3)
 	cluster.Spec.CloudStorage.MaxStorageNodes = &maxStorageNodes
@@ -3447,6 +3459,18 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	// TestCase: Change spec.storage.systemMetadataDevice
 	metadataDevice := "metadata-dev"
 	cluster.Spec.Storage.SystemMdDevice = &metadataDevice
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.storage.kvdbDevice
+	kvdbDevice := "kvdb-dev"
+	cluster.Spec.Storage.KvdbDevice = &kvdbDevice
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
