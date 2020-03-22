@@ -212,7 +212,7 @@ func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error
 				{
 					APIGroups: []string{""},
 					Resources: []string{"events"},
-					Verbs:     []string{"create"},
+					Verbs:     []string{"create", "patch"},
 				},
 				{
 					APIGroups: []string{"core.libopenstorage.org"},
