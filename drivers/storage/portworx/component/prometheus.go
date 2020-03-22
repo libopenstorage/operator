@@ -368,12 +368,20 @@ func (c *prometheus) createOperatorDeployment(
 		return getErr
 	}
 
-	modified := util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
+	var existingImageName string
+	if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
+		existingImageName = existingDeployment.Spec.Template.Spec.Containers[0].Image
+	}
+
+	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, DefaultPrometheusOperatorImage)
+
+	modified := existingImageName != imageName ||
+		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isOperatorCreated || errors.IsNotFound(getErr) || modified {
-		deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef)
+		deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
 		if err := k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -385,6 +393,7 @@ func (c *prometheus) createOperatorDeployment(
 func getPrometheusOperatorDeploymentSpec(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	operatorImage string,
 ) *appsv1.Deployment {
 	replicas := int32(1)
 	runAsNonRoot := true
@@ -392,7 +401,6 @@ func getPrometheusOperatorDeploymentSpec(
 	labels := map[string]string{
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
-	operatorImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, DefaultPrometheusOperatorImage)
 	args := make([]string, 0)
 	args = append(args,
 		fmt.Sprintf("-namespaces=%s", cluster.Namespace),

@@ -481,6 +481,256 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
 }
 
+func TestStorkCustomRegistryChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	customRegistry := "test-registry:1111"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRegistry,
+			ImagePullPolicy:     v1.PullIfNotPresent,
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
+
+	// Case: Custom registry should be applied to the images
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/osd/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: Updated custom registry should be applied to the images
+	customRegistry = "test-registry:2222"
+	cluster.Spec.CustomImageRegistry = customRegistry
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/osd/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: If empty, remove custom registry from the images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"osd/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: Custom registry should be added back if not present in images
+	customRegistry = "test-registry:3333"
+	cluster.Spec.CustomImageRegistry = customRegistry
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/osd/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestStorkCustomRepoRegistryChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	customRepo := "test-registry:1111/test-repo"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CustomImageRegistry: customRepo,
+			ImagePullPolicy:     v1.PullIfNotPresent,
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
+
+	// Case: Custom repo-registry should be applied to the images
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: Updated custom repo-registry should be applied to the images
+	customRepo = "test-registry:1111/new-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: If empty, remove custom repo-registry from the images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"osd/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Case: Custom repo-registry should be added back if not present in images
+	customRepo = "test-registry:1111/newest-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/stork:test",
+		storkDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-scheduler-amd64:v"+k8sVersion.String(),
+		schedDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
 func TestStorkImagePullSecretChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -1235,18 +1485,17 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	require.ElementsMatch(t, expectedCommand, deployment.Spec.Template.Spec.Containers[0].Command)
 }
 
-func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
+func TestStorkInstallWithImagePullPolicy(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			CustomImageRegistry: customRepo,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Stork: &corev1alpha1.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
@@ -1275,65 +1524,6 @@ func TestStorkInstallWithCustomRepoRegistry(t *testing.T) {
 	storkDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/stork:test",
-		storkDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	schedDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/kube-scheduler-amd64:v"+k8sVersion.String(),
-		schedDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-}
-
-func TestStorkInstallWithCustomRegistry(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			CustomImageRegistry: customRegistry,
-			ImagePullPolicy:     v1.PullIfNotPresent,
-			Stork: &corev1alpha1.StorkSpec{
-				Enabled: true,
-				Image:   "osd/stork:test",
-			},
-		},
-	}
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
-		AnyTimes()
-
-	err := controller.syncStork(cluster)
-	require.NoError(t, err)
-
-	storkDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/osd/stork:test",
-		storkDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
 	require.Equal(t,
 		v1.PullIfNotPresent,
 		storkDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy,
@@ -1343,195 +1533,9 @@ func TestStorkInstallWithCustomRegistry(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
-		schedDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
 		v1.PullIfNotPresent,
 		schedDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy,
 	)
-}
-
-func TestStorkInstallWithImagePullSecret(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	imagePullSecret := "registry-secret"
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			ImagePullSecret: &imagePullSecret,
-			Stork: &corev1alpha1.StorkSpec{
-				Enabled: true,
-				Image:   "osd/stork:test",
-			},
-		},
-	}
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
-		AnyTimes()
-
-	err := controller.syncStork(cluster)
-	require.NoError(t, err)
-
-	storkDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t,
-		imagePullSecret,
-		storkDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
-	)
-
-	schedDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, storkDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t,
-		imagePullSecret,
-		schedDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
-	)
-}
-
-func TestStorkInstallWithTolerations(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	tolerations := []v1.Toleration{
-		{
-			Key:      "must-exist",
-			Operator: v1.TolerationOpExists,
-			Effect:   v1.TaintEffectNoExecute,
-		},
-		{
-			Key:      "foo",
-			Operator: v1.TolerationOpEqual,
-			Value:    "bar",
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Placement: &corev1alpha1.PlacementSpec{
-				Tolerations: tolerations,
-			},
-			Stork: &corev1alpha1.StorkSpec{
-				Enabled: true,
-				Image:   "osd/stork:test",
-			},
-		},
-	}
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
-		AnyTimes()
-
-	err := controller.syncStork(cluster)
-	require.NoError(t, err)
-
-	storkDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, storkDeployment.Spec.Template.Spec.Tolerations)
-
-	schedDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, schedDeployment.Spec.Template.Spec.Tolerations)
-}
-
-func TestStorkInstallWithNodeAffinity(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	nodeAffinity := &v1.NodeAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-			NodeSelectorTerms: []v1.NodeSelectorTerm{
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "foo",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"bar"},
-						},
-					},
-				},
-			},
-		},
-	}
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Placement: &corev1alpha1.PlacementSpec{
-				NodeAffinity: nodeAffinity,
-			},
-			Stork: &corev1alpha1.StorkSpec{
-				Enabled: true,
-				Image:   "osd/stork:test",
-			},
-		},
-	}
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
-		AnyTimes()
-
-	err := controller.syncStork(cluster)
-	require.NoError(t, err)
-
-	storkDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, storkDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
-
-	schedDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, schedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 }
 
 func TestDisableStork(t *testing.T) {
