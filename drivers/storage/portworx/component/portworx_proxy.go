@@ -171,12 +171,20 @@ func (c *portworxProxy) createDaemonSet(
 		return getErr
 	}
 
-	modified := util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
+	var existingImageName string
+	if len(existingDaemonSet.Spec.Template.Spec.Containers) > 0 {
+		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
+	}
+
+	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, "k8s.gcr.io/pause:3.1")
+
+	modified := existingImageName != imageName ||
+		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxProxyDaemonSetSpec(cluster, ownerRef)
+		daemonSet := getPortworxProxyDaemonSetSpec(cluster, ownerRef, imageName)
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -188,8 +196,8 @@ func (c *portworxProxy) createDaemonSet(
 func getPortworxProxyDaemonSetSpec(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	imageName string,
 ) *appsv1.DaemonSet {
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, "k8s.gcr.io/pause:3.1")
 	maxUnavailable := intstr.FromString("100%")
 	startPort := pxutil.StartPort(cluster)
 
