@@ -30,7 +30,7 @@ rules:
   verbs: ["get", "list"]
 - apiGroups: [""]
   resources: ["events"]
-  verbs: ["create"]
+  verbs: ["create", "patch"]
 - apiGroups: ["core.libopenstorage.org"]
   resources: ["*"]
   verbs: ["*"]
