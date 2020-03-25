@@ -104,6 +104,10 @@ func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.En
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
 		},
+		{
+			Name:  pxutil.EnvKeyPortworxServiceName,
+			Value: component.PxAPIServiceName,
+		},
 	}
 }
 
