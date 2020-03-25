@@ -13,6 +13,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/dbg"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -93,9 +94,11 @@ func TestGetStorkEnvList(t *testing.T) {
 
 	envVars := driver.GetStorkEnvList(cluster)
 
-	require.Len(t, envVars, 1)
+	require.Len(t, envVars, 2)
 	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
 	require.Equal(t, cluster.Namespace, envVars[0].Value)
+	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
+	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
