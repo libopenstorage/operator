@@ -13,7 +13,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/sched-ops/k8s"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metaerrors "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +27,8 @@ const (
 	MonitoringComponentName = "Monitoring"
 	// PxServiceMonitor name of the Portworx service monitor
 	PxServiceMonitor = "portworx"
+	// PxBackupServiceMonitor name of the px backup service monitor
+	PxBackupServiceMonitor = "px-backup"
 	// PxPrometheusRule name of the prometheus rule object for Portworx
 	PxPrometheusRule = "portworx"
 
@@ -184,6 +186,7 @@ func (c *monitoring) retryCreate(
 func serviceMonitorLabels() map[string]string {
 	return map[string]string{
 		"name": PxServiceMonitor,
+		"app":  PxBackupServiceMonitor,
 	}
 }
 
