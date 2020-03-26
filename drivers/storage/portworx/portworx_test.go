@@ -3681,6 +3681,35 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	)
 }
 
+func TestDeleteClusterWithImagePullPolicy(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ImagePullPolicy: v1.PullIfNotPresent,
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.PullIfNotPresent,
+		wiperDS.Spec.Template.Spec.Containers[0].ImagePullPolicy,
+	)
+}
+
 func TestDeleteClusterWithImagePullSecret(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{
