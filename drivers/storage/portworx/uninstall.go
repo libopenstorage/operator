@@ -215,7 +215,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						{
 							Name:            pxNodeWiperDaemonSetName,
 							Image:           wiperImage,
-							ImagePullPolicy: v1.PullAlways,
+							ImagePullPolicy: pxutil.ImagePullPolicy(u.cluster),
 							Args:            args,
 							SecurityContext: &v1.SecurityContext{
 								Privileged: &trueVar,
