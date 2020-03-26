@@ -8,8 +8,12 @@ spec:
   logLevel: debug
   serviceAccountName: px-prometheus
   serviceMonitorSelector:
-    matchLabels:
-      name: portworx
+    matchExpressions:
+    - key: prometheus
+      operator: In
+      values:
+      - portworx
+      - px-backup
   remoteWrite:
   - url: "http://test.endpoint:1234/api/prom/push"
   resources:
