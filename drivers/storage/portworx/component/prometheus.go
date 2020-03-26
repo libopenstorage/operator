@@ -523,7 +523,16 @@ func (c *prometheus) createPrometheusInstance(
 			LogLevel:           "debug",
 			ServiceAccountName: PrometheusServiceAccountName,
 			ServiceMonitorSelector: &metav1.LabelSelector{
-				MatchLabels: serviceMonitorLabels(),
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "prometheus",
+						Operator: metav1.LabelSelectorOpIn,
+						Values: []string{
+							PxServiceMonitor,
+							PxBackupServiceMonitor,
+						},
+					},
+				},
 			},
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: prometheusRuleLabels(),

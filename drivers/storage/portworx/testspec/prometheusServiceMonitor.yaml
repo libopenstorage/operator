@@ -5,6 +5,7 @@ metadata:
   name: portworx
   labels:
     name: portworx
+    prometheus: portworx
 spec:
   selector:
     matchLabels:
