@@ -10,6 +10,7 @@ spec:
   serviceMonitorSelector:
     matchLabels:
       name: portworx
+      app: px-backup
   resources:
     requests:
       memory: 400Mi

@@ -10,6 +10,7 @@ spec:
   serviceMonitorSelector:
     matchLabels:
       name: portworx
+      app: px-backup
   remoteWrite:
   - url: "http://test.endpoint:1234/api/prom/push"
   resources:
