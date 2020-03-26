@@ -7074,6 +7074,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	serviceMonitor := serviceMonitorList.Items[0]
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Equal(t, expectedServiceMonitor.Labels, serviceMonitor.Labels)
 	require.Len(t, serviceMonitor.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
 	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
@@ -7104,6 +7105,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Equal(t, expectedServiceMonitor.Labels, serviceMonitor.Labels)
 	require.Len(t, serviceMonitor.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
 	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
