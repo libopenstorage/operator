@@ -21,8 +21,22 @@ set -o pipefail
 SCRIPT_ROOT=$(dirname ${BASH_SOURCE})/..
 CODEGEN_PKG=${CODEGEN_PKG:-$(cd ${SCRIPT_ROOT}; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
+
+# Pull in go.mod hack from https://github.com/openshift/client-go/blob/master/hack/update-codegen.sh
+# we have to fake the vendor for generator in order to be able to build it...
+mv ${CODEGEN_PKG}/generate-groups.sh ${CODEGEN_PKG}/generate-groups.sh.orig
+sed 's/ go install/#go install/g' ${CODEGEN_PKG}/generate-groups.sh.orig > ${CODEGEN_PKG}/generate-groups.sh
+chmod +x ${CODEGEN_PKG}/generate-groups.sh
+function cleanup {
+  mv ${CODEGEN_PKG}/generate-groups.sh.orig ${CODEGEN_PKG}/generate-groups.sh
+}
+trap cleanup EXIT
+
+go install ./${CODEGEN_PKG}/cmd/{defaulter-gen,client-gen,lister-gen,informer-gen,deepcopy-gen}
+
+
 # generate the code with:
-${CODEGEN_PKG}/generate-groups.sh \
+bash ${CODEGEN_PKG}/generate-groups.sh \
 	all \
   github.com/libopenstorage/operator/pkg/client \
 	github.com/libopenstorage/operator/pkg/apis \
