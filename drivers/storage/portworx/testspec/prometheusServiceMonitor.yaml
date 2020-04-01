@@ -5,6 +5,7 @@ metadata:
   name: portworx
   labels:
     name: portworx
+    owner: px-central
 spec:
   selector:
     matchLabels:

@@ -9,8 +9,7 @@ spec:
   serviceAccountName: px-prometheus
   serviceMonitorSelector:
     matchLabels:
-      name: portworx
-      app: px-backup
+      owner: px-central
   resources:
     requests:
       memory: 400Mi

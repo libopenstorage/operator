@@ -33,6 +33,8 @@ const (
 	PxPrometheusRule = "portworx"
 
 	pxPrometheusRuleFile = "portworx-prometheus-rule.yaml"
+	//PxCentralServiceMonitor label selector for px and backup
+	PxCentralServiceMonitor = "px-central"
 )
 
 type monitoring struct {
@@ -185,14 +187,14 @@ func (c *monitoring) retryCreate(
 
 func serviceMonitorLabels() map[string]string {
 	return map[string]string{
-		"name": PxServiceMonitor,
+		"name":  PxServiceMonitor,
+		"owner": PxCentralServiceMonitor,
 	}
 }
 
 func prometheusServiceMonitorSelectorLabels() map[string]string {
 	return map[string]string{
-		"name": PxServiceMonitor,
-		"app":  PxBackupServiceMonitor,
+		"owner": PxCentralServiceMonitor,
 	}
 }
 
