@@ -185,14 +185,8 @@ func (c *monitoring) retryCreate(
 
 func serviceMonitorLabels() map[string]string {
 	return map[string]string{
-		"name": PxServiceMonitor,
-	}
-}
-
-func prometheusServiceMonitorSelectorLabels() map[string]string {
-	return map[string]string{
-		"name": PxServiceMonitor,
-		"app":  PxBackupServiceMonitor,
+		"name":       PxServiceMonitor,
+		"prometheus": PxServiceMonitor,
 	}
 }
 
