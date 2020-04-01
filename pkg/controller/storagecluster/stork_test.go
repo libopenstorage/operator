@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
@@ -90,6 +91,7 @@ func TestStorkInstallation(t *testing.T) {
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
+				HTTPTimeout:    5 * time.Minute,
 			},
 		},
 	})
