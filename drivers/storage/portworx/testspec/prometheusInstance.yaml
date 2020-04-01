@@ -8,9 +8,12 @@ spec:
   logLevel: debug
   serviceAccountName: px-prometheus
   serviceMonitorSelector:
-    matchLabels:
-      name: portworx
-      app: px-backup
+    matchExpressions:
+    - key: prometheus
+      operator: In
+      values:
+      - portworx
+      - px-backup
   resources:
     requests:
       memory: 400Mi
