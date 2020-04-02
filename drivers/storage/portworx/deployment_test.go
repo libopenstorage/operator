@@ -121,7 +121,14 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
 	assert.Len(t, actual.Containers[0].Env, 5)
-	assert.Equal(t, expectedRegistryEnv, actual.Containers[0].Env[4])
+	var actualEnv v1.EnvVar
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == "REGISTRY_CONFIG" {
+			actualEnv = env
+			break
+		}
+	}
+	assert.Equal(t, expectedRegistryEnv, actualEnv)
 }
 
 func TestPodSpecWithTolerations(t *testing.T) {
@@ -158,6 +165,41 @@ func TestPodSpecWithTolerations(t *testing.T) {
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.ElementsMatch(t, tolerations, podSpec.Tolerations)
+}
+
+func TestPodSpecWithEnvOverrides(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxSecretsNamespace,
+						Value: "custom",
+					},
+					{
+						Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
+						Value: "300",
+					},
+				},
+			},
+		},
+	}
+
+	expected := getExpectedPodSpec(t, "testspec/portworxPodEnvOverride.yaml")
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
 }
 
 func TestPodSpecWithKvdbSpec(t *testing.T) {
