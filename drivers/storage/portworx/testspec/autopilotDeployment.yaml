@@ -40,6 +40,9 @@ spec:
         volumeMounts:
         - name: config-volume
           mountPath: /etc/config
+        env:
+        - name: PX_NAMESPACE
+          value: kube-test
       hostPID: false
       affinity:
         podAntiAffinity:
