@@ -268,6 +268,65 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, dsList.Items)
 }
 
+func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	secretsNamespace := "secrets-namespace"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxSecretsNamespace,
+						Value: secretsNamespace,
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx secrets namespace
+	ns := &v1.Namespace{}
+	err = testutil.Get(k8sClient, ns, secretsNamespace, "")
+	require.NoError(t, err)
+	require.Empty(t, ns.OwnerReferences, 0)
+
+	// Portworx Secrets Role
+	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
+	actualRole := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, secretsNamespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRole.Name, actualRole.Name)
+	require.Len(t, actualRole.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRole.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
+
+	// Portworx Secrets RoleBinding
+	expectedRB := testutil.GetExpectedRoleBinding(t, "portworxRoleBinding.yaml")
+	actualRB := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, secretsNamespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRB.Name, actualRB.Name)
+	require.Len(t, actualRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
+	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+}
+
 func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
