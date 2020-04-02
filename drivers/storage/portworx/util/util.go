@@ -68,6 +68,9 @@ const (
 	// EnvKeyPortworxServiceName key for the env var which tells the name of the
 	// portworx service to be used
 	EnvKeyPortworxServiceName = "PX_SERVICE_NAME"
+	// EnvKeyPortworxSecretsNamespace key for the env var which tells the namespace
+	// where portworx should look for secrets
+	EnvKeyPortworxSecretsNamespace = "PX_SECRETS_NAMESPACE"
 	// EnvKeyDeprecatedCSIDriverName key for the env var that can force Portworx
 	// to use the deprecated CSI driver name
 	EnvKeyDeprecatedCSIDriverName = "PORTWORX_USEDEPRECATED_CSIDRIVERNAME"
