@@ -717,53 +717,48 @@ func (t *template) getArguments() []string {
 }
 
 func (t *template) getEnvList() []v1.EnvVar {
-	envList := []v1.EnvVar{
-		{
+	envMap := map[string]*v1.EnvVar{
+		pxutil.EnvKeyPortworxNamespace: {
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: t.cluster.Namespace,
 		},
-		{
-			Name:  "PX_SECRETS_NAMESPACE",
+		pxutil.EnvKeyPortworxSecretsNamespace: {
+			Name:  pxutil.EnvKeyPortworxSecretsNamespace,
 			Value: t.cluster.Namespace,
 		},
-		{
+		"AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS": {
 			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
 			Value: "1500",
 		},
-		{
+		"PX_TEMPLATE_VERSION": {
 			Name:  "PX_TEMPLATE_VERSION",
 			Value: templateVersion,
 		},
 	}
 
 	if t.isPKS {
-		envList = append(envList,
-			v1.EnvVar{
-				Name:  "PRE-EXEC",
-				Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
-			},
-		)
+		envMap["PRE-EXEC"] = &v1.EnvVar{
+			Name:  "PRE-EXEC",
+			Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
+		}
 	}
 
 	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
-		envList = append(envList,
-			v1.EnvVar{
-				Name:  "CSI_ENDPOINT",
-				Value: "unix://" + t.csiConfig.DriverBasePath() + "/csi.sock",
-			},
-		)
+		envMap["CSI_ENDPOINT"] = &v1.EnvVar{
+			Name:  "CSI_ENDPOINT",
+			Value: "unix://" + t.csiConfig.DriverBasePath() + "/csi.sock",
+		}
+
 		if t.csiConfig.Version != "" {
-			envList = append(envList,
-				v1.EnvVar{
-					Name:  "PORTWORX_CSIVERSION",
-					Value: t.csiConfig.Version,
-				},
-			)
+			envMap["PORTWORX_CSIVERSION"] = &v1.EnvVar{
+				Name:  "PORTWORX_CSIVERSION",
+				Value: t.csiConfig.Version,
+			}
 		}
 	}
 
 	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
-		envList = append(envList, v1.EnvVar{
+		envMap["REGISTRY_CONFIG"] = &v1.EnvVar{
 			Name: "REGISTRY_CONFIG",
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
@@ -773,14 +768,18 @@ func (t *template) getEnvList() []v1.EnvVar {
 					},
 				},
 			},
-		})
+		}
 	}
 
+	// Copy user provided env and overwrite default ones with user's values
 	for _, env := range t.cluster.Spec.Env {
-		envCopy := env.DeepCopy()
-		envList = append(envList, *envCopy)
+		envMap[env.Name] = env.DeepCopy()
 	}
 
+	envList := make([]v1.EnvVar, 0)
+	for _, env := range envMap {
+		envList = append(envList, *env)
+	}
 	return envList
 }
 
