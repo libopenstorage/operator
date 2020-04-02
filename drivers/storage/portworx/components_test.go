@@ -2269,12 +2269,16 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 3)
 	// Env vars are sorted on the key
 	require.Equal(t, "BAR", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	require.Equal(t, "bar", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 	require.Equal(t, "FOO", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	require.Equal(t, "foo", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
+	require.Equal(t, pxutil.EnvKeyPortworxNamespace,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	require.Equal(t, cluster.Namespace,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
 }
 
 func TestAutopilotImageChange(t *testing.T) {
@@ -2455,7 +2459,13 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check env vars are passed to deployment
-	expectedEnvs := append([]v1.EnvVar{}, cluster.Spec.Autopilot.Env...)
+	defaultEnvVars := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	expectedEnvs := append(defaultEnvVars, cluster.Spec.Autopilot.Env...)
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -2467,7 +2477,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedEnvs[0].Value = "bar"
+	expectedEnvs[1].Value = "bar"
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
