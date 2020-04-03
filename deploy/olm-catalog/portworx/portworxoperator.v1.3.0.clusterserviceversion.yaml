@@ -121,6 +121,16 @@ spec:
 
     * [Elastisearch on Kubernetes](https://portworx.com/elasticsearch-kubernetes)
 
+    * [PostgreSQL on Kubernetes](https://portworx.com/postgres-kubernetes/)
+
+    * [MongoDB on Kubernetes](https://portworx.com/mongodb-kubernetes/)
+
+    * [Cassandra on Kubernetes](https://portworx.com/cassandra-kubernetes/)
+
+    * [Kubernetes backup and recovery](https://portworx.com/kubernetes-backup/)
+
+    * [Disaster Recovery for Kubernetes](https://portworx.com/kubernetes-disaster-recovery/)
+
     ### Uninstall
 
     Deleting the StorageCluster object for Portworx cluster does not stop Portworx
