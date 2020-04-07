@@ -80,11 +80,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:3d89924c8f89318d81c5d21a5d704bba9ab821f0580a5afcae2b3172f7b1156a"
+  digest = "1:a80dd73b64585bfa4c84e44e277d95ed163e9d73dedfc7e32030eba648e36efb"
   name = "github.com/coreos/prometheus-operator"
   packages = [
     "pkg/apis/monitoring",
     "pkg/apis/monitoring/v1",
+    "pkg/client/versioned",
     "pkg/client/versioned/scheme",
     "pkg/client/versioned/typed/monitoring/v1",
   ]
@@ -532,7 +533,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6345ba6c7d202ab5f749e3b1f5bdc3e22317474506e776526bc63c167309c676"
+  digest = "1:0682a34e24365ae3b12937a04c9f5acce1df0a0cf827e5d806a04ab33ffdae1d"
   name = "github.com/portworx/sched-ops"
   packages = [
     "k8s",
@@ -542,6 +543,7 @@
     "k8s/core",
     "k8s/errors",
     "k8s/operator",
+    "k8s/prometheus",
     "task",
   ]
   pruneopts = "UT"
@@ -1471,6 +1473,7 @@
     "github.com/portworx/sched-ops/k8s/core",
     "github.com/portworx/sched-ops/k8s/errors",
     "github.com/portworx/sched-ops/k8s/operator",
+    "github.com/portworx/sched-ops/k8s/prometheus",
     "github.com/portworx/sched-ops/task",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
