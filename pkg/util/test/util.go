@@ -590,11 +590,15 @@ func validatePods(namespace string, listOptions map[string]string, timeout, inte
 					continue
 				}
 			}
+			containerReady := 0
 			for _, c := range pod.Status.ContainerStatuses {
 				if c.Ready {
-					podReady++
+					containerReady++
 					continue
 				}
+			}
+			if len(pod.Spec.Containers) == containerReady {
+				podReady++
 			}
 		}
 		if len(pods.Items) == podReady {
