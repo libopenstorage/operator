@@ -651,7 +651,7 @@ func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval 
 		if cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled {
 			dep := appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "prometheus-operator",
+					Name:      "px-prometheus-operator",
 					Namespace: cluster.Namespace,
 				},
 			}
@@ -661,7 +661,7 @@ func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval 
 
 			st := appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "prometheus-prometheus",
+					Name:      "px-prometheus-prometheus",
 					Namespace: cluster.Namespace,
 				},
 			}
@@ -669,22 +669,8 @@ func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval 
 				return err
 			}
 		}
-		t := func() (interface{}, bool, error) {
-			alertManager, err := prometheusops.Instance().GetAlertManager("portworx", cluster.Namespace)
-			if err != nil {
-				return nil, true, err
-			}
-			if *alertManager.Spec.Replicas != alertManager.Status.AvailableReplicas {
-				return nil, true, fmt.Errorf("not all replicas are ready. expected: %d available: %d",
-					*alertManager.Spec.Replicas, alertManager.Status.AvailableReplicas)
-			}
-			return nil, false, nil
-		}
-		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
-			return err
-		}
 
-		t = func() (interface{}, bool, error) {
+		t := func() (interface{}, bool, error) {
 			_, err := prometheusops.Instance().GetPrometheusRule("portworx", cluster.Namespace)
 			if err != nil {
 				return nil, true, err
