@@ -20,6 +20,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	"github.com/portworx/sched-ops/task"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -285,11 +286,6 @@ func ValidateStorageCluster(
 	if err = validateComponents(cluster, timeout, interval); err != nil {
 		return err
 	}
-
-	// TODO validate monitoring
-	//if cluster.Spec.Monitoring != nil && *cluster.Spec.Monitoring.EnableMetrics {
-	//
-	//}
 
 	conn, err := getSdkConnection(cluster)
 	if err != nil {
@@ -569,6 +565,11 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 			return err
 		}
 	}
+
+	if err = validateMonitoring(cluster, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -638,6 +639,57 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 				return fmt.Errorf("failed to validade image tag on pod %s container %s, Expected: %s Got: %s",
 					pod.Name, container.Name, tag, imageTag)
 			}
+		}
+	}
+	return nil
+}
+
+func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
+	if cluster.Spec.Monitoring != nil &&
+		(*cluster.Spec.Monitoring.EnableMetrics ||
+			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
+		if cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled {
+			dep := appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "px-prometheus-operator",
+					Namespace: cluster.Namespace,
+				},
+			}
+			if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
+				return err
+			}
+
+			st := appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "px-prometheus-prometheus",
+					Namespace: cluster.Namespace,
+				},
+			}
+			if err := appops.Instance().ValidateStatefulSet(&st, timeout); err != nil {
+				return err
+			}
+		}
+
+		t := func() (interface{}, bool, error) {
+			_, err := prometheusops.Instance().GetPrometheusRule("portworx", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+			return nil, false, nil
+		}
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
+		}
+
+		t = func() (interface{}, bool, error) {
+			_, err := prometheusops.Instance().GetServiceMonitor("portworx", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+			return nil, false, nil
+		}
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
 		}
 	}
 	return nil
