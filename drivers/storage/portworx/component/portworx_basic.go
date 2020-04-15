@@ -8,7 +8,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -254,6 +254,11 @@ func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error
 				{
 					APIGroups: []string{"portworx.io"},
 					Resources: []string{"volumeplacementstrategies"},
+					Verbs:     []string{"get", "list"},
+				},
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses"},
 					Verbs:     []string{"get", "list"},
 				},
 				{
