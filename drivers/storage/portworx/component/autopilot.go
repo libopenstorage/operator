@@ -280,7 +280,12 @@ func (c *autopilot) createDeployment(
 		cluster.Spec.Autopilot.Image,
 	)
 
-	envVars := make([]v1.EnvVar, 0)
+	envVars := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
 	for _, env := range cluster.Spec.Autopilot.Env {
 		envCopy := env.DeepCopy()
 		envVars = append(envVars, *envCopy)

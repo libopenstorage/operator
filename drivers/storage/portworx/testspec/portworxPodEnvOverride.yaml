@@ -3,8 +3,6 @@ kind: DaemonSet
 metadata:
   name: portworx
   namespace: kube-system
-  annotations:
-    portworx.com/install-source: "https://edge-install.portworx.com/2.1?mc=false&kbver=1.12.3&b=true&c=px-cluster-96bfaab8-c821-43de-99f6-41fe55e9dbe7&stork=true&csi=true&lh=true&st=k8s"
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -26,18 +24,14 @@ spec:
             ["-c", "px-cluster",
              "-x", "kubernetes"]
           env:
+            - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
+              value: "300"
+            - name: "PX_TEMPLATE_VERSION"
+              value: "v4"
             - name: "PX_NAMESPACE"
               value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"
-              value: "kube-system"
-            - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
-              value: "1500"
-            - name: "PX_TEMPLATE_VERSION"
-              value: "v4"
-            - name: "PORTWORX_CSIVERSION"
-              value: "0.3"
-            - name: CSI_ENDPOINT
-              value: unix:///var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock
+              value: "custom"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
@@ -81,28 +75,6 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-        - name: csi-driver-registrar
-          image: quay.io/k8scsi/driver-registrar:v0.4.2
-          args:
-            - "--v=5"
-            - "--csi-address=$(ADDRESS)"
-            - "--mode=node-register"
-            - "--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock"
-          imagePullPolicy: Always
-          env:
-            - name: ADDRESS
-              value: /csi/csi.sock
-            - name: KUBE_NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: csi-driver-path
-              mountPath: /csi
-            - name: registration-dir
-              mountPath: /registration
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
@@ -122,14 +94,6 @@ spec:
           hostPath:
             path: /etc/crictl.yaml
             type: FileOrCreate
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins
-            type: DirectoryOrCreate
-        - name: csi-driver-path
-          hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
-            type: DirectoryOrCreate
         - name: etcpwx
           hostPath:
             path: /etc/pwx

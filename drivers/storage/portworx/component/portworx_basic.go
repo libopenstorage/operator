@@ -1,14 +1,19 @@
 package component
 
 import (
+	"context"
+
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"k8s.io/api/core/v1"
+	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -55,10 +60,7 @@ func (c *portworxBasic) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createRole(cluster.Namespace, ownerRef); err != nil {
-		return NewError(ErrCritical, err)
-	}
-	if err := c.createRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.prepareForSecrets(cluster, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
 	if err := c.createPortworxService(cluster, ownerRef); err != nil {
@@ -109,13 +111,62 @@ func (c *portworxBasic) createServiceAccount(
 	)
 }
 
-func (c *portworxBasic) createRole(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+func (c *portworxBasic) prepareForSecrets(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	secretsNamespace := cluster.Namespace
+	for _, env := range cluster.Spec.Env {
+		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
+			secretsNamespace = env.Value
+			break
+		}
+	}
+
+	if secretsNamespace != cluster.Namespace {
+		if err := c.createNamespace(secretsNamespace); err != nil {
+			return err
+		}
+	}
+	if err := c.createRole(secretsNamespace, ownerRef); err != nil {
+		return err
+	}
+	if err := c.createRoleBinding(secretsNamespace, cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *portworxBasic) createNamespace(namespace string) error {
+	existingNamespace := &v1.Namespace{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name: namespace,
+		},
+		existingNamespace,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating Namespace %s", namespace)
+		ns := &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		}
+		return c.k8sClient.Create(context.TODO(), ns)
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerReference) error {
 	return k8sutil.CreateOrUpdateRole(
 		c.k8sClient,
 		&rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            PxRoleName,
-				Namespace:       clusterNamespace,
+				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Rules: []rbacv1.PolicyRule{
@@ -131,6 +182,7 @@ func (c *portworxBasic) createRole(clusterNamespace string, ownerRef *metav1.Own
 }
 
 func (c *portworxBasic) createRoleBinding(
+	bindingNamespace string,
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -139,7 +191,7 @@ func (c *portworxBasic) createRoleBinding(
 		&rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            PxRoleBindingName,
-				Namespace:       clusterNamespace,
+				Namespace:       bindingNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
@@ -205,6 +257,11 @@ func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error
 					Verbs:     []string{"get", "list"},
 				},
 				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses"},
+					Verbs:     []string{"get", "list"},
+				},
+				{
 					APIGroups: []string{"stork.libopenstorage.org"},
 					Resources: []string{"backuplocations"},
 					Verbs:     []string{"get", "list"},
@@ -212,7 +269,12 @@ func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error
 				{
 					APIGroups: []string{""},
 					Resources: []string{"events"},
-					Verbs:     []string{"create"},
+					Verbs:     []string{"create", "patch"},
+				},
+				{
+					APIGroups: []string{"core.libopenstorage.org"},
+					Resources: []string{"*"},
+					Verbs:     []string{"*"},
 				},
 				{
 					APIGroups:     []string{"security.openshift.io"},

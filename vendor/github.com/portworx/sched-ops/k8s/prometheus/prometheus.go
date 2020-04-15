@@ -1,11 +1,11 @@
-package operator
+package prometheus
 
 import (
 	"fmt"
 	"os"
 	"sync"
 
-	ostclientset "github.com/libopenstorage/operator/pkg/client/clientset/versioned"
+	prometheusclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -18,10 +18,12 @@ var (
 	deleteForegroundPolicy = metav1.DeletePropagationForeground
 )
 
-// Ops is an interface to Operator operations.
+// Ops is an interface to perform Prometheus object operations.
 type Ops interface {
-	StorageClusterOps
-	StorageNodeOps
+	ServiceMonitorOps
+	PodOps
+	RuleOps
+	AlertManagerOps
 
 	// SetConfig sets the config and resets the client
 	SetConfig(config *rest.Config)
@@ -42,22 +44,22 @@ func SetInstance(i Ops) {
 	instance = i
 }
 
-// New builds a new operator client.
-func New(c ostclientset.Interface) *Client {
+// New builds a new client.
+func New(c prometheusclient.Interface) *Client {
 	return &Client{
-		ost: c,
+		prometheus: c,
 	}
 }
 
-// NewForConfig builds a new operator client for the given config.
+// NewForConfig builds a new client for the given config.
 func NewForConfig(c *rest.Config) (*Client, error) {
-	ostClient, err := ostclientset.NewForConfig(c)
+	client, err := prometheusclient.NewForConfig(c)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
-		ost: ostClient,
+		prometheus: client,
 	}, nil
 }
 
@@ -72,21 +74,23 @@ func NewInstanceFromConfigFile(config string) (Ops, error) {
 	return newInstance, nil
 }
 
-// Client is a wrapper for the operator client.
+// Client is a wrapper for the prometheus operator client.
 type Client struct {
 	config *rest.Config
-	ost    ostclientset.Interface
+
+	prometheus prometheusclient.Interface
 }
 
 // SetConfig sets the config and resets the client
 func (c *Client) SetConfig(cfg *rest.Config) {
 	c.config = cfg
-	c.ost = nil
+
+	c.prometheus = nil
 }
 
 // initClient the k8s client if uninitialized
 func (c *Client) initClient() error {
-	if c.ost != nil {
+	if c.prometheus != nil {
 		return nil
 	}
 
@@ -140,7 +144,7 @@ func (c *Client) loadClient() error {
 
 	var err error
 
-	c.ost, err = ostclientset.NewForConfig(c.config)
+	c.prometheus, err = prometheusclient.NewForConfig(c.config)
 	if err != nil {
 		return err
 	}

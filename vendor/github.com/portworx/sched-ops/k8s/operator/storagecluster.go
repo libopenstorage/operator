@@ -66,9 +66,8 @@ func (c *Client) DeleteStorageCluster(name, namespace string) error {
 		return err
 	}
 
-	return c.ost.CoreV1alpha1().StorageClusters(namespace).Delete(name, &metav1.DeleteOptions{
-		PropagationPolicy: &deleteForegroundPolicy,
-	})
+	// TODO Temporary removing PropagationPolicy: &deleteForegroundPolicy from metav1.DeleteOptions{}, until we figure out the correct policy to use
+	return c.ost.CoreV1alpha1().StorageClusters(namespace).Delete(name, &metav1.DeleteOptions{})
 }
 
 // UpdateStorageClusterStatus update the status of given StorageCluster

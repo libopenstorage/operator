@@ -268,6 +268,65 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, dsList.Items)
 }
 
+func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	secretsNamespace := "secrets-namespace"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "false",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			CommonConfig: corev1alpha1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxSecretsNamespace,
+						Value: secretsNamespace,
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx secrets namespace
+	ns := &v1.Namespace{}
+	err = testutil.Get(k8sClient, ns, secretsNamespace, "")
+	require.NoError(t, err)
+	require.Empty(t, ns.OwnerReferences, 0)
+
+	// Portworx Secrets Role
+	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
+	actualRole := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, secretsNamespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRole.Name, actualRole.Name)
+	require.Len(t, actualRole.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRole.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
+
+	// Portworx Secrets RoleBinding
+	expectedRB := testutil.GetExpectedRoleBinding(t, "portworxRoleBinding.yaml")
+	actualRB := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, secretsNamespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRB.Name, actualRB.Name)
+	require.Len(t, actualRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
+	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+}
+
 func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -299,7 +358,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	// Case: Change the daemon set, but it should not be recreated/updated as
+	// Case: Change the image of daemon set, it should be recreated
 	// it is already deployed
 	ds.Spec.Template.Spec.Containers[0].Image = "new/image"
 	k8sClient.Update(context.TODO(), ds)
@@ -310,7 +369,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	ds = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "k8s.gcr.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
 
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
@@ -2210,12 +2269,16 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 3)
 	// Env vars are sorted on the key
 	require.Equal(t, "BAR", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	require.Equal(t, "bar", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 	require.Equal(t, "FOO", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	require.Equal(t, "foo", autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
+	require.Equal(t, pxutil.EnvKeyPortworxNamespace,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	require.Equal(t, cluster.Namespace,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
 }
 
 func TestAutopilotImageChange(t *testing.T) {
@@ -2396,7 +2459,13 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check env vars are passed to deployment
-	expectedEnvs := append([]v1.EnvVar{}, cluster.Spec.Autopilot.Env...)
+	defaultEnvVars := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	expectedEnvs := append(defaultEnvVars, cluster.Spec.Autopilot.Env...)
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -2408,7 +2477,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedEnvs[0].Value = "bar"
+	expectedEnvs[1].Value = "bar"
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
@@ -3292,7 +3361,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3331,7 +3400,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3360,6 +3429,24 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
+
+	// Change snapshotter image with k8s 1.14+
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		deployment.Spec.Template.Spec.Containers[1].Image)
+
+	deployment.Spec.Template.Spec.Containers[1].Image = "my-csi-snapshotter:test"
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		deployment.Spec.Template.Spec.Containers[1].Image)
 }
 
 func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
@@ -3498,10 +3585,10 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
-		deployment.Spec.Template.Spec.Containers[2].Args[4])
+		deployment.Spec.Template.Spec.Containers[2].Args[3])
 
 	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar
 	// and add the resizer sidecar
@@ -3526,10 +3613,9 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "--leader-election-type=leases",
-		deployment.Spec.Template.Spec.Containers[1].Args[4])
+	require.Len(t, deployment.Spec.Template.Spec.Containers[1].Args, 3)
 	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
@@ -3996,323 +4082,6 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
 }
 
-func TestCompleteInstallWithCustomRepoRegistry(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	customRepo := "test-registry:1111/test-repo"
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
-			CustomImageRegistry: customRepo,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
-					Enabled: true,
-				},
-			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
-
-	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v1.13.0",
-		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
-	)
-	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
-	)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/autopilot:test",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	parts := strings.Split(component.DefaultPrometheusOperatorImage, "/")
-	expectedPrometheusImage := parts[len(parts)-1]
-	prometheusOperatorDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/"+expectedPrometheusImage,
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	csiDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.4.0-1",
-		csiDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.1-1",
-		csiDeployment.Spec.Template.Spec.Containers[1].Image,
-	)
-	require.Equal(t,
-		customRepo+"/csi-snapshotter:v2.0.0",
-		csiDeployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.14, so that resizer sidecar is deployed
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.14.6",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	csiDeployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRepo+"/csi-resizer:v0.3.0",
-		csiDeployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t,
-		customRepo+"/csi-provisioner:v0.4.3",
-		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRepo+"/csi-attacher:v0.4.2",
-		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
-	)
-}
-
-func TestCompleteInstallWithCustomRegistry(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
-			CustomImageRegistry: customRegistry,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
-					Enabled: true,
-				},
-			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
-		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	pvcDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
-		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
-	)
-	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
-	)
-	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
-	)
-	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
-		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
-	)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/portworx/autopilot:test",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	prometheusOperatorDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/"+component.DefaultPrometheusOperatorImage,
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-
-	csiDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-provisioner:v1.4.0-1",
-		csiDeployment.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-attacher:v1.2.1-1",
-		csiDeployment.Spec.Template.Spec.Containers[1].Image,
-	)
-	require.Equal(t,
-		customRegistry+"/quay.io/openstorage/csi-snapshotter:v2.0.0",
-		csiDeployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.14, so that resizer sidecar is deployed
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.14.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	csiDeployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-resizer:v0.3.0",
-		csiDeployment.Spec.Template.Spec.Containers[2].Image,
-	)
-
-	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-provisioner:v0.4.3",
-		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
-	)
-	require.Equal(t,
-		customRegistry+"/quay.io/k8scsi/csi-attacher:v0.4.2",
-		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
-	)
-}
-
 func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -4450,7 +4219,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	)
 }
 
-func TestCompleteInstallWithImagePullSecret(t *testing.T) {
+func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -4463,8 +4232,9 @@ func TestCompleteInstallWithImagePullSecret(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 
-	imagePullSecret := "registry-secret"
+	customRegistry := "test-registry:1111"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -4474,8 +4244,9 @@ func TestCompleteInstallWithImagePullSecret(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image:           "portworx/image:2.2",
-			ImagePullSecret: &imagePullSecret,
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRegistry,
+			StartPort:           &startPort,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
@@ -4495,6 +4266,7 @@ func TestCompleteInstallWithImagePullSecret(t *testing.T) {
 		},
 	}
 
+	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -4502,74 +4274,334 @@ func TestCompleteInstallWithImagePullSecret(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		pxAPIDaemonSet.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	pxProxyDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		pvcDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	lhDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		lhDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/portworx/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		autopilotDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	prometheusOperatorDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		imagePullSecret,
-		csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
-	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
+	// Case: Update registry should be added to the images
+	customRegistry = "test-registry:2222"
+	cluster.Spec.CustomImageRegistry = customRegistry
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		imagePullSecret,
-		csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: If empty, remove custom registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "k8s.gcr.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, "k8s.gcr.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"portworx/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		component.DefaultPrometheusOperatorImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		"quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"quay.io/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		"quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: Custom registry should be added back in not present in images
+	customRegistry = "test-registry:3333"
+	cluster.Spec.CustomImageRegistry = customRegistry
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/k8s.gcr.io/pause:3.1",
+		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRegistry+"/portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
 
-func TestCompleteInstallWithTolerations(t *testing.T) {
+func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.14.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
@@ -4579,19 +4611,7 @@ func TestCompleteInstallWithTolerations(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	tolerations := []v1.Toleration{
-		{
-			Key:      "must-exist",
-			Operator: v1.TolerationOpExists,
-			Effect:   v1.TaintEffectNoExecute,
-		},
-		{
-			Key:      "foo",
-			Operator: v1.TolerationOpEqual,
-			Value:    "bar",
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
+	customRegistry := "test-registry:1111"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -4601,84 +4621,265 @@ func TestCompleteInstallWithTolerations(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/image:2.2",
-			Placement: &corev1alpha1.PlacementSpec{
-				Tolerations: tolerations,
-			},
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
-				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
-					Enabled: true,
-				},
-			},
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRegistry,
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
 		},
 	}
 
+	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
-
-	pxAPIDaemonSet := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, pxAPIDaemonSet.Spec.Template.Spec.Tolerations)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, pvcDeployment.Spec.Template.Spec.Tolerations)
-
-	lhDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, lhDeployment.Spec.Template.Spec.Tolerations)
-
-	autopilotDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, autopilotDeployment.Spec.Template.Spec.Tolerations)
-
-	prometheusOperatorDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, prometheusOperatorDeployment.Spec.Template.Spec.Tolerations)
-
-	prometheusInst := &monitoringv1.Prometheus{}
-	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
 
-	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
+	// Case: Update registry should be added to the images
+	customRegistry = "test-registry:2222"
+	cluster.Spec.CustomImageRegistry = customRegistry
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: If empty, remove custom registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: Custom registry should be added back in not present in images
+	customRegistry = "test-registry:3333"
+	cluster.Spec.CustomImageRegistry = customRegistry
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
 }
 
-func TestCompleteInstallWithNodeAffinity(t *testing.T) {
+func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	customRegistry := "test-registry:1111"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRegistry,
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Custom registry should be added to the images
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: Update registry should be added to the images
+	customRegistry = "test-registry:2222"
+	cluster.Spec.CustomImageRegistry = customRegistry
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: If empty, remove custom registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: Custom registry should be added back in not present in images
+	customRegistry = "test-registry:3333"
+	cluster.Spec.CustomImageRegistry = customRegistry
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+}
+
+func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -4691,22 +4892,9 @@ func TestCompleteInstallWithNodeAffinity(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 
-	nodeAffinity := &v1.NodeAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-			NodeSelectorTerms: []v1.NodeSelectorTerm{
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "foo",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"bar"},
-						},
-					},
-				},
-			},
-		},
-	}
+	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -4716,10 +4904,9 @@ func TestCompleteInstallWithNodeAffinity(t *testing.T) {
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/image:2.2",
-			Placement: &corev1alpha1.PlacementSpec{
-				NodeAffinity: nodeAffinity,
-			},
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRepo,
+			StartPort:           &startPort,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
@@ -4739,58 +4926,601 @@ func TestCompleteInstallWithNodeAffinity(t *testing.T) {
 		},
 	}
 
+	// Case: Custom repo-registry should be added to the images
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, pxAPIDaemonSet.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pxProxyDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pvcDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, pvcDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
 
 	lhDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, lhDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Equal(t,
+		customRepo+"/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
 
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, autopilotDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
 
+	parts := strings.Split(component.DefaultPrometheusOperatorImage, "/")
+	expectedPrometheusImage := parts[len(parts)-1]
 	prometheusOperatorDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, prometheusOperatorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
-
-	prometheusInst := &monitoringv1.Prometheus{}
-	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
 
-	// Change the k8s version to 1.12, so that CSI stateful set is created instead of deployment
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
+	// Case: Update repo-registry should be added to the images
+	customRepo = "test-registry:1111/new-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: If empty, remove custom repo-registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "k8s.gcr.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, "k8s.gcr.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"portworx/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		"portworx/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"portworx/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		component.DefaultPrometheusOperatorImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		"quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"quay.io/openstorage/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		"quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: Custom repo-registry should be added back in not present in images
+	customRepo = "test-registry:1111/newest-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pxProxyDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	lhDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/px-lighthouse:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-stork-connector:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
+	)
+	require.Equal(t,
+		customRepo+"/lh-config-sync:test",
+		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
+	)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/autopilot:test",
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	prometheusOperatorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
+		component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v1.4.0-1",
+		csiDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v1.2.1-1",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v1.2.2-1",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+}
+
+func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	customRepo := "test-registry:1111/test-repo"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRepo,
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Custom repo-registry should be added to the images
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: Update repo-registry should be added to the images
+	customRepo = "test-registry:1111/new-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: If empty, remove custom repo-registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	// Case: Custom repo-registry should be added back in not present in images
+	customRepo = "test-registry:1111/newest-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.14.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
+	require.Equal(t,
+		customRepo+"/csi-snapshotter:v2.0.0",
+		csiDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-resizer:v0.3.0",
+		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+}
+
+func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	customRepo := "test-registry:1111/test-repo"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image:               "portworx/image:2.2",
+			CustomImageRegistry: customRepo,
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+		},
+	}
+
+	// Case: Custom repo-registry should be added to the images
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
 	csiStatefulSet := &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: Update repo-registry should be added to the images
+	customRepo = "test-registry:1111/new-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: If empty, remove custom repo-registry from images
+	cluster.Spec.CustomImageRegistry = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"quay.io/k8scsi/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	// Case: Custom repo-registry should be added back in not present in images
+	customRepo = "test-registry:1111/newest-repo"
+	cluster.Spec.CustomImageRegistry = customRepo
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/kube-controller-manager-amd64:v1.12.0",
+		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	csiStatefulSet = &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/csi-provisioner:v0.4.3",
+		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/csi-attacher:v0.4.2",
+		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
 }
 
 func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
@@ -6413,6 +7143,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	serviceMonitor := serviceMonitorList.Items[0]
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Equal(t, expectedServiceMonitor.Labels, serviceMonitor.Labels)
 	require.Len(t, serviceMonitor.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
 	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
@@ -6443,6 +7174,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedServiceMonitor.Name, serviceMonitor.Name)
 	require.Equal(t, expectedServiceMonitor.Namespace, serviceMonitor.Namespace)
+	require.Equal(t, expectedServiceMonitor.Labels, serviceMonitor.Labels)
 	require.Len(t, serviceMonitor.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
 	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)

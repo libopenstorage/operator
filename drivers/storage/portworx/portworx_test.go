@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/dbg"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -24,6 +26,7 @@ import (
 	e3 "github.com/portworx/kvdb/etcd/v3"
 	"github.com/portworx/kvdb/mem"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -91,9 +94,11 @@ func TestGetStorkEnvList(t *testing.T) {
 
 	envVars := driver.GetStorkEnvList(cluster)
 
-	require.Len(t, envVars, 1)
+	require.Len(t, envVars, 2)
 	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
 	require.Equal(t, cluster.Namespace, envVars[0].Value)
+	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
+	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
@@ -658,6 +663,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage.KvdbDevice)
 
 	// Set node spec storage fields from cluster storage spec, if empty at node level
 	// If devices is set, then no need to set UseAll and UseAllWithPartitions as it
@@ -670,6 +676,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		ForceUseDisks:        boolPtr(true),
 		JournalDevice:        stringPtr("journal"),
 		SystemMdDevice:       stringPtr("metadata"),
+		KvdbDevice:           stringPtr("kvdb"),
 	}
 	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
 		{
@@ -685,6 +692,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.ElementsMatch(t, clusterDevices, *cluster.Spec.Nodes[0].Storage.Devices)
 	require.Equal(t, "journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Equal(t, "kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 
 	// If devices is set and empty, even then no need to set UseAll and UseAllWithPartitions,
 	// as devices take precedence over them.
@@ -777,6 +785,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		ForceUseDisks:        boolPtr(false),
 		JournalDevice:        stringPtr("node-journal"),
 		SystemMdDevice:       stringPtr("node-metadata"),
+		KvdbDevice:           stringPtr("node-kvdb"),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAll)
@@ -785,6 +794,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.ElementsMatch(t, nodeDevices, *cluster.Spec.Nodes[0].Storage.Devices)
 	require.Equal(t, "node-journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "node-metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
+	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
@@ -1251,8 +1261,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
@@ -1265,8 +1275,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeState, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Return only one node in enumerate for future tests
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -1287,7 +1297,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeInit, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeInitStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
 	expectedNodeOne.Status = api.Status_STATUS_OFFLINE
@@ -1303,7 +1313,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Error
 	expectedNodeOne.Status = api.Status_STATUS_ERROR
@@ -1319,7 +1329,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorum
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM
@@ -1335,7 +1345,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorumNoStorage
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
@@ -1351,7 +1361,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorum, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NeedsReboot
 	expectedNodeOne.Status = api.Status_STATUS_NEEDS_REBOOT
@@ -1367,7 +1377,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOffline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Decommission
 	expectedNodeOne.Status = api.Status_STATUS_DECOMMISSION
@@ -1383,7 +1393,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDecommissioned, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDecommissionedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Maintenance
 	expectedNodeOne.Status = api.Status_STATUS_MAINTENANCE
@@ -1399,7 +1409,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Ok
 	expectedNodeOne.Status = api.Status_STATUS_OK
@@ -1415,7 +1425,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDown
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DOWN
@@ -1431,7 +1441,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -1447,7 +1457,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageRebalance
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_REBALANCE
@@ -1463,7 +1473,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDriveReplace
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
@@ -1479,7 +1489,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegraded, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Invalid
 	expectedNodeOne.Status = api.Status(9999)
@@ -1495,7 +1505,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeUnknown, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeUnknownStatus, nodeStatus.Status.Conditions[0].Status)
 }
 
 func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
@@ -1600,8 +1610,19 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
 
-	// If the PX imgae does not have a tag then don't add version to status object
+	// If the PX image does not have a tag then don't update the version
 	cluster.Spec.Image = "test/image"
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	nodeStatus = &corev1alpha1.StorageNode{}
+	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
+
+	// If the PX image does not have a tag then create without version
+	k8sClient.Delete(context.TODO(), nodeStatus)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -1630,9 +1651,64 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 		},
 	}
 
+	// TestCase: No storage nodes and portworx pods exist
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Empty(t, storageNodes.Items)
+
+	// TestCase: Portworx pods exist, but no storage nodes present
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	k8sClient.Create(context.TODO(), pod1)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.Contains(t, err.Error(), "not found")
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Empty(t, storageNodes.Items)
+
+	// TestCase: Portworx pods and storage nodes both exist
+	storageNode1 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+	storageNode2 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-2",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), storageNode1)
+	k8sClient.Create(context.TODO(), storageNode2)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.Contains(t, err.Error(), "not found")
+
+	// Delete extra nodes that do not have corresponding pods
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
@@ -1661,9 +1737,46 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 		},
 	}
 
+	// TestCase: No storage nodes and portworx pods exist
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get endpoint")
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Empty(t, storageNodes.Items)
+
+	// TestCase: Portworx pod exist and storage node exist
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), pod)
+	k8sClient.Create(context.TODO(), storageNode)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.Contains(t, err.Error(), "failed to get endpoint")
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
@@ -1691,9 +1804,36 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 		},
 	}
 
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), pod)
+	k8sClient.Create(context.TODO(), storageNode)
+
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error connecting to GRPC server")
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
@@ -1745,6 +1885,27 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		},
 	}
 
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), pod)
+	k8sClient.Create(context.TODO(), storageNode)
+
 	// Error from InspectCurrent API
 	mockClusterServer.EXPECT().
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
@@ -1755,15 +1916,31 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "InspectCurrent error")
 
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
 	// Nil response from InspectCurrent API
 	mockClusterServer.EXPECT().
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
 		Return(nil, nil).
 		Times(1)
 
+	// Reset the storage node status
+	storageNode.Status = corev1alpha1.NodeStatus{}
+	k8sClient.Status().Update(context.TODO(), storageNode)
+
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to inspect cluster")
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// Nil cluster object in the response of InspectCurrent API
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
@@ -1774,9 +1951,19 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
+	// Reset the storage node status
+	storageNode.Status = corev1alpha1.NodeStatus{}
+	k8sClient.Status().Update(context.TODO(), storageNode)
+
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty ClusterInspect response")
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
@@ -1830,6 +2017,27 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		},
 	}
 
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), pod)
+	k8sClient.Create(context.TODO(), storageNode)
+
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
 		Cluster: &api.StorageCluster{},
 	}
@@ -1838,7 +2046,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
-	// Error from node Enumerate API
+	// TestCase: Error from node Enumerate API
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(nil, fmt.Errorf("node Enumerate error")).
@@ -1848,17 +2056,33 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "node Enumerate error")
 
-	// Nil response from node Enumerate API
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Nil response from node Enumerate API
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(nil, nil).
 		Times(1)
 
+	// Reset the storage node status
+	storageNode.Status = corev1alpha1.NodeStatus{}
+	k8sClient.Status().Update(context.TODO(), storageNode)
+
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to enumerate nodes")
 
-	// Empty list of nodes should not create any StorageNode objects
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Empty list of nodes should create StorageNode objects only for matching pods
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{},
 	}
@@ -1866,6 +2090,50 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
+
+	// Reset the storage node status
+	storageNode.Status = corev1alpha1.NodeStatus{}
+	k8sClient.Status().Update(context.TODO(), storageNode)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Nil list of nodes should create StorageNode objects only for matching pods
+	expectedNodeEnumerateResp.Nodes = nil
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	// Reset the storage node status
+	storageNode.Status = corev1alpha1.NodeStatus{}
+	k8sClient.Status().Update(context.TODO(), storageNode)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Empty list of nodes should not create any StorageNode objects
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	k8sClient.Delete(context.TODO(), pod)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -1875,7 +2143,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
 
-	// Nil list of nodes should not create any StorageNode objects
+	// TestCase: Nil list of nodes should not create any StorageNode objects
 	expectedNodeEnumerateResp.Nodes = nil
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
@@ -1975,7 +2243,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeMaintenance, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "1.1.1.1", nodeStatusList.Items[0].Status.Network.DataIP)
 
 	// Update status based on the latest object
@@ -2000,8 +2268,251 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeOnline, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "2.2.2.2", nodeStatusList.Items[0].Status.Network.DataIP)
+}
+
+func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	// TestCases: Portworx node present in SDK output
+	// TestCase: Node does not have any condition, node state condition will be
+	// used to populate the node phase
+	expectedNode := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		DataIp:            "1.1.1.1",
+		Status:            api.Status_STATUS_MAINTENANCE,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNode},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Node has another condition which is newer than when the node state
+	// was last transitioned
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	// Sleep is needed because fake k8s client stores the timestamp at sec granularity
+	time.Sleep(time.Second)
+	operatorops.Instance().UpdateStorageNodeCondition(
+		&storageNodes.Items[0].Status,
+		&corev1alpha1.NodeCondition{
+			Type:   corev1alpha1.NodeInitCondition,
+			Status: corev1alpha1.NodeFailedStatus,
+		},
+	)
+	k8sClient.Status().Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: Node state has transitioned
+	expectedNode.Status = api.Status_STATUS_DECOMMISSION
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	time.Sleep(time.Second)
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeDecommissionedStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCases: Portworx node not present in SDK output, but matching pod present
+	// TestCase: If latest node condition is not Init or Failed (here it is Decommissioned)
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-one",
+		},
+	}
+	k8sClient.Create(context.TODO(), pod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If latest node condition is Failed then phase should be Failed
+	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+		{
+			Type:   corev1alpha1.NodeStateCondition,
+			Status: corev1alpha1.NodeFailedStatus,
+		},
+	}
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If latest node condition is NodeInit with succeeded status
+	// then phase should be Init
+	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+		{
+			Type:   corev1alpha1.NodeInitCondition,
+			Status: corev1alpha1.NodeSucceededStatus,
+		},
+	}
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If latest node condition does not have status, phase should be Init
+	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+		{
+			Type:   corev1alpha1.NodeInitCondition,
+			Status: corev1alpha1.NodeSucceededStatus,
+		},
+	}
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If no condition present, phase should be Init
+	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{}
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If conditions are nil, phase should be Init
+	storageNodes.Items[0].Status.Conditions = nil
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
@@ -2043,7 +2554,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	// Create driver object with the fake k8s client
 	driver := portworx{
 		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		recorder:  record.NewFakeRecorder(0),
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2209,7 +2720,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.Equal(t, "node-uid", nodeStatusList.Items[0].Status.NodeUID)
 }
 
-func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) {
+func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -2320,7 +2831,286 @@ func TestUpdateClusterStatusShouldDeleteStatusForNonExistingNodes(t *testing.T) 
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
 }
 
-func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *testing.T) {
+func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	nodeEnumerateRespWithAllNodes := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-1",
+				SchedulerNodeName: "node-one",
+				Status:            api.Status_STATUS_OK,
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node got removed from portworx sdk response, but corresponding pod exists
+	nodeEnumerateRespWithOneNode := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	nodeOnePod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-one",
+		},
+	}
+	k8sClient.Create(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
+	// but portworx is in Initializing state; should remain in Initializing state.
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+
+	// No conditions means the node is initializing state
+	storageNodeList.Items[0].Status.Conditions = nil
+	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
+	// but portworx is in Failed state; should remain in Failed state.
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+
+	// Latest condition is in failed state
+	storageNodeList.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+		{
+			Type:   corev1alpha1.NodeInitCondition,
+			Status: corev1alpha1.NodeFailedStatus,
+		},
+	}
+	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
+	// that of portworx pods
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+
+	nodeOnePod.Labels = nil
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// have correct owner references
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+	nodeOnePod.Labels = driver.GetSelectorLabels()
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+	nodeOnePod.OwnerReferences[0].UID = types.UID("dummy")
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// have correct node name
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+	nodeOnePod.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+	nodeOnePod.Spec.NodeName = "dummy"
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// exist in cluster's namespace
+	k8sClient.Delete(context.TODO(), nodeOnePod)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithOneNode, nil).
+		Times(1)
+	nodeOnePod.Namespace = "dummy"
+	k8sClient.Create(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+}
+
+func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent(t *testing.T) {
 	// Create fake k8s client without any nodes to lookup
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
@@ -2458,6 +3248,291 @@ func TestUpdateClusterStatusShouldDeleteStatusIfSchedulerNodeNameNotPresent(t *t
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-2", nodeStatusList.Items[0].Status.NodeUID)
+}
+
+func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleNameAbsent(t *testing.T) {
+	// Create fake k8s client without any nodes to lookup
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	nodeEnumerateRespWithAllNodes := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id:                "node-1",
+				SchedulerNodeName: "node-one",
+				Status:            api.Status_STATUS_OK,
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Scheduler node name missing for storage node, but corresponding pod exists
+	nodeEnumerateRespWithNoSchedName := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{
+			{
+				Id: "node-1",
+			},
+			{
+				Id:                "node-2",
+				SchedulerNodeName: "node-two",
+			},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	nodeOnePod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod-1",
+			Namespace:       cluster.Namespace,
+			Labels:          driver.GetSelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "node-one",
+		},
+	}
+	k8sClient.Create(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
+	// but portworx is in Initializing state; should remain in Initializing state.
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+
+	// No conditions means the node is initializing state
+	storageNodeList.Items[0].Status.Conditions = nil
+	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
+	// but portworx is in Failed state; should remain in Failed state.
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+
+	// Latest condition is in failed state
+	storageNodeList.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+		{
+			Type:   corev1alpha1.NodeInitCondition,
+			Status: corev1alpha1.NodeFailedStatus,
+		},
+	}
+	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
+
+	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
+	// that of portworx pods
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+
+	nodeOnePod.Labels = nil
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// have correct owner references
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+	nodeOnePod.Labels = driver.GetSelectorLabels()
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+	nodeOnePod.OwnerReferences[0].UID = types.UID("dummy")
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// have correct node name
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+	nodeOnePod.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+	nodeOnePod.Spec.NodeName = "dummy"
+	k8sClient.Update(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
+
+	// TestCase: Node is not present in portworx sdk response, and pod does not
+	// exist in cluster's namespace
+	k8sClient.Delete(context.TODO(), nodeOnePod)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithAllNodes, nil).
+		Times(1)
+
+	driver.UpdateStorageClusterStatus(cluster)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	testutil.List(k8sClient, storageNodeList)
+	require.Len(t, storageNodeList.Items, 2)
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nodeEnumerateRespWithNoSchedName, nil).
+		Times(1)
+	nodeOnePod.Namespace = "dummy"
+	k8sClient.Create(context.TODO(), nodeOnePod)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodeList = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodeList)
+	require.NoError(t, err)
+	require.Len(t, storageNodeList.Items, 1)
 }
 
 func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
@@ -2603,6 +3678,35 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, customRegistry+"/"+defaultNodeWiperImage,
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
+func TestDeleteClusterWithImagePullPolicy(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			ImagePullPolicy: v1.PullIfNotPresent,
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	_, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.PullIfNotPresent,
+		wiperDS.Spec.Template.Spec.Containers[0].ImagePullPolicy,
 	)
 }
 

@@ -734,6 +734,114 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
 }
 
+func TestStorageNodeGetsCreated(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+
+	// Kubernetes node with resources to create a pod
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+	storageLabels := map[string]string{"foo": "bar"}
+
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(storageLabels).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	expectedStorageNode1 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            k8sNode1.Name,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+			Labels:          storageLabels,
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+		},
+	}
+	expectedStorageNode2 := expectedStorageNode1.DeepCopy()
+	expectedStorageNode2.Name = k8sNode2.Name
+	expectedStorageNodes := []corev1alpha1.StorageNode{*expectedStorageNode1, *expectedStorageNode2}
+
+	storageNodes := &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.ElementsMatch(t,
+		expectedStorageNodes,
+		storageNodes.Items,
+	)
+
+	// TestCase: Recreating the pods should not affect the created storage nodes
+	pods := &v1.PodList{}
+	testutil.List(k8sClient, pods)
+	require.Empty(t, pods.Items)
+
+	storageNodes.Items[0].Status.Phase = string(corev1alpha1.NodeOnlineStatus)
+	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 2)
+	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[1].Status.Phase)
+
+	// TestCase: Should recreate the storage nodes when re-creating pods
+	pods = &v1.PodList{}
+	testutil.List(k8sClient, pods)
+	require.Empty(t, pods.Items)
+
+	k8sClient.Delete(context.TODO(), &storageNodes.Items[0])
+	k8sClient.Delete(context.TODO(), &storageNodes.Items[1])
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 2)
+}
+
 func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -3218,6 +3326,18 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
+	// TestCase: Change spec.cloudStorage.kvdbDeviceSpec
+	kvdbDeviceSpec := "kvdb-dev-spec"
+	cluster.Spec.CloudStorage.KvdbDeviceSpec = &kvdbDeviceSpec
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
 	// TestCase: Change spec.cloudStorage.maxStorageNodes
 	maxStorageNodes := uint32(3)
 	cluster.Spec.CloudStorage.MaxStorageNodes = &maxStorageNodes
@@ -3339,6 +3459,18 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	// TestCase: Change spec.storage.systemMetadataDevice
 	metadataDevice := "metadata-dev"
 	cluster.Spec.Storage.SystemMdDevice = &metadataDevice
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.storage.kvdbDevice
+	kvdbDevice := "kvdb-dev"
+	cluster.Spec.Storage.KvdbDevice = &kvdbDevice
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil

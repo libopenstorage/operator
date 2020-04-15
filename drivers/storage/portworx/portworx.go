@@ -1,16 +1,10 @@
 package portworx
 
 import (
-	"context"
-	"crypto/x509"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
-	"github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
@@ -19,15 +13,11 @@ import (
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -113,6 +103,10 @@ func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.En
 		{
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxServiceName,
+			Value: component.PxAPIServiceName,
 		},
 	}
 }
@@ -249,176 +243,6 @@ func (p *portworx) markComponentsAsDeleted() {
 	}
 }
 
-func (p *portworx) UpdateStorageClusterStatus(
-	cluster *corev1alpha1.StorageCluster,
-) error {
-	if cluster.Status.Phase == "" {
-		cluster.Status.ClusterName = cluster.Name
-		cluster.Status.Phase = string(corev1alpha1.ClusterInit)
-		return nil
-	}
-
-	if !pxutil.IsPortworxEnabled(cluster) {
-		cluster.Status.Phase = string(corev1alpha1.ClusterOnline)
-		return nil
-	}
-
-	clientConn, err := p.getPortworxClient(cluster)
-	if err != nil {
-		return err
-	}
-
-	clusterClient := api.NewOpenStorageClusterClient(clientConn)
-	pxCluster, err := clusterClient.InspectCurrent(context.TODO(), &api.SdkClusterInspectCurrentRequest{})
-	if err != nil {
-		if closeErr := p.sdkConn.Close(); closeErr != nil {
-			logrus.Warnf("Failed to close grpc connection. %v", closeErr)
-		}
-		p.sdkConn = nil
-		return fmt.Errorf("failed to inspect cluster: %v", err)
-	} else if pxCluster.Cluster == nil {
-		return fmt.Errorf("empty ClusterInspect response")
-	}
-
-	cluster.Status.Phase = string(mapClusterStatus(pxCluster.Cluster.Status))
-	cluster.Status.ClusterName = pxCluster.Cluster.Name
-	cluster.Status.ClusterUID = pxCluster.Cluster.Id
-
-	return p.updateStorageNodes(clientConn, cluster)
-}
-
-func (p *portworx) updateStorageNodes(
-	clientConn *grpc.ClientConn,
-	cluster *corev1alpha1.StorageCluster,
-) error {
-	nodeClient := api.NewOpenStorageNodeClient(clientConn)
-	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		context.TODO(),
-		&api.SdkNodeEnumerateWithFiltersRequest{},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to enumerate nodes: %v", err)
-	}
-
-	currentNodes := make(map[string]bool)
-
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	for _, node := range nodeEnumerateResponse.Nodes {
-		if node.SchedulerNodeName == "" {
-			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
-				[]string{node.DataIp, node.MgmtIp, node.Hostname},
-			)
-			if err != nil {
-				msg := fmt.Sprintf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
-				p.warningEvent(cluster, util.FailedSyncReason, msg)
-				continue
-			}
-			node.SchedulerNodeName = k8sNode.Name
-		}
-
-		currentNodes[node.SchedulerNodeName] = true
-
-		phase := mapNodeStatus(node.Status)
-		storageNode := &corev1alpha1.StorageNode{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            node.SchedulerNodeName,
-				Namespace:       cluster.Namespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				Labels:          p.GetSelectorLabels(),
-			},
-			Status: corev1alpha1.NodeStatus{
-				NodeUID: node.Id,
-				Network: corev1alpha1.NetworkStatus{
-					DataIP: node.DataIp,
-					MgmtIP: node.MgmtIp,
-				},
-				Phase: string(phase),
-				// TODO: Add a human readable reason with the status
-				Conditions: []corev1alpha1.NodeCondition{
-					{
-						Type:   corev1alpha1.NodeState,
-						Status: phase,
-					},
-				},
-			},
-		}
-
-		if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
-			storageNode.Spec = corev1alpha1.StorageNodeSpec{
-				Version: version,
-			}
-		} else {
-			partitions := strings.Split(cluster.Spec.Image, ":")
-			if len(partitions) > 1 {
-				storageNode.Spec = corev1alpha1.StorageNodeSpec{
-					Version: partitions[len(partitions)-1],
-				}
-			}
-		}
-
-		err = k8sutil.CreateOrUpdateStorageNode(p.k8sClient, storageNode, ownerRef)
-		if err != nil {
-			msg := fmt.Sprintf("Failed to update status for nodeID %v: %v", node.Id, err)
-			p.warningEvent(cluster, util.FailedSyncReason, msg)
-		}
-	}
-
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
-	if err = p.k8sClient.List(context.TODO(), nodeStatusList, &client.ListOptions{}); err != nil {
-		return fmt.Errorf("failed to get a list of StorageNode: %v", err)
-	}
-
-	for _, nodeStatus := range nodeStatusList.Items {
-		if _, exists := currentNodes[nodeStatus.Name]; !exists {
-			logrus.Debugf("Deleting orphan StorageNode %v/%v",
-				nodeStatus.Namespace, nodeStatus.Name)
-			err = p.k8sClient.Delete(context.TODO(), nodeStatus.DeepCopy())
-			if err != nil && !errors.IsNotFound(err) {
-				msg := fmt.Sprintf("Failed to delete StorageNode %v/%v: %v",
-					nodeStatus.Namespace, nodeStatus.Name, err)
-				p.warningEvent(cluster, util.FailedSyncReason, msg)
-			}
-		}
-	}
-	return nil
-}
-
-func (p *portworx) getPortworxClient(
-	cluster *corev1alpha1.StorageCluster,
-) (*grpc.ClientConn, error) {
-	if p.sdkConn != nil {
-		return p.sdkConn, nil
-	}
-
-	pxService := &v1.Service{}
-	err := p.k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      pxutil.PortworxServiceName,
-			Namespace: cluster.Namespace,
-		},
-		pxService,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get k8s service spec: %v", err)
-	} else if len(pxService.Spec.ClusterIP) == 0 {
-		return nil, fmt.Errorf("failed to get endpoint for portworx volume driver")
-	}
-
-	endpoint := pxService.Spec.ClusterIP
-	sdkPort := defaultSDKPort
-
-	// Get the ports from service
-	for _, pxServicePort := range pxService.Spec.Ports {
-		if pxServicePort.Name == pxutil.PortworxSDKPortName && pxServicePort.Port != 0 {
-			sdkPort = int(pxServicePort.Port)
-		}
-	}
-
-	endpoint = fmt.Sprintf("%s:%d", endpoint, sdkPort)
-	return p.getGrpcConn(endpoint)
-}
-
 func (p *portworx) warningEvent(
 	cluster *corev1alpha1.StorageCluster,
 	reason, message string,
@@ -427,20 +251,7 @@ func (p *portworx) warningEvent(
 	p.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
 }
 
-func (p *portworx) getGrpcConn(endpoint string) (*grpc.ClientConn, error) {
-	dialOptions, err := getDialOptions(isTLSEnabled())
-	if err != nil {
-		return nil, err
-	}
-	p.sdkConn, err = grpcserver.Connect(endpoint, dialOptions)
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to GRPC server [%s]: %v", endpoint, err)
-	}
-	return p.sdkConn, nil
-}
-
 func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNode, cluster *corev1alpha1.StorageCluster) *cloudstorage.Config {
-
 	res := &cloudstorage.Config{
 		CloudStorage:            []cloudstorage.CloudDriveConfig{},
 		StorageInstancesPerZone: cluster.Status.Storage.StorageNodesPerZone,
@@ -460,104 +271,6 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNo
 		}
 	}
 	return nil
-}
-
-func getDialOptions(tls bool) ([]grpc.DialOption, error) {
-	if !tls {
-		return []grpc.DialOption{grpc.WithInsecure()}, nil
-	}
-	capool, err := x509.SystemCertPool()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load CA system certs: %v", err)
-	}
-	return []grpc.DialOption{grpc.WithTransportCredentials(
-		credentials.NewClientTLSFromCert(capool, ""),
-	)}, nil
-}
-
-func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
-	switch status {
-	case api.Status_STATUS_NONE:
-		fallthrough
-	case api.Status_STATUS_INIT:
-		fallthrough
-	case api.Status_STATUS_OFFLINE:
-		fallthrough
-	case api.Status_STATUS_ERROR:
-		return corev1alpha1.ClusterOffline
-
-	case api.Status_STATUS_NOT_IN_QUORUM:
-		fallthrough
-	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.ClusterNotInQuorum
-
-	case api.Status_STATUS_OK:
-		fallthrough
-	case api.Status_STATUS_MAINTENANCE:
-		fallthrough
-	case api.Status_STATUS_NEEDS_REBOOT:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DOWN:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DEGRADED:
-		fallthrough
-	case api.Status_STATUS_STORAGE_REBALANCE:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.ClusterOnline
-
-	case api.Status_STATUS_DECOMMISSION:
-		fallthrough
-	default:
-		return corev1alpha1.ClusterUnknown
-	}
-}
-
-func mapNodeStatus(status api.Status) corev1alpha1.ConditionStatus {
-	switch status {
-	case api.Status_STATUS_NONE:
-		fallthrough
-	case api.Status_STATUS_OFFLINE:
-		fallthrough
-	case api.Status_STATUS_ERROR:
-		fallthrough
-	case api.Status_STATUS_NEEDS_REBOOT:
-		return corev1alpha1.NodeOffline
-
-	case api.Status_STATUS_INIT:
-		return corev1alpha1.NodeInit
-
-	case api.Status_STATUS_NOT_IN_QUORUM:
-		fallthrough
-	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.NodeNotInQuorum
-
-	case api.Status_STATUS_MAINTENANCE:
-		return corev1alpha1.NodeMaintenance
-
-	case api.Status_STATUS_OK:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DOWN:
-		return corev1alpha1.NodeOnline
-
-	case api.Status_STATUS_DECOMMISSION:
-		return corev1alpha1.NodeDecommissioned
-
-	case api.Status_STATUS_STORAGE_DEGRADED:
-		fallthrough
-	case api.Status_STATUS_STORAGE_REBALANCE:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.NodeDegraded
-
-	default:
-		return corev1alpha1.NodeUnknown
-	}
-}
-
-func isTLSEnabled() bool {
-	enabled, err := strconv.ParseBool(os.Getenv(envKeyPortworxEnableTLS))
-	return err == nil && enabled
 }
 
 func componentVersions(releases *manifest.ReleaseManifest, pxVersion *version.Version) (manifest.Release, error) {
@@ -676,6 +389,9 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 			}
 			if nodeSpecCopy.Storage.SystemMdDevice == nil && toUpdate.Spec.Storage.SystemMdDevice != nil {
 				nodeSpecCopy.Storage.SystemMdDevice = stringPtr(*toUpdate.Spec.Storage.SystemMdDevice)
+			}
+			if nodeSpecCopy.Storage.KvdbDevice == nil && toUpdate.Spec.Storage.KvdbDevice != nil {
+				nodeSpecCopy.Storage.KvdbDevice = stringPtr(*toUpdate.Spec.Storage.KvdbDevice)
 			}
 		}
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)

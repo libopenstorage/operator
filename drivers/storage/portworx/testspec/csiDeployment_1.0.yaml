@@ -61,11 +61,10 @@ spec:
               mountPath: /csi
         - name: csi-snapshotter
           imagePullPolicy: Always
-          image: quay.io/openstorage/csi-snapshotter:v2.0.0
+          image: quay.io/openstorage/csi-snapshotter:v1.2.2-1
           args:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"
-            - "--snapshotter=com.openstorage.pxd"
             - "--leader-election=true"
             - "--leader-election-type=configmaps"
           env:

@@ -111,6 +111,7 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
 		cv.IncludeEndpointsAndConfigMapsForLeases = true
+		cv.Snapshotter = "quay.io/openstorage/csi-snapshotter:v1.2.2-1"
 	}
 
 	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
@@ -180,7 +181,7 @@ func (g *CSIGenerator) setSidecarContainerVersionsV1_0() *CSIConfiguration {
 		Attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
 		NodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
 		Provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
-		Snapshotter:   "quay.io/openstorage/csi-snapshotter:v2.0.0",
+		Snapshotter:   "quay.io/k8scsi/csi-snapshotter:v2.0.0",
 		Resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
 		// Single registrar has been deprecated
 		Registrar: "",
