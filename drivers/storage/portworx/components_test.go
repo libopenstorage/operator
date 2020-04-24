@@ -4330,6 +4330,24 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
+	require.Equal(t,
+		"--config-reloader-image="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		*prometheusInstance.Spec.Image,
+	)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -4415,6 +4433,24 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
+	require.Equal(t,
+		"--config-reloader-image="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		*prometheusInstance.Spec.Image,
+	)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -4492,6 +4528,22 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		component.DefaultPrometheusOperatorImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"--config-reloader-image="+component.DefaultConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+component.DefaultPrometheusConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		component.DefaultPrometheusImage,
+		*prometheusInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -4577,6 +4629,24 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"--config-reloader-image="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRegistry+"/"+
+			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		*prometheusInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -4978,6 +5048,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 
 	parts := strings.Split(component.DefaultPrometheusOperatorImage, "/")
 	expectedPrometheusImage := parts[len(parts)-1]
+	parts = strings.Split(component.DefaultConfigReloaderImage, "/")
+	expectedConfigReloaderImage := parts[len(parts)-1]
+	parts = strings.Split(component.DefaultPrometheusConfigReloaderImage, "/")
+	expectedPrometheusConfigReloaderImage := parts[len(parts)-1]
 	prometheusOperatorDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
@@ -4985,6 +5059,24 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/"+expectedPrometheusImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	parts = strings.Split(component.DefaultPrometheusImage, "/")
+	expectedPrometheusInstanceImage := parts[len(parts)-1]
+	prometheusInstance := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusInstanceImage,
+		*prometheusInstance.Spec.Image,
 	)
 
 	csiDeployment := &appsv1.Deployment{}
@@ -5065,6 +5157,22 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		customRepo+"/"+expectedPrometheusImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
+	require.Equal(t,
+		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusInstanceImage,
+		*prometheusInstance.Spec.Image,
+	)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -5142,6 +5250,22 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		component.DefaultPrometheusOperatorImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"--config-reloader-image="+component.DefaultConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+component.DefaultPrometheusConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		component.DefaultPrometheusImage,
+		*prometheusInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -5221,6 +5345,22 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/"+expectedPrometheusImage,
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
+	)
+	require.Equal(t,
+		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
+	)
+
+	prometheusInstance = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/"+expectedPrometheusInstanceImage,
+		*prometheusInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -5606,7 +5746,14 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	prometheusOperatorDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusInst := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -5654,7 +5801,14 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	prometheusOperatorDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -5699,6 +5853,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets)
 
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, prometheusInst.Spec.ImagePullSecrets)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5740,6 +5899,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, prometheusInst.Spec.ImagePullSecrets)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -5787,7 +5951,14 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	prometheusOperatorDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusOperatorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	prometheusInst = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
