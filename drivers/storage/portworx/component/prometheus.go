@@ -51,6 +51,12 @@ const (
 	PrometheusInstanceName = "px-prometheus"
 	// DefaultPrometheusOperatorImage is the default prometheus operator image
 	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.34.0"
+	// DefaultConfigReloaderImage is the default config reloader image
+	DefaultConfigReloaderImage = "quay.io/coreos/configmap-reload:v0.0.1"
+	// DefaultPrometheusConfigReloaderImage is the default prometheus config reloader image
+	DefaultPrometheusConfigReloaderImage = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
+	// DefaultPrometheusImage is the default prometheus image
+	DefaultPrometheusImage = "quay.io/prometheus/prometheus:v2.7.1"
 )
 
 type prometheus struct {
@@ -401,11 +407,20 @@ func getPrometheusOperatorDeploymentSpec(
 	labels := map[string]string{
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
+	configReloaderImageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		DefaultConfigReloaderImage,
+	)
+	prometheusConfigReloaderImageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		DefaultPrometheusConfigReloaderImage,
+	)
 	args := make([]string, 0)
 	args = append(args,
 		fmt.Sprintf("-namespaces=%s", cluster.Namespace),
 		fmt.Sprintf("--kubelet-service=%s/kubelet", cluster.Namespace),
-		"--config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1",
+		fmt.Sprintf("--config-reloader-image=%s", configReloaderImageName),
+		fmt.Sprintf("--prometheus-config-reloader=%s", prometheusConfigReloaderImageName),
 	)
 
 	deployment := &appsv1.Deployment{
@@ -511,6 +526,10 @@ func (c *prometheus) createPrometheusInstance(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	replicas := int32(1)
+	prometheusImageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		DefaultPrometheusImage,
+	)
 
 	prometheusInst := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
@@ -519,6 +538,7 @@ func (c *prometheus) createPrometheusInstance(
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			Image:              &prometheusImageName,
 			Replicas:           &replicas,
 			LogLevel:           "debug",
 			ServiceAccountName: PrometheusServiceAccountName,
@@ -543,6 +563,15 @@ func (c *prometheus) createPrometheusInstance(
 				},
 			},
 		},
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		prometheusInst.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
 	}
 
 	if cluster.Spec.Monitoring != nil &&

@@ -20,6 +20,7 @@ spec:
             - -namespaces=kube-test
             - --kubelet-service=kube-test/kubelet
             - --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1
+            - --prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v0.34.0
           image: quay.io/coreos/prometheus-operator:v0.34.0
           imagePullPolicy: Always
           name: px-prometheus-operator
