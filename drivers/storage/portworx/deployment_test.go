@@ -202,6 +202,35 @@ func TestPodSpecWithEnvOverrides(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestAutoNodeRecoveryTimeoutEnvForPxVersion2_6(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.5.1",
+		},
+	}
+	recoveryEnv := v1.EnvVar{
+		Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
+		Value: "1500",
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.Contains(t, actual.Containers[0].Env, recoveryEnv)
+
+	cluster.Spec.Image = "portworx/oci-monitor:2.6.0"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.NotContains(t, actual.Containers[0].Env, recoveryEnv)
+}
+
 func TestPodSpecWithKvdbSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
