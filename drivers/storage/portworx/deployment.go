@@ -726,14 +726,18 @@ func (t *template) getEnvList() []v1.EnvVar {
 			Name:  pxutil.EnvKeyPortworxSecretsNamespace,
 			Value: t.cluster.Namespace,
 		},
-		"AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS": {
-			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
-			Value: "1500",
-		},
 		"PX_TEMPLATE_VERSION": {
 			Name:  "PX_TEMPLATE_VERSION",
 			Value: templateVersion,
 		},
+	}
+
+	pxVer2_6, _ := version.NewVersion("2.6")
+	if t.pxVersion.LessThan(pxVer2_6) {
+		envMap["AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"] = &v1.EnvVar{
+			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
+			Value: "1500",
+		}
 	}
 
 	if t.isPKS {
