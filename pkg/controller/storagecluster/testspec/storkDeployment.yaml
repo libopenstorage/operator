@@ -50,6 +50,7 @@ spec:
             cpu: '0.1'
         name: stork
       hostPID: false
+      hostNetwork: true
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

@@ -602,6 +602,7 @@ func (c *Controller) getStorkDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkServiceAccountName,
+					HostNetwork:        true,
 					Containers: []v1.Container{
 						{
 							Name:            storkContainerName,
