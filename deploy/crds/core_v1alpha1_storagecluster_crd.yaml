@@ -397,6 +397,9 @@ spec:
                 image:
                   type: string
                   description: Docker image of the STORK container.
+                hostNetwork:
+                  type: boolean
+                  description: Flag indicating if Stork pods should run in host network.
                 args:
                   type: object
                   description: >-
