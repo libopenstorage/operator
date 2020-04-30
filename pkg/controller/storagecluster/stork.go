@@ -520,6 +520,7 @@ func (c *Controller) createStorkDeployment(
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		!reflect.DeepEqual(cluster.Spec.Stork.HostNetwork, &existingDeployment.Spec.Template.Spec.HostNetwork) ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
@@ -633,6 +634,10 @@ func (c *Controller) getStorkDeploymentSpec(
 				Name: *cluster.Spec.ImagePullSecret,
 			},
 		)
+	}
+
+	if cluster.Spec.Stork.HostNetwork != nil {
+		deployment.Spec.Template.Spec.HostNetwork = *cluster.Spec.Stork.HostNetwork
 	}
 
 	if cluster.Spec.Placement != nil {

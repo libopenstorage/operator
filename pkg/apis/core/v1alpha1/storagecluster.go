@@ -349,6 +349,8 @@ type StorkSpec struct {
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by stork
 	Env []v1.EnvVar `json:"env,omitempty"`
+	// HostNetwork if set, will use host's network for stork pods
+	HostNetwork *bool `json:"hostNetwork,omitempty"`
 }
 
 // AutopilotSpec contains details of an autopilot component
