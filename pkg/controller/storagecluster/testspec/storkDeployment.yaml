@@ -32,6 +32,7 @@ spec:
         - --driver=pxd
         - --health-monitor-interval=120
         - --leader-elect=true
+        - --lock-object-namespace=kube-test
         - --verbose=true
         imagePullPolicy: Always
         image: osd/stork:test

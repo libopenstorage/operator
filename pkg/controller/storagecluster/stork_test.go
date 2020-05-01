@@ -434,7 +434,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 	storkDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 6)
+	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 7)
 	require.Contains(t,
 		storkDeployment.Spec.Template.Spec.Containers[0].Command,
 		"--test-key=test-value",
@@ -452,7 +452,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 6)
+	require.Len(t, storkDeployment.Spec.Template.Spec.Containers[0].Command, 7)
 	require.Contains(t,
 		storkDeployment.Spec.Template.Spec.Containers[0].Command,
 		"--verbose=false",
