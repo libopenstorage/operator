@@ -30,7 +30,6 @@ const (
 	flagLeaderElectLockNamespace = "leader-elect-lock-namespace"
 	flagMetricsPort              = "metrics-port"
 	defaultLockObjectName        = "openstorage-operator"
-	defaultLockObjectNamespace   = "kube-system"
 	defaultResyncPeriod          = 30 * time.Second
 	defaultMetricsPort           = 8999
 	metricsPortName              = "metrics"
@@ -64,7 +63,6 @@ func main() {
 		cli.StringFlag{
 			Name:  flagLeaderElectLockNamespace,
 			Usage: "Namespace for the leader election lock object",
-			Value: defaultLockObjectNamespace,
 		},
 		cli.IntFlag{
 			Name:  flagMetricsPort,

@@ -482,6 +482,7 @@ func (c *Controller) createStorkDeployment(
 		"verbose":                 "true",
 		"leader-elect":            "true",
 		"health-monitor-interval": "120",
+		"lock-object-namespace":   cluster.Namespace,
 	}
 	for k, v := range cluster.Spec.Stork.Args {
 		key := strings.TrimLeft(k, "-")
