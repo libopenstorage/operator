@@ -650,7 +650,7 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 
 func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
 	if cluster.Spec.Monitoring != nil &&
-		(*cluster.Spec.Monitoring.EnableMetrics ||
+		((cluster.Spec.Monitoring.EnableMetrics != nil && *cluster.Spec.Monitoring.EnableMetrics) ||
 			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
 		if cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled {
 			dep := appsv1.Deployment{
