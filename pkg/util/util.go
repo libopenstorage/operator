@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 // Reasons for controller events
@@ -21,6 +21,8 @@ const (
 	FailedValidationReason = "FailedValidation"
 	// FailedComponentReason is added to an event when setting up or removing a component fails.
 	FailedComponentReason = "FailedComponent"
+	// ClusterOnlineReason is added to an event when a cluster comes online
+	ClusterOnlineReason = "ClusterOnline"
 )
 
 var (

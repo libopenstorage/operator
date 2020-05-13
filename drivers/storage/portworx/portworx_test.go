@@ -967,6 +967,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Create driver object with the fake k8s client
 	driver := portworx{
 		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2198,6 +2199,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	// Create driver object with the fake k8s client
 	driver := portworx{
 		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2310,6 +2312,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 
 	driver := portworx{
 		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1alpha1.StorageCluster{
