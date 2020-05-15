@@ -14,7 +14,6 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
-	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -487,7 +486,7 @@ func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
 }
 
 func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
-	k8sVersion, err := getVersion()
+	k8sVersion, err := getK8SVersion()
 	if err != nil {
 		return err
 	}
@@ -500,7 +499,7 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 			return err
 		}
 
-		if err = validateImageTag(k8sVersion.String(), cluster.Namespace, map[string]string{"name": "portworx-pvc-controller"}); err != nil {
+		if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "portworx-pvc-controller"}); err != nil {
 			return err
 		}
 	}
@@ -525,7 +524,7 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 			return err
 		}
 
-		if err = validateImageTag(k8sVersion.String(), cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+		if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
 			return err
 		}
 	}
@@ -756,15 +755,15 @@ func isOpenshift(cluster *corev1alpha1.StorageCluster) bool {
 	return err == nil && enabled
 }
 
-func getVersion() (*version.Version, error) {
+func getK8SVersion() (string, error) {
 	kbVerRegex := regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+		return "", fmt.Errorf("unable to get kubernetes version: %v", err)
 	}
 	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
 	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+		return "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
-	return version.NewVersion(matches[1])
+	return matches[1], nil
 }
