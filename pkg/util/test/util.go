@@ -640,7 +640,11 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 	}
 	for _, pod := range pods.Items {
 		for _, container := range pod.Spec.Containers {
-			imageTag := strings.Split(container.Image, ":")[0]
+			imageSplit := strings.Split(container.Image, ":")
+			imageTag := ""
+			if len(imageSplit) == 2 {
+				imageTag = imageSplit[1]
+			}
 			if imageTag != tag {
 				return fmt.Errorf("failed to validade image tag on pod %s container %s, Expected: %s Got: %s",
 					pod.Name, container.Name, tag, imageTag)
