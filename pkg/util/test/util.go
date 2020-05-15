@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -485,7 +487,7 @@ func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
 }
 
 func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
-	k8sVersion, err := coreops.Instance().GetVersion()
+	k8sVersion, err := getVersion()
 	if err != nil {
 		return err
 	}
@@ -748,4 +750,17 @@ func isEKS(cluster *corev1alpha1.StorageCluster) bool {
 func isOpenshift(cluster *corev1alpha1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-openshift"])
 	return err == nil && enabled
+}
+
+func getVersion() (*version.Version, error) {
+	kbVerRegex := regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
+	k8sVersion, err := coreops.Instance().GetVersion()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+	}
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+	return version.NewVersion(matches[1])
 }
