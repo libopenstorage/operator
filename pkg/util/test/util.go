@@ -17,6 +17,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/util"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
@@ -511,8 +512,8 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 		if err = appops.Instance().ValidateDeployment(storkDp, timeout, interval); err != nil {
 			return err
 		}
-
-		err := validateImageOnPods(cluster.Spec.Stork.Image, cluster.Namespace, map[string]string{"name": "stork"})
+		storkImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.Stork.Image)
+		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
 		if err != nil {
 			return err
 		}
@@ -536,7 +537,8 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 		if err = appops.Instance().ValidateDeployment(autopilotDp, timeout, interval); err != nil {
 			return err
 		}
-		if err = validateImageOnPods(cluster.Spec.Autopilot.Image, cluster.Namespace, map[string]string{"name": "autopilot"}); err != nil {
+		autopilotImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.Autopilot.Image)
+		if err = validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": "autopilot"}); err != nil {
 			return err
 		}
 	}
@@ -548,7 +550,8 @@ func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval 
 		if err = appops.Instance().ValidateDeployment(lighthouseDp, timeout, interval); err != nil {
 			return err
 		}
-		if err = validateImageOnPods(cluster.Spec.UserInterface.Image, cluster.Namespace, map[string]string{"name": "lighthouse"}); err != nil {
+		lhImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.UserInterface.Image)
+		if err = validateImageOnPods(lhImage, cluster.Namespace, map[string]string{"name": "lighthouse"}); err != nil {
 			return err
 		}
 	}
