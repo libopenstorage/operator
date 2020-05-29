@@ -513,4 +513,3 @@ func (p *portworx) setupContextWithToken(ctx context.Context, cluster *corev1alp
 	})
 	return metadata.NewOutgoingContext(ctx, md), nil
 }
-
