@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -20,7 +21,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"k8s.io/api/core/v1"
+	"google.golang.org/grpc/metadata"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -49,7 +51,11 @@ func (p *portworx) UpdateStorageClusterStatus(
 	}
 
 	clusterClient := api.NewOpenStorageClusterClient(clientConn)
-	pxCluster, err := clusterClient.InspectCurrent(context.TODO(), &api.SdkClusterInspectCurrentRequest{})
+	ctx, err := p.setupContextWithToken(context.Background(), cluster)
+	if err != nil {
+		return err
+	}
+	pxCluster, err := clusterClient.InspectCurrent(ctx, &api.SdkClusterInspectCurrentRequest{})
 	if err != nil {
 		if closeErr := p.sdkConn.Close(); closeErr != nil {
 			logrus.Warnf("Failed to close grpc connection. %v", closeErr)
@@ -62,7 +68,14 @@ func (p *portworx) UpdateStorageClusterStatus(
 		return fmt.Errorf("empty ClusterInspect response")
 	}
 
-	cluster.Status.Phase = string(mapClusterStatus(pxCluster.Cluster.Status))
+	newClusterStatus := mapClusterStatus(pxCluster.Cluster.Status)
+	if cluster.Status.Phase != string(corev1alpha1.ClusterOnline) &&
+		newClusterStatus == corev1alpha1.ClusterOnline {
+		msg := fmt.Sprintf("Storage cluster %v online", cluster.GetName())
+		p.normalEvent(cluster, util.ClusterOnlineReason, msg)
+	}
+
+	cluster.Status.Phase = string(newClusterStatus)
 	cluster.Status.ClusterName = pxCluster.Cluster.Name
 	cluster.Status.ClusterUID = pxCluster.Cluster.Id
 
@@ -74,8 +87,12 @@ func (p *portworx) updateStorageNodes(
 	cluster *corev1alpha1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(clientConn)
+	ctx, err := p.setupContextWithToken(context.Background(), cluster)
+	if err != nil {
+		return err
+	}
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		context.TODO(),
+		ctx,
 		&api.SdkNodeEnumerateWithFiltersRequest{},
 	)
 	if err != nil {
@@ -433,3 +450,67 @@ func isTLSEnabled() bool {
 	enabled, err := strconv.ParseBool(os.Getenv(envKeyPortworxEnableTLS))
 	return err == nil && enabled
 }
+
+func (p *portworx) getOperatorToken(secretkey string) (string, error) {
+	claims := &auth.Claims{
+		Issuer:  "openstorage.io",
+		Subject: "operator@openstorage.io",
+		Name:    "operator communications",
+		Email:   "operator@openstorage.io",
+		Roles:   []string{"system.admin"},
+		Groups:  []string{"*"},
+	}
+
+	signature, err := auth.NewSignatureSharedSecret(string(secretkey))
+	if err != nil {
+		return "", err
+	}
+	token, err := auth.Token(claims, signature, &auth.Options{
+		Expiration: time.Now().Add(1 * time.Hour).Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func (p *portworx) getAuthSecret(
+	ctx context.Context,
+	cluster *corev1alpha1.StorageCluster,
+) (string, error) {
+	for _, envVar := range cluster.Spec.Env {
+		if envVar.Name == envKeyPortworxSharedSecretKey {
+			authSecret, err := pxutil.GetValueFromEnv(ctx, p.k8sClient, &envVar, cluster.Namespace)
+			if err != nil {
+				return "", err
+			}
+
+			return authSecret, nil
+		}
+	}
+
+	return "", nil
+}
+
+// Gets token or from secret for authenticating with the SDK server
+func (p *portworx) setupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageCluster) (context.Context, error) {
+	pxAuthSecret, err := p.getAuthSecret(ctx, cluster)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get auth secret: %v", err.Error())
+	}
+	if pxAuthSecret == "" {
+		return ctx, nil
+	}
+
+	// Generate token and add to metadata
+	token, err := p.getOperatorToken(string(pxAuthSecret))
+	if err != nil {
+		return ctx, fmt.Errorf("failed to create operator token: %v", err.Error())
+	}
+	md := metadata.New(map[string]string{
+		"authorization": "bearer " + token,
+	})
+	return metadata.NewOutgoingContext(ctx, md), nil
+}
+

@@ -35,6 +35,7 @@ const (
 	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.4"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
+	envKeyPortworxSharedSecretKey     = "PORTWORX_AUTH_SYSTEM_KEY"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
@@ -241,6 +242,14 @@ func (p *portworx) markComponentsAsDeleted() {
 	for _, comp := range component.GetAll() {
 		comp.MarkDeleted()
 	}
+}
+
+func (p *portworx) normalEvent(
+	cluster *corev1alpha1.StorageCluster,
+	reason, message string,
+) {
+	logrus.Info(message)
+	p.recorder.Event(cluster, v1.EventTypeNormal, reason, message)
 }
 
 func (p *portworx) warningEvent(

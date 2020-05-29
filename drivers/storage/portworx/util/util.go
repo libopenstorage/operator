@@ -1,6 +1,8 @@
 package util
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -9,8 +11,10 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -240,6 +244,53 @@ func SelectorLabels() map[string]string {
 // StorageClusterKind returns the GroupVersionKind for StorageCluster
 func StorageClusterKind() schema.GroupVersionKind {
 	return corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+}
+
+// GetValueFromEnv returns the value of v1.EnvVar Value or ValueFrom
+func GetValueFromEnv(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
+	if valueFrom := envVar.ValueFrom; valueFrom != nil {
+		if valueFrom.SecretKeyRef != nil {
+			key := valueFrom.SecretKeyRef.Key
+			secretName := valueFrom.SecretKeyRef.Name
+
+			// Get secret key
+			secret := &v1.Secret{}
+			err := client.Get(ctx, types.NamespacedName{
+				Name:      secretName,
+				Namespace: namespace,
+			}, secret)
+			if err != nil {
+				return "", err
+			}
+			pxAuthSecret := secret.Data[key]
+			if len(pxAuthSecret) == 0 {
+				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
+			}
+
+			return string(pxAuthSecret), nil
+		} else if valueFrom.ConfigMapKeyRef != nil {
+			cmName := valueFrom.ConfigMapKeyRef.Name
+			key := valueFrom.ConfigMapKeyRef.Key
+			configMap := &v1.ConfigMap{}
+			if err := client.Get(ctx, types.NamespacedName{
+				Name:      cmName,
+				Namespace: namespace,
+			}, configMap); err != nil {
+				return "", err
+			}
+
+			value, ok := configMap.Data[key]
+			if !ok {
+				return "", fmt.Errorf("failed to find env var value %s in configmap %s in namespace %s", key, cmName, namespace)
+			}
+
+			return value, nil
+		}
+	} else {
+		return envVar.Value, nil
+	}
+
+	return "", nil
 }
 
 func getSpecsBaseDir() string {
