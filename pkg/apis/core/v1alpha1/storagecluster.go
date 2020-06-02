@@ -301,6 +301,8 @@ type UserInterfaceSpec struct {
 	// LockImage is a boolean indicating if the user interface image needs to be locked
 	// to the given image. If the image is not locked, it can be updated by the driver
 	// during upgrades.
+	// DEPRECATED: This is no longer needed to lock an image. The new behavior is to
+	// use the image as it is, if present, else use a default image.
 	LockImage bool `json:"lockImage,omitempty"`
 	// Env is a list of environment variables used by UI component
 	Env []v1.EnvVar `json:"env,omitempty"`
@@ -315,6 +317,8 @@ type StorkSpec struct {
 	// LockImage is a boolean indicating if the stork image needs to be locked
 	// to the given image. If the image is not locked, it can be updated by the
 	// driver during upgrades.
+	// DEPRECATED: This is no longer needed to lock an image. The new behavior is to
+	// use the image as it is, if present, else use a default image.
 	LockImage bool `json:"lockImage,omitempty"`
 	// Args is a map of arguments given to STORK
 	Args map[string]string `json:"args,omitempty"`
@@ -331,6 +335,8 @@ type AutopilotSpec struct {
 	// LockImage is a boolean indicating if the autopilot image needs to be locked
 	// to the given image. If the image is not locked, it can be updated by the
 	// driver during upgrades.
+	// DEPRECATED: This is no longer needed to lock an image. The new behavior is to
+	// use the image as it is, if present, else use a default image.
 	LockImage bool `json:"lockImage,omitempty"`
 	// Providers is a list of input data providers for autopilot if it needs any
 	Providers []DataProviderSpec `json:"providers,omitempty"`
@@ -386,6 +392,17 @@ type StorageClusterStatus struct {
 	Conditions []ClusterCondition `json:"conditions,omitempty"`
 	// Storage represents cluster storage details
 	Storage Storage `json:"storage,omitempty"`
+	// Version version of the storage driver image
+	Version string `json:"version,omitempty"`
+	// DesiredImages represents all the desired images of various components
+	DesiredImages *ComponentImages `json:"desiredImages,omitempty"`
+}
+
+// ComponentImages is a collection of all the images managed by the operator
+type ComponentImages struct {
+	Stork         string `json:"stork,omitempty"`
+	UserInterface string `json:"userInterface,omitempty"`
+	Autopilot     string `json:"autopilot,omitempty"`
 }
 
 // Storage represents cluster storage details
