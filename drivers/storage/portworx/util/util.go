@@ -234,6 +234,14 @@ func GetPortworxVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 	return pxVersion
 }
 
+// GetImageTag returns the tag of the image
+func GetImageTag(image string) string {
+	if parts := strings.Split(image, ":"); len(parts) >= 2 {
+		return parts[len(parts)-1]
+	}
+	return ""
+}
+
 // SelectorLabels returns the labels that are used to select Portworx pods
 func SelectorLabels() map[string]string {
 	return map[string]string{

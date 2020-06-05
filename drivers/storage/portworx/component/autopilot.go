@@ -228,7 +228,8 @@ func (c *autopilot) createDeployment(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if cluster.Spec.Autopilot.Image == "" {
+	imageName := getDesiredAutopilotImage(cluster)
+	if imageName == "" {
 		return fmt.Errorf("autopilot image cannot be empty")
 	}
 
@@ -275,10 +276,7 @@ func (c *autopilot) createDeployment(
 	sort.Strings(argList)
 	command := append([]string{"/autopilot"}, argList...)
 
-	imageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
-		cluster.Spec.Autopilot.Image,
-	)
+	imageName = util.GetImageURN(cluster.Spec.CustomImageRegistry, imageName)
 
 	envVars := []v1.EnvVar{
 		{
@@ -472,6 +470,15 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	}
 
 	return deployment
+}
+
+func getDesiredAutopilotImage(cluster *corev1alpha1.StorageCluster) string {
+	if cluster.Spec.Autopilot.Image != "" {
+		return cluster.Spec.Autopilot.Image
+	} else if cluster.Status.DesiredImages != nil {
+		return cluster.Status.DesiredImages.Autopilot
+	}
+	return ""
 }
 
 type envByName []v1.EnvVar

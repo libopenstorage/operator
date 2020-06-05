@@ -25,14 +25,8 @@ import (
 const (
 	storkDriverName                   = "pxd"
 	defaultPortworxImage              = "portworx/oci-monitor"
-	defaultPortworxVersion            = "2.3.2"
-	edgePortworxVersion               = "edge"
-	defaultLighthouseImage            = "portworx/px-lighthouse:2.0.6"
-	defaultAutopilotImage             = "portworx/autopilot:1.0.0"
-	defaultStorkImage                 = "openstorage/stork:2.3.1"
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
-	defaultNodeWiperImage             = "portworx/px-node-wiper:2.1.4"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
 	envKeyPortworxSharedSecretKey     = "PORTWORX_AUTH_SYSTEM_KEY"
@@ -40,6 +34,11 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
+)
+
+var (
+	// getVersionManifest is extracted as a var for testing
+	getVersionManifest = manifest.GetVersions
 )
 
 type portworx struct {
@@ -117,31 +116,66 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
-	releases, err := manifest.NewReleaseManifest()
-	if err != nil {
-		logrus.Warnf(err.Error())
+	if toUpdate.Status.DesiredImages == nil {
+		toUpdate.Status.DesiredImages = &corev1alpha1.ComponentImages{}
 	}
 
-	isPortworxEnabled := pxutil.IsPortworxEnabled(toUpdate)
-	if len(strings.TrimSpace(toUpdate.Spec.Image)) == 0 {
-		toUpdate.Spec.Image = defaultPortworxImage + ":" + defaultPortworxImageVersion(releases)
+	if pxutil.IsPortworxEnabled(toUpdate) {
+		if toUpdate.Spec.Stork == nil {
+			toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{
+				Enabled: true,
+			}
+		}
+		setPortworxDefaults(toUpdate)
 	}
 
-	t, err := newTemplate(toUpdate)
-	if err != nil {
-		return
+	removeDeprecatedFields(toUpdate)
+
+	toUpdate.Spec.Image = strings.TrimSpace(toUpdate.Spec.Image)
+	toUpdate.Spec.Version = pxutil.GetImageTag(toUpdate.Spec.Image)
+	pxVersionChanged := toUpdate.Spec.Version == "" ||
+		toUpdate.Spec.Version != toUpdate.Status.Version
+
+	if pxVersionChanged || hasComponentChanged(toUpdate) {
+		release := getVersionManifest(toUpdate)
+		if toUpdate.Spec.Version == "" {
+			if toUpdate.Spec.Image == "" {
+				toUpdate.Spec.Image = defaultPortworxImage
+			}
+			toUpdate.Spec.Image = toUpdate.Spec.Image + ":" + release.PortworxVersion
+			toUpdate.Spec.Version = release.PortworxVersion
+		}
+		toUpdate.Status.Version = toUpdate.Spec.Version
+
+		if autoUpdateStork(toUpdate) &&
+			(toUpdate.Status.DesiredImages.Stork == "" || pxVersionChanged) {
+			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
+		}
+
+		if autoUpdateAutopilot(toUpdate) &&
+			(toUpdate.Status.DesiredImages.Autopilot == "" || pxVersionChanged) {
+			toUpdate.Status.DesiredImages.Autopilot = release.Components.Autopilot
+		}
+
+		if autoUpdateLighthouse(toUpdate) &&
+			(toUpdate.Status.DesiredImages.UserInterface == "" || pxVersionChanged) {
+			toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
+		}
 	}
 
-	if isPortworxEnabled {
-		setPortworxDefaults(toUpdate, t)
+	if !autoUpdateStork(toUpdate) {
+		toUpdate.Status.DesiredImages.Stork = ""
 	}
 
-	components, err := componentVersions(releases, t.pxVersion)
-	if err != nil {
-		logrus.Warnf(err.Error())
+	if !autoUpdateAutopilot(toUpdate) {
+		toUpdate.Status.DesiredImages.Autopilot = ""
 	}
 
-	setComponentDefaults(toUpdate, components, isPortworxEnabled)
+	if !autoUpdateLighthouse(toUpdate) {
+		toUpdate.Status.DesiredImages.UserInterface = ""
+	}
+
+	setDefaultAutopilotProviders(toUpdate)
 }
 
 func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
@@ -193,8 +227,7 @@ func (p *portworx) DeleteStorage(
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
-		nodeWiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, cluster.Spec.Env)
-		if err := u.RunNodeWiper(nodeWiperImage, removeData); err != nil {
+		if err := u.RunNodeWiper(removeData); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
 				Status: corev1alpha1.ClusterOperationFailed,
@@ -282,39 +315,10 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNo
 	return nil
 }
 
-func componentVersions(releases *manifest.ReleaseManifest, pxVersion *version.Version) (manifest.Release, error) {
-	if releases == nil {
-		return manifest.Release{}, fmt.Errorf("release manifest is empty")
-	}
-	components, err := releases.GetFromVersion(pxVersion)
+func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
+	t, err := newTemplate(toUpdate)
 	if err != nil {
-		logrus.Debugf("Could not find an entry for portworx %v in release manifest: %v", pxVersion, err)
-		components, err = releases.Get(edgePortworxVersion)
-		if err != nil {
-			logrus.Debugf("Could not find an entry for 'edge' in release manifest: %v", err)
-			components, err = releases.GetDefault()
-			if err != nil {
-				return manifest.Release{}, fmt.Errorf("error getting default release from manifest: %v", err)
-			}
-		}
-	}
-	return *components, nil
-}
-
-func defaultPortworxImageVersion(releases *manifest.ReleaseManifest) string {
-	if releases != nil && len(releases.DefaultRelease) > 0 {
-		return releases.DefaultRelease
-	}
-	return defaultPortworxVersion
-}
-
-func setPortworxDefaults(
-	toUpdate *corev1alpha1.StorageCluster,
-	t *template,
-) {
-	partitions := strings.Split(toUpdate.Spec.Image, ":")
-	if len(partitions) > 1 {
-		toUpdate.Spec.Version = partitions[len(partitions)-1]
+		return
 	}
 
 	if toUpdate.Spec.Kvdb == nil {
@@ -408,89 +412,105 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	toUpdate.Spec.Nodes = updatedNodeSpecs
 }
 
-func setComponentDefaults(
+func setDefaultAutopilotProviders(
 	toUpdate *corev1alpha1.StorageCluster,
-	components manifest.Release,
-	isPortworxEnabled bool,
 ) {
-	// Use the lighthouse image from release manifest if the current image is not locked,
-	// else keep using the existing image. If the current image is empty then use the
-	// default image from manifest else a hardcoded one if absent in manifest.
-	if toUpdate.Spec.UserInterface != nil &&
-		toUpdate.Spec.UserInterface.Enabled {
-		toUpdate.Spec.UserInterface.Image = strings.TrimSpace(toUpdate.Spec.UserInterface.Image)
-		if len(components.Lighthouse) > 0 {
-			if !toUpdate.Spec.UserInterface.LockImage ||
-				len(toUpdate.Spec.UserInterface.Image) == 0 {
-				toUpdate.Spec.UserInterface.Image = components.Lighthouse
-			}
-		} else if len(toUpdate.Spec.UserInterface.Image) == 0 {
-			toUpdate.Spec.UserInterface.Image = defaultLighthouseImage
-		}
-	}
-
-	// Use the autopilot image from release manifest if the current image is not locked,
-	// else keep using the existing image. If the current image is empty then use the
-	// default image from manifest else a hardcoded one if absent in manifest.
-	if toUpdate.Spec.Autopilot != nil &&
-		toUpdate.Spec.Autopilot.Enabled {
-		toUpdate.Spec.Autopilot.Image = strings.TrimSpace(toUpdate.Spec.Autopilot.Image)
-		if len(components.Autopilot) > 0 {
-			if !toUpdate.Spec.Autopilot.LockImage ||
-				len(toUpdate.Spec.Autopilot.Image) == 0 {
-				toUpdate.Spec.Autopilot.Image = components.Autopilot
-			}
-		} else if len(toUpdate.Spec.Autopilot.Image) == 0 {
-			toUpdate.Spec.Autopilot.Image = defaultAutopilotImage
-		}
-
-		if len(toUpdate.Spec.Autopilot.Providers) == 0 {
-			toUpdate.Spec.Autopilot.Providers = []corev1alpha1.DataProviderSpec{
-				{
-					Name: "default",
-					Type: "prometheus",
-					Params: map[string]string{
-						"url": "http://prometheus:9090",
-					},
+	if toUpdate.Spec.Autopilot != nil && toUpdate.Spec.Autopilot.Enabled &&
+		len(toUpdate.Spec.Autopilot.Providers) == 0 {
+		toUpdate.Spec.Autopilot.Providers = []corev1alpha1.DataProviderSpec{
+			{
+				Name: "default",
+				Type: "prometheus",
+				Params: map[string]string{
+					"url": "http://prometheus:9090",
 				},
-			}
+			},
 		}
+	}
+}
+
+func removeDeprecatedFields(
+	cluster *corev1alpha1.StorageCluster,
+) {
+	// For new clusters with this version of the operator we don't
+	// want to reset the images if they are present
+	existingCluster := cluster.Spec.Version != ""
+	// If the image has been reset once, we should not do it again,
+	// as the user could have chosen to override the image manually.
+	// status.version is a newly introduced field and will be
+	// populated first time when this version of operator runs.
+	alreadyDone := cluster.Status.Version != ""
+
+	// Remove the deprecated lockImage flag from all components
+	if cluster.Spec.Stork != nil {
+		if existingCluster && !alreadyDone && !cluster.Spec.Stork.LockImage {
+			cluster.Spec.Stork.Image = ""
+		}
+		cluster.Spec.Stork.LockImage = false
 	}
 
-	// Enable stork by default, only if portworx is enabled
-	if toUpdate.Spec.Stork == nil && isPortworxEnabled {
-		toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{
-			Enabled: true,
+	if cluster.Spec.Autopilot != nil {
+		if existingCluster && !alreadyDone && !cluster.Spec.Autopilot.LockImage {
+			cluster.Spec.Autopilot.Image = ""
 		}
+		cluster.Spec.Autopilot.LockImage = false
 	}
-	// Use the stork image from release manifest if the current image is not locked,
-	// else keep using the existing image. If the current image is empty then use the
-	// default image from manifest else a hardcoded one if absent in manifest.
-	if toUpdate.Spec.Stork != nil &&
-		toUpdate.Spec.Stork.Enabled {
-		toUpdate.Spec.Stork.Image = strings.TrimSpace(toUpdate.Spec.Stork.Image)
-		if len(components.Stork) > 0 {
-			if !toUpdate.Spec.Stork.LockImage ||
-				len(toUpdate.Spec.Stork.Image) == 0 {
-				toUpdate.Spec.Stork.Image = components.Stork
-			}
-		} else if len(toUpdate.Spec.Stork.Image) == 0 {
-			toUpdate.Spec.Stork.Image = defaultStorkImage
+
+	if cluster.Spec.UserInterface != nil {
+		if existingCluster && !alreadyDone && !cluster.Spec.UserInterface.LockImage {
+			cluster.Spec.UserInterface.Image = ""
 		}
+		cluster.Spec.UserInterface.LockImage = false
 	}
 
 	// If the deprecated metrics flag is set, then remove it and set the corresponding
 	// exportMetrics flag in Prometheus spec.
-	if toUpdate.Spec.Monitoring != nil &&
-		toUpdate.Spec.Monitoring.EnableMetrics != nil {
-		if *toUpdate.Spec.Monitoring.EnableMetrics {
-			if toUpdate.Spec.Monitoring.Prometheus == nil {
-				toUpdate.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
+	if cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.EnableMetrics != nil {
+		if *cluster.Spec.Monitoring.EnableMetrics {
+			if cluster.Spec.Monitoring.Prometheus == nil {
+				cluster.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
 			}
-			toUpdate.Spec.Monitoring.Prometheus.ExportMetrics = true
+			cluster.Spec.Monitoring.Prometheus.ExportMetrics = true
 		}
-		toUpdate.Spec.Monitoring.EnableMetrics = nil
+		cluster.Spec.Monitoring.EnableMetrics = nil
 	}
+}
+
+func hasComponentChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return hasStorkChanged(cluster) ||
+		hasAutopilotChanged(cluster) ||
+		hasLighthouseChanged(cluster)
+}
+
+func hasStorkChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return autoUpdateStork(cluster) && cluster.Status.DesiredImages.Stork == ""
+}
+
+func hasAutopilotChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return autoUpdateAutopilot(cluster) && cluster.Status.DesiredImages.Autopilot == ""
+}
+
+func hasLighthouseChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return autoUpdateLighthouse(cluster) && cluster.Status.DesiredImages.UserInterface == ""
+}
+
+func autoUpdateStork(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.Stork != nil &&
+		cluster.Spec.Stork.Enabled &&
+		cluster.Spec.Stork.Image == ""
+}
+
+func autoUpdateAutopilot(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.Autopilot != nil &&
+		cluster.Spec.Autopilot.Enabled &&
+		cluster.Spec.Autopilot.Image == ""
+}
+
+func autoUpdateLighthouse(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.UserInterface != nil &&
+		cluster.Spec.UserInterface.Enabled &&
+		cluster.Spec.UserInterface.Image == ""
 }
 
 func init() {

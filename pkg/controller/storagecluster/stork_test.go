@@ -292,6 +292,60 @@ func TestStorkWithoutImage(t *testing.T) {
 	)
 }
 
+func TestStorkWithDesiredImage(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				Stork: "osd/stork:status",
+			},
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(cluster).
+		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+		AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "osd/stork:status", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+
+	// If image is present in spec, then use that instead of desired image
+	cluster.Spec.Stork.Image = "osd/stork:spec"
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "osd/stork:spec", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestStorkImageChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

@@ -66,7 +66,7 @@ const (
 // UninstallPortworx provides a set of APIs to uninstall portworx
 type UninstallPortworx interface {
 	// RunNodeWiper runs the node-wiper daemonset
-	RunNodeWiper(wiperImage string, removeData bool) error
+	RunNodeWiper(removeData bool) error
 	// GetNodeWiperStatus returns the status of the node-wiper daemonset
 	// returns the no. of completed, in progress and total pods
 	GetNodeWiperStatus() (int32, int32, int32, error)
@@ -150,10 +150,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 	return kv.DeleteTree(u.cluster.Name)
 }
 
-func (u *uninstallPortworx) RunNodeWiper(
-	wiperImage string,
-	removeData bool,
-) error {
+func (u *uninstallPortworx) RunNodeWiper(removeData bool) error {
 	pwxHostPathRoot := "/"
 
 	enabled, err := strconv.ParseBool(u.cluster.Annotations[annotationIsPKS])
@@ -168,8 +165,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 		"name": pxNodeWiperDaemonSetName,
 	}
 
+	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		wiperImage = defaultNodeWiperImage
+		release := getVersionManifest(u.cluster)
+		wiperImage = release.Components.NodeWiper
 	}
 	wiperImage = util.GetImageURN(u.cluster.Spec.CustomImageRegistry, wiperImage)
 
