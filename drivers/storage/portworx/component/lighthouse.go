@@ -52,7 +52,6 @@ const (
 
 	defaultLhConfigSyncImage     = "portworx/lh-config-sync"
 	defaultLhStorkConnectorImage = "portworx/lh-stork-connector"
-	defaultLighthouseImageTag    = "2.0.4"
 )
 
 type lighthouse struct {
@@ -275,7 +274,8 @@ func (c *lighthouse) createDeployment(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if cluster.Spec.UserInterface.Image == "" {
+	lhImage := getDesiredLighthouseImage(cluster)
+	if lhImage == "" {
 		return fmt.Errorf("lighthouse image cannot be empty")
 	}
 
@@ -297,23 +297,29 @@ func (c *lighthouse) createDeployment(
 	existingConfigSyncImage := k8sutil.GetImageFromDeployment(existingDeployment, LhConfigSyncContainerName)
 	existingStorkConnectorImage := k8sutil.GetImageFromDeployment(existingDeployment, LhStorkConnectorContainerName)
 
-	imageTag := defaultLighthouseImageTag
-	partitions := strings.Split(cluster.Spec.UserInterface.Image, ":")
+	imageTag := ""
+	partitions := strings.Split(lhImage, ":")
 	if len(partitions) > 1 {
 		imageTag = partitions[len(partitions)-1]
 	}
 
 	configSyncImage := k8sutil.GetValueFromEnv(EnvKeyLhConfigSyncImage, cluster.Spec.UserInterface.Env)
 	if len(configSyncImage) == 0 {
-		configSyncImage = fmt.Sprintf("%s:%s", defaultLhConfigSyncImage, imageTag)
+		configSyncImage = defaultLhConfigSyncImage
+		if len(imageTag) > 0 {
+			configSyncImage = fmt.Sprintf("%s:%s", configSyncImage, imageTag)
+		}
 	}
 	storkConnectorImage := k8sutil.GetValueFromEnv(EnvKeyLhStorkConnectorImage, cluster.Spec.UserInterface.Env)
 	if len(storkConnectorImage) == 0 {
-		storkConnectorImage = fmt.Sprintf("%s:%s", defaultLhStorkConnectorImage, imageTag)
+		storkConnectorImage = defaultLhStorkConnectorImage
+		if len(imageTag) > 0 {
+			storkConnectorImage = fmt.Sprintf("%s:%s", storkConnectorImage, imageTag)
+		}
 	}
 
 	imageRegistry := cluster.Spec.CustomImageRegistry
-	lhImage := util.GetImageURN(imageRegistry, cluster.Spec.UserInterface.Image)
+	lhImage = util.GetImageURN(imageRegistry, lhImage)
 	configSyncImage = util.GetImageURN(imageRegistry, configSyncImage)
 	storkConnectorImage = util.GetImageURN(imageRegistry, storkConnectorImage)
 
@@ -479,6 +485,15 @@ func getLighthouseDeploymentSpec(
 	}
 
 	return deployment
+}
+
+func getDesiredLighthouseImage(cluster *corev1alpha1.StorageCluster) string {
+	if cluster.Spec.UserInterface.Image != "" {
+		return cluster.Spec.UserInterface.Image
+	} else if cluster.Status.DesiredImages != nil {
+		return cluster.Status.DesiredImages.UserInterface
+	}
+	return ""
 }
 
 func getLighthouseLabels() map[string]string {

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	version "github.com/hashicorp/go-version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,16 +27,16 @@ func TestErrorWhenReadingLocalManifest(t *testing.T) {
 	defer unmaskLoadManifest()
 	// Error reading manifest file
 	readManifest = func(filename string) ([]byte, error) {
-		require.Equal(t, path.Join(ManifestDir, LocalReleaseManifest), filename)
+		require.Equal(t, path.Join(manifestDir, localReleaseManifest), filename)
 		return nil, fmt.Errorf("file read error")
 	}
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("1.2.3").Get()
 	require.EqualError(t, err, "file read error")
 	require.Nil(t, r)
 
 	// Error parsing manifest file
 	maskLoadManifest("invalid-yaml")
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("1.2.3").Get()
 	require.Error(t, err)
 	require.Nil(t, r)
 }
@@ -46,7 +45,7 @@ func TestManifestWithoutReleases(t *testing.T) {
 	defer unmaskLoadManifest()
 	// Empty manifest file
 	maskLoadManifest("")
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("1.2.3").Get()
 	require.Equal(t, ErrEmptyReleases, err)
 	require.Nil(t, r)
 
@@ -54,7 +53,7 @@ func TestManifestWithoutReleases(t *testing.T) {
 	maskLoadManifest(`
 defaultRelease: 1.2.3
 `)
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("1.2.3").Get()
 	require.Equal(t, ErrEmptyReleases, err)
 	require.Nil(t, r)
 
@@ -63,7 +62,7 @@ defaultRelease: 1.2.3
 defaultRelease: 1.2.3
 releases:
 `)
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("1.2.3").Get()
 	require.Equal(t, ErrEmptyReleases, err)
 	require.Nil(t, r)
 }
@@ -76,7 +75,7 @@ releases:
   1.2.3:
     stork: stork/image
 `)
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("1.2.3").Get()
 	require.Equal(t, ErrInvalidDefaultRelease, err)
 	require.Nil(t, r)
 }
@@ -96,65 +95,22 @@ releases:
     autopilot: autopilot/image:1.2.4
 `)
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("1.2.3").Get()
 	require.NoError(t, err)
-	require.Equal(t, "1.2.3", r.DefaultRelease)
-	require.Len(t, r.Releases, 2)
-	require.Equal(t, "stork/image:1.2.3", r.Releases["1.2.3"].Stork)
-	require.Equal(t, "lighthouse/image:1.2.3", r.Releases["1.2.3"].Lighthouse)
-	require.Equal(t, "autopilot/image:1.2.3", r.Releases["1.2.3"].Autopilot)
-	require.Equal(t, "stork/image:1.2.4", r.Releases["1.2.4"].Stork)
-	require.Equal(t, "lighthouse/image:1.2.4", r.Releases["1.2.4"].Lighthouse)
-	require.Equal(t, "autopilot/image:1.2.4", r.Releases["1.2.4"].Autopilot)
+	require.Equal(t, "1.2.3", r.PortworxVersion)
+	require.Equal(t, "stork/image:1.2.3", r.Components.Stork)
+	require.Equal(t, "lighthouse/image:1.2.3", r.Components.Lighthouse)
+	require.Equal(t, "autopilot/image:1.2.3", r.Components.Autopilot)
+
+	r, err = newDeprecatedManifest("1.2.4").Get()
+	require.NoError(t, err)
+	require.Equal(t, "1.2.4", r.PortworxVersion)
+	require.Equal(t, "stork/image:1.2.4", r.Components.Stork)
+	require.Equal(t, "lighthouse/image:1.2.4", r.Components.Lighthouse)
+	require.Equal(t, "autopilot/image:1.2.4", r.Components.Autopilot)
 }
 
-func TestMissingDefaultShouldMakeLatestAsDefault(t *testing.T) {
-	defer unmaskLoadManifest()
-	// Choose the latest version as default if absent
-	maskLoadManifest(`
-releases:
-  1.2.3:
-    stork: stork/image:1.2.3
-  1.2.4:
-    stork: stork/image:1.2.4
-  1.2.4-rc1:
-    stork: stork/image:1.2.4-rc1
-`)
-
-	r, err := NewReleaseManifest()
-	require.NoError(t, err)
-	require.Len(t, r.Releases, 3)
-	require.Equal(t, "1.2.4", r.DefaultRelease)
-
-	release, err := r.GetDefault()
-	require.NoError(t, err)
-	require.Equal(t, "stork/image:1.2.4", release.Stork)
-
-	// Non-semvar versions are considered newer than semvar versions.
-	// Non-semvar versions are sorted amongst themselves lexicographically.
-	maskLoadManifest(`
-releases:
-  test1:
-    stork: stork/image:test1
-  1.2.3:
-    stork: stork/image:1.2.3
-  test3:
-    stork: stork/image:test3
-  test2:
-    stork: stork/image:test2
-`)
-
-	r, err = NewReleaseManifest()
-	require.NoError(t, err)
-	require.Len(t, r.Releases, 4)
-	require.Equal(t, "test3", r.DefaultRelease)
-
-	release, err = r.GetDefault()
-	require.NoError(t, err)
-	require.Equal(t, "stork/image:test3", release.Stork)
-}
-
-func TestGetOnReleaseManifest(t *testing.T) {
+func TestGetWithReleaseManifestWithInvalidVersions(t *testing.T) {
 	defer unmaskLoadManifest()
 	maskLoadManifest(`
 releases:
@@ -164,31 +120,24 @@ releases:
     lighthouse: lighthouse/image:1.2.3
 `)
 
-	r, err := NewReleaseManifest()
+	// Should return the release if found even if it's not semvar
+	release, err := newDeprecatedManifest("master").Get()
 	require.NoError(t, err)
-
-	// Should return the release if found
-	release, err := r.Get("master")
-	require.NoError(t, err)
-	require.Equal(t, "lighthouse/image:master", release.Lighthouse)
-
-	// Should return a matching semver release if not found directly
-	release, err = r.Get("1.2.3.0")
-	require.NoError(t, err)
-	require.Equal(t, "lighthouse/image:1.2.3", release.Lighthouse)
+	require.Equal(t, "lighthouse/image:master", release.Components.Lighthouse)
+	require.Equal(t, "master", release.PortworxVersion)
 
 	// Should return error if not found
-	release, err = r.Get("1.2.3.1")
+	release, err = newDeprecatedManifest("1.2.3.1").Get()
 	require.Equal(t, ErrReleaseNotFound, err)
 	require.Nil(t, release)
 
 	// Should return error if not found directly and is invalid semver
-	release, err = r.Get("latest")
+	release, err = newDeprecatedManifest("latest").Get()
 	require.Contains(t, err.Error(), "invalid version")
 	require.Nil(t, release)
 }
 
-func TestGetFromVersionOnReleaseManifest(t *testing.T) {
+func TestGetBySemvarVersionOnReleaseManifest(t *testing.T) {
 	defer unmaskLoadManifest()
 	maskLoadManifest(`
 releases:
@@ -198,47 +147,48 @@ releases:
     autopilot: autopilot/image:1.2.3.0
 `)
 
-	r, err := NewReleaseManifest()
-	require.NoError(t, err)
-
-	// Should return err if nil version passed
-	release, err := r.GetFromVersion(nil)
-	require.Equal(t, ErrReleaseNotFound, err)
+	// Should return err if empty version passed
+	release, err := newDeprecatedManifest("").Get()
+	require.Contains(t, err.Error(), "invalid version")
 	require.Nil(t, release)
 
 	// Should return a matching version found
-	v, _ := version.NewSemver("1.2.3.0")
-	release, err = r.GetFromVersion(v)
+	release, err = newDeprecatedManifest("1.2.3.0").Get()
 	require.NoError(t, err)
-	require.Equal(t, "autopilot/image:1.2.3.0", release.Autopilot)
+	require.Equal(t, "autopilot/image:1.2.3.0", release.Components.Autopilot)
+	require.Equal(t, "1.2.3.0", release.PortworxVersion)
 
 	// Should return even if a matching semver version found
-	v, _ = version.NewSemver("1.2.3")
-	release, err = r.GetFromVersion(v)
+	release, err = newDeprecatedManifest("1.2.3").Get()
 	require.NoError(t, err)
-	require.Equal(t, "autopilot/image:1.2.3.0", release.Autopilot)
+	require.Equal(t, "autopilot/image:1.2.3.0", release.Components.Autopilot)
+	require.Equal(t, "1.2.3", release.PortworxVersion)
+
+	// Should return if semvar does not match exactly
+	release, err = newDeprecatedManifest("1.2").Get()
+	require.Equal(t, ErrReleaseNotFound, err)
+	require.Nil(t, release)
 
 	// Should return err if not found
-	v, _ = version.NewSemver("1.2.3.1")
-	release, err = r.GetFromVersion(v)
+	release, err = newDeprecatedManifest("1.2.3.1").Get()
 	require.Equal(t, ErrReleaseNotFound, err)
 	require.Nil(t, release)
 }
 
 func TestReadingLocalManifestFile(t *testing.T) {
+	setupHTTPFailure()
 	linkPath := path.Join(
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, ManifestDir)
+	os.Symlink(linkPath, manifestDir)
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("2.1.5").Get()
 	require.NoError(t, err)
-	require.Equal(t, "2.1.5", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "openstorage/stork:2.2.4", r.Releases["2.1.5"].Stork)
-	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Releases["2.1.5"].Lighthouse)
-	require.Equal(t, "portworx/autopilot:0.0.0", r.Releases["2.1.5"].Autopilot)
+	require.Equal(t, "2.1.5", r.PortworxVersion)
+	require.Equal(t, "openstorage/stork:2.2.4", r.Components.Stork)
+	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Components.Lighthouse)
+	require.Equal(t, "portworx/autopilot:0.0.0", r.Components.Autopilot)
 }
 
 func TestRemoteManifest(t *testing.T) {
@@ -246,12 +196,12 @@ func TestRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, ManifestDir)
-	os.Remove(path.Join(linkPath, RemoteReleaseManifest))
+	os.Symlink(linkPath, manifestDir)
+	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
-		os.Remove(path.Join(linkPath, RemoteReleaseManifest))
-		os.RemoveAll(ManifestDir)
+		os.Remove(path.Join(linkPath, remoteReleaseManifest))
+		os.RemoveAll(manifestDir)
 		unmaskLoadManifest()
 		setupHTTPFailure()
 		refreshInterval = manifestRefreshInterval
@@ -268,23 +218,21 @@ releases:
 		}, nil
 	}
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("3.2.1").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "3.2.1", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:3.2.1", r.Releases["3.2.1"].Stork)
+	require.Equal(t, "3.2.1", r.PortworxVersion)
+	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
 
 	// Should load the same file again instead of downloading it again
 	// We are mocking the http call to return error so we know it is not called
 	setupHTTPFailure()
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("3.2.1").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "3.2.1", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:3.2.1", r.Releases["3.2.1"].Stork)
+	require.Equal(t, "3.2.1", r.PortworxVersion)
+	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
 
 	// If loading the existing remote manifest fails, we should download it again
 	readManifest = func(filename string) ([]byte, error) {
@@ -300,12 +248,11 @@ releases:
 		}, nil
 	}
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("3.5.0").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "3.5.0", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:3.5.0", r.Releases["3.5.0"].Stork)
+	require.Equal(t, "3.5.0", r.PortworxVersion)
+	require.Equal(t, "stork/image:3.5.0", r.Components.Stork)
 	unmaskLoadManifest()
 
 	// If the manifest is stale, then re-download it
@@ -322,41 +269,38 @@ releases:
 		}, nil
 	}
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("4.0.0").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "4.0.0", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:4.0.0", r.Releases["4.0.0"].Stork)
+	require.Equal(t, "4.0.0", r.PortworxVersion)
+	require.Equal(t, "stork/image:4.0.0", r.Components.Stork)
 
 	// If the manifest is stale, and the download fails then return the stale manifest
 	setupHTTPFailure()
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("4.0.0").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "4.0.0", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:4.0.0", r.Releases["4.0.0"].Stork)
+	require.Equal(t, "4.0.0", r.PortworxVersion)
+	require.Equal(t, "stork/image:4.0.0", r.Components.Stork)
 
 	// If manifest is stale, download fails and unable to read previous file,
 	// then load the local manifest file
 	setupHTTPFailure()
 	readManifest = func(filename string) ([]byte, error) {
-		if strings.Contains(filename, RemoteReleaseManifest) {
+		if strings.Contains(filename, remoteReleaseManifest) {
 			return nil, fmt.Errorf("remote manifest read error")
 		}
 		return readReleaseManifest(filename)
 	}
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("2.1.5").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "2.1.5", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "openstorage/stork:2.2.4", r.Releases["2.1.5"].Stork)
-	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Releases["2.1.5"].Lighthouse)
-	require.Equal(t, "portworx/autopilot:0.0.0", r.Releases["2.1.5"].Autopilot)
+	require.Equal(t, "2.1.5", r.PortworxVersion)
+	require.Equal(t, "openstorage/stork:2.2.4", r.Components.Stork)
+	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Components.Lighthouse)
+	require.Equal(t, "portworx/autopilot:0.0.0", r.Components.Autopilot)
 }
 
 func TestInvalidRemoteManifest(t *testing.T) {
@@ -364,12 +308,12 @@ func TestInvalidRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, ManifestDir)
-	os.Remove(path.Join(linkPath, RemoteReleaseManifest))
+	os.Symlink(linkPath, manifestDir)
+	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
-		os.Remove(path.Join(linkPath, RemoteReleaseManifest))
-		os.RemoveAll(ManifestDir)
+		os.Remove(path.Join(linkPath, remoteReleaseManifest))
+		os.RemoveAll(manifestDir)
 		unmaskLoadManifest()
 		setupHTTPFailure()
 		refreshInterval = manifestRefreshInterval
@@ -387,7 +331,7 @@ func TestInvalidRemoteManifest(t *testing.T) {
 		return nil, fmt.Errorf("read error")
 	}
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("2.0.0").Get()
 	require.Error(t, err)
 	require.Nil(t, r)
 
@@ -395,14 +339,13 @@ func TestInvalidRemoteManifest(t *testing.T) {
 	// then use the local manifest
 	unmaskLoadManifest()
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("2.1.5").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "2.1.5", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "openstorage/stork:2.2.4", r.Releases["2.1.5"].Stork)
-	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Releases["2.1.5"].Lighthouse)
-	require.Equal(t, "portworx/autopilot:0.0.0", r.Releases["2.1.5"].Autopilot)
+	require.Equal(t, "2.1.5", r.PortworxVersion)
+	require.Equal(t, "openstorage/stork:2.2.4", r.Components.Stork)
+	require.Equal(t, "portworx/px-lighthouse:2.0.4", r.Components.Lighthouse)
+	require.Equal(t, "portworx/autopilot:0.0.0", r.Components.Autopilot)
 
 	// If downloaded manifest is invalid, use the existing remote manifest
 	httpGet = func(url string) (*http.Response, error) {
@@ -414,8 +357,12 @@ releases:
 `))),
 		}, nil
 	}
-	_, err = NewReleaseManifest()
+
+	r, err = newDeprecatedManifest("2.0.0").Get()
 	require.NoError(t, err)
+
+	require.Equal(t, "2.0.0", r.PortworxVersion)
+	require.Equal(t, "stork/image:2.0.0", r.Components.Stork)
 
 	refreshInterval = func() time.Duration {
 		return 0 * time.Second
@@ -426,12 +373,11 @@ releases:
 		}, nil
 	}
 
-	r, err = NewReleaseManifest()
+	r, err = newDeprecatedManifest("2.0.0").Get()
 	require.NoError(t, err)
 
-	require.Equal(t, "2.0.0", r.DefaultRelease)
-	require.Len(t, r.Releases, 1)
-	require.Equal(t, "stork/image:2.0.0", r.Releases["2.0.0"].Stork)
+	require.Equal(t, "2.0.0", r.PortworxVersion)
+	require.Equal(t, "stork/image:2.0.0", r.Components.Stork)
 }
 
 func TestFailureToWriteRemoteManifest(t *testing.T) {
@@ -452,7 +398,7 @@ releases:
 		return nil, fmt.Errorf("read error")
 	}
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("2.0.0").Get()
 	require.Error(t, err)
 	require.Nil(t, r)
 }
@@ -471,7 +417,7 @@ func TestFailureToReadManifestFromResponse(t *testing.T) {
 		return nil, fmt.Errorf("read error")
 	}
 
-	r, err := NewReleaseManifest()
+	r, err := newDeprecatedManifest("2.0.0").Get()
 	require.Error(t, err)
 	require.Nil(t, r)
 }
@@ -485,22 +431,22 @@ func TestCustomURLToDownloadManifest(t *testing.T) {
 
 	// Use custom url if env variable set
 	customURL := "http://custom-url"
-	os.Setenv(EnvKeyReleaseManifestURL, customURL)
+	os.Setenv(envKeyReleaseManifestURL, customURL)
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, customURL, url)
 		return nil, fmt.Errorf("http error")
 	}
 
-	NewReleaseManifest()
+	newDeprecatedManifest("2.0.0").Get()
 
 	// Use default url if no env variable set
-	os.Unsetenv(EnvKeyReleaseManifestURL)
+	os.Unsetenv(envKeyReleaseManifestURL)
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, defaultReleaseManifestURL, url)
 		return nil, fmt.Errorf("http error")
 	}
 
-	NewReleaseManifest()
+	newDeprecatedManifest("2.0.0").Get()
 }
 
 func maskLoadManifest(manifest string) {
@@ -514,7 +460,7 @@ func unmaskLoadManifest() {
 }
 
 func manifestCleanup(t *testing.M) {
-	os.RemoveAll(ManifestDir)
+	os.RemoveAll(manifestDir)
 }
 
 func setupHTTPFailure() {

@@ -1048,14 +1048,17 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageClus
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
-	// Update the spec only if anything has changed
-	if !reflect.DeepEqual(cluster.Spec, toUpdate.Spec) || !foundDeleteFinalizer {
-		err := c.client.Update(context.TODO(), toUpdate)
-		if err != nil {
+	// Update the cluster only if anything has changed
+	if !reflect.DeepEqual(cluster, toUpdate) {
+		toUpdate.DeepCopyInto(cluster)
+		if err := c.client.Update(context.TODO(), cluster); err != nil {
 			return err
 		}
-		cluster.Spec = *toUpdate.Spec.DeepCopy()
-		cluster.Finalizers = append([]string{}, toUpdate.Finalizers...)
+
+		cluster.Status = *toUpdate.Status.DeepCopy()
+		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
+			return err
+		}
 	}
 	return nil
 }

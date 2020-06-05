@@ -1870,8 +1870,54 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	)
 }
 
+func TestLighthouseWithDesiredImage(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				UserInterface: "portworx/px-lighthouse:status",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
+	require.Equal(t, "portworx/px-lighthouse:status", image)
+
+	// If image is present in spec, then use that instead of the desired image
+	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:spec"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
+	require.Equal(t, "portworx/px-lighthouse:spec", image)
+}
+
 func TestLighthouseImageChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
@@ -2033,11 +2079,11 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
 	require.Equal(t, "portworx/px-lighthouse", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync:2.0.4", image)
+	require.Equal(t, "portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "portworx/lh-config-sync:2.0.4", image)
+	require.Equal(t, "portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector:2.0.4", image)
+	require.Equal(t, "portworx/lh-stork-connector", image)
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
@@ -2279,6 +2325,51 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	require.Equal(t, cluster.Namespace,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+}
+
+func TestAutopilotWithDesiredImage(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				Autopilot: "portworx/autopilot:status",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image := k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
+	require.Equal(t, "portworx/autopilot:status", image)
+
+	// If image is present in spec, then use that instead of the desired image
+	cluster.Spec.Autopilot.Image = "portworx/autopilot:spec"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	image = k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
+	require.Equal(t, "portworx/autopilot:spec", image)
 }
 
 func TestAutopilotImageChange(t *testing.T) {

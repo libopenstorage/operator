@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: px-node-wiper
-        image: portworx/px-node-wiper:2.1.4
+        image: portworx/px-node-wiper:2.3.4
         imagePullPolicy: Always
         args:
         - -w

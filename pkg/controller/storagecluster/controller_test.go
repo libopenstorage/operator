@@ -484,6 +484,18 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, corev1alpha1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Empty(t, cluster.Spec.UpdateStrategy.RollingUpdate)
+
+	// Should update cluster even if status is modified
+	driver.EXPECT().
+		SetDefaultsOnStorageCluster(gomock.Any()).
+		Do(func(cluster *corev1alpha1.StorageCluster) {
+			cluster.Status.Version = "1.2.3"
+		})
+
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, "1.2.3", cluster.Status.Version)
 }
 
 func TestReconcileForNonExistingCluster(t *testing.T) {

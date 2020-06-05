@@ -457,7 +457,8 @@ func (c *Controller) createStorkDeployment(
 	if err != nil {
 		return err
 	}
-	if cluster.Spec.Stork.Image == "" {
+	imageName := getDesiredStorkImage(cluster)
+	if imageName == "" {
 		return fmt.Errorf("stork image cannot be empty")
 	}
 
@@ -503,10 +504,7 @@ func (c *Controller) createStorkDeployment(
 	sort.Strings(argList)
 	command := append([]string{"/stork"}, argList...)
 
-	imageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
-		cluster.Spec.Stork.Image,
-	)
+	imageName = util.GetImageURN(cluster.Spec.CustomImageRegistry, imageName)
 
 	envVars := c.Driver.GetStorkEnvList(cluster)
 	for _, env := range cluster.Spec.Stork.Env {
@@ -859,6 +857,15 @@ func getStorkSchedDeploymentSpec(
 	}
 
 	return deployment
+}
+
+func getDesiredStorkImage(cluster *corev1alpha1.StorageCluster) string {
+	if cluster.Spec.Stork.Image != "" {
+		return cluster.Spec.Stork.Image
+	} else if cluster.Status.DesiredImages != nil {
+		return cluster.Status.DesiredImages.Stork
+	}
+	return ""
 }
 
 func getStorkServiceLabels() map[string]string {
