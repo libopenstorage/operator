@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/sirupsen/logrus"
@@ -45,7 +46,19 @@ func GetVersions(
 ) *Version {
 	var m manifest
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
-	m = newDeprecatedManifest(ver)
+	currPxVer, err := version.NewSemver(ver)
+	if err == nil {
+		pxVer2_6, _ := version.NewVersion("2.6")
+		if currPxVer.LessThan(pxVer2_6) {
+			m = newDeprecatedManifest(ver)
+		}
+	}
+
+	if m == nil {
+		// TODO: Use config map if present for air-gapped clusters
+		m = newRemoteManifest(cluster)
+	}
+
 	rel, err := m.Get()
 	if err != nil {
 		logrus.Errorf("Using default versions due to: %v", err)

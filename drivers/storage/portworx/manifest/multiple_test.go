@@ -14,15 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	manifestCleanup(m)
-	setupHTTPFailure()
-	code := m.Run()
-	manifestCleanup(m)
-	httpGet = http.Get
-	os.Exit(code)
-}
-
 func TestErrorWhenReadingLocalManifest(t *testing.T) {
 	defer unmaskLoadManifest()
 	// Error reading manifest file
