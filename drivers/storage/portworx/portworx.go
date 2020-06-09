@@ -137,7 +137,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Spec.Version != toUpdate.Status.Version
 
 	if pxVersionChanged || hasComponentChanged(toUpdate) {
-		release := getVersionManifest(toUpdate, p.recorder)
+		release := getVersionManifest(toUpdate, p.k8sClient, p.recorder)
 		if toUpdate.Spec.Version == "" {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
