@@ -4602,6 +4602,7 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 func manifestSetup() {
 	getVersionManifest = func(
 		_ *corev1alpha1.StorageCluster,
+		_ client.Client,
 		_ record.EventRecorder,
 	) *manifest.Version {
 		return &manifest.Version{

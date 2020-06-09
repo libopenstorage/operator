@@ -11,9 +11,11 @@ import (
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -40,7 +42,49 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, nil)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil)
+	require.Equal(t, expected, rel)
+}
+
+func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "2.6.0",
+		Components: Release{
+			Stork:      "image/stork:2.6.0",
+			Autopilot:  "image/autopilo:2.6.0",
+			Lighthouse: "image/lighthouse:2.6.0",
+			NodeWiper:  "image/nodewiper:2.6.0",
+		},
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			versionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+	// Add this to ensure configmap takes precedence over remote endpoint
+	httpGet = func(url string) (*http.Response, error) {
+		return &http.Response{
+			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+version: 3.2.1
+components:
+  stork: stork/image:3.2.1
+`))),
+		}, nil
+	}
+
+	rel := GetVersions(cluster, k8sClient, nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -56,7 +100,7 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, recorder)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder)
 	require.Equal(t, defaultRelease(), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -104,7 +148,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, nil)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -141,7 +185,7 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, recorder)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder)
 	require.Equal(t, defaultRelease(), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -180,7 +224,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, nil)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -207,12 +251,43 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, recorder)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder)
 	require.Equal(t, defaultRelease(), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Using default version",
 			v1.EventTypeWarning, util.FailedComponentReason))
+}
+
+func TestManifestWithoutPortworxVersion(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "2.6.0",
+		Components: Release{
+			Stork:      "image/stork:2.6.0",
+			Autopilot:  "image/autopilo:2.6.0",
+			Lighthouse: "image/lighthouse:2.6.0",
+			NodeWiper:  "image/nodewiper:2.6.0",
+		},
+	}
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image",
+		},
+	}
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			versionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+
+	r := GetVersions(cluster, k8sClient, nil)
+	require.Equal(t, expected, r)
 }
 
 func TestManifestWithPartialComponents(t *testing.T) {
@@ -239,7 +314,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		NodeWiper: "image/nodewiper:3.0.0",
 	}
 
-	rel := GetVersions(cluster, nil)
+	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil)
 	fillDefaults(expected)
 	require.Equal(t, expected, rel)
 	require.Equal(t, "image/stork:3.0.0", rel.Components.Stork)
@@ -250,7 +325,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, use all default components
 	expected.Components = Release{}
 
-	rel = GetVersions(cluster, nil)
+	rel = GetVersions(cluster, testutil.FakeK8sClient(), nil)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease().Components, rel.Components)
 }

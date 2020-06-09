@@ -10,7 +10,6 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -59,18 +58,6 @@ func downloadVersionManifest(
 	}
 
 	return parseVersionManifest(body)
-}
-
-func parseVersionManifest(content []byte) (*Version, error) {
-	manifest := &Version{}
-	err := yaml.Unmarshal(content, manifest)
-	if err != nil {
-		return nil, err
-	}
-	if manifest.PortworxVersion == "" {
-		return nil, ErrReleaseNotFound
-	}
-	return manifest, nil
 }
 
 func manifestURLFromVersion(version string) string {

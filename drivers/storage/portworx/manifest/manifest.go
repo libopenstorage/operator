@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -48,6 +49,7 @@ type manifest interface {
 // that are to be installed with given cluster version.
 func GetVersions(
 	cluster *corev1alpha1.StorageCluster,
+	k8sClient client.Client,
 	recorder record.EventRecorder,
 ) *Version {
 	var m manifest
@@ -61,8 +63,11 @@ func GetVersions(
 	}
 
 	if m == nil {
-		// TODO: Use config map if present for air-gapped clusters
-		m = newRemoteManifest(cluster)
+		m, err = newConfigMapManifest(k8sClient, cluster)
+		if err != nil {
+			logrus.Debugf("Unable to get versions from ConfigMap. %v", err)
+			m = newRemoteManifest(cluster)
+		}
 	}
 
 	rel, err := m.Get()
