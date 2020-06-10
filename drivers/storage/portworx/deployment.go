@@ -6,6 +6,9 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
@@ -780,6 +783,36 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
+	// Add JWT Issuer from spec if security is enabled
+	if pxutil.SecurityEnabled(t.cluster) {
+		envMap[pxutil.EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
+			Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: pxutil.SecurityPXAuthKeysSecretName,
+					},
+					Key: component.SecuritySharedSecretKey,
+				},
+			},
+		}
+		envMap[pxutil.EnvKeyPortworxAuthSystemKey] = &v1.EnvVar{
+			Name: pxutil.EnvKeyPortworxAuthSystemKey,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: pxutil.SecurityPXAuthKeysSecretName,
+					},
+					Key: component.SecuritySystemSecretKey,
+				},
+			},
+		}
+		envMap[pxutil.EnvKeyPortworxAuthJwtIssuer] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxAuthJwtIssuer,
+			Value: *t.cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+		}
+	}
+
 	envList := make([]v1.EnvVar, 0)
 	for _, env := range envMap {
 		envList = append(envList, *env)
@@ -929,6 +962,12 @@ func (t *template) loadKvdbAuth() map[string]string {
 
 func stringPtr(val string) *string {
 	return &val
+}
+
+func metav1DurationPtr(val time.Duration) *metav1.Duration {
+	return &metav1.Duration{
+		Duration: val,
+	}
 }
 
 func boolPtr(val bool) *bool {

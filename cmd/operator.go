@@ -16,7 +16,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"

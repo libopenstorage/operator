@@ -4,26 +4,27 @@ import (
 	"context"
 	"testing"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSetupContextWithToken(t *testing.T) {
-	var pxAuthSecretKey = "auth-secret"
-
 	var defaultSecret = []v1.Secret{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "px-secret",
+				Name:      pxutil.SecurityPXAuthKeysSecretName,
 				Namespace: "ns",
 			},
 			Data: map[string][]byte{
-				pxAuthSecretKey: []byte("mysecret"),
+				component.SecuritySharedSecretKey: []byte("mysecret"),
 			},
 		},
 	}
@@ -31,7 +32,7 @@ func TestSetupContextWithToken(t *testing.T) {
 	var emptySecret = []v1.Secret{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "empty-secret",
+				Name:      pxutil.SecurityPXAuthKeysSecretName,
 				Namespace: "ns",
 			},
 			// no data in secret
@@ -42,12 +43,12 @@ func TestSetupContextWithToken(t *testing.T) {
 	var defaultConfigMap = []v1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "px-cm",
+				Name:      pxutil.SecurityPXAuthKeysSecretName,
 				Namespace: "ns",
 			},
 			// no data in secret
 			Data: map[string]string{
-				pxAuthSecretKey: "mysecret",
+				component.SecuritySharedSecretKey: "mysecret",
 			},
 		},
 	}
@@ -55,7 +56,7 @@ func TestSetupContextWithToken(t *testing.T) {
 	var emptyConfigMap = []v1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "px-cm",
+				Name:      pxutil.SecurityPXAuthKeysSecretName,
 				Namespace: "ns",
 			},
 			// no data in secret
@@ -76,15 +77,6 @@ func TestSetupContextWithToken(t *testing.T) {
 		expectTokenAdded bool
 		expectedError    string
 	}{
-		{
-			name:              "Cluster with no auth env variables should not add token",
-			pxSecretName:      "",
-			pxSharedSecretKey: "",
-			initialSecrets:    defaultSecret,
-
-			expectTokenAdded: false,
-			expectError:      false,
-		},
 		{
 			name:              "Shared secret key should add token to context",
 			pxSecretName:      "",
@@ -116,7 +108,7 @@ func TestSetupContextWithToken(t *testing.T) {
 
 			expectTokenAdded: false,
 			expectError:      true,
-			expectedError:    "failed to get auth secret: failed to find env var value auth-secret in secret empty-secret in namespace ns",
+			expectedError:    "failed to get auth secret: failed to find env var value shared-secret in secret px-auth-keys in namespace ns",
 		},
 		{
 			name:              "Empty config map should fail",
@@ -125,7 +117,7 @@ func TestSetupContextWithToken(t *testing.T) {
 
 			expectTokenAdded: false,
 			expectError:      true,
-			expectedError:    "failed to get auth secret: failed to find env var value auth-secret in configmap px-cm in namespace ns",
+			expectedError:    "failed to get auth secret: failed to find env var value shared-secret in configmap px-auth-keys in namespace ns",
 		},
 		{
 			name:           "Nonexistent secret should fail",
@@ -134,7 +126,7 @@ func TestSetupContextWithToken(t *testing.T) {
 
 			expectTokenAdded: false,
 			expectError:      true,
-			expectedError:    "failed to get auth secret: secrets \"px-secret\" not found",
+			expectedError:    "failed to get auth secret: secrets \"px-auth-keys\" not found",
 		},
 	}
 	for _, tc := range tt {
@@ -156,12 +148,18 @@ func TestSetupContextWithToken(t *testing.T) {
 					Name:      "testcluster",
 					Namespace: "ns",
 				},
+				Spec: corev1alpha1.StorageClusterSpec{
+					Security: &corev1alpha1.SecuritySpec{
+						Enabled: true,
+					},
+				},
 			}
+			setSecuritySpecDefaults(cluster)
 
 			// set env vars
 			if tc.pxSharedSecretKey != "" {
 				cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
-					Name:  envKeyPortworxSharedSecretKey,
+					Name:  pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 					Value: tc.pxSharedSecretKey,
 				})
 			}
@@ -169,13 +167,13 @@ func TestSetupContextWithToken(t *testing.T) {
 			// assign valueFrom secrets
 			if tc.pxSecretName != "" {
 				cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
-					Name: envKeyPortworxSharedSecretKey,
+					Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 					ValueFrom: &v1.EnvVarSource{
 						SecretKeyRef: &v1.SecretKeySelector{
 							LocalObjectReference: v1.LocalObjectReference{
 								Name: tc.pxSecretName,
 							},
-							Key: pxAuthSecretKey,
+							Key: component.SecuritySharedSecretKey,
 						},
 					},
 				})
@@ -184,13 +182,13 @@ func TestSetupContextWithToken(t *testing.T) {
 			// assign valueFrom configmaps
 			if tc.pxConfigMapName != "" {
 				cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
-					Name: envKeyPortworxSharedSecretKey,
+					Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 					ValueFrom: &v1.EnvVarSource{
 						ConfigMapKeyRef: &v1.ConfigMapKeySelector{
 							LocalObjectReference: v1.LocalObjectReference{
 								Name: tc.pxConfigMapName,
 							},
-							Key: pxAuthSecretKey,
+							Key: component.SecuritySharedSecretKey,
 						},
 					},
 				})
@@ -199,7 +197,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			p := portworx{
 				k8sClient: k8sClient,
 			}
-			ctx, err := p.setupContextWithToken(context.Background(), cluster)
+			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
 			if tc.expectError {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedError)

@@ -2304,6 +2304,61 @@ func TestStorageNodeConfig(t *testing.T) {
 	}
 }
 
+func TestSecuritySetEnv(t *testing.T) {
+	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(k8sClient)
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
+	setSecuritySpecDefaults(cluster)
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	expectedJwtIssuer := "portworx.io"
+	var jwtIssuer string
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthJwtIssuer {
+			jwtIssuer = env.Value
+			break
+		}
+	}
+	assert.Equal(t, expectedJwtIssuer, jwtIssuer)
+
+	expectedJwtIssuer = "test.io"
+	cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = stringPtr(expectedJwtIssuer)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	var sharedSecretSet bool
+	var systemSecretSet bool
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthJwtIssuer {
+			jwtIssuer = env.Value
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthJwtSharedSecret {
+			sharedSecretSet = true
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemKey {
+			systemSecretSet = true
+		}
+	}
+	assert.Equal(t, expectedJwtIssuer, jwtIssuer)
+	assert.True(t, sharedSecretSet)
+	assert.True(t, systemSecretSet)
+
+}
+
 func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)

@@ -2,15 +2,24 @@ package util
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/pkg/auth"
+	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -81,9 +90,21 @@ const (
 	// EnvKeyDisableCSIAlpha key for the env var that is used to disable CSI
 	// alpha features
 	EnvKeyDisableCSIAlpha = "PORTWORX_DISABLE_CSI_ALPHA"
+	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
+	EnvKeyPortworxEnableTLS = "PX_ENABLE_TLS"
+	// EnvKeyPortworxAuthSystemKey is the environment variable name for the PX security secret
+	EnvKeyPortworxAuthSystemKey = "PORTWORX_AUTH_SYSTEM_KEY"
+	// EnvKeyPortworxAuthJwtSharedSecret is an environment variable defining the PX Security JWT secret
+	EnvKeyPortworxAuthJwtSharedSecret = "PORTWORX_AUTH_JWT_SHAREDSECRET"
+	// EnvKeyPortworxAuthJwtIssuer is an environment variable defining the PX Security JWT Issuer
+	EnvKeyPortworxAuthJwtIssuer = "PORTWORX_AUTH_JWT_ISSUER"
+
+	// SecurityPXAuthKeysSecretName is the admin secret name for PX security
+	SecurityPXAuthKeysSecretName = "px-auth-keys"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
+	defaultSDKPort     = 9020
 )
 
 var (
@@ -254,8 +275,20 @@ func StorageClusterKind() schema.GroupVersionKind {
 	return corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
 }
 
-// GetValueFromEnv returns the value of v1.EnvVar Value or ValueFrom
-func GetValueFromEnv(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
+// GetClusterEnvVarValue returns the environment variable value for a cluster.
+// Note: This strictly gets the Value, not ValueFrom
+func GetClusterEnvVarValue(ctx context.Context, cluster *corev1alpha1.StorageCluster, envKey string) string {
+	for _, envVar := range cluster.Spec.Env {
+		if envVar.Name == envKey {
+			return envVar.Value
+		}
+	}
+
+	return ""
+}
+
+// GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
+func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
 	if valueFrom := envVar.ValueFrom; valueFrom != nil {
 		if valueFrom.SecretKeyRef != nil {
 			key := valueFrom.SecretKeyRef.Key
@@ -270,12 +303,18 @@ func GetValueFromEnv(ctx context.Context, client client.Client, envVar *v1.EnvVa
 			if err != nil {
 				return "", err
 			}
-			pxAuthSecret := secret.Data[key]
-			if len(pxAuthSecret) == 0 {
+			value := secret.Data[key]
+			if len(value) == 0 {
 				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
 			}
 
-			return string(pxAuthSecret), nil
+			decodedValue := make([]byte, len(value))
+			_, err = base64.StdEncoding.Decode(decodedValue, value)
+			if err != nil {
+				return "", err
+			}
+
+			return string(decodedValue), nil
 		} else if valueFrom.ConfigMapKeyRef != nil {
 			cmName := valueFrom.ConfigMapKeyRef.Name
 			key := valueFrom.ConfigMapKeyRef.Key
@@ -303,4 +342,178 @@ func GetValueFromEnv(ctx context.Context, client client.Client, envVar *v1.EnvVa
 
 func getSpecsBaseDir() string {
 	return PortworxSpecsDir
+}
+
+// GetPortworxConn returns a new Portworx SDK client
+func GetPortworxConn(sdkConn *grpc.ClientConn, k8sClient client.Client, namespace string) (*grpc.ClientConn, error) {
+	if sdkConn != nil {
+		return sdkConn, nil
+	}
+
+	pxService := &v1.Service{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      PortworxServiceName,
+			Namespace: namespace,
+		},
+		pxService,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get k8s service spec: %v", err)
+	} else if len(pxService.Spec.ClusterIP) == 0 {
+		return nil, fmt.Errorf("failed to get endpoint for portworx volume driver")
+	}
+
+	endpoint := pxService.Spec.ClusterIP
+	sdkPort := defaultSDKPort
+
+	// Get the ports from service
+	for _, pxServicePort := range pxService.Spec.Ports {
+		if pxServicePort.Name == PortworxSDKPortName && pxServicePort.Port != 0 {
+			sdkPort = int(pxServicePort.Port)
+		}
+	}
+
+	endpoint = fmt.Sprintf("%s:%d", endpoint, sdkPort)
+	return GetGrpcConn(endpoint)
+}
+
+// GetGrpcConn creates a new gRPC connection to a given endpoint
+func GetGrpcConn(endpoint string) (*grpc.ClientConn, error) {
+	dialOptions, err := GetDialOptions(IsTLSEnabled())
+	if err != nil {
+		return nil, err
+	}
+	sdkConn, err := grpcserver.Connect(endpoint, dialOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to GRPC server [%s]: %v", endpoint, err)
+	}
+	return sdkConn, nil
+}
+
+// GetDialOptions is a gRPC utility to get dial options for a connection
+func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
+	if !tls {
+		return []grpc.DialOption{grpc.WithInsecure()}, nil
+	}
+	capool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load CA system certs: %v", err)
+	}
+	return []grpc.DialOption{grpc.WithTransportCredentials(
+		credentials.NewClientTLSFromCert(capool, ""),
+	)}, nil
+}
+
+// IsTLSEnabled checks if TLS is enabled for the operator
+func IsTLSEnabled() bool {
+	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEnableTLS))
+	return err == nil && enabled
+}
+
+// GetOperatorToken generates an auth token given a secret key
+func GetOperatorToken(
+	cluster *corev1alpha1.StorageCluster,
+	secretkey string,
+) (string, error) {
+	claims := &auth.Claims{
+		Issuer:  *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+		Subject: "operator@portworx.io",
+		Name:    "operator communications",
+		Email:   "operator@portworx.io",
+		Roles:   []string{"system.admin"},
+		Groups:  []string{"*"},
+	}
+
+	signature, err := auth.NewSignatureSharedSecret(string(secretkey))
+	if err != nil {
+		return "", err
+	}
+	token, err := auth.Token(claims, signature, &auth.Options{
+		Expiration: time.Now().
+			Add(cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime.Duration).Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// GetAdminSecret gets the admin secret from a pre-configured environment variable
+func GetAdminSecret(
+	ctx context.Context,
+	cluster *corev1alpha1.StorageCluster,
+	k8sClient client.Client,
+) (string, error) {
+	adminSecret := v1.Secret{}
+
+	// if configured in cluster spec env, get it and use it.
+	// this allows for configmap support too.
+	for _, envVar := range cluster.Spec.Env {
+		if envVar.Name == EnvKeyPortworxAuthJwtSharedSecret {
+			val, err := GetValueFromEnvVar(ctx, k8sClient, &envVar, cluster.Namespace)
+			if err != nil {
+				return "", err
+			}
+
+			return val, nil
+		}
+	}
+
+	// check for px-auth-keys secret
+	err := k8sClient.Get(ctx,
+		types.NamespacedName{
+			Name:      SecurityPXAuthKeysSecretName,
+			Namespace: cluster.Namespace,
+		},
+		&adminSecret,
+	)
+	if err != nil {
+		return "", err
+	}
+	encodedSecret, ok := adminSecret.Data["shared-secret"]
+	if !ok || len(encodedSecret) <= 0 {
+		return "", fmt.Errorf("failed to get admin token from secret %s/%s", cluster.Namespace, SecurityPXAuthKeysSecretName)
+	}
+
+	decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(encodedSecret)))
+	_, err = base64.StdEncoding.Decode(decodedSecret, encodedSecret)
+	if err != nil {
+		return "", err
+	}
+
+	return string(decodedSecret), nil
+}
+
+// SecurityEnabled checks if the security flag is set for a cluster
+func SecurityEnabled(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.Security != nil && cluster.Spec.Security.Enabled
+}
+
+// SetupContextWithToken Gets token or from secret for authenticating with the SDK server
+func SetupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageCluster, k8sClient client.Client) (context.Context, error) {
+	// auth not declared in cluster spec
+	if !SecurityEnabled(cluster) {
+		return ctx, nil
+	}
+
+	pxAuthSecret, err := GetAdminSecret(ctx, cluster, k8sClient)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get auth secret: %v", err.Error())
+	}
+	if pxAuthSecret == "" {
+		return ctx, nil
+	}
+
+	// Generate token and add to metadata
+	token, err := GetOperatorToken(cluster, string(pxAuthSecret))
+	if err != nil {
+		return ctx, fmt.Errorf("failed to create operator token: %v", err.Error())
+	}
+	md := metadata.New(map[string]string{
+		"authorization": "bearer " + token,
+	})
+	return metadata.NewOutgoingContext(ctx, md), nil
 }
