@@ -10,9 +10,11 @@ import (
 	"testing"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 	"k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 )
 
 func TestManifestWithNewerPortworxVersion(t *testing.T) {
@@ -38,7 +40,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -52,9 +54,14 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 			Image: "px/image:2.6.0",
 		},
 	}
+	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, recorder)
 	require.Equal(t, defaultRelease(), rel)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using default version",
+			v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestManifestWithOlderPortworxVersion(t *testing.T) {
@@ -97,7 +104,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -132,9 +139,14 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 			Image: "px/image:2.5.0",
 		},
 	}
+	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, recorder)
 	require.Equal(t, defaultRelease(), rel)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using default version",
+			v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
@@ -168,7 +180,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, nil)
 	require.Equal(t, expected, rel)
 }
 
@@ -193,9 +205,14 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 			},
 		},
 	}
+	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, recorder)
 	require.Equal(t, defaultRelease(), rel)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using default version",
+			v1.EventTypeWarning, util.FailedComponentReason))
 }
 
 func TestManifestWithPartialComponents(t *testing.T) {
@@ -222,7 +239,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		NodeWiper: "image/nodewiper:3.0.0",
 	}
 
-	rel := GetVersions(cluster)
+	rel := GetVersions(cluster, nil)
 	fillDefaults(expected)
 	require.Equal(t, expected, rel)
 	require.Equal(t, "image/stork:3.0.0", rel.Components.Stork)
@@ -233,7 +250,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, use all default components
 	expected.Components = Release{}
 
-	rel = GetVersions(cluster)
+	rel = GetVersions(cluster, nil)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease().Components, rel.Components)
 }

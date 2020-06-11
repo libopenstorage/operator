@@ -23,7 +23,7 @@ const (
 	remoteReleaseManifest = "portworx-releases-remote.yaml"
 	// defaultReleaseManifestURL is the URL to download the latest release manifest
 	defaultReleaseManifestURL = "https://install.portworx.com/versions"
-	// defaultManifestRefreshInternal internal after which we should refresh the
+	// defaultManifestRefreshInterval interval after which we should refresh the
 	// downloaded release manifest
 	defaultManifestRefreshInterval = time.Hour
 )

@@ -4600,7 +4600,10 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 }
 
 func manifestSetup() {
-	getVersionManifest = func(_ *corev1alpha1.StorageCluster) *manifest.Version {
+	getVersionManifest = func(
+		_ *corev1alpha1.StorageCluster,
+		_ record.EventRecorder,
+	) *manifest.Version {
 		return &manifest.Version{
 			PortworxVersion: "2.1.5.1",
 			Components: manifest.Release{
