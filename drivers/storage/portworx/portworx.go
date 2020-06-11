@@ -137,7 +137,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Spec.Version != toUpdate.Status.Version
 
 	if pxVersionChanged || hasComponentChanged(toUpdate) {
-		release := getVersionManifest(toUpdate)
+		release := getVersionManifest(toUpdate, p.recorder)
 		if toUpdate.Spec.Version == "" {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
@@ -227,7 +227,7 @@ func (p *portworx) DeleteStorage(
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		// Run the node wiper
-		if err := u.RunNodeWiper(removeData); err != nil {
+		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
 				Status: corev1alpha1.ClusterOperationFailed,

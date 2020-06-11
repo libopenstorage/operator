@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -66,7 +67,7 @@ const (
 // UninstallPortworx provides a set of APIs to uninstall portworx
 type UninstallPortworx interface {
 	// RunNodeWiper runs the node-wiper daemonset
-	RunNodeWiper(removeData bool) error
+	RunNodeWiper(removeData bool, recorder record.EventRecorder) error
 	// GetNodeWiperStatus returns the status of the node-wiper daemonset
 	// returns the no. of completed, in progress and total pods
 	GetNodeWiperStatus() (int32, int32, int32, error)
@@ -150,7 +151,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 	return kv.DeleteTree(u.cluster.Name)
 }
 
-func (u *uninstallPortworx) RunNodeWiper(removeData bool) error {
+func (u *uninstallPortworx) RunNodeWiper(removeData bool, recorder record.EventRecorder) error {
 	pwxHostPathRoot := "/"
 
 	enabled, err := strconv.ParseBool(u.cluster.Annotations[annotationIsPKS])
@@ -167,7 +168,7 @@ func (u *uninstallPortworx) RunNodeWiper(removeData bool) error {
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := getVersionManifest(u.cluster)
+		release := getVersionManifest(u.cluster, recorder)
 		wiperImage = release.Components.NodeWiper
 	}
 	wiperImage = util.GetImageURN(u.cluster.Spec.CustomImageRegistry, wiperImage)

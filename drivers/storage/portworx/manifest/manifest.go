@@ -1,10 +1,15 @@
 package manifest
 
 import (
+	"fmt"
+
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/sirupsen/logrus"
+	"k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 )
 
 const (
@@ -43,6 +48,7 @@ type manifest interface {
 // that are to be installed with given cluster version.
 func GetVersions(
 	cluster *corev1alpha1.StorageCluster,
+	recorder record.EventRecorder,
 ) *Version {
 	var m manifest
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
@@ -61,7 +67,9 @@ func GetVersions(
 
 	rel, err := m.Get()
 	if err != nil {
-		logrus.Errorf("Using default versions due to: %v", err)
+		msg := fmt.Sprintf("Using default version due to: %v", err)
+		logrus.Error(msg)
+		recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
 		return defaultRelease()
 	}
 
