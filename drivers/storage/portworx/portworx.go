@@ -137,7 +137,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Spec.Version != toUpdate.Status.Version
 
 	if pxVersionChanged || hasComponentChanged(toUpdate) {
-		release := getVersionManifest(toUpdate, p.k8sClient, p.recorder)
+		release := getVersionManifest(toUpdate, p.k8sClient, p.recorder, p.k8sVersion)
 		if toUpdate.Spec.Version == "" {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
@@ -161,6 +161,16 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 			(toUpdate.Status.DesiredImages.UserInterface == "" || pxVersionChanged) {
 			toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
 		}
+
+		if pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) &&
+			(toUpdate.Status.DesiredImages.CSIProvisioner == "" || pxVersionChanged) {
+			toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
+			toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
+			toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
+			toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
+			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
+			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
+		}
 	}
 
 	if !autoUpdateStork(toUpdate) {
@@ -173,6 +183,15 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 
 	if !autoUpdateLighthouse(toUpdate) {
 		toUpdate.Status.DesiredImages.UserInterface = ""
+	}
+
+	if !pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) {
+		toUpdate.Status.DesiredImages.CSIProvisioner = ""
+		toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = ""
+		toUpdate.Status.DesiredImages.CSIDriverRegistrar = ""
+		toUpdate.Status.DesiredImages.CSIAttacher = ""
+		toUpdate.Status.DesiredImages.CSIResizer = ""
+		toUpdate.Status.DesiredImages.CSISnapshotter = ""
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
@@ -347,14 +366,15 @@ func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
 
 	setNodeSpecDefaults(toUpdate)
 
-	if toUpdate.Spec.Placement == nil || toUpdate.Spec.Placement.NodeAffinity == nil {
-		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
-						{
-							MatchExpressions: t.getSelectorRequirements(),
-						},
+	if toUpdate.Spec.Placement == nil {
+		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{}
+	}
+	if toUpdate.Spec.Placement.NodeAffinity == nil {
+		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: t.getSelectorRequirements(),
 					},
 				},
 			},
@@ -480,7 +500,8 @@ func removeDeprecatedFields(
 func hasComponentChanged(cluster *corev1alpha1.StorageCluster) bool {
 	return hasStorkChanged(cluster) ||
 		hasAutopilotChanged(cluster) ||
-		hasLighthouseChanged(cluster)
+		hasLighthouseChanged(cluster) ||
+		hasCSIChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1alpha1.StorageCluster) bool {
@@ -493,6 +514,11 @@ func hasAutopilotChanged(cluster *corev1alpha1.StorageCluster) bool {
 
 func hasLighthouseChanged(cluster *corev1alpha1.StorageCluster) bool {
 	return autoUpdateLighthouse(cluster) && cluster.Status.DesiredImages.UserInterface == ""
+}
+
+func hasCSIChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) &&
+		cluster.Status.DesiredImages.CSIProvisioner == ""
 }
 
 func autoUpdateStork(cluster *corev1alpha1.StorageCluster) bool {

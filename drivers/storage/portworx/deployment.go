@@ -471,22 +471,22 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 		},
 	}
 
-	if t.csiConfig.NodeRegistrar != "" {
+	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
 		container.Name = "csi-node-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			t.csiConfig.NodeRegistrar,
+			t.cluster.Status.DesiredImages.CSINodeDriverRegistrar,
 		)
 		container.Args = []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
 			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
 		}
-	} else if t.csiConfig.Registrar != "" {
+	} else if t.cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
 		container.Name = "csi-driver-registrar"
 		container.Image = util.GetImageURN(
 			t.cluster.Spec.CustomImageRegistry,
-			t.csiConfig.Registrar,
+			t.cluster.Status.DesiredImages.CSIDriverRegistrar,
 		)
 		container.Args = []string{
 			"--v=5",
