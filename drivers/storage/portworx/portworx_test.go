@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/dbg"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
@@ -4604,14 +4605,21 @@ func manifestSetup() {
 		_ *corev1alpha1.StorageCluster,
 		_ client.Client,
 		_ record.EventRecorder,
+		_ *version.Version,
 	) *manifest.Version {
 		return &manifest.Version{
 			PortworxVersion: "2.1.5.1",
 			Components: manifest.Release{
-				Stork:      "openstorage/stork:2.3.4",
-				Autopilot:  "portworx/autopilot:2.3.4",
-				Lighthouse: "portworx/px-lighthouse:2.3.4",
-				NodeWiper:  "portworx/px-node-wiper:2.3.4",
+				Stork:                  "openstorage/stork:2.3.4",
+				Autopilot:              "portworx/autopilot:2.3.4",
+				Lighthouse:             "portworx/px-lighthouse:2.3.4",
+				NodeWiper:              "portworx/px-node-wiper:2.3.4",
+				CSIProvisioner:         "quay.io/k8scsi/csi-provisioner:v1.2.3",
+				CSIAttacher:            "quay.io/k8scsi/csi-attacher:v1.2.3",
+				CSIDriverRegistrar:     "quay.io/k8scsi/driver-registrar:v1.2.3",
+				CSINodeDriverRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+				CSISnapshotter:         "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+				CSIResizer:             "quay.io/k8scsi/csi-resizer:v1.2.3",
 			},
 		}
 	}

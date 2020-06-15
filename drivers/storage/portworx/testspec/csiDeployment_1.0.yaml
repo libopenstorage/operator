@@ -28,7 +28,7 @@ spec:
       containers:
         - name: csi-external-provisioner
           imagePullPolicy: Always
-          image: quay.io/openstorage/csi-provisioner:v1.4.0-1
+          image: quay.io/k8scsi/csi-provisioner:v1.2.3
           args:
             - "--v=3"
             - "--provisioner=com.openstorage.pxd"
@@ -45,7 +45,7 @@ spec:
               mountPath: /csi
         - name: csi-attacher
           imagePullPolicy: Always
-          image: quay.io/openstorage/csi-attacher:v1.2.1-1
+          image: quay.io/k8scsi/csi-attacher:v1.2.3
           args:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"
@@ -61,7 +61,7 @@ spec:
               mountPath: /csi
         - name: csi-snapshotter
           imagePullPolicy: Always
-          image: quay.io/openstorage/csi-snapshotter:v1.2.2-1
+          image: quay.io/k8scsi/csi-snapshotter:v1.2.3
           args:
             - "--v=3"
             - "--csi-address=$(ADDRESS)"

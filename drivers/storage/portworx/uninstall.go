@@ -151,7 +151,10 @@ func (u *uninstallPortworx) WipeMetadata() error {
 	return kv.DeleteTree(u.cluster.Name)
 }
 
-func (u *uninstallPortworx) RunNodeWiper(removeData bool, recorder record.EventRecorder) error {
+func (u *uninstallPortworx) RunNodeWiper(
+	removeData bool,
+	recorder record.EventRecorder,
+) error {
 	pwxHostPathRoot := "/"
 
 	enabled, err := strconv.ParseBool(u.cluster.Annotations[annotationIsPKS])
@@ -168,7 +171,7 @@ func (u *uninstallPortworx) RunNodeWiper(removeData bool, recorder record.EventR
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := getVersionManifest(u.cluster, u.k8sClient, recorder)
+		release := getVersionManifest(u.cluster, u.k8sClient, recorder, nil)
 		wiperImage = release.Components.NodeWiper
 	}
 	wiperImage = util.GetImageURN(u.cluster.Spec.CustomImageRegistry, wiperImage)

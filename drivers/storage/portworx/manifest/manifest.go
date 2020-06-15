@@ -28,10 +28,16 @@ const (
 
 // Release is a single release object with images for different components
 type Release struct {
-	Stork      string `yaml:"stork,omitempty"`
-	Lighthouse string `yaml:"lighthouse,omitempty"`
-	Autopilot  string `yaml:"autopilot,omitempty"`
-	NodeWiper  string `yaml:"nodeWiper,omitempty"`
+	Stork                  string `yaml:"stork,omitempty"`
+	Lighthouse             string `yaml:"lighthouse,omitempty"`
+	Autopilot              string `yaml:"autopilot,omitempty"`
+	NodeWiper              string `yaml:"nodeWiper,omitempty"`
+	CSIDriverRegistrar     string `yaml:"csiDriverRegistrar,omitempty"`
+	CSINodeDriverRegistrar string `yaml:"csiNodeDriverRegistrar,omitempty"`
+	CSIProvisioner         string `yaml:"csiProvisioner,omitempty"`
+	CSIAttacher            string `yaml:"csiAttacher,omitempty"`
+	CSIResizer             string `yaml:"csiResizer,omitempty"`
+	CSISnapshotter         string `yaml:"csiSnapshotter,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -51,6 +57,7 @@ func GetVersions(
 	cluster *corev1alpha1.StorageCluster,
 	k8sClient client.Client,
 	recorder record.EventRecorder,
+	k8sVersion *version.Version,
 ) *Version {
 	var m manifest
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
@@ -75,14 +82,33 @@ func GetVersions(
 		msg := fmt.Sprintf("Using default version due to: %v", err)
 		logrus.Error(msg)
 		recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
-		return defaultRelease()
+		return defaultRelease(k8sVersion)
 	}
 
-	fillDefaults(rel)
+	fillDefaults(rel, k8sVersion)
 	return rel
 }
 
-func fillDefaults(rel *Version) {
+func defaultRelease(
+	k8sVersion *version.Version,
+) *Version {
+	rel := &Version{
+		PortworxVersion: DefaultPortworxVersion,
+		Components: Release{
+			Stork:      defaultStorkImage,
+			Autopilot:  defaultAutopilotImage,
+			Lighthouse: defaultLighthouseImage,
+			NodeWiper:  defaultNodeWiperImage,
+		},
+	}
+	fillCSIDefaults(rel, k8sVersion)
+	return rel
+}
+
+func fillDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
 	if rel.Components.Stork == "" {
 		rel.Components.Stork = defaultStorkImage
 	}
@@ -95,16 +121,26 @@ func fillDefaults(rel *Version) {
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
 	}
+	fillCSIDefaults(rel, k8sVersion)
 }
 
-func defaultRelease() *Version {
-	return &Version{
-		PortworxVersion: DefaultPortworxVersion,
-		Components: Release{
-			Stork:      defaultStorkImage,
-			Autopilot:  defaultAutopilotImage,
-			Lighthouse: defaultLighthouseImage,
-			NodeWiper:  defaultNodeWiperImage,
-		},
+func fillCSIDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if k8sVersion == nil || rel.Components.CSIProvisioner != "" {
+		return
 	}
+
+	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
+	csiGenerator := pxutil.NewCSIGenerator(
+		*k8sVersion, *pxVersion, false, false)
+	csiImages := csiGenerator.GetCSIImages()
+
+	rel.Components.CSIProvisioner = csiImages.Provisioner
+	rel.Components.CSIAttacher = csiImages.Attacher
+	rel.Components.CSIDriverRegistrar = csiImages.Registrar
+	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
+	rel.Components.CSIResizer = csiImages.Resizer
+	rel.Components.CSISnapshotter = csiImages.Snapshotter
 }

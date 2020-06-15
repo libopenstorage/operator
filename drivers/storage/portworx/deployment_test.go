@@ -1409,6 +1409,11 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 				string(pxutil.FeatureCSI): "True",
 			},
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				CSINodeDriverRegistrar: "csi/registrar",
+			},
+		},
 	}
 	driver := portworx{}
 
@@ -1596,6 +1601,11 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 				string(pxutil.FeatureCSI): "true",
 			},
 		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				CSIDriverRegistrar: "quay.io/k8scsi/driver-registrar:v0.4.2",
+			},
+		},
 	}
 
 	driver := portworx{}
@@ -1635,6 +1645,11 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 			Image: "portworx/oci-monitor:2.1.1",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				CSINodeDriverRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
 			},
 		},
 	}
@@ -1682,6 +1697,11 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 						Value: "portworx/oci-monitor:2.1.1-rc1",
 					},
 				},
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				CSINodeDriverRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
 			},
 		},
 	}
@@ -1750,6 +1770,11 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 						Value: "true",
 					},
 				},
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{
+				CSINodeDriverRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
 			},
 		},
 	}

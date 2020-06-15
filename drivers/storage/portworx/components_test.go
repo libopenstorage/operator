@@ -2709,6 +2709,7 @@ func TestCSIInstall(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2734,146 +2735,6 @@ func TestCSIInstall(t *testing.T) {
 	require.Len(t, clusterRoleList.Items, 2)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
-	actualCR := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
-	require.NoError(t, err)
-	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
-	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
-
-	// CSI ClusterRoleBinding
-	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = testutil.List(k8sClient, crbList)
-	require.NoError(t, err)
-	require.Len(t, crbList.Items, 2)
-
-	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "csiClusterRoleBinding.yaml")
-	actualCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualCRB, component.CSIClusterRoleBindingName, "")
-	require.NoError(t, err)
-	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
-	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
-	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
-
-	// CSI Service
-	serviceList := &v1.ServiceList{}
-	err = testutil.List(k8sClient, serviceList)
-	require.NoError(t, err)
-	require.Len(t, serviceList.Items, 3)
-
-	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
-	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, expectedService.Name, service.Name)
-	require.Equal(t, expectedService.Namespace, service.Namespace)
-	require.Len(t, service.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, service.OwnerReferences[0].Name)
-	require.Equal(t, expectedService.Labels, service.Labels)
-	require.Equal(t, expectedService.Spec, service.Spec)
-
-	// CSI StatefulSet
-	statefulSetList := &appsv1.StatefulSetList{}
-	err = testutil.List(k8sClient, statefulSetList)
-	require.NoError(t, err)
-	require.Len(t, statefulSetList.Items, 1)
-
-	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
-	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
-	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
-	require.Len(t, statefulSet.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
-	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
-
-	// CSIDriver object should be created only for k8s version 1.14+
-	csiDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
-	require.True(t, errors.IsNotFound(err))
-}
-
-func TestCSIInstallWithOlderPortworxVersion(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.4",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "false",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Image: "portworx/image:2.0.3",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
-			},
-			Placement: &corev1alpha1.PlacementSpec{
-				NodeAffinity: &v1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{
-							{
-								MatchExpressions: []v1.NodeSelectorRequirement{
-									{
-										Key:      "px/enabled",
-										Operator: v1.NodeSelectorOpNotIn,
-										Values:   []string{"false"},
-									},
-									{
-										Key:      "node-role.kubernetes.io/master",
-										Operator: v1.NodeSelectorOpDoesNotExist,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// CSI ServiceAccount
-	serviceAccountList := &v1.ServiceAccountList{}
-	err = testutil.List(k8sClient, serviceAccountList)
-	require.NoError(t, err)
-	require.Len(t, serviceAccountList.Items, 2)
-
-	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, component.CSIServiceAccountName, sa.Name)
-	require.Equal(t, cluster.Namespace, sa.Namespace)
-	require.Len(t, sa.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
-
-	// CSI ClusterRole
-	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = testutil.List(k8sClient, clusterRoleList)
-	require.NoError(t, err)
-	require.Len(t, clusterRoleList.Items, 2)
-
-	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
 	actualCR := &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
 	require.NoError(t, err)
@@ -2986,6 +2847,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3079,6 +2941,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	expectedCRD := testutil.GetExpectedCRD(t, "csiNodeInfoCrd.yaml")
 	go func() {
@@ -3196,6 +3059,8 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Placement = nil
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3279,6 +3144,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Should not deploy resizer and snapshotter as they are alpha in k8s 1.14
 	err := driver.PreInstall(cluster)
@@ -3400,6 +3266,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3440,6 +3307,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3448,11 +3316,11 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[1].Image)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Change provisioner image
@@ -3465,7 +3333,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 
 	// Change attacher image
@@ -3478,7 +3346,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 
 	// Change snapshotter image
@@ -3491,7 +3359,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	// Enable resizer and the change it's image
@@ -3506,7 +3374,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 
 	deployment.Spec.Template.Spec.Containers[2].Image = "my-csi-resizer:test"
@@ -3518,26 +3386,8 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
-
-	// Change snapshotter image with k8s 1.14+
-	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
-		deployment.Spec.Template.Spec.Containers[1].Image)
-
-	deployment.Spec.Template.Spec.Containers[1].Image = "my-csi-snapshotter:test"
-	err = k8sClient.Update(context.TODO(), deployment)
-	require.NoError(t, err)
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
-		deployment.Spec.Template.Spec.Containers[1].Image)
 }
 
 func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
@@ -3566,6 +3416,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3574,9 +3425,9 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
 
 	// Change provisioner image
@@ -3589,7 +3440,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
 
 	// Change attacher image
@@ -3602,7 +3453,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
 }
 
@@ -3632,6 +3483,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3640,9 +3492,9 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v0.4.3",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v0.4.2",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		statefulSet.Spec.Template.Spec.Containers[1].Image)
 
 	deployment := &appsv1.Deployment{}
@@ -3668,15 +3520,15 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=endpoints",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/openstorage/csi-attacher:v1.2.1-1",
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[1].Args[3])
-	require.Equal(t, "quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[3])
@@ -3700,14 +3552,14 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1",
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[0].Image)
 	require.Equal(t, "--leader-election-type=leases",
 		deployment.Spec.Template.Spec.Containers[0].Args[4])
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v2.0.0",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Len(t, deployment.Spec.Template.Spec.Containers[1].Args, 3)
-	require.Equal(t, "quay.io/k8scsi/csi-resizer:v0.3.0",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
@@ -3739,6 +3591,7 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 			ImagePullSecret: &imagePullSecret,
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Image pull secret should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -3839,6 +3692,7 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Tolerations should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -3973,6 +3827,7 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Node affinity should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -4200,11 +4055,9 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 			ImagePullPolicy: v1.PullIfNotPresent,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
 			},
 			Autopilot: &corev1alpha1.AutopilotSpec{
 				Enabled: true,
-				Image:   "portworx/autopilot:test",
 			},
 			Monitoring: &corev1alpha1.MonitoringSpec{
 				Prometheus: &corev1alpha1.PrometheusSpec{
@@ -4216,6 +4069,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4340,11 +4194,9 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			StartPort:           &startPort,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
 			},
 			Autopilot: &corev1alpha1.AutopilotSpec{
 				Enabled: true,
-				Image:   "portworx/autopilot:test",
 			},
 			Monitoring: &corev1alpha1.MonitoringSpec{
 				Prometheus: &corev1alpha1.PrometheusSpec{
@@ -4356,6 +4208,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -4389,19 +4242,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:test",
+		customRegistry+"/portworx/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:test",
+		customRegistry+"/portworx/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4409,7 +4262,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:test",
+		customRegistry+"/portworx/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4445,15 +4298,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4492,19 +4345,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:test",
+		customRegistry+"/portworx/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:test",
+		customRegistry+"/portworx/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4512,7 +4365,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:test",
+		customRegistry+"/portworx/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4548,15 +4401,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4588,19 +4441,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:test",
+		"portworx/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:test",
+		"portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:test",
+		"portworx/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:test",
+		"portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4608,7 +4461,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:test",
+		"portworx/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4642,15 +4495,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		"quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		"quay.io/k8scsi/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/openstorage/csi-attacher:v1.2.1-1",
+		"quay.io/k8scsi/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4689,19 +4542,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:test",
+		customRegistry+"/portworx/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:test",
+		customRegistry+"/portworx/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:test",
+		customRegistry+"/portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4709,7 +4562,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:test",
+		customRegistry+"/portworx/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4745,15 +4598,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-provisioner:v1.4.0-1",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-attacher:v1.2.1-1",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/openstorage/csi-snapshotter:v1.2.2-1",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
@@ -4789,6 +4642,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -4807,11 +4661,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4835,11 +4689,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4862,11 +4716,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-resizer:v0.3.0",
+		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -4890,11 +4744,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v2.0.0",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-resizer:v0.3.0",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
@@ -4930,6 +4784,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -4948,11 +4803,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -4976,11 +4831,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -5003,11 +4858,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-provisioner:v0.4.3",
+		"quay.io/k8scsi/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-attacher:v0.4.2",
+		"quay.io/k8scsi/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -5031,11 +4886,11 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-provisioner:v0.4.3",
+		customRegistry+"/k8scsi/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v0.4.2",
+		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 }
@@ -5070,11 +4925,9 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			StartPort:           &startPort,
 			UserInterface: &corev1alpha1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
 			},
 			Autopilot: &corev1alpha1.AutopilotSpec{
 				Enabled: true,
-				Image:   "portworx/autopilot:test",
 			},
 			Monitoring: &corev1alpha1.MonitoringSpec{
 				Prometheus: &corev1alpha1.PrometheusSpec{
@@ -5086,6 +4939,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom repo-registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -5113,19 +4967,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
+		customRepo+"/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
+		customRepo+"/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5133,7 +4987,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:test",
+		customRepo+"/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5175,15 +5029,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.4.0-1",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.1-1",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.2-1",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5216,19 +5070,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
+		customRepo+"/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
+		customRepo+"/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5236,7 +5090,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:test",
+		customRepo+"/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5270,15 +5124,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.4.0-1",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.1-1",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.2-1",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5310,19 +5164,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:test",
+		"portworx/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:test",
+		"portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:test",
+		"portworx/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:test",
+		"portworx/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5330,7 +5184,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:test",
+		"portworx/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5364,15 +5218,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		"quay.io/openstorage/csi-provisioner:v1.4.0-1",
+		"quay.io/k8scsi/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/openstorage/csi-attacher:v1.2.1-1",
+		"quay.io/k8scsi/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/openstorage/csi-snapshotter:v1.2.2-1",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5405,19 +5259,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:test",
+		customRepo+"/px-lighthouse:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:test",
+		customRepo+"/lh-stork-connector:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:test",
+		customRepo+"/lh-config-sync:2.3.4",
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5425,7 +5279,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:test",
+		customRepo+"/autopilot:2.3.4",
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5459,15 +5313,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v1.4.0-1",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.1-1",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.2-1",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
@@ -5503,6 +5357,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom repo-registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -5521,11 +5376,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v2.0.0",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-resizer:v0.3.0",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5549,11 +5404,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v2.0.0",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-resizer:v0.3.0",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5576,11 +5431,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-snapshotter:v2.0.0",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-resizer:v0.3.0",
+		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -5604,11 +5459,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 3)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v2.0.0",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-resizer:v0.3.0",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 }
@@ -5644,6 +5499,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom repo-registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -5662,11 +5518,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v0.4.3",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v0.4.2",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -5690,11 +5546,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v0.4.3",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v0.4.2",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -5717,11 +5573,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-provisioner:v0.4.3",
+		"quay.io/k8scsi/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-attacher:v0.4.2",
+		"quay.io/k8scsi/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -5745,11 +5601,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiStatefulSet.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		customRepo+"/csi-provisioner:v0.4.3",
+		customRepo+"/csi-provisioner:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v0.4.2",
+		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 }
@@ -5799,6 +5655,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Image pull secret should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -6113,6 +5970,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Tolerations should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -6510,6 +6368,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Node affinity should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -7171,6 +7030,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -7265,11 +7125,13 @@ func TestDisableCSI_1_0(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.5.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
