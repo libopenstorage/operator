@@ -57,7 +57,6 @@ func (c *portworxStorageClass) IsEnabled(cluster *corev1alpha1.StorageCluster) b
 }
 
 func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) error {
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	docAnnotations := map[string]string{
 		"params/docs":              "https://docs.portworx.com/scheduler/kubernetes/dynamic-provisioning.html",
 		"params/fs":                "Filesystem to be laid out: none|xfs|ext4",
@@ -75,9 +74,8 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 	storageClasses := []*storagev1.StorageClass{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxDbStorageClass,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				Annotations:     docAnnotations,
+				Name:        PxDbStorageClass,
+				Annotations: docAnnotations,
 			},
 			Provisioner: portworxProvisioner,
 			Parameters: map[string]string{
@@ -87,8 +85,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxDbEncryptedStorageClass,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxDbEncryptedStorageClass,
 				Annotations: map[string]string{
 					"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
 				},
@@ -102,8 +99,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxReplicatedStorageClass,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxReplicatedStorageClass,
 			},
 			Provisioner: portworxProvisioner,
 			Parameters: map[string]string{
@@ -112,8 +108,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxReplicatedEncryptedStorageClass,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxReplicatedEncryptedStorageClass,
 			},
 			Provisioner: portworxProvisioner,
 			Parameters: map[string]string{
@@ -127,8 +122,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) e
 		storageClasses = append(storageClasses,
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            PxDbLocalSnapshotStorageClass,
-					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+					Name: PxDbLocalSnapshotStorageClass,
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
@@ -141,8 +135,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            PxDbLocalSnapshotEncryptedStorageClass,
-					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+					Name: PxDbLocalSnapshotEncryptedStorageClass,
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
@@ -156,8 +149,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            PxDbCloudSnapshotStorageClass,
-					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+					Name: PxDbCloudSnapshotStorageClass,
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
@@ -170,8 +162,7 @@ annotations:
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:            PxDbCloudSnapshotEncryptedStorageClass,
-					OwnerReferences: []metav1.OwnerReference{*ownerRef},
+					Name: PxDbCloudSnapshotEncryptedStorageClass,
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
@@ -195,29 +186,28 @@ annotations:
 }
 
 func (c *portworxStorageClass) Delete(cluster *corev1alpha1.StorageCluster) error {
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbEncryptedStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbEncryptedStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedEncryptedStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedEncryptedStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotEncryptedStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotEncryptedStorageClass); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotEncryptedStorageClass, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotEncryptedStorageClass); err != nil {
 		return err
 	}
 	return nil

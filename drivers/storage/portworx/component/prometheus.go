@@ -88,10 +88,10 @@ func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createOperatorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createOperatorClusterRole(ownerRef); err != nil {
+	if err := c.createOperatorClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createOperatorClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createOperatorClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createOperatorDeployment(cluster, ownerRef); err != nil {
@@ -100,10 +100,10 @@ func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createPrometheusServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createPrometheusClusterRole(ownerRef); err != nil {
+	if err := c.createPrometheusClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createPrometheusClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createPrometheusClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createPrometheusService(cluster.Namespace, ownerRef); err != nil {
@@ -143,10 +143,10 @@ func (c *prometheus) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PrometheusServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, PrometheusClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, PrometheusClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PrometheusClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PrometheusClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.k8sClient, PrometheusServiceName, cluster.Namespace, *ownerRef); err != nil {
@@ -155,10 +155,10 @@ func (c *prometheus) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PrometheusOperatorServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, PrometheusOperatorClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, PrometheusOperatorClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PrometheusOperatorClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PrometheusOperatorClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(c.k8sClient, PrometheusOperatorDeploymentName, cluster.Namespace, *ownerRef); err != nil {
@@ -205,13 +205,12 @@ func (c *prometheus) createPrometheusServiceAccount(
 	)
 }
 
-func (c *prometheus) createOperatorClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *prometheus) createOperatorClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PrometheusOperatorClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PrometheusOperatorClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -268,17 +267,15 @@ func (c *prometheus) createOperatorClusterRole(ownerRef *metav1.OwnerReference) 
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
-func (c *prometheus) createPrometheusClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *prometheus) createPrometheusClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PrometheusClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PrometheusClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -297,20 +294,17 @@ func (c *prometheus) createPrometheusClusterRole(ownerRef *metav1.OwnerReference
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *prometheus) createOperatorClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PrometheusOperatorClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PrometheusOperatorClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -325,20 +319,17 @@ func (c *prometheus) createOperatorClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *prometheus) createPrometheusClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PrometheusClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PrometheusClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -353,7 +344,6 @@ func (c *prometheus) createPrometheusClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 

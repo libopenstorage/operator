@@ -74,17 +74,17 @@ func (c *csi) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(cluster, csiConfig, ownerRef); err != nil {
+	if err := c.createClusterRole(cluster, csiConfig); err != nil {
 		return err
 	}
-	if err := c.createClusterRoleBinding(cluster, ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(cluster); err != nil {
 		return err
 	}
 	if err := c.createService(cluster, ownerRef); err != nil {
 		return err
 	}
 	if csiConfig.IncludeCsiDriverInfo {
-		if err := c.createCSIDriver(csiConfig, ownerRef); err != nil {
+		if err := c.createCSIDriver(csiConfig); err != nil {
 			return err
 		}
 	}
@@ -116,10 +116,10 @@ func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	// We don't delete the service account for CSI because it is part of CSV. If
 	// we disable CSI then the CSV upgrades would fail as requirements are not met.
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, CSIClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, CSIClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, CSIClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, CSIClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.k8sClient, CSIServiceName, cluster.Namespace, *ownerRef); err != nil {
@@ -136,7 +136,7 @@ func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
 	if csiConfig.IncludeCsiDriverInfo {
-		if err := k8sutil.DeleteCSIDriver(c.k8sClient, csiConfig.DriverName, *ownerRef); err != nil {
+		if err := k8sutil.DeleteCSIDriver(c.k8sClient, csiConfig.DriverName); err != nil {
 			return err
 		}
 	}
@@ -168,12 +168,10 @@ func (c *csi) createServiceAccount(
 func (c *csi) createClusterRole(
 	cluster *corev1alpha1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            CSIClusterRoleName,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Name: CSIClusterRoleName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -296,19 +294,17 @@ func (c *csi) createClusterRole(
 			},
 		)
 	}
-	return k8sutil.CreateOrUpdateClusterRole(c.k8sClient, clusterRole, ownerRef)
+	return k8sutil.CreateOrUpdateClusterRole(c.k8sClient, clusterRole)
 }
 
 func (c *csi) createClusterRoleBinding(
 	cluster *corev1alpha1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            CSIClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: CSIClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -323,7 +319,6 @@ func (c *csi) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
@@ -810,21 +805,18 @@ func getCSIStatefulSetSpec(
 
 func (c *csi) createCSIDriver(
 	csiConfig *pxutil.CSIConfiguration,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateCSIDriver(
 		c.k8sClient,
 		&storagev1beta1.CSIDriver{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            csiConfig.DriverName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: csiConfig.DriverName,
 			},
 			Spec: storagev1beta1.CSIDriverSpec{
 				AttachRequired: boolPtr(false),
 				PodInfoOnMount: boolPtr(false),
 			},
 		},
-		ownerRef,
 	)
 }
 

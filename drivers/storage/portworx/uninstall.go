@@ -188,12 +188,12 @@ func (u *uninstallPortworx) RunNodeWiper(
 		return err
 	}
 
-	err = u.createClusterRole(ownerRef)
+	err = u.createClusterRole()
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
-	err = u.createClusterRoleBinding(ownerRef)
+	err = u.createClusterRoleBinding()
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
@@ -413,15 +413,12 @@ func (u *uninstallPortworx) createServiceAccount(
 	)
 }
 
-func (u *uninstallPortworx) createClusterRole(
-	ownerRef *metav1.OwnerReference,
-) error {
+func (u *uninstallPortworx) createClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		u.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxNodeWiperClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: pxNodeWiperClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -432,19 +429,15 @@ func (u *uninstallPortworx) createClusterRole(
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
-func (u *uninstallPortworx) createClusterRoleBinding(
-	ownerRef *metav1.OwnerReference,
-) error {
+func (u *uninstallPortworx) createClusterRoleBinding() error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		u.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxNodeWiperClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: pxNodeWiperClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -459,7 +452,6 @@ func (u *uninstallPortworx) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
