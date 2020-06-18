@@ -3645,10 +3645,11 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		k8sClient: k8sClient,
-	}
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3682,8 +3683,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, wiperCR.Name)
-	require.Len(t, wiperCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.Empty(t, wiperCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
 
 	// Check wiper cluster role binding
@@ -3692,8 +3692,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
-	require.Len(t, wiperCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.Empty(t, wiperCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
 
@@ -3912,10 +3911,11 @@ func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		k8sClient: k8sClient,
-	}
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3952,8 +3952,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, wiperCR.Name)
-	require.Len(t, wiperCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.Empty(t, wiperCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
 
 	// Check wiper cluster role binding
@@ -3962,8 +3961,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
-	require.Len(t, wiperCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.Empty(t, wiperCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
 
@@ -3980,10 +3978,11 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{
-		k8sClient: k8sClient,
-	}
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -4017,8 +4016,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCR, pxNodeWiperClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, wiperCR.Name)
-	require.Len(t, wiperCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCR.OwnerReferences[0].Name)
+	require.Empty(t, wiperCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, wiperCR.Rules)
 
 	// Check wiper cluster role binding
@@ -4027,8 +4025,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.Get(k8sClient, wiperCRB, pxNodeWiperClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, wiperCRB.Name)
-	require.Len(t, wiperCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, wiperCRB.OwnerReferences[0].Name)
+	require.Empty(t, wiperCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, wiperCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, wiperCRB.RoleRef)
 

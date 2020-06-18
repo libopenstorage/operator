@@ -94,8 +94,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.PxClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Portworx ClusterRoleBinding
@@ -104,8 +103,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.PxClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -171,8 +169,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PxProxyServiceAccountName, api.NamespaceSystem)
 	require.NoError(t, err)
-	require.Len(t, sa.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+	require.Empty(t, sa.OwnerReferences)
 
 	// Portworx Proxy ClusterRoleBinding
 	expectedCRB = testutil.GetExpectedClusterRoleBinding(t, "pxProxyClusterRoleBinding.yaml")
@@ -180,8 +177,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.PxProxyClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -192,8 +188,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedPxProxyService.Name, pxProxyService.Name)
 	require.Equal(t, expectedPxProxyService.Namespace, pxProxyService.Namespace)
-	require.Len(t, pxProxyService.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, pxProxyService.OwnerReferences[0].Name)
+	require.Empty(t, pxProxyService.OwnerReferences)
 	require.Equal(t, expectedPxProxyService.Labels, pxProxyService.Labels)
 	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
 
@@ -204,8 +199,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedDaemonSet.Name, ds.Name)
 	require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
-	require.Len(t, ds.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
+	require.Empty(t, ds.OwnerReferences)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 }
 
@@ -615,8 +609,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -626,8 +619,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbEncryptedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbEncryptedStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -637,8 +629,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxReplicatedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxReplicatedStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -648,8 +639,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxReplicatedEncryptedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxReplicatedEncryptedStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -659,8 +649,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbLocalSnapshotStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbLocalSnapshotStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -670,8 +659,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbLocalSnapshotEncryptedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbLocalSnapshotEncryptedStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -681,8 +669,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbCloudSnapshotStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbCloudSnapshotStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -692,8 +679,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbCloudSnapshotEncryptedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbCloudSnapshotEncryptedStorageClass)
-	require.Len(t, actualSC.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualSC.OwnerReferences[0].Name)
+	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
 	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
@@ -1354,8 +1340,7 @@ func verifyPVCControllerInstall(
 	err = testutil.Get(k8sClient, actualCR, component.PVCClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// PVC Controller ClusterRoleBinding
@@ -1369,8 +1354,7 @@ func verifyPVCControllerInstall(
 	err = testutil.Get(k8sClient, actualCRB, component.PVCClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 }
@@ -1605,8 +1589,7 @@ func TestLighthouseInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.LhClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Lighthouse ClusterRoleBinding
@@ -1620,8 +1603,7 @@ func TestLighthouseInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.LhClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -2207,8 +2189,7 @@ func TestAutopilotInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.AutopilotClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Autopilot ClusterRoleBinding
@@ -2217,8 +2198,7 @@ func TestAutopilotInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.AutopilotClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -2719,6 +2699,7 @@ func TestSecurityInstall(t *testing.T) {
 	cluster.Spec.Security.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
+
 	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -2821,8 +2802,7 @@ func TestCSIInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// CSI ClusterRoleBinding
@@ -2836,8 +2816,7 @@ func TestCSIInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.CSIClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -2939,8 +2918,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0.yaml")
@@ -2987,8 +2965,7 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.NoError(t, err)
-	require.Len(t, csiDriver.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
+	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
 	require.False(t, *csiDriver.Spec.PodInfoOnMount)
 
@@ -3161,8 +3138,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	csiDriver := &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.NoError(t, err)
-	require.Len(t, csiDriver.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, csiDriver.OwnerReferences[0].Name)
+	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
 	require.False(t, *csiDriver.Spec.PodInfoOnMount)
 
@@ -3358,8 +3334,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 }
 
@@ -4013,8 +3988,7 @@ func TestPrometheusInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.PrometheusOperatorClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Prometheus operator ClusterRoleBinding
@@ -4023,8 +3997,7 @@ func TestPrometheusInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.PrometheusOperatorClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -4054,8 +4027,7 @@ func TestPrometheusInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCR, component.PrometheusClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
-	require.Len(t, actualCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCR.OwnerReferences[0].Name)
+	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// Prometheus ClusterRoleBinding
@@ -4064,8 +4036,7 @@ func TestPrometheusInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCRB, component.PrometheusClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedCRB.Name, actualCRB.Name)
-	require.Len(t, actualCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualCRB.OwnerReferences[0].Name)
+	require.Empty(t, actualCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
@@ -6732,7 +6703,6 @@ func TestRemovePVCController(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -6793,7 +6763,6 @@ func TestDisablePVCController(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -6860,7 +6829,6 @@ func TestRemoveLighthouse(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.LhServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -6931,7 +6899,6 @@ func TestDisableLighthouse(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.LhServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -7142,10 +7109,9 @@ func TestDisableCSI_0_3(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
@@ -7168,10 +7134,9 @@ func TestDisableCSI_0_3(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
@@ -7247,10 +7212,9 @@ func TestDisableCSI_1_0(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
@@ -7277,10 +7241,9 @@ func TestDisableCSI_1_0(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Keep the service account
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")

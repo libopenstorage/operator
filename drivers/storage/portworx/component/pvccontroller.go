@@ -81,10 +81,10 @@ func (c *pvcController) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(ownerRef); err != nil {
+	if err := c.createClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
@@ -98,10 +98,10 @@ func (c *pvcController) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PVCServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, PVCClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, PVCClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PVCClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PVCClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(c.k8sClient, PVCDeploymentName, cluster.Namespace, *ownerRef); err != nil {
@@ -132,13 +132,12 @@ func (c *pvcController) createServiceAccount(
 	)
 }
 
-func (c *pvcController) createClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *pvcController) createClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PVCClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PVCClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -214,20 +213,17 @@ func (c *pvcController) createClusterRole(ownerRef *metav1.OwnerReference) error
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *pvcController) createClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PVCClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PVCClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -242,7 +238,6 @@ func (c *pvcController) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
