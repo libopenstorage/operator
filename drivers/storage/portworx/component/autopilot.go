@@ -76,10 +76,10 @@ func (c *autopilot) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(ownerRef); err != nil {
+	if err := c.createClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
@@ -96,10 +96,10 @@ func (c *autopilot) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, AutopilotServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, AutopilotClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, AutopilotClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
@@ -176,13 +176,12 @@ func (c *autopilot) createServiceAccount(
 	)
 }
 
-func (c *autopilot) createClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *autopilot) createClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            AutopilotClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: AutopilotClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -192,20 +191,17 @@ func (c *autopilot) createClusterRole(ownerRef *metav1.OwnerReference) error {
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *autopilot) createClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            AutopilotClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: AutopilotClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -220,7 +216,6 @@ func (c *autopilot) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 

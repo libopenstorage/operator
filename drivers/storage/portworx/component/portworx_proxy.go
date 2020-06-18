@@ -8,6 +8,7 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -32,7 +33,6 @@ const (
 	PxProxyClusterRoleBindingName = "portworx-proxy"
 	// PxProxyDaemonSetName name of the Portworx proxy daemon set
 	PxProxyDaemonSetName = "portworx-proxy"
-
 	pxProxyContainerName = "portworx-proxy"
 )
 
@@ -57,17 +57,16 @@ func (c *portworxProxy) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 }
 
 func (c *portworxProxy) Reconcile(cluster *corev1alpha1.StorageCluster) error {
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := c.createServiceAccount(ownerRef); err != nil {
+	if err := c.createServiceAccount(); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createClusterRoleBinding(ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createPortworxService(cluster, ownerRef); err != nil {
+	if err := c.createPortworxService(cluster); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createDaemonSet(cluster, ownerRef); err != nil {
+	if err := c.createDaemonSet(cluster); err != nil {
 		return NewError(ErrCritical, err)
 	}
 	return nil
@@ -80,17 +79,16 @@ func (c *portworxProxy) Delete(cluster *corev1alpha1.StorageCluster) error {
 		return nil
 	}
 
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PxProxyServiceAccountName, api.NamespaceSystem, *ownerRef); err != nil {
+	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PxProxyServiceAccountName, api.NamespaceSystem); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxProxyClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxProxyClusterRoleBindingName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, api.NamespaceSystem, *ownerRef); err != nil {
+	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, api.NamespaceSystem); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxProxyDaemonSetName, api.NamespaceSystem, *ownerRef); err != nil {
+	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxProxyDaemonSetName, api.NamespaceSystem); err != nil {
 		return err
 	}
 	c.isCreated = false
@@ -99,31 +97,44 @@ func (c *portworxProxy) Delete(cluster *corev1alpha1.StorageCluster) error {
 
 func (c *portworxProxy) MarkDeleted() {}
 
-func (c *portworxProxy) createServiceAccount(
-	ownerRef *metav1.OwnerReference,
-) error {
-	return k8sutil.CreateOrUpdateServiceAccount(
-		c.k8sClient,
-		&v1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxProxyServiceAccountName,
-				Namespace:       api.NamespaceSystem,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			},
+func (c *portworxProxy) createServiceAccount() error {
+	sa := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PxProxyServiceAccountName,
+			Namespace: api.NamespaceSystem,
 		},
-		ownerRef,
+	}
+
+	// Remove ownership information from the object as Kuberentes
+	// does not handle cross-namespace ownership. This code should
+	// be removed eventually when existing customers are upgraded.
+	existingSA := &v1.ServiceAccount{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      sa.Name,
+			Namespace: sa.Namespace,
+		},
+		existingSA,
 	)
+	if err == nil && len(existingSA.OwnerReferences) > 0 {
+		existingSA.OwnerReferences = nil
+		logrus.Debugf("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
+		if err := c.k8sClient.Update(context.TODO(), existingSA); err != nil {
+			return err
+		}
+		sa.ResourceVersion = existingSA.ResourceVersion
+	}
+
+	return k8sutil.CreateOrUpdateServiceAccount(c.k8sClient, sa, nil)
 }
 
-func (c *portworxProxy) createClusterRoleBinding(
-	ownerRef *metav1.OwnerReference,
-) error {
+func (c *portworxProxy) createClusterRoleBinding() error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxProxyClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxProxyClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -138,25 +149,42 @@ func (c *portworxProxy) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *portworxProxy) createPortworxService(
 	cluster *corev1alpha1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
 ) error {
-	service := getPortworxServiceSpec(cluster, ownerRef)
+	service := getPortworxServiceSpec(cluster, nil)
 	service.Namespace = api.NamespaceSystem
 	service.Labels = getPortworxProxyServiceLabels()
 	service.Spec.Selector = getPortworxProxyServiceLabels()
 
-	return k8sutil.CreateOrUpdateService(c.k8sClient, service, ownerRef)
+	// Remove ownership information from the object as Kuberentes
+	// does not handle cross-namespace ownership. This code should
+	// be removed eventually when existing customers are upgraded.
+	existingSvc := &v1.Service{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      service.Name,
+			Namespace: service.Namespace,
+		},
+		existingSvc,
+	)
+	if err == nil && len(existingSvc.OwnerReferences) > 0 {
+		existingSvc.OwnerReferences = nil
+		logrus.Debugf("Updating %s/%s Service", service.Namespace, service.Name)
+		if err := c.k8sClient.Update(context.TODO(), existingSvc); err != nil {
+			return err
+		}
+	}
+
+	return k8sutil.CreateOrUpdateService(c.k8sClient, service, nil)
 }
 
 func (c *portworxProxy) createDaemonSet(
 	cluster *corev1alpha1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDaemonSet := &appsv1.DaemonSet{}
 	getErr := c.k8sClient.Get(
@@ -184,8 +212,20 @@ func (c *portworxProxy) createDaemonSet(
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxProxyDaemonSetSpec(cluster, ownerRef, imageName)
-		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
+		daemonSet := getPortworxProxyDaemonSetSpec(cluster, imageName)
+
+		// Remove ownership information from the object as Kuberentes
+		// does not handle cross-namespace ownership. This code should
+		// be removed eventually when existing customers are upgraded.
+		if !errors.IsNotFound(getErr) && len(existingDaemonSet.OwnerReferences) > 0 {
+			existingDaemonSet.OwnerReferences = nil
+			logrus.Debugf("Updating %s/%s DaemonSet", daemonSet.Namespace, daemonSet.Name)
+			if err := c.k8sClient.Update(context.TODO(), existingDaemonSet); err != nil {
+				return err
+			}
+		}
+
+		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, nil); err != nil {
 			return err
 		}
 	}
@@ -195,7 +235,6 @@ func (c *portworxProxy) createDaemonSet(
 
 func getPortworxProxyDaemonSetSpec(
 	cluster *corev1alpha1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
 	imageName string,
 ) *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromString("100%")
@@ -203,9 +242,8 @@ func getPortworxProxyDaemonSetSpec(
 
 	newDaemonSet := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            PxProxyDaemonSetName,
-			Namespace:       api.NamespaceSystem,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Name:      PxProxyDaemonSetName,
+			Namespace: api.NamespaceSystem,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{

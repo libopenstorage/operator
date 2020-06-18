@@ -54,10 +54,10 @@ func (c *portworxBasic) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createClusterRole(ownerRef); err != nil {
+	if err := c.createClusterRole(); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return NewError(ErrCritical, err)
 	}
 	if err := c.prepareForSecrets(cluster, ownerRef); err != nil {
@@ -74,10 +74,10 @@ func (c *portworxBasic) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, pxutil.PortworxServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, PxClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, PxClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteRole(c.k8sClient, PxRoleName, cluster.Namespace, *ownerRef); err != nil {
@@ -211,13 +211,12 @@ func (c *portworxBasic) createRoleBinding(
 	)
 }
 
-func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *portworxBasic) createClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -279,20 +278,17 @@ func (c *portworxBasic) createClusterRole(ownerRef *metav1.OwnerReference) error
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *portworxBasic) createClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: PxClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -307,7 +303,6 @@ func (c *portworxBasic) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
@@ -336,10 +331,9 @@ func getPortworxServiceSpec(
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxutil.PortworxServiceName,
-			Namespace:       cluster.Namespace,
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+			Labels:    labels,
 		},
 		Spec: v1.ServiceSpec{
 			Selector: labels,
@@ -371,6 +365,10 @@ func getPortworxServiceSpec(
 				},
 			},
 		},
+	}
+
+	if ownerRef != nil {
+		newService.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	}
 
 	serviceType := pxutil.ServiceType(cluster)

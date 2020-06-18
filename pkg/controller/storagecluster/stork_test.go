@@ -140,8 +140,7 @@ func TestStorkInstallation(t *testing.T) {
 	err = testutil.Get(k8sClient, storkCR, storkClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedStorkCR.Name, storkCR.Name)
-	require.Len(t, storkCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, storkCR.OwnerReferences[0].Name)
+	require.Empty(t, storkCR.OwnerReferences)
 	require.ElementsMatch(t, expectedStorkCR.Rules, storkCR.Rules)
 
 	// Stork Scheduler ClusterRole
@@ -150,8 +149,7 @@ func TestStorkInstallation(t *testing.T) {
 	err = testutil.Get(k8sClient, schedCR, storkSchedClusterRoleName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchedCR.Name, schedCR.Name)
-	require.Len(t, schedCR.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, schedCR.OwnerReferences[0].Name)
+	require.Empty(t, schedCR.OwnerReferences)
 	require.ElementsMatch(t, expectedSchedCR.Rules, schedCR.Rules)
 
 	// ClusterRoleBindings
@@ -166,8 +164,7 @@ func TestStorkInstallation(t *testing.T) {
 	err = testutil.Get(k8sClient, storkCRB, storkClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedStorkCRB.Name, storkCRB.Name)
-	require.Len(t, storkCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, storkCRB.OwnerReferences[0].Name)
+	require.Empty(t, storkCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedStorkCRB.Subjects, storkCRB.Subjects)
 	require.Equal(t, expectedStorkCRB.RoleRef, storkCRB.RoleRef)
 
@@ -177,8 +174,7 @@ func TestStorkInstallation(t *testing.T) {
 	err = testutil.Get(k8sClient, schedCRB, storkSchedClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchedCRB.Name, schedCRB.Name)
-	require.Len(t, schedCRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, schedCRB.OwnerReferences[0].Name)
+	require.Empty(t, schedCRB.OwnerReferences)
 	require.ElementsMatch(t, expectedSchedCRB.Subjects, schedCRB.Subjects)
 	require.Equal(t, expectedSchedCRB.RoleRef, schedCRB.RoleRef)
 
@@ -241,8 +237,7 @@ func TestStorkInstallation(t *testing.T) {
 	err = testutil.Get(k8sClient, storkStorageClass, storkSnapshotStorageClassName, "")
 	require.NoError(t, err)
 	require.Equal(t, storkSnapshotStorageClassName, storkStorageClass.Name)
-	require.Len(t, storkStorageClass.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, storkStorageClass.OwnerReferences[0].Name)
+	require.Empty(t, storkStorageClass.OwnerReferences)
 	require.Equal(t, "stork-snapshot", storkStorageClass.Provisioner)
 }
 

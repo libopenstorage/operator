@@ -77,10 +77,10 @@ func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createStorkServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createStorkClusterRole(ownerRef); err != nil {
+	if err := c.createStorkClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createStorkClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createStorkClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createStorkService(cluster.Namespace, ownerRef); err != nil {
@@ -89,7 +89,7 @@ func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createStorkDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createStorkSnapshotStorageClass(ownerRef); err != nil {
+	if err := c.createStorkSnapshotStorageClass(); err != nil {
 		return err
 	}
 	return c.setupStorkScheduler(cluster)
@@ -100,10 +100,10 @@ func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) e
 	if err := c.createStorkSchedServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createStorkSchedClusterRole(ownerRef); err != nil {
+	if err := c.createStorkSchedClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createStorkSchedClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createStorkSchedClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createStorkSchedDeployment(cluster, ownerRef); err != nil {
@@ -121,10 +121,10 @@ func (c *Controller) removeStork(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.client, storkServiceAccountName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.client, storkClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.client, storkClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.client, storkServiceName, namespace, *ownerRef); err != nil {
@@ -134,7 +134,7 @@ func (c *Controller) removeStork(cluster *corev1alpha1.StorageCluster) error {
 		return err
 	}
 	c.isStorkDeploymentCreated = false
-	if err := k8sutil.DeleteStorageClass(c.client, storkSnapshotStorageClassName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteStorageClass(c.client, storkSnapshotStorageClassName); err != nil {
 		return err
 	}
 	return c.removeStorkScheduler(namespace, ownerRef)
@@ -147,10 +147,10 @@ func (c *Controller) removeStorkScheduler(
 	if err := k8sutil.DeleteServiceAccount(c.client, storkSchedServiceAccountName, namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.client, storkSchedClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.client, storkSchedClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkSchedClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.client, storkSchedClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(c.client, storkSchedDeploymentName, namespace, *ownerRef); err != nil {
@@ -205,15 +205,12 @@ func (c *Controller) createStorkConfigMap(
 	)
 }
 
-func (c *Controller) createStorkSnapshotStorageClass(
-	ownerRef *metav1.OwnerReference,
-) error {
+func (c *Controller) createStorkSnapshotStorageClass() error {
 	return k8sutil.CreateStorageClass(
 		c.client,
 		&storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            storkSnapshotStorageClassName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: storkSnapshotStorageClassName,
 			},
 			Provisioner: "stork-snapshot",
 		},
@@ -254,13 +251,12 @@ func (c *Controller) createStorkSchedServiceAccount(
 	)
 }
 
-func (c *Controller) createStorkClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *Controller) createStorkClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.client,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            storkClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: storkClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -270,17 +266,15 @@ func (c *Controller) createStorkClusterRole(ownerRef *metav1.OwnerReference) err
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
-func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *Controller) createStorkSchedClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.client,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            storkSchedClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: storkSchedClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -361,20 +355,17 @@ func (c *Controller) createStorkSchedClusterRole(ownerRef *metav1.OwnerReference
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *Controller) createStorkClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.client,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            storkClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: storkClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -389,20 +380,17 @@ func (c *Controller) createStorkClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *Controller) createStorkSchedClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.client,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            storkSchedClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: storkSchedClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -417,7 +405,6 @@ func (c *Controller) createStorkSchedClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 

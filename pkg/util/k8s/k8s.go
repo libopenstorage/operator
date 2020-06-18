@@ -92,20 +92,20 @@ func CreateOrUpdateServiceAccount(
 		existingSA,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s service account", sa.Name)
+		logrus.Debugf("Creating %s/%s ServiceAccount", sa.Namespace, sa.Name)
 		return k8sClient.Create(context.TODO(), sa)
 	} else if err != nil {
 		return err
 	}
 
 	for _, o := range existingSA.OwnerReferences {
-		if o.UID != ownerRef.UID {
+		if ownerRef != nil && o.UID != ownerRef.UID {
 			sa.OwnerReferences = append(sa.OwnerReferences, o)
 		}
 	}
 
 	if len(sa.OwnerReferences) > len(existingSA.OwnerReferences) {
-		logrus.Debugf("Updating %s service account", sa.Name)
+		logrus.Debugf("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
 		return k8sClient.Update(context.TODO(), sa)
 	}
 	return nil
@@ -310,7 +310,6 @@ func DeleteRoleBinding(
 func CreateOrUpdateClusterRole(
 	k8sClient client.Client,
 	cr *rbacv1.ClusterRole,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	existingCR := &rbacv1.ClusterRole{}
 	err := k8sClient.Get(
@@ -319,37 +318,31 @@ func CreateOrUpdateClusterRole(
 		existingCR,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s cluster role", cr.Name)
+		logrus.Debugf("Creating %s ClusterRole", cr.Name)
 		return k8sClient.Create(context.TODO(), cr)
 	} else if err != nil {
 		return err
 	}
 
-	modified := !reflect.DeepEqual(cr.Rules, existingCR.Rules)
-
-	for _, o := range existingCR.OwnerReferences {
-		if o.UID != ownerRef.UID {
-			cr.OwnerReferences = append(cr.OwnerReferences, o)
-		}
-	}
-
-	if modified || len(cr.OwnerReferences) > len(existingCR.OwnerReferences) {
-		logrus.Debugf("Updating %s cluster role", cr.Name)
-		return k8sClient.Update(context.TODO(), cr)
+	// Cluster scoped objects should not have owner references
+	if !reflect.DeepEqual(cr.Rules, existingCR.Rules) ||
+		len(existingCR.OwnerReferences) > 0 {
+		existingCR.Rules = cr.DeepCopy().Rules
+		existingCR.OwnerReferences = nil
+		logrus.Debugf("Updating %s ClusterRole", existingCR.Name)
+		return k8sClient.Update(context.TODO(), existingCR)
 	}
 	return nil
 }
 
-// DeleteClusterRole deletes a cluster role if present and owned
+// DeleteClusterRole deletes a cluster role if present
 func DeleteClusterRole(
 	k8sClient client.Client,
 	name string,
-	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
 	}
-
 	clusterRole := &rbacv1.ClusterRole{}
 	err := k8sClient.Get(context.TODO(), resource, clusterRole)
 	if errors.IsNotFound(err) {
@@ -358,23 +351,14 @@ func DeleteClusterRole(
 		return err
 	}
 
-	newOwners := removeOwners(clusterRole.OwnerReferences, owners)
-
-	// Do not delete the object if it does not have the owner that was passed;
-	// even if the object has no owner
-	if (len(clusterRole.OwnerReferences) == 0 && len(owners) > 0) ||
-		(len(clusterRole.OwnerReferences) > 0 && len(clusterRole.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete ClusterRole %s as it is not owned", name)
+	// Do not delete the object if it has an owner
+	if len(clusterRole.OwnerReferences) > 0 {
+		logrus.Debugf("Cannot delete ClusterRole %s as it is owned", name)
 		return nil
 	}
 
-	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s ClusterRole", name)
-		return k8sClient.Delete(context.TODO(), clusterRole)
-	}
-	clusterRole.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s ClusterRole", name)
-	return k8sClient.Update(context.TODO(), clusterRole)
+	logrus.Debugf("Deleting %s ClusterRole", name)
+	return k8sClient.Delete(context.TODO(), clusterRole)
 }
 
 // CreateOrUpdateClusterRoleBinding creates a cluster role binding if not present,
@@ -382,7 +366,6 @@ func DeleteClusterRole(
 func CreateOrUpdateClusterRoleBinding(
 	k8sClient client.Client,
 	crb *rbacv1.ClusterRoleBinding,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	existingCRB := &rbacv1.ClusterRoleBinding{}
 	err := k8sClient.Get(
@@ -391,7 +374,7 @@ func CreateOrUpdateClusterRoleBinding(
 		existingCRB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s cluster role binding", crb.Name)
+		logrus.Debugf("Creating %s ClusterRoleBinding", crb.Name)
 		return k8sClient.Create(context.TODO(), crb)
 	} else if err != nil {
 		return err
@@ -400,20 +383,19 @@ func CreateOrUpdateClusterRoleBinding(
 	modified := !reflect.DeepEqual(crb.Subjects, existingCRB.Subjects) ||
 		!reflect.DeepEqual(crb.RoleRef, existingCRB.RoleRef)
 
-	for _, o := range existingCRB.OwnerReferences {
-		if o.UID != ownerRef.UID {
-			crb.OwnerReferences = append(crb.OwnerReferences, o)
-		}
-	}
-
-	if modified || len(crb.OwnerReferences) > len(existingCRB.OwnerReferences) {
-		logrus.Debugf("Updating %s cluster role binding", crb.Name)
-		return k8sClient.Update(context.TODO(), crb)
+	// Cluster scoped objects should not have owner references
+	if modified || len(existingCRB.OwnerReferences) > 0 {
+		copy := crb.DeepCopy()
+		existingCRB.Subjects = copy.Subjects
+		existingCRB.RoleRef = copy.RoleRef
+		existingCRB.OwnerReferences = nil
+		logrus.Debugf("Updating %s ClusterRoleBinding", existingCRB.Name)
+		return k8sClient.Update(context.TODO(), existingCRB)
 	}
 	return nil
 }
 
-// DeleteClusterRoleBinding deletes a cluster role binding if present and owned
+// DeleteClusterRoleBinding deletes a cluster role binding if present
 func DeleteClusterRoleBinding(
 	k8sClient client.Client,
 	name string,
@@ -422,7 +404,6 @@ func DeleteClusterRoleBinding(
 	resource := types.NamespacedName{
 		Name: name,
 	}
-
 	crb := &rbacv1.ClusterRoleBinding{}
 	err := k8sClient.Get(context.TODO(), resource, crb)
 	if errors.IsNotFound(err) {
@@ -431,23 +412,14 @@ func DeleteClusterRoleBinding(
 		return err
 	}
 
-	newOwners := removeOwners(crb.OwnerReferences, owners)
-
-	// Do not delete the object if it does not have the owner that was passed;
-	// even if the object has no owner
-	if (len(crb.OwnerReferences) == 0 && len(owners) > 0) ||
-		(len(crb.OwnerReferences) > 0 && len(crb.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete ClusterRoleBinding %s as it is not owned", name)
+	// Do not delete the object if it has an owner
+	if len(crb.OwnerReferences) > 0 {
+		logrus.Debugf("Cannot delete ClusterRoleBinding %s as it is owned", name)
 		return nil
 	}
 
-	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s ClusterRoleBinding", name)
-		return k8sClient.Delete(context.TODO(), crb)
-	}
-	crb.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s ClusterRoleBinding", name)
-	return k8sClient.Update(context.TODO(), crb)
+	logrus.Debugf("Deleting %s ClusterRoleBinding", name)
+	return k8sClient.Delete(context.TODO(), crb)
 }
 
 // CreateOrUpdateConfigMap creates a config map if not present,
@@ -543,20 +515,23 @@ func CreateStorageClass(
 	if errors.IsNotFound(err) {
 		logrus.Debugf("Creating %s StorageClass", sc.Name)
 		return k8sClient.Create(context.TODO(), sc)
+	} else if err == nil && len(existingSC.OwnerReferences) > 0 {
+		// Cluster scoped objects should not have owner references
+		logrus.Debugf("Updating %s StorageClass", sc.Name)
+		existingSC.OwnerReferences = nil
+		return k8sClient.Update(context.TODO(), existingSC)
 	}
 	return err
 }
 
-// DeleteStorageClass deletes a storage class if present and owned
+// DeleteStorageClass deletes a storage class if present
 func DeleteStorageClass(
 	k8sClient client.Client,
 	name string,
-	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
 	}
-
 	storageClass := &storagev1.StorageClass{}
 	err := k8sClient.Get(context.TODO(), resource, storageClass)
 	if errors.IsNotFound(err) {
@@ -565,23 +540,14 @@ func DeleteStorageClass(
 		return err
 	}
 
-	newOwners := removeOwners(storageClass.OwnerReferences, owners)
-
-	// Do not delete the object if it does not have the owner that was passed;
-	// even if the object has no owner
-	if (len(storageClass.OwnerReferences) == 0 && len(owners) > 0) ||
-		(len(storageClass.OwnerReferences) > 0 && len(storageClass.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete StorageClass %s as it is not owned", name)
+	// Do not delete the object if it has an owner
+	if len(storageClass.OwnerReferences) > 0 {
+		logrus.Debugf("Cannot delete StorageClass %s as it is owned", name)
 		return nil
 	}
 
-	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s StorageClass", name)
-		return k8sClient.Delete(context.TODO(), storageClass)
-	}
-	storageClass.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s StorageClass", name)
-	return k8sClient.Update(context.TODO(), storageClass)
+	logrus.Debugf("Deleting %s StorageClass", name)
+	return k8sClient.Delete(context.TODO(), storageClass)
 }
 
 // CreateOrUpdateCSIDriver creates a CSIDriver if not present,
@@ -589,7 +555,6 @@ func DeleteStorageClass(
 func CreateOrUpdateCSIDriver(
 	k8sClient client.Client,
 	driver *storagev1beta1.CSIDriver,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDriver := &storagev1beta1.CSIDriver{}
 	err := k8sClient.Get(
@@ -604,31 +569,25 @@ func CreateOrUpdateCSIDriver(
 		return err
 	}
 
-	modified := !reflect.DeepEqual(driver.Spec, existingDriver.Spec)
-
-	for _, o := range existingDriver.OwnerReferences {
-		if o.UID != ownerRef.UID {
-			driver.OwnerReferences = append(driver.OwnerReferences, o)
-		}
-	}
-
-	if modified || len(driver.OwnerReferences) > len(existingDriver.OwnerReferences) {
-		logrus.Debugf("Updating %s CSIDriver", driver.Name)
-		return k8sClient.Update(context.TODO(), driver)
+	// Cluster scoped objects should not have owner references
+	if !reflect.DeepEqual(driver.Spec, existingDriver.Spec) ||
+		len(existingDriver.OwnerReferences) > 0 {
+		existingDriver.Spec = *driver.Spec.DeepCopy()
+		existingDriver.OwnerReferences = nil
+		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
+		return k8sClient.Update(context.TODO(), existingDriver)
 	}
 	return nil
 }
 
-// DeleteCSIDriver deletes the CSIDriver object if present and owned
+// DeleteCSIDriver deletes the CSIDriver object if present
 func DeleteCSIDriver(
 	k8sClient client.Client,
 	name string,
-	owners ...metav1.OwnerReference,
 ) error {
 	resource := types.NamespacedName{
 		Name: name,
 	}
-
 	csiDriver := &storagev1beta1.CSIDriver{}
 	err := k8sClient.Get(context.TODO(), resource, csiDriver)
 	if errors.IsNotFound(err) {
@@ -637,23 +596,14 @@ func DeleteCSIDriver(
 		return err
 	}
 
-	newOwners := removeOwners(csiDriver.OwnerReferences, owners)
-
-	// Do not delete the object if it does not have the owner that was passed;
-	// even if the object has no owner
-	if (len(csiDriver.OwnerReferences) == 0 && len(owners) > 0) ||
-		(len(csiDriver.OwnerReferences) > 0 && len(csiDriver.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete CSIDriver %s as it is not owned", name)
+	// Do not delete the object if it has an owner
+	if len(csiDriver.OwnerReferences) > 0 {
+		logrus.Debugf("Cannot delete CSIDriver %s as it is owned", name)
 		return nil
 	}
 
-	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s CSIDriver", name)
-		return k8sClient.Delete(context.TODO(), csiDriver)
-	}
-	csiDriver.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s CSIDriver", name)
-	return k8sClient.Update(context.TODO(), csiDriver)
+	logrus.Debugf("Deleting %s CSIDriver", name)
+	return k8sClient.Delete(context.TODO(), csiDriver)
 }
 
 // CreateOrUpdateService creates a service if not present, else updates it
@@ -672,7 +622,7 @@ func CreateOrUpdateService(
 		existingService,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s service", service.Name)
+		logrus.Debugf("Creating %s/%s Service", service.Namespace, service.Name)
 		return k8sClient.Create(context.TODO(), service)
 	} else if err != nil {
 		return err
@@ -745,7 +695,7 @@ func CreateOrUpdateService(
 		existingService.Spec.Selector = service.Spec.Selector
 		existingService.Spec.Type = service.Spec.Type
 		existingService.Spec.Ports = servicePorts
-		logrus.Debugf("Updating %s service", service.Name)
+		logrus.Debugf("Updating %s/%s Service", service.Namespace, service.Name)
 		return k8sClient.Update(context.TODO(), existingService)
 	}
 	return nil
@@ -948,30 +898,32 @@ func CreateOrUpdateDaemonSet(
 		existingDS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s DaemonSet", ds.Name)
+		logrus.Debugf("Creating %s/%s DaemonSet", ds.Namespace, ds.Name)
 		return k8sClient.Create(context.TODO(), ds)
 	} else if err != nil {
 		return err
 	}
 
-	ownerRefPresent := false
-	for _, o := range existingDS.OwnerReferences {
-		if o.UID == ownerRef.UID {
-			ownerRefPresent = true
-			break
+	if ownerRef != nil {
+		ownerRefPresent := false
+		for _, o := range existingDS.OwnerReferences {
+			if o.UID == ownerRef.UID {
+				ownerRefPresent = true
+				break
+			}
 		}
-	}
-	if !ownerRefPresent {
-		if existingDS.OwnerReferences == nil {
-			existingDS.OwnerReferences = make([]metav1.OwnerReference, 0)
+		if !ownerRefPresent {
+			if existingDS.OwnerReferences == nil {
+				existingDS.OwnerReferences = make([]metav1.OwnerReference, 0)
+			}
+			existingDS.OwnerReferences = append(existingDS.OwnerReferences, *ownerRef)
 		}
-		existingDS.OwnerReferences = append(existingDS.OwnerReferences, *ownerRef)
 	}
 
 	existingDS.Labels = ds.Labels
 	existingDS.Spec = ds.Spec
 
-	logrus.Debugf("Updating %s DaemonSet", ds.Name)
+	logrus.Debugf("Updating %s/%s DaemonSet", ds.Namespace, ds.Name)
 	return k8sClient.Update(context.TODO(), existingDS)
 }
 

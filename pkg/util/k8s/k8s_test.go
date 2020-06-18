@@ -291,16 +291,6 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, clusterRole)
 
-	// Don't delete when there is no owner in the cluster role
-	// but trying to delete for specific owners
-	err = DeleteClusterRole(k8sClient, name, metav1.OwnerReference{UID: "foo"})
-	require.NoError(t, err)
-
-	clusterRole = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, clusterRole, name, "")
-	require.NoError(t, err)
-	require.Equal(t, expected, clusterRole)
-
 	// Delete when there is no owner in the cluster role
 	err = DeleteClusterRole(k8sClient, name)
 	require.NoError(t, err)
@@ -310,7 +300,6 @@ func TestDeleteClusterRole(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the cluster role is owned by an object
-	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
 	k8sClient.Create(context.TODO(), expected)
 
@@ -321,30 +310,6 @@ func TestDeleteClusterRole(t *testing.T) {
 	err = testutil.Get(k8sClient, clusterRole, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, clusterRole)
-
-	// Don't delete when the cluster role is owned by objects
-	// more than what are passed on delete call
-	err = DeleteClusterRole(k8sClient, name, metav1.OwnerReference{UID: "beta"})
-	require.NoError(t, err)
-
-	clusterRole = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, clusterRole, name, "")
-	require.NoError(t, err)
-	require.Len(t, clusterRole.OwnerReferences, 2)
-	require.Equal(t, types.UID("alpha"), clusterRole.OwnerReferences[0].UID)
-	require.Equal(t, types.UID("gamma"), clusterRole.OwnerReferences[1].UID)
-
-	// Delete when delete call passes all owners (or more) of the cluster role
-	err = DeleteClusterRole(k8sClient, name,
-		metav1.OwnerReference{UID: "theta"},
-		metav1.OwnerReference{UID: "gamma"},
-		metav1.OwnerReference{UID: "alpha"},
-	)
-	require.NoError(t, err)
-
-	clusterRole = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, clusterRole, name, "")
-	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDeleteClusterRoleBinding(t *testing.T) {
@@ -365,16 +330,6 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, crb)
 
-	// Don't delete when there is no owner in the cluster role binding
-	// but trying to delete for specific owners
-	err = DeleteClusterRoleBinding(k8sClient, name, metav1.OwnerReference{UID: "foo"})
-	require.NoError(t, err)
-
-	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, name, "")
-	require.NoError(t, err)
-	require.Equal(t, expected, crb)
-
 	// Delete when there is no owner in the cluster role binding
 	err = DeleteClusterRoleBinding(k8sClient, name)
 	require.NoError(t, err)
@@ -384,7 +339,6 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the cluster role binding is owned by an object
-	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
 	k8sClient.Create(context.TODO(), expected)
 
@@ -395,30 +349,6 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 	err = testutil.Get(k8sClient, crb, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, crb)
-
-	// Don't delete when the cluster role binding is owned by objects
-	// more than what are passed on delete call
-	err = DeleteClusterRoleBinding(k8sClient, name, metav1.OwnerReference{UID: "beta"})
-	require.NoError(t, err)
-
-	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, name, "")
-	require.NoError(t, err)
-	require.Len(t, crb.OwnerReferences, 2)
-	require.Equal(t, types.UID("alpha"), crb.OwnerReferences[0].UID)
-	require.Equal(t, types.UID("gamma"), crb.OwnerReferences[1].UID)
-
-	// Delete when delete call passes all owners (or more) of the cluster role binding
-	err = DeleteClusterRoleBinding(k8sClient, name,
-		metav1.OwnerReference{UID: "theta"},
-		metav1.OwnerReference{UID: "gamma"},
-		metav1.OwnerReference{UID: "alpha"},
-	)
-	require.NoError(t, err)
-
-	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, name, "")
-	require.True(t, errors.IsNotFound(err))
 }
 
 func TestCreateStorageClass(t *testing.T) {
@@ -468,16 +398,6 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, storageClass)
 
-	// Don't delete when there is no owner in the storage class
-	// but trying to delete for specific owners
-	err = DeleteStorageClass(k8sClient, name, metav1.OwnerReference{UID: "foo"})
-	require.NoError(t, err)
-
-	storageClass = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, storageClass, name, "")
-	require.NoError(t, err)
-	require.Equal(t, expected, storageClass)
-
 	// Delete when there is no owner in the storage class
 	err = DeleteStorageClass(k8sClient, name)
 	require.NoError(t, err)
@@ -487,7 +407,6 @@ func TestDeleteStorageClass(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the storage class is owned by an object
-	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
 	k8sClient.Create(context.TODO(), expected)
 
@@ -498,30 +417,6 @@ func TestDeleteStorageClass(t *testing.T) {
 	err = testutil.Get(k8sClient, storageClass, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, storageClass)
-
-	// Don't delete when the storage class is owned by objects
-	// more than what are passed on delete call
-	err = DeleteStorageClass(k8sClient, name, metav1.OwnerReference{UID: "beta"})
-	require.NoError(t, err)
-
-	storageClass = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, storageClass, name, "")
-	require.NoError(t, err)
-	require.Len(t, storageClass.OwnerReferences, 2)
-	require.Equal(t, types.UID("alpha"), storageClass.OwnerReferences[0].UID)
-	require.Equal(t, types.UID("gamma"), storageClass.OwnerReferences[1].UID)
-
-	// Delete when delete call passes all owners (or more) of the storage class
-	err = DeleteStorageClass(k8sClient, name,
-		metav1.OwnerReference{UID: "theta"},
-		metav1.OwnerReference{UID: "gamma"},
-		metav1.OwnerReference{UID: "alpha"},
-	)
-	require.NoError(t, err)
-
-	storageClass = &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, storageClass, name, "")
-	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDeleteConfigMap(t *testing.T) {
@@ -618,16 +513,6 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, csiDriver)
 
-	// Don't delete when there is no owner in the CSI driver
-	// but trying to delete for specific owners
-	err = DeleteCSIDriver(k8sClient, name, metav1.OwnerReference{UID: "foo"})
-	require.NoError(t, err)
-
-	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, name, "")
-	require.NoError(t, err)
-	require.Equal(t, expected, csiDriver)
-
 	// Delete when there is no owner in the CSI driver
 	err = DeleteCSIDriver(k8sClient, name)
 	require.NoError(t, err)
@@ -637,7 +522,6 @@ func TestDeleteCSIDriver(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Don't delete when the CSI driver is owned by an object
-	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
 	k8sClient.Create(context.TODO(), expected)
 
@@ -648,30 +532,6 @@ func TestDeleteCSIDriver(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDriver, name, "")
 	require.NoError(t, err)
 	require.Equal(t, expected, csiDriver)
-
-	// Don't delete when the CSI driver is owned by objects
-	// more than what are passed on delete call
-	err = DeleteCSIDriver(k8sClient, name, metav1.OwnerReference{UID: "beta"})
-	require.NoError(t, err)
-
-	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, name, "")
-	require.NoError(t, err)
-	require.Len(t, csiDriver.OwnerReferences, 2)
-	require.Equal(t, types.UID("alpha"), csiDriver.OwnerReferences[0].UID)
-	require.Equal(t, types.UID("gamma"), csiDriver.OwnerReferences[1].UID)
-
-	// Delete when delete call passes all owners (or more) of the CSI driver
-	err = DeleteCSIDriver(k8sClient, name,
-		metav1.OwnerReference{UID: "theta"},
-		metav1.OwnerReference{UID: "gamma"},
-		metav1.OwnerReference{UID: "alpha"},
-	)
-	require.NoError(t, err)
-
-	csiDriver = &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, csiDriver, name, "")
-	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDeleteService(t *testing.T) {
@@ -1571,7 +1431,7 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 		},
 	}
 
-	err := CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
+	err := CreateOrUpdateCSIDriver(k8sClient, expectedDriver)
 	require.NoError(t, err)
 
 	actualDriver := &storagev1beta1.CSIDriver{}
@@ -1582,54 +1442,38 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 	// Change spec
 	attachRequired = false
 
-	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
+	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver)
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
 	require.False(t, *actualDriver.Spec.AttachRequired)
-}
 
-func TestCSIDriverWithOwnerReferences(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	// Do not add owner reference if the input object has it
+	driver := actualDriver.DeepCopy()
+	driver.OwnerReferences = []metav1.OwnerReference{{UID: "uid"}}
 
-	firstOwner := metav1.OwnerReference{UID: "first-owner"}
-	expectedDriver := &storagev1beta1.CSIDriver{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test",
-			OwnerReferences: []metav1.OwnerReference{firstOwner},
-		},
-	}
-
-	err := CreateOrUpdateCSIDriver(k8sClient, expectedDriver, nil)
-	require.NoError(t, err)
-
-	actualDriver := &storagev1beta1.CSIDriver{}
-	err = testutil.Get(k8sClient, actualDriver, "test", "")
-	require.NoError(t, err)
-	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
-
-	// Update with the same owner. Nothing should change as owner hasn't changed.
-	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, &firstOwner)
+	err = CreateOrUpdateCSIDriver(k8sClient, driver)
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
-	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualDriver.OwnerReferences)
+	require.Empty(t, actualDriver.OwnerReferences)
 
-	// Update with a new owner.
-	secondOwner := metav1.OwnerReference{UID: "second-owner"}
-	expectedDriver.OwnerReferences = []metav1.OwnerReference{secondOwner}
+	// Remove owner reference if already present
+	driver = actualDriver.DeepCopy()
+	driver.OwnerReferences = []metav1.OwnerReference{{UID: "uid"}}
+	k8sClient.Update(context.TODO(), driver)
 
-	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver, &secondOwner)
+	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver)
 	require.NoError(t, err)
 
 	actualDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, actualDriver, "test", "")
 	require.NoError(t, err)
-	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualDriver.OwnerReferences)
+	require.Empty(t, actualDriver.OwnerReferences)
 }
 
 func TestServicePortAddition(t *testing.T) {

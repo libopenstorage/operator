@@ -78,10 +78,10 @@ func (c *lighthouse) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(ownerRef); err != nil {
+	if err := c.createClusterRole(); err != nil {
 		return err
 	}
-	if err := c.createClusterRoleBinding(cluster.Namespace, ownerRef); err != nil {
+	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 	if err := c.createService(cluster, ownerRef); err != nil {
@@ -98,10 +98,10 @@ func (c *lighthouse) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, LhServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(c.k8sClient, LhClusterRoleName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRole(c.k8sClient, LhClusterRoleName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, LhClusterRoleBindingName, *ownerRef); err != nil {
+	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, LhClusterRoleBindingName); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.k8sClient, LhServiceName, cluster.Namespace, *ownerRef); err != nil {
@@ -135,13 +135,12 @@ func (c *lighthouse) createServiceAccount(
 	)
 }
 
-func (c *lighthouse) createClusterRole(ownerRef *metav1.OwnerReference) error {
+func (c *lighthouse) createClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            LhClusterRoleName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: LhClusterRoleName,
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -198,20 +197,17 @@ func (c *lighthouse) createClusterRole(ownerRef *metav1.OwnerReference) error {
 				},
 			},
 		},
-		ownerRef,
 	)
 }
 
 func (c *lighthouse) createClusterRoleBinding(
 	clusterNamespace string,
-	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            LhClusterRoleBindingName,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name: LhClusterRoleBindingName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -226,7 +222,6 @@ func (c *lighthouse) createClusterRoleBinding(
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
-		ownerRef,
 	)
 }
 
