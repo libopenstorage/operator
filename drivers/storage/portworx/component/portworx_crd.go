@@ -50,6 +50,7 @@ func (c *portworxCRD) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 }
 
 func (c *portworxCRD) Delete(cluster *corev1alpha1.StorageCluster) error {
+	c.MarkDeleted()
 	return nil
 }
 

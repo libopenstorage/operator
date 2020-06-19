@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -2339,6 +2341,129 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
 	require.Empty(t, updatedCluster.Finalizers)
+}
+
+func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Stork: &corev1alpha1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	// podControl := &k8scontroller.FakePodControl{}
+	// recorder := record.NewFakeRecorder(0)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+		// podControl:        podControl,
+		// recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("pxd").AnyTimes()
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvList(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	serviceAccountList := &v1.ServiceAccountList{}
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.NotEmpty(t, serviceAccountList.Items)
+
+	clusterRoleList := &rbacv1.ClusterRoleList{}
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.NotEmpty(t, clusterRoleList.Items)
+
+	crbList := &rbacv1.ClusterRoleBindingList{}
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.NotEmpty(t, crbList.Items)
+
+	configMapList := &v1.ConfigMapList{}
+	err = testutil.List(k8sClient, configMapList)
+	require.NoError(t, err)
+	require.NotEmpty(t, configMapList.Items)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.NotEmpty(t, storageClassList.Items)
+
+	serviceList := &v1.ServiceList{}
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.NotEmpty(t, serviceList.Items)
+
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.NotEmpty(t, deploymentList.Items)
+
+	// On deleting the storage cluster, stork specs should
+	// also get removed
+	deletionTimeStamp := metav1.Now()
+	cluster.DeletionTimestamp = &deletionTimeStamp
+	k8sClient.Update(context.TODO(), cluster)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.Empty(t, serviceAccountList.Items)
+
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.Empty(t, clusterRoleList.Items)
+
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.Empty(t, crbList.Items)
+
+	err = testutil.List(k8sClient, configMapList)
+	require.NoError(t, err)
+	require.Empty(t, configMapList.Items)
+
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.Empty(t, storageClassList.Items)
+
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.Empty(t, serviceList.Items)
+
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.Empty(t, deploymentList.Items)
 }
 
 func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {

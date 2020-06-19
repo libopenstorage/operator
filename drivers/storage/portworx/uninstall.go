@@ -70,6 +70,8 @@ type UninstallPortworx interface {
 	// GetNodeWiperStatus returns the status of the node-wiper daemonset
 	// returns the no. of completed, in progress and total pods
 	GetNodeWiperStatus() (int32, int32, int32, error)
+	// DeleteNodeWiper deletes the node-wiper daemonset
+	DeleteNodeWiper() error
 	// WipeMetadata wipes the metadata associated with Portworx cluster
 	WipeMetadata() error
 }
@@ -392,6 +394,23 @@ func (u *uninstallPortworx) RunNodeWiper(
 	}
 
 	return u.k8sClient.Create(context.TODO(), ds)
+}
+
+func (u *uninstallPortworx) DeleteNodeWiper() error {
+	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
+	if err := k8sutil.DeleteServiceAccount(u.k8sClient, pxNodeWiperServiceAccountName, u.cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRole(u.k8sClient, pxNodeWiperClusterRoleName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(u.k8sClient, pxNodeWiperClusterRoleBindingName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDaemonSet(u.k8sClient, pxNodeWiperDaemonSetName, u.cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *uninstallPortworx) createServiceAccount(

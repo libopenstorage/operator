@@ -31,7 +31,7 @@ type PortworxComponent interface {
 	Reconcile(cluster *corev1alpha1.StorageCluster) error
 	// Delete deletes the component if present
 	Delete(cluster *corev1alpha1.StorageCluster) error
-	// MarkDeleted marks the component as deleted in situations like StorageCluster deletion
+	// MarkDeleted marks the component as deleted for testing purposes
 	MarkDeleted()
 }
 

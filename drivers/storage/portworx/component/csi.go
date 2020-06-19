@@ -114,8 +114,9 @@ func (c *csi) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 
 func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	// We don't delete the service account for CSI because it is part of CSV. If
-	// we disable CSI then the CSV upgrades would fail as requirements are not met.
+	if err := k8sutil.DeleteServiceAccount(c.k8sClient, CSIServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
 	if err := k8sutil.DeleteClusterRole(c.k8sClient, CSIClusterRoleName); err != nil {
 		return err
 	}
@@ -131,7 +132,6 @@ func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	c.isCreated = false
 
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
@@ -140,6 +140,8 @@ func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
 			return err
 		}
 	}
+
+	c.MarkDeleted()
 	return nil
 }
 

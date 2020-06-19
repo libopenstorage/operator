@@ -91,11 +91,13 @@ func (c *portworxProxy) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxProxyDaemonSetName, api.NamespaceSystem); err != nil {
 		return err
 	}
-	c.isCreated = false
+	c.MarkDeleted()
 	return nil
 }
 
-func (c *portworxProxy) MarkDeleted() {}
+func (c *portworxProxy) MarkDeleted() {
+	c.isCreated = false
+}
 
 func (c *portworxProxy) createServiceAccount() error {
 	sa := &v1.ServiceAccount{
