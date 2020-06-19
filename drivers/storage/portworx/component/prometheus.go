@@ -164,6 +164,7 @@ func (c *prometheus) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, PrometheusOperatorDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+	c.MarkDeleted()
 	return nil
 }
 

@@ -65,7 +65,7 @@ func (c *portworxAPI) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxAPIDaemonSetName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	c.isCreated = false
+	c.MarkDeleted()
 	return nil
 }
 

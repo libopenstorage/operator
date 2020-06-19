@@ -455,9 +455,10 @@ func (c *Controller) deleteStorageCluster(
 		}
 	}
 
-	c.isStorkDeploymentCreated = false
-	c.isStorkSchedDeploymentCreated = false
-
+	if err := c.removeStork(cluster); err != nil {
+		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
+		c.warningEvent(cluster, util.FailedComponentReason, msg)
+	}
 	return nil
 }
 

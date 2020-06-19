@@ -224,7 +224,7 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 func (p *portworx) DeleteStorage(
 	cluster *corev1alpha1.StorageCluster,
 ) (*corev1alpha1.ClusterCondition, error) {
-	p.markComponentsAsDeleted()
+	p.deleteComponents(cluster)
 
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
 		// No Delete strategy provided or Portworx not installed through the operator,
@@ -267,6 +267,9 @@ func (p *portworx) DeleteStorage(
 	}
 
 	if completed != 0 && total != 0 && completed == total {
+		if err := u.DeleteNodeWiper(); err != nil {
+			logrus.Errorf("Failed to cleanup node wiper. %v", err)
+		}
 		// all the nodes are wiped
 		if removeData {
 			logrus.Debugf("Deleting portworx metadata")
@@ -293,9 +296,12 @@ func (p *portworx) DeleteStorage(
 	}, nil
 }
 
-func (p *portworx) markComponentsAsDeleted() {
-	for _, comp := range component.GetAll() {
-		comp.MarkDeleted()
+func (p *portworx) deleteComponents(cluster *corev1alpha1.StorageCluster) {
+	for componentName, comp := range component.GetAll() {
+		if err := comp.Delete(cluster); err != nil {
+			msg := fmt.Sprintf("Failed to cleanup %v. %v", componentName, err)
+			p.warningEvent(cluster, util.FailedComponentReason, msg)
+		}
 	}
 }
 

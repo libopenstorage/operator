@@ -105,7 +105,7 @@ func (c *autopilot) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	c.isCreated = false
+	c.MarkDeleted()
 	return nil
 }
 
