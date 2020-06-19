@@ -186,6 +186,13 @@ annotations:
 }
 
 func (c *portworxStorageClass) Delete(cluster *corev1alpha1.StorageCluster) error {
+	if cluster.DeletionTimestamp != nil &&
+		(cluster.Spec.DeleteStrategy == nil || cluster.Spec.DeleteStrategy.Type == "") {
+		// If the cluster is deleted without any delete strategy do not delete the
+		// storage classes as Portworx is still running on the nodes
+		return nil
+	}
+
 	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbStorageClass); err != nil {
 		return err
 	}

@@ -107,7 +107,7 @@ func (c *pvcController) Delete(cluster *corev1alpha1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, PVCDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	c.isCreated = false
+	c.MarkDeleted()
 	return nil
 }
 
