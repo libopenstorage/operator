@@ -93,6 +93,8 @@ type StorageClusterSpec struct {
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
+	// Security configurations for setting up an auth enabled or disabled cluster
+	Security *SecuritySpec `json:"security,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -105,6 +107,29 @@ type NodeSpec struct {
 	// CommonConfig contains storage, network and other configuration specific
 	// to the group of nodes. This will override the cluster-level configuration.
 	CommonConfig
+}
+
+// SecuritySpec is used to define the security configuration for a cluster.
+type SecuritySpec struct {
+	Enabled bool      `json:"enabled,omitempty"`
+	Auth    *AuthSpec `json:"auth,omitempty"`
+}
+
+// AuthSpec lets the user define authorization configurations
+// for creating a PX Security enabled cluster
+type AuthSpec struct {
+	Authenticators *AuthenticatorsSpec `json:"authenticators,omitempty"`
+}
+
+// AuthenticatorsSpec defines which auth mechanisms are setup for PX Security
+type AuthenticatorsSpec struct {
+	SelfSigned *SelfSignedSpec `json:"selfSigned,omitempty"`
+}
+
+// SelfSignedSpec defines a configuration for self signed authentication
+type SelfSignedSpec struct {
+	Issuer        *string        `json:"issuer,omitempty"`
+	TokenLifetime *meta.Duration `json:"tokenLifetime,omitempty"`
 }
 
 // CommonConfig are common configurations that are exposed at both

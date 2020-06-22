@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -128,6 +128,14 @@ func GetExpectedConfigMap(t *testing.T, fileName string) *v1.ConfigMap {
 	configMap, ok := obj.(*v1.ConfigMap)
 	assert.True(t, ok, "Expected ConfigMap object")
 	return configMap
+}
+
+// GetExpectedSecret returns the Secret object from given yaml spec file
+func GetExpectedSecret(t *testing.T, fileName string) *v1.Secret {
+	obj := getKubernetesObject(t, fileName)
+	secret, ok := obj.(*v1.Secret)
+	assert.True(t, ok, "Expected Secret object")
+	return secret
 }
 
 // GetExpectedService returns the Service object from given yaml spec file

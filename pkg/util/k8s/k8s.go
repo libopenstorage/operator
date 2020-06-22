@@ -13,7 +13,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -1382,4 +1382,80 @@ func removeOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerRe
 		}
 	}
 	return newOwners
+}
+
+// CreateOrUpdateSecret creates a secret if not present, else updates it
+func CreateOrUpdateSecret(
+	k8sClient client.Client,
+	secret *v1.Secret,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingSecret := &v1.Secret{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      secret.Name,
+			Namespace: secret.Namespace,
+		},
+		existingSecret,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating %s/%s Secret", secret.Namespace, secret.Name)
+		return k8sClient.Create(context.TODO(), secret)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(secret.Data, existingSecret.Data)
+
+	for _, o := range existingSecret.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			secret.OwnerReferences = append(secret.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(secret.OwnerReferences) > len(existingSecret.OwnerReferences) {
+		logrus.Debugf("Updating %s/%s Secret", secret.Namespace, secret.Name)
+		return k8sClient.Update(context.TODO(), secret)
+	}
+	return nil
+}
+
+// DeleteSecret deletes a secret if present and owned
+func DeleteSecret(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	secret := &v1.Secret{}
+	err := k8sClient.Get(context.TODO(), resource, secret)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(secret.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(secret.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(secret.OwnerReferences) > 0 && len(secret.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete secret %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s Secret", namespace, name)
+		return k8sClient.Delete(context.TODO(), secret)
+	}
+	secret.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s Secret", namespace, name)
+	return k8sClient.Update(context.TODO(), secret)
 }

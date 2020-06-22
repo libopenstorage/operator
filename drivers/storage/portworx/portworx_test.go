@@ -830,6 +830,99 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 }
 
+func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluster) {
+	require.NotNil(t, cluster.Spec.Security)
+	require.Equal(t, true, cluster.Spec.Security.Enabled)
+	require.NotNil(t, true, cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
+	require.Equal(t, "portworx.io", *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
+	require.NotNil(t, true, cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
+	require.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, *cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
+}
+
+func TestStorageClusterDefaultsForSecurity(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Security spec should be nil, as it's disabled by default
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Security)
+
+	// when security.enabled is false, no security fields should be populated.
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: false,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Security.Auth)
+
+	// Check for default values when only enabled=true
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	// Check for default values when only enabled=true and fields non-nil but empty
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth:    &corev1alpha1.AuthSpec{},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			Authenticators: &corev1alpha1.AuthenticatorsSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			Authenticators: &corev1alpha1.AuthenticatorsSpec{
+				SelfSigned: &corev1alpha1.SelfSignedSpec{},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			Authenticators: &corev1alpha1.AuthenticatorsSpec{
+				SelfSigned: &corev1alpha1.SelfSignedSpec{
+					Issuer: stringPtr(""),
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	// issuer, when manually set, is not overwritten.
+	cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = stringPtr("myissuer.io")
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "myissuer.io", *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
+
+	// token lifetime, when manually set, is not overwritten.
+	driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime = metav1DurationPtr(time.Hour * 1)
+	require.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, *cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
+
+}
+
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
