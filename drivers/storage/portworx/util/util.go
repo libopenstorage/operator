@@ -308,8 +308,7 @@ func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.En
 				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
 			}
 
-			decodedValue := make([]byte, len(value))
-			_, err = base64.StdEncoding.Decode(decodedValue, value)
+			decodedValue, err := DecodeBase64(value)
 			if err != nil {
 				return "", err
 			}
@@ -412,21 +411,14 @@ func IsTLSEnabled() bool {
 	return err == nil && enabled
 }
 
-// GetOperatorToken generates an auth token given a secret key
-func GetOperatorToken(
+// GenerateToken generates an auth token given a secret key
+func GenerateToken(
 	cluster *corev1alpha1.StorageCluster,
 	secretkey string,
-) (string, error) {
-	claims := &auth.Claims{
-		Issuer:  *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
-		Subject: "operator@portworx.io",
-		Name:    "operator communications",
-		Email:   "operator@portworx.io",
-		Roles:   []string{"system.admin"},
-		Groups:  []string{"*"},
-	}
+	claims *auth.Claims,
 
-	signature, err := auth.NewSignatureSharedSecret(string(secretkey))
+) (string, error) {
+	signature, err := auth.NewSignatureSharedSecret(secretkey)
 	if err != nil {
 		return "", err
 	}
@@ -441,50 +433,32 @@ func GetOperatorToken(
 	return token, nil
 }
 
-// GetAdminSecret gets the admin secret from a pre-configured environment variable
-func GetAdminSecret(
+// GetSecretValue gets any secret key value from k8s and decodes to a string value
+func GetSecretValue(
 	ctx context.Context,
 	cluster *corev1alpha1.StorageCluster,
 	k8sClient client.Client,
+	secretName,
+	secretKey string,
 ) (string, error) {
-	adminSecret := v1.Secret{}
-
-	// if configured in cluster spec env, get it and use it.
-	// this allows for configmap support too.
-	for _, envVar := range cluster.Spec.Env {
-		if envVar.Name == EnvKeyPortworxAuthJwtSharedSecret {
-			val, err := GetValueFromEnvVar(ctx, k8sClient, &envVar, cluster.Namespace)
-			if err != nil {
-				return "", err
-			}
-
-			return val, nil
-		}
-	}
-
-	// check for px-auth-keys secret
+	// check for secretName
+	secret := v1.Secret{}
 	err := k8sClient.Get(ctx,
 		types.NamespacedName{
-			Name:      SecurityPXAuthKeysSecretName,
+			Name:      secretName,
 			Namespace: cluster.Namespace,
 		},
-		&adminSecret,
+		&secret,
 	)
 	if err != nil {
 		return "", err
 	}
-	encodedSecret, ok := adminSecret.Data["shared-secret"]
-	if !ok || len(encodedSecret) <= 0 {
-		return "", fmt.Errorf("failed to get admin token from secret %s/%s", cluster.Namespace, SecurityPXAuthKeysSecretName)
+	value, ok := secret.Data[secretKey]
+	if !ok || len(value) <= 0 {
+		return "", fmt.Errorf("failed to get key %s inside secret %s/%s", secretKey, cluster.Namespace, secretName)
 	}
 
-	decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(encodedSecret)))
-	_, err = base64.StdEncoding.Decode(decodedSecret, encodedSecret)
-	if err != nil {
-		return "", err
-	}
-
-	return string(decodedSecret), nil
+	return string(value), nil
 }
 
 // SecurityEnabled checks if the security flag is set for a cluster
@@ -499,21 +473,36 @@ func SetupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageClu
 		return ctx, nil
 	}
 
-	pxAuthSecret, err := GetAdminSecret(ctx, cluster, k8sClient)
+	pxAdminToken, err := GetSecretValue(ctx, cluster, k8sClient, "px-admin-token", "auth-token")
 	if err != nil {
-		return ctx, fmt.Errorf("failed to get auth secret: %v", err.Error())
+		return ctx, fmt.Errorf("failed to get px-admin-token: %v", err.Error())
 	}
-	if pxAuthSecret == "" {
+	if pxAdminToken == "" {
 		return ctx, nil
 	}
 
-	// Generate token and add to metadata
-	token, err := GetOperatorToken(cluster, string(pxAuthSecret))
-	if err != nil {
-		return ctx, fmt.Errorf("failed to create operator token: %v", err.Error())
-	}
 	md := metadata.New(map[string]string{
-		"authorization": "bearer " + token,
+		"authorization": "bearer " + pxAdminToken,
 	})
 	return metadata.NewOutgoingContext(ctx, md), nil
+}
+
+// DecodeBase64 decodes a given src byte slice.
+// This returns the byte slice based on the length decoded.
+func DecodeBase64(src []byte) ([]byte, error) {
+	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(src)))
+	l, err := base64.StdEncoding.Decode(decoded, src)
+	if err != nil {
+		return nil, err
+	}
+
+	return decoded[:l], nil
+}
+
+// EncodeBase64 encode a given src byte slice.
+func EncodeBase64(src []byte) []byte {
+	encoded := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
+	base64.StdEncoding.Encode(encoded, src)
+
+	return encoded
 }

@@ -5,10 +5,14 @@ import (
 	"testing"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -29,17 +33,6 @@ func TestSetupContextWithToken(t *testing.T) {
 		},
 	}
 
-	var emptySecret = []v1.Secret{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
-				Namespace: "ns",
-			},
-			// no data in secret
-			Data: map[string][]byte{},
-		},
-	}
-
 	var defaultConfigMap = []v1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -50,17 +43,6 @@ func TestSetupContextWithToken(t *testing.T) {
 			Data: map[string]string{
 				component.SecuritySharedSecretKey: "mysecret",
 			},
-		},
-	}
-
-	var emptyConfigMap = []v1.ConfigMap{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
-				Namespace: "ns",
-			},
-			// no data in secret
-			Data: map[string]string{},
 		},
 	}
 
@@ -101,37 +83,10 @@ func TestSetupContextWithToken(t *testing.T) {
 			expectTokenAdded: true,
 			expectError:      false,
 		},
-		{
-			name:           "Empty secret should fail",
-			pxSecretName:   emptySecret[0].Name,
-			initialSecrets: emptySecret,
-
-			expectTokenAdded: false,
-			expectError:      true,
-			expectedError:    "failed to get auth secret: failed to find env var value shared-secret in secret px-auth-keys in namespace ns",
-		},
-		{
-			name:              "Empty config map should fail",
-			pxConfigMapName:   emptyConfigMap[0].Name,
-			initialConfigMaps: emptyConfigMap,
-
-			expectTokenAdded: false,
-			expectError:      true,
-			expectedError:    "failed to get auth secret: failed to find env var value shared-secret in configmap px-auth-keys in namespace ns",
-		},
-		{
-			name:           "Nonexistent secret should fail",
-			pxSecretName:   defaultSecret[0].Name,
-			initialSecrets: []v1.Secret{}, // no secrets created
-
-			expectTokenAdded: false,
-			expectError:      true,
-			expectedError:    "failed to get auth secret: secrets \"px-auth-keys\" not found",
-		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			k8sClient := testutil.FakeK8sClient(&v1.Service{})
+			k8sClient := testutil.FakeK8sClient()
 
 			// create all initial k8s resources
 			for _, initialSecret := range tc.initialSecrets {
@@ -154,7 +109,14 @@ func TestSetupContextWithToken(t *testing.T) {
 					},
 				},
 			}
+			coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+			reregisterComponents()
+			driver := portworx{}
+			driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 			setSecuritySpecDefaults(cluster)
+
+			err := driver.PreInstall(cluster)
+			assert.NoError(t, err)
 
 			// set env vars
 			if tc.pxSharedSecretKey != "" {
