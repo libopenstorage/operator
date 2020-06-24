@@ -9,7 +9,6 @@ import (
 	"path"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,6 @@ func TestErrorWhenReadingLocalManifest(t *testing.T) {
 	defer unmaskLoadManifest()
 	// Error reading manifest file
 	readManifest = func(filename string) ([]byte, error) {
-		require.Equal(t, path.Join(manifestDir, localReleaseManifest), filename)
 		return nil, fmt.Errorf("file read error")
 	}
 	r, err := newDeprecatedManifest("1.2.3").Get()
@@ -195,7 +193,6 @@ func TestRemoteManifest(t *testing.T) {
 		os.RemoveAll(manifestDir)
 		unmaskLoadManifest()
 		setupHTTPFailure()
-		refreshInterval = manifestRefreshInterval
 	}()
 
 	// Should download remote manifest if not present
@@ -215,8 +212,7 @@ releases:
 	require.Equal(t, "3.2.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
 
-	// Should load the same file again instead of downloading it again
-	// We are mocking the http call to return error so we know it is not called
+	// If the manifest is stale, and the download fails then return the stale manifest
 	setupHTTPFailure()
 
 	r, err = newDeprecatedManifest("3.2.1").Get()
@@ -224,56 +220,6 @@ releases:
 
 	require.Equal(t, "3.2.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
-
-	// If loading the existing remote manifest fails, we should download it again
-	readManifest = func(filename string) ([]byte, error) {
-		return nil, fmt.Errorf("remote manifest read error")
-	}
-	httpGet = func(url string) (*http.Response, error) {
-		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
-releases:
-  3.5.0:
-    stork: stork/image:3.5.0
-`))),
-		}, nil
-	}
-
-	r, err = newDeprecatedManifest("3.5.0").Get()
-	require.NoError(t, err)
-
-	require.Equal(t, "3.5.0", r.PortworxVersion)
-	require.Equal(t, "stork/image:3.5.0", r.Components.Stork)
-	unmaskLoadManifest()
-
-	// If the manifest is stale, then re-download it
-	refreshInterval = func() time.Duration {
-		return 0 * time.Second
-	}
-	httpGet = func(url string) (*http.Response, error) {
-		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
-releases:
-  4.0.0:
-    stork: stork/image:4.0.0
-`))),
-		}, nil
-	}
-
-	r, err = newDeprecatedManifest("4.0.0").Get()
-	require.NoError(t, err)
-
-	require.Equal(t, "4.0.0", r.PortworxVersion)
-	require.Equal(t, "stork/image:4.0.0", r.Components.Stork)
-
-	// If the manifest is stale, and the download fails then return the stale manifest
-	setupHTTPFailure()
-
-	r, err = newDeprecatedManifest("4.0.0").Get()
-	require.NoError(t, err)
-
-	require.Equal(t, "4.0.0", r.PortworxVersion)
-	require.Equal(t, "stork/image:4.0.0", r.Components.Stork)
 
 	// If manifest is stale, download fails and unable to read previous file,
 	// then load the local manifest file
@@ -307,7 +253,6 @@ func TestInvalidRemoteManifest(t *testing.T) {
 		os.RemoveAll(manifestDir)
 		unmaskLoadManifest()
 		setupHTTPFailure()
-		refreshInterval = manifestRefreshInterval
 	}()
 
 	// If the downloaded manifest is invalid and unable to read local
@@ -355,9 +300,6 @@ releases:
 	require.Equal(t, "2.0.0", r.PortworxVersion)
 	require.Equal(t, "stork/image:2.0.0", r.Components.Stork)
 
-	refreshInterval = func() time.Duration {
-		return 0 * time.Second
-	}
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
 			Body: ioutil.NopCloser(bytes.NewReader([]byte("invalid-yaml"))),

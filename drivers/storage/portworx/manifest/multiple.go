@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"time"
 
 	version "github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -23,9 +22,6 @@ const (
 	remoteReleaseManifest = "portworx-releases-remote.yaml"
 	// defaultReleaseManifestURL is the URL to download the latest release manifest
 	defaultReleaseManifestURL = "https://install.portworx.com/versions"
-	// defaultManifestRefreshInterval interval after which we should refresh the
-	// downloaded release manifest
-	defaultManifestRefreshInterval = time.Hour
 )
 
 var (
@@ -39,8 +35,7 @@ var (
 
 // Methods to override for testing
 var (
-	readManifest    = readReleaseManifest
-	refreshInterval = manifestRefreshInterval
+	readManifest = readReleaseManifest
 )
 
 // releaseManifest defines the Portworx release manifest
@@ -58,7 +53,7 @@ type multiple struct {
 	pxVersion string
 }
 
-func newDeprecatedManifest(pxVersion string) manifest {
+func newDeprecatedManifest(pxVersion string) versionProvider {
 	logrus.Debugf("Using old release manifest")
 	return &multiple{
 		pxVersion: pxVersion,
@@ -144,34 +139,13 @@ func loadLocalManifest() (*releaseManifest, error) {
 }
 
 func loadRemoteManifest() (*releaseManifest, error) {
-	var fileExists bool
-	manifestPath := manifestFilepath(remoteReleaseManifest)
-	file, err := os.Stat(manifestPath)
-	if err != nil {
-		logrus.Debugf("Cannot read release manifest. %v", err)
-	} else {
-		fileExists = true
-		expirationTime := time.Now().Add(-refreshInterval())
-		if file.ModTime().Before(expirationTime) {
-			logrus.Debugf("Release manifest is stale.")
-		} else {
-			manifest, err := loadManifestFromFile(manifestPath)
-			if err == nil {
-				return manifest, nil
-			}
-			logrus.Debugf("Failed to load existing release manifest. %v", err)
-		}
-	}
-
 	logrus.Debugf("Downloading latest release manifest.")
 	manifest, err := downloadManifest()
 	if err != nil {
+		// If download fails return the existing remote manifest if it exists
 		logrus.Debugf("Failed to get latest release manifest. %v", err)
-		if fileExists {
-			// If download fails return the existing remote manifest if it exists
-			return loadManifestFromFile(manifestPath)
-		}
-		return nil, err
+		manifestPath := manifestFilepath(remoteReleaseManifest)
+		return loadManifestFromFile(manifestPath)
 	}
 	return manifest, nil
 }
@@ -225,10 +199,6 @@ func loadManifest(content []byte) (*releaseManifest, error) {
 
 func manifestFilepath(filename string) string {
 	return path.Join(manifestDir, filename)
-}
-
-func manifestRefreshInterval() time.Duration {
-	return defaultManifestRefreshInterval
 }
 
 type semver []string

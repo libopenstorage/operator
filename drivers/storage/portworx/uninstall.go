@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -173,7 +174,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := getVersionManifest(u.cluster, u.k8sClient, recorder, nil)
+		release := manifest.Instance().GetVersions(u.cluster, true)
 		wiperImage = release.Components.NodeWiper
 	}
 	wiperImage = util.GetImageURN(u.cluster.Spec.CustomImageRegistry, wiperImage)

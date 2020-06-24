@@ -157,9 +157,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Use default image from release manifest when spec.image is not set
-	require.Equal(t, defaultPortworxImage+":2.1.5.1", cluster.Spec.Image)
-	require.Equal(t, "2.1.5.1", cluster.Spec.Version)
-	require.Equal(t, "2.1.5.1", cluster.Status.Version)
+	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
+	require.Equal(t, "3.0.0", cluster.Spec.Version)
+	require.Equal(t, "3.0.0", cluster.Status.Version)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
 	require.Equal(t, uint32(pxutil.DefaultStartPort), *cluster.Spec.StartPort)
@@ -170,9 +170,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Image = "  "
 	cluster.Spec.Version = "  "
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, defaultPortworxImage+":2.1.5.1", cluster.Spec.Image)
-	require.Equal(t, "2.1.5.1", cluster.Spec.Version)
-	require.Equal(t, "2.1.5.1", cluster.Status.Version)
+	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
+	require.Equal(t, "3.0.0", cluster.Spec.Version)
+	require.Equal(t, "3.0.0", cluster.Status.Version)
 
 	// Don't use default image when spec.image has a value
 	cluster.Spec.Image = "foo/image:1.0.0"
@@ -185,9 +185,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Image = "test/image"
 	cluster.Spec.Version = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "test/image:2.1.5.1", cluster.Spec.Image)
-	require.Equal(t, "2.1.5.1", cluster.Spec.Version)
-	require.Equal(t, "2.1.5.1", cluster.Status.Version)
+	require.Equal(t, "test/image:3.0.0", cluster.Spec.Image)
+	require.Equal(t, "3.0.0", cluster.Spec.Version)
+	require.Equal(t, "3.0.0", cluster.Status.Version)
 
 	// Empty kvdb spec should still set internal kvdb as default
 	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
@@ -315,9 +315,9 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 
 	// Only portworx image and version should be set
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, defaultPortworxImage+":2.1.5.1", cluster.Spec.Image)
-	require.Equal(t, "2.1.5.1", cluster.Spec.Version)
-	require.Equal(t, "2.1.5.1", cluster.Status.Version)
+	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
+	require.Equal(t, "3.0.0", cluster.Spec.Version)
+	require.Equal(t, "3.0.0", cluster.Status.Version)
 	cluster.Spec.Image = ""
 	cluster.Spec.Version = ""
 	require.Empty(t, cluster.Spec)
@@ -336,9 +336,9 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 }
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
@@ -376,7 +376,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
@@ -399,12 +399,12 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	cluster.Spec.UserInterface.Image = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.UserInterface = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
@@ -418,21 +418,51 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image has changed
-	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired image if auto update of components is always enabled
+	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.UserInterface.Image)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired image if auto update of components is enabled once
+	updateStrategy = corev1alpha1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.UserInterface.Image)
+	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
+
+	// Don't change desired image if auto update of components is never
+	updateStrategy = corev1alpha1.NeverAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.UserInterface.Image)
+	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
+
+	// Don't change desired image if auto update of components is not set
+	cluster.Spec.AutoUpdateComponents = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.UserInterface.Image)
+	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
 
 	// For upgrades from existing cluster, if image is not locked
 	// we need to reset it the first time as previously it was
@@ -442,7 +472,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:existing"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Reset desired image if lighthouse has been disabled
 	cluster.Spec.UserInterface.Enabled = false
@@ -485,7 +515,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
@@ -508,12 +538,12 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	cluster.Spec.Autopilot.Image = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.Autopilot = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
@@ -527,21 +557,51 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if px image has changed
-	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
+
+	// Change desired image if auto update of components is always enabled
+	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Image)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
+
+	// Change desired image if auto update of components is enabled once
+	updateStrategy = corev1alpha1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Image)
+	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
+
+	// Don't change desired image if auto update of components is never
+	updateStrategy = corev1alpha1.NeverAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Image)
+	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
+
+	// Don't change desired image if auto update of components is not set
+	cluster.Spec.AutoUpdateComponents = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Image)
+	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
 
 	// For upgrades from existing cluster, if image is not locked
 	// we need to reset it the first time as previously it was
@@ -551,7 +611,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:existing"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
-	require.Equal(t, "portworx/autopilot:2.3.4", cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Reset desired image if autopilot has been disabled
 	cluster.Spec.Autopilot.Enabled = false
@@ -593,7 +653,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
@@ -616,12 +676,12 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	cluster.Spec.Stork.Image = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.Stork = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
@@ -635,21 +695,51 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
-	require.Equal(t, "portworx/px-lighthouse:2.3.4", cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Change desired image if px image has changed
-	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
+
+	// Change desired image if auto update of components is always enabled
+	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Stork.Image)
+	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
+
+	// Change desired image if auto update of components is enabled once
+	updateStrategy = corev1alpha1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Stork.Image)
+	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
+
+	// Don't change desired image if auto update of components is never
+	updateStrategy = corev1alpha1.NeverAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Stork.Image)
+	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
+
+	// Don't change desired image if auto update of components is not set
+	cluster.Spec.AutoUpdateComponents = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Stork.Image)
+	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
 
 	// For upgrades from existing cluster, if image is not locked
 	// we need to reset it the first time as previously it was
@@ -659,7 +749,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	cluster.Spec.Stork.Image = "openstorage/stork:existing"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, "openstorage/stork:2.3.4", cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Reset desired image if stork has been disabled
 	cluster.Spec.Stork.Enabled = false
@@ -742,7 +832,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Change desired images if px image has changed
-	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
@@ -832,7 +922,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 		cluster.Status.DesiredImages.PrometheusOperator)
 
 	// Change desired images if px image has changed
-	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
@@ -4420,7 +4510,7 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 	wiperDS := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, customRepo+"/px-node-wiper:2.3.4",
+	require.Equal(t, customRepo+"/px-node-wiper:"+newCompVersion(),
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -4453,7 +4543,7 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	wiperDS := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, customRegistry+"/portworx/px-node-wiper:2.3.4",
+	require.Equal(t, customRegistry+"/portworx/px-node-wiper:"+newCompVersion(),
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -5633,41 +5723,52 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 }
 
 func manifestSetup() {
-	getVersionManifest = func(
-		_ *corev1alpha1.StorageCluster,
-		_ client.Client,
-		_ record.EventRecorder,
-		_ *version.Version,
-	) *manifest.Version {
-		return &manifest.Version{
-			PortworxVersion: "2.1.5.1",
-			Components: manifest.Release{
-				Stork:                     "openstorage/stork:2.3.4",
-				Autopilot:                 "portworx/autopilot:2.3.4",
-				Lighthouse:                "portworx/px-lighthouse:2.3.4",
-				NodeWiper:                 "portworx/px-node-wiper:2.3.4",
-				CSIProvisioner:            "quay.io/k8scsi/csi-provisioner:v1.2.3",
-				CSIAttacher:               "quay.io/k8scsi/csi-attacher:v1.2.3",
-				CSIDriverRegistrar:        "quay.io/k8scsi/driver-registrar:v1.2.3",
-				CSINodeDriverRegistrar:    "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
-				CSISnapshotter:            "quay.io/k8scsi/csi-snapshotter:v1.2.3",
-				CSIResizer:                "quay.io/k8scsi/csi-resizer:v1.2.3",
-				Prometheus:                "quay.io/prometheus/prometheus:v1.2.3",
-				PrometheusOperator:        "quay.io/coreos/prometheus-operator:v1.2.3",
-				PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",
-				PrometheusConfigMapReload: "quay.io/coreos/configmap-reload:v1.2.3",
-			},
-		}
+	manifest.SetInstance(&fakeManifest{})
+}
+
+type fakeManifest struct{}
+
+func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, _ *version.Version) {}
+
+func (m *fakeManifest) GetVersions(
+	_ *corev1alpha1.StorageCluster,
+	force bool,
+) *manifest.Version {
+	compVersion := compVersion()
+	if force {
+		compVersion = newCompVersion()
+	}
+	return &manifest.Version{
+		PortworxVersion: "3.0.0",
+		Components: manifest.Release{
+			Stork:                     "openstorage/stork:" + compVersion,
+			Autopilot:                 "portworx/autopilot:" + compVersion,
+			Lighthouse:                "portworx/px-lighthouse:" + compVersion,
+			NodeWiper:                 "portworx/px-node-wiper:" + compVersion,
+			CSIProvisioner:            "quay.io/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:               "quay.io/k8scsi/csi-attacher:v1.2.3",
+			CSIDriverRegistrar:        "quay.io/k8scsi/driver-registrar:v1.2.3",
+			CSINodeDriverRegistrar:    "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:            "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                "quay.io/k8scsi/csi-resizer:v1.2.3",
+			Prometheus:                "quay.io/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:        "quay.io/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload: "quay.io/coreos/configmap-reload:v1.2.3",
+		},
 	}
 }
 
-func manifestCleanup() {
-	getVersionManifest = manifest.GetVersions
+func compVersion() string {
+	return "2.3.4"
+}
+
+func newCompVersion() string {
+	return "4.3.2"
 }
 
 func TestMain(m *testing.M) {
 	manifestSetup()
 	code := m.Run()
-	manifestCleanup()
 	os.Exit(code)
 }

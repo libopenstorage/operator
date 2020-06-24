@@ -20,7 +20,7 @@ type remote struct {
 	cluster *corev1alpha1.StorageCluster
 }
 
-func newRemoteManifest(cluster *corev1alpha1.StorageCluster) manifest {
+func newRemoteManifest(cluster *corev1alpha1.StorageCluster) versionProvider {
 	return &remote{
 		cluster: cluster,
 	}
