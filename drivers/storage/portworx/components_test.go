@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/constants"
+
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
@@ -15,7 +17,6 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
 
@@ -222,7 +223,7 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				storagecluster.AnnotationDisableStorage: "true",
+				constants.AnnotationDisableStorage: "true",
 			},
 		},
 	}
@@ -530,7 +531,7 @@ func TestDisablePortworx(t *testing.T) {
 
 	// Disable Portworx
 	cluster.Annotations = map[string]string{
-		storagecluster.AnnotationDisableStorage: "true",
+		constants.AnnotationDisableStorage: "true",
 	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -763,7 +764,7 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				storagecluster.AnnotationDisableStorage: "true",
+				constants.AnnotationDisableStorage: "true",
 			},
 		},
 	}
@@ -777,7 +778,7 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, storageClassList.Items)
 
 	// Invalid annotation value should result in creating storage classes
-	cluster.Annotations[storagecluster.AnnotationDisableStorage] = "invalid"
+	cluster.Annotations[constants.AnnotationDisableStorage] = "invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1287,12 +1288,12 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsPKS:                         "true",
-				annotationIsEKS:                         "true",
-				annotationIsGKE:                         "true",
-				annotationIsAKS:                         "true",
-				annotationIsOpenshift:                   "true",
-				storagecluster.AnnotationDisableStorage: "true",
+				annotationIsPKS:                    "true",
+				annotationIsEKS:                    "true",
+				annotationIsGKE:                    "true",
+				annotationIsAKS:                    "true",
+				annotationIsOpenshift:              "true",
+				constants.AnnotationDisableStorage: "true",
 			},
 		},
 	}

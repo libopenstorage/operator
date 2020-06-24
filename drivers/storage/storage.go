@@ -53,6 +53,8 @@ type ClusterPluginInterface interface {
 	PreInstall(*corev1alpha1.StorageCluster) error
 	// GetStoragePodSpec given the storage cluster spec and node name it returns the pod spec for a specific node
 	GetStoragePodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
+	//  GetKVDBPodSpec given the storage cluster spec and node name it returns the pod spec for a kvdb node
+	GetKVDBPodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
 	GetSelectorLabels() map[string]string
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage

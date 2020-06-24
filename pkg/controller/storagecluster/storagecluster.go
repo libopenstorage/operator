@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path"
 	"reflect"
 	"sort"
 	"strconv"
@@ -29,18 +28,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/constants"
+
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -66,28 +66,22 @@ import (
 
 const (
 	// ControllerName is the name of the controller
-	ControllerName = "storagecluster-controller"
-	// AnnotationDisableStorage annotation to disable the storage pods from running.
-	// Defaults to false value.
-	AnnotationDisableStorage            = operatorPrefix + "/disable-storage"
+	ControllerName                      = "storagecluster-controller"
 	slowStartInitialBatchSize           = 1
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
-	operatorPrefix                      = "operator.libopenstorage.org"
-	labelKeyName                        = operatorPrefix + "/name"
-	labelKeyDriverName                  = operatorPrefix + "/driver"
-	annotationNodeLabels                = operatorPrefix + "/node-labels"
-	deleteFinalizerName                 = operatorPrefix + "/delete"
+	annotationNodeLabels                = constants.OperatorPrefix + "/node-labels"
+	deleteFinalizerName                 = constants.OperatorPrefix + "/delete"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 	defaultRevisionHistoryLimit         = 10
 	defaultMaxUnavailablePods           = 1
 	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
-	storageNodeStatusPlural             = "storagenodestatuses"
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
-	storageNodeCRDFile                  = "core_v1alpha1_storagenode_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
+	// ClusterAPIMachineAnnotation is the present on the k8s node object if it is being managed by a machine object
+
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -207,12 +201,12 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	}
 
 	if err := c.validate(cluster); err != nil {
-		c.warningEvent(cluster, util.FailedValidationReason, err.Error())
+		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if err := c.syncStorageCluster(cluster); err != nil {
-		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
+		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -232,7 +226,7 @@ func (c *Controller) validate(cluster *corev1alpha1.StorageCluster) error {
 func (c *Controller) validateK8sVersion() error {
 	var err error
 	if c.kubernetesVersion == nil {
-		c.kubernetesVersion, err = k8sutil.GetVersion()
+		c.kubernetesVersion, err = k8s.GetVersion()
 		if err != nil {
 			return err
 		}
@@ -283,7 +277,7 @@ func (c *Controller) validateSingleCluster(current *corev1alpha1.StorageCluster)
 // RegisterCRD registers and validates CRDs
 func (c *Controller) RegisterCRD() error {
 	// Create and validate StorageCluster CRD
-	crd, err := getCRDFromFile(storageClusterCRDFile)
+	crd, err := k8s.GetCRDFromFile(storageClusterCRDFile, crdBaseDir())
 	if err != nil {
 		return err
 	}
@@ -310,43 +304,6 @@ func (c *Controller) RegisterCRD() error {
 		return err
 	}
 
-	// Create and validate StorageNode CRD
-	crd, err = getCRDFromFile(storageNodeCRDFile)
-	if err != nil {
-		return err
-	}
-	latestCRD, err = apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		if err = apiextensionsops.Instance().RegisterCRD(crd); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	} else {
-		crd.ResourceVersion = latestCRD.ResourceVersion
-		if _, err := apiextensionsops.Instance().UpdateCRD(crd); err != nil {
-			return err
-		}
-	}
-
-	resource = apiextensionsops.CustomResource{
-		Plural: corev1alpha1.StorageNodeResourcePlural,
-		Group:  corev1alpha1.SchemeGroupVersion.Group,
-	}
-	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
-	if err != nil {
-		return err
-	}
-
-	// Delete StorageNodeStatus CRD as it is not longer used
-	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		storageNodeStatusPlural,
-		corev1alpha1.SchemeGroupVersion.Group,
-	)
-	err = apiextensionsops.Instance().DeleteCRD(nodeStatusCRDName)
-	if err != nil && !errors.IsNotFound(err) {
-		logrus.Warnf("Failed to delete CRD %s: %v", nodeStatusCRDName, err)
-	}
 	return nil
 }
 
@@ -431,7 +388,7 @@ func (c *Controller) deleteStorageCluster(
 		deleteClusterCondition, driverErr := c.Driver.DeleteStorage(toDelete)
 		if driverErr != nil {
 			msg := fmt.Sprintf("Driver failed to delete storage. %v", driverErr)
-			c.warningEvent(toDelete, util.FailedSyncReason, msg)
+			k8s.WarningEvent(c.recorder, toDelete, util.FailedSyncReason, msg)
 		}
 		// Check if there is an existing delete condition and overwrite it
 		foundIndex := -1
@@ -459,7 +416,7 @@ func (c *Controller) deleteStorageCluster(
 		}
 
 		toDelete.Status.Phase = string(corev1alpha1.ClusterConditionTypeDelete) + string(toDelete.Status.Conditions[foundIndex].Status)
-		if err := k8sutil.UpdateStorageClusterStatus(c.client, toDelete); err != nil && !errors.IsNotFound(err) {
+		if err := k8s.UpdateStorageClusterStatus(c.client, toDelete); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}
@@ -475,7 +432,7 @@ func (c *Controller) deleteStorageCluster(
 
 	if err := c.removeStork(cluster); err != nil {
 		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
-		c.warningEvent(cluster, util.FailedComponentReason, msg)
+		k8s.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
 	}
 	return nil
 }
@@ -485,9 +442,9 @@ func (c *Controller) updateStorageClusterStatus(
 ) error {
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
-		c.warningEvent(cluster, util.FailedSyncReason, err.Error())
+		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
 	}
-	return k8sutil.UpdateStorageClusterStatus(c.client, toUpdate)
+	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
 }
 
 func (c *Controller) manage(
@@ -807,7 +764,7 @@ func (c *Controller) podsShouldBeOnNode(
 			}
 			if pod.Status.Phase == v1.PodFailed {
 				msg := fmt.Sprintf("Found failed storage pod %s on node %s, will try to kill it", pod.Name, node.Name)
-				c.warningEvent(cluster, util.FailedStoragePodReason, msg)
+				k8s.WarningEvent(c.recorder, cluster, util.FailedStoragePodReason, msg)
 				podsToDelete = append(podsToDelete, pod.Name)
 			} else {
 				storagePodsRunning = append(storagePodsRunning, pod)
@@ -841,6 +798,17 @@ func (c *Controller) nodeShouldRunStoragePod(
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
 	if !storagePodsEnabled(cluster) {
 		return false, false, false, nil
+	}
+
+	// If node is being deleted, don't need to schedule new storage pods
+	isBeingDeleted, err := k8s.IsNodeBeingDeleted(node, c.client)
+	if err != nil {
+		c.log(cluster).Warnf("failed to check if node: %s is being deleted due to: %v", node.Name, err)
+	}
+
+	if isBeingDeleted {
+		logrus.Infof("node: %s is in the process of being deleted. Will not create new pods here.", node.Name)
+		return false, false, true, nil
 	}
 
 	newPod, err := c.newSimulationPod(cluster, node.Name)
@@ -940,7 +908,7 @@ func (c *Controller) createPodTemplate(
 	if err != nil {
 		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
 	}
-	addOrUpdateStoragePodTolerations(&podSpec)
+	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
 
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -992,7 +960,7 @@ func (c *Controller) newSimulationPod(
 	}
 
 	// Add default tolerations for StorageCluster pods
-	addOrUpdateStoragePodTolerations(&newPod.Spec)
+	k8s.AddOrUpdateStoragePodTolerations(&newPod.Spec)
 	return newPod, nil
 }
 
@@ -1206,49 +1174,34 @@ func (c *Controller) createStorageNode(
 			logrus.Warnf("Failed to update status of StorageNode %s/%s. %v",
 				nodeName, cluster.Namespace, err)
 		}
-	} else if err != nil && !errors.IsAlreadyExists(err) {
+	} else if !errors.IsAlreadyExists(err) {
 		logrus.Warnf("Failed to create StorageNode %s/%s. %v", nodeName, cluster.Namespace, err)
 	}
 }
 
 func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
-	labels := c.Driver.GetSelectorLabels()
-	if labels == nil {
-		labels = make(map[string]string)
+	clusterLabels := c.Driver.GetSelectorLabels()
+	if clusterLabels == nil {
+		clusterLabels = make(map[string]string)
 	}
-	labels[labelKeyName] = cluster.Name
-	labels[labelKeyDriverName] = c.Driver.String()
-	return labels
+	clusterLabels[constants.LabelKeyName] = cluster.Name
+	clusterLabels[constants.LabelKeyDriverName] = c.Driver.String()
+	return clusterLabels
 }
 
-func (c *Controller) warningEvent(
-	cluster *corev1alpha1.StorageCluster,
-	reason, message string,
-) {
-	logrus.Warn(message)
-	c.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+func (c *Controller) log(clus *corev1alpha1.StorageCluster) *logrus.Entry {
+	logFields := logrus.Fields{
+		"cluster": clus.Name,
+	}
+
+	return logrus.WithFields(logFields)
 }
 
 func storagePodsEnabled(
 	cluster *corev1alpha1.StorageCluster,
 ) bool {
-	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableStorage])
+	disabled, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationDisableStorage])
 	return err != nil || !disabled
-}
-
-func getCRDFromFile(
-	filename string,
-) (*apiextensionsv1beta1.CustomResourceDefinition, error) {
-	filepath := path.Join(crdBaseDir(), filename)
-	scheme := runtime.NewScheme()
-	if err := apiextensionsv1beta1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-	if err := k8sutil.ParseObjectFromFile(filepath, scheme, crd); err != nil {
-		return nil, err
-	}
-	return crd, nil
 }
 
 func getCRDBasePath() string {

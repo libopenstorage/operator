@@ -98,6 +98,15 @@ spec:
                 mgmtIP:
                   type: string
                   description: IP address used by the storage driver for management traffic.
+            storage:
+              type: object
+              properties:
+                totalSize:
+                  type: string
+                  description: Cumulative total size of all storage pools on the node
+                usedSize:
+                  type: string
+                  description: Cumulative used size of all storage pools on the node
             conditions:
               type: array
               description: Contains details for the current condition of this storage node.

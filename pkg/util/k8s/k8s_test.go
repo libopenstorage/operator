@@ -2019,3 +2019,32 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Selector)
 }
+
+func TestGetCRDFromFile(t *testing.T) {
+	tests := []struct {
+		dir         string
+		file        string
+		expectedErr string
+	}{
+		{
+			dir:  "../../../deploy/crds",
+			file: "core_v1alpha1_storagecluster_crd.yaml",
+		},
+		{
+			dir:         "../../../deploy/crds",
+			file:        "core_v1alpha1_storagecluster_crd-dont-exist.yaml",
+			expectedErr: "no such file or directory",
+		},
+	}
+
+	for _, test := range tests {
+		crd, err := GetCRDFromFile(test.file, test.dir)
+		if len(test.expectedErr) == 0 {
+			require.NoError(t, err)
+			require.NotNil(t, crd)
+		} else {
+			require.NotNil(t, err)
+			require.Contains(t, err.Error(), test.expectedErr)
+		}
+	}
+}

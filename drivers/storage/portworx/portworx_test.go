@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/constants"
+
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
@@ -17,7 +19,6 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
@@ -308,7 +309,7 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				storagecluster.AnnotationDisableStorage: "true",
+				constants.AnnotationDisableStorage: "true",
 			},
 		},
 	}
@@ -1361,7 +1362,7 @@ func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				storagecluster.AnnotationDisableStorage: "True",
+				constants.AnnotationDisableStorage: "True",
 			},
 		},
 	}
@@ -1685,6 +1686,18 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		DataIp:            "10.0.2.1",
 		MgmtIp:            "10.0.2.2",
 		Status:            api.Status_STATUS_OK,
+		Pools: []*api.StoragePool{
+			{
+				ID:        0,
+				TotalSize: 21474836480,
+				Used:      10737418240,
+			},
+			{
+				ID:        1,
+				TotalSize: 21474836480,
+				Used:      2147483648,
+			},
+		},
 	}
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
@@ -5677,7 +5690,7 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				storagecluster.AnnotationDisableStorage: "1",
+				constants.AnnotationDisableStorage: "1",
 			},
 		},
 		Spec: corev1alpha1.StorageClusterSpec{

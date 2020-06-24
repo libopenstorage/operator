@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -11,15 +12,23 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+	"github.com/portworx/kvdb/api/bootstrap/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	// pxEntriesKey is key which holds all the bootstrap entries
+	pxEntriesKey = "px-entries"
 )
 
 func (p *portworx) UpdateStorageClusterStatus(
@@ -99,6 +108,29 @@ func (p *portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
+	// If cluster is running internal kvdb, get current bootstrap nodes
+	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
+	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
+		cmName := k8s.GetBootstrapConfigMapName(cluster.GetName())
+		cm := &v1.ConfigMap{}
+		err = p.k8sClient.Get(context.TODO(), types.NamespacedName{
+			Name:      cmName,
+			Namespace: cluster.GetNamespace(),
+		}, cm)
+		if err != nil {
+			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+		}
+
+		// Get the bootstrap entries
+		entriesBlob, ok := cm.Data[pxEntriesKey]
+		if ok {
+			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
+			if err != nil {
+				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+			}
+		}
+	}
+
 	// Find all k8s nodes where Portworx is actually running
 	currentPxNodes := make(map[string]bool)
 	for _, node := range nodeEnumerateResponse.Nodes {
@@ -115,14 +147,14 @@ func (p *portworx) updateStorageNodes(
 
 		currentPxNodes[node.SchedulerNodeName] = true
 
-		storageNode, err := p.updateStorageNodeSpec(cluster, node)
+		storageNode, err := p.createOrUpdateStorageNode(cluster, node)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update StorageNode for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, util.FailedSyncReason, msg)
 			continue
 		}
 
-		err = p.updateStorageNodeStatus(storageNode, node)
+		err = p.updateStorageNodeStatus(storageNode, node, kvdbNodeMap)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update StorageNode status for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, util.FailedSyncReason, msg)
@@ -212,7 +244,7 @@ func (p *portworx) updateRemainingStorageNodes(
 	return nil
 }
 
-func (p *portworx) updateStorageNodeSpec(
+func (p *portworx) createOrUpdateStorageNode(
 	cluster *corev1alpha1.StorageCluster,
 	node *api.StorageNode,
 ) (*corev1alpha1.StorageNode, error) {
@@ -259,6 +291,7 @@ func (p *portworx) updateStorageNodeSpec(
 func (p *portworx) updateStorageNodeStatus(
 	storageNode *corev1alpha1.StorageNode,
 	node *api.StorageNode,
+	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
 ) error {
 	originalStorageNodeStatus := storageNode.Status.DeepCopy()
 	storageNode.Status.NodeUID = node.Id
@@ -270,6 +303,46 @@ func (p *portworx) updateStorageNodeStatus(
 		Type:   corev1alpha1.NodeStateCondition,
 		Status: mapNodeStatus(node.Status),
 	}
+
+	var (
+		totalSizeInBytes, usedSizeInBytes int64
+	)
+
+	for _, pool := range node.Pools {
+		totalSizeInBytes += int64(pool.TotalSize)
+		usedSizeInBytes += int64(pool.Used)
+	}
+	storageNode.Status.Storage = corev1alpha1.StorageStatus{
+		TotalSize: *resource.NewQuantity(totalSizeInBytes, resource.BinarySI),
+		UsedSize:  *resource.NewQuantity(usedSizeInBytes, resource.BinarySI),
+	}
+
+	kvdbEntry, present := kvdbNodeMap[storageNode.Status.NodeUID]
+	if present && kvdbEntry != nil {
+		nodeKVDBCondition := &corev1alpha1.NodeCondition{
+			Type:   corev1alpha1.NodeKVDBCondition,
+			Status: mapKVDBState(kvdbEntry.State),
+			Message: fmt.Sprintf("node is kvdb %s listening on %s",
+				mapKVDBNodeType(kvdbEntry.Type), kvdbEntry.IP),
+		}
+
+		operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeKVDBCondition)
+	} else {
+		// remove if present
+		k := 0
+		for _, cond := range storageNode.Status.Conditions {
+			if cond.Type != corev1alpha1.NodeKVDBCondition {
+				storageNode.Status.Conditions[k] = cond
+				k++
+			}
+		}
+
+		if k != len(storageNode.Status.Conditions) {
+			logrus.Debugf("[debug] removing kvdb condition from storage node: %s", storageNode.Name)
+		}
+		storageNode.Status.Conditions = storageNode.Status.Conditions[:k]
+	}
+
 	operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
 	storageNode.Status.Phase = getStorageNodePhase(&storageNode.Status)
 
@@ -317,6 +390,34 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 		fallthrough
 	default:
 		return corev1alpha1.ClusterUnknown
+	}
+}
+
+func mapKVDBState(state kvdb_api.NodeState) corev1alpha1.NodeConditionStatus {
+	switch state {
+	case kvdb_api.BootstrapNodeStateInProgress:
+		return corev1alpha1.NodeInitStatus
+	case kvdb_api.BootstrapNodeStateOperational:
+		return corev1alpha1.NodeOnlineStatus
+	case kvdb_api.BootstrapNodeStateSuspectDown:
+		return corev1alpha1.NodeOfflineStatus
+	case kvdb_api.BootstrapNodeStateNone:
+		fallthrough
+	default:
+		return corev1alpha1.NodeUnknownStatus
+	}
+}
+
+func mapKVDBNodeType(nodeType kvdb_api.NodeType) string {
+	switch nodeType {
+	case kvdb_api.BootstrapNodeTypeLeader:
+		return "leader"
+	case kvdb_api.BootstrapNodeTypeMember:
+		return "member"
+	case kvdb_api.BootstrapNodeTypeNone:
+		fallthrough
+	default:
+		return ""
 	}
 }
 
@@ -387,4 +488,21 @@ func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
 		return string(corev1alpha1.NodeInitStatus)
 	}
 	return string(latestCondition.Status)
+}
+
+func blobToBootstrapEntries(
+	entriesBlob []byte,
+) (map[string]*kvdb_api.BootstrapEntry, error) {
+
+	var bEntries []*kvdb_api.BootstrapEntry
+	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
+		return nil, err
+	}
+
+	// return as a map by ID to facilitate callers
+	retMap := make(map[string]*kvdb_api.BootstrapEntry)
+	for _, e := range bEntries {
+		retMap[e.ID] = e
+	}
+	return retMap, nil
 }

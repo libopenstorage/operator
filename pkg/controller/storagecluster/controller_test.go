@@ -9,6 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/constants"
+
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -50,7 +54,6 @@ func TestRegisterCRD(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	group := corev1alpha1.SchemeGroupVersion.Group
 	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
-	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
 
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
@@ -58,11 +61,6 @@ func TestRegisterCRD(t *testing.T) {
 		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
 		require.NoError(t, err)
 	}()
-	go func() {
-		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
-		require.NoError(t, err)
-	}()
-
 	controller := Controller{}
 
 	// Should fail if the CRD specs are not found
@@ -84,7 +82,7 @@ func TestRegisterCRD(t *testing.T) {
 		CustomResourceDefinitions().
 		List(metav1.ListOptions{})
 	require.NoError(t, err)
-	require.Len(t, crds.Items, 2)
+	require.Len(t, crds.Items, 1)
 
 	scCRD, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
@@ -144,6 +142,7 @@ func TestRegisterCRD(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	// If CRDs are already present, then should not fail
 	err = controller.RegisterCRD()
 	require.NoError(t, err)
 
@@ -151,7 +150,7 @@ func TestRegisterCRD(t *testing.T) {
 		CustomResourceDefinitions().
 		List(metav1.ListOptions{})
 	require.NoError(t, err)
-	require.Len(t, crds.Items, 2)
+	require.Len(t, crds.Items, 1)
 	require.Equal(t, storageClusterCRDName, crds.Items[0].Name)
 	require.Equal(t, storageNodeCRDName, crds.Items[1].Name)
 
@@ -646,7 +645,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Annotations = map[string]string{
-		AnnotationDisableStorage: "true",
+		constants.AnnotationDisableStorage: "true",
 	}
 
 	// Kubernetes node with resources to create a pod
@@ -723,13 +722,13 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	expectedPodSpec := v1.PodSpec{
 		Containers: []v1.Container{{Name: "test"}},
 	}
-	addOrUpdateStoragePodTolerations(&expectedPodSpec)
+	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
 	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				labelKeyName:       cluster.Name,
-				labelKeyDriverName: driverName,
+				constants.LabelKeyName:       cluster.Name,
+				constants.LabelKeyDriverName: driverName,
 			},
 		},
 		Spec: expectedPodSpec,
@@ -823,6 +822,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
+	defaultQuantity, _ := resource.ParseQuantity("0")
 	expectedStorageNode1 := &corev1alpha1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            k8sNode1.Name,
@@ -832,6 +832,10 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 		},
 		Status: corev1alpha1.NodeStatus{
 			Phase: string(corev1alpha1.NodeInitStatus),
+			Storage: corev1alpha1.StorageStatus{
+				TotalSize: defaultQuantity,
+				UsedSize:  defaultQuantity,
+			},
 		},
 	}
 	expectedStorageNode2 := expectedStorageNode1.DeepCopy()
@@ -1086,13 +1090,13 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	expectedPodSpec := v1.PodSpec{
 		Containers: []v1.Container{{Name: "test"}},
 	}
-	addOrUpdateStoragePodTolerations(&expectedPodSpec)
+	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
 	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				labelKeyName:       cluster.Name,
-				labelKeyDriverName: driverName,
+				constants.LabelKeyName:       cluster.Name,
+				constants.LabelKeyDriverName: driverName,
 			},
 		},
 		Spec: expectedPodSpec,
@@ -1192,8 +1196,8 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1279,8 +1283,8 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1385,11 +1389,11 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Annotations = map[string]string{
-		AnnotationDisableStorage: "1",
+		constants.AnnotationDisableStorage: "1",
 	}
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1450,8 +1454,8 @@ func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1546,8 +1550,8 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 		},
 	}
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1635,8 +1639,8 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 		},
 	}
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -1834,8 +1838,8 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -2176,8 +2180,8 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 
 	driverName := "mock-driver"
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -2249,8 +2253,8 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 
 	driverName := "mock-driver"
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
@@ -2638,8 +2642,8 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -2824,8 +2828,8 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3022,8 +3026,8 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3078,8 +3082,8 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3172,8 +3176,8 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3266,8 +3270,8 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3370,8 +3374,8 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3537,8 +3541,8 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3690,8 +3694,8 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3773,8 +3777,8 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3858,8 +3862,8 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -3940,8 +3944,8 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4021,8 +4025,8 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4102,8 +4106,8 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4194,8 +4198,8 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4573,8 +4577,8 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4660,8 +4664,8 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4803,8 +4807,8 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -4880,8 +4884,8 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
-		labelKeyName:       cluster.Name,
-		labelKeyDriverName: driverName,
+		constants.LabelKeyName:       cluster.Name,
+		constants.LabelKeyDriverName: driverName,
 	}
 	k8sClient := testutil.FakeK8sClient(cluster)
 	podControl := &k8scontroller.FakePodControl{}
@@ -5683,8 +5687,8 @@ func getRevision(
 			Name:      historyName(cluster.Name, hash),
 			Namespace: cluster.Namespace,
 			Labels: map[string]string{
-				labelKeyName:                        cluster.Name,
-				labelKeyDriverName:                  driverName,
+				constants.LabelKeyName:              cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
 				defaultStorageClusterUniqueLabelKey: hash,
 			},
 			Annotations:     cluster.Annotations,
