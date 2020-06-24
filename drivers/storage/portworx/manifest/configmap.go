@@ -21,7 +21,7 @@ type configMap struct {
 func newConfigMapManifest(
 	k8sClient client.Client,
 	cluster *corev1alpha1.StorageCluster,
-) (manifest, error) {
+) (versionProvider, error) {
 	versionCM := &v1.ConfigMap{}
 	err := k8sClient.Get(
 		context.TODO(),

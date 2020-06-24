@@ -2,6 +2,8 @@ package manifest
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -28,6 +30,13 @@ const (
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
+	defaultManifestRefreshInterval        = 3 * time.Hour
+)
+
+var (
+	instance        Manifest
+	once            sync.Once
+	refreshInterval = manifestRefreshInterval
 )
 
 // Release is a single release object with images for different components
@@ -54,47 +63,97 @@ type Version struct {
 	Components      Release `yaml:"components,omitempty"`
 }
 
-type manifest interface {
+// versionProvider is an interface for different providers that
+// can return version information
+type versionProvider interface {
 	Get() (*Version, error)
+}
+
+// Manifest is an interface for getting versions information
+type Manifest interface {
+	// Init initialize the manifest
+	Init(client.Client, record.EventRecorder, *version.Version)
+	// GetVersions return the correct release versions for given cluster
+	GetVersions(*corev1alpha1.StorageCluster, bool) *Version
+}
+
+// Instance returns a single instance of Manifest if present, else
+// creates a new one and returns it
+func Instance() Manifest {
+	once.Do(func() {
+		if instance == nil {
+			instance = &manifest{}
+		}
+	})
+	return instance
+}
+
+// SetInstance can be used to set Manifest singleton instance
+// This will be helpful for testing with a mock instance
+func SetInstance(m Manifest) {
+	instance = m
+}
+
+type manifest struct {
+	k8sClient      client.Client
+	recorder       record.EventRecorder
+	k8sVersion     *version.Version
+	cachedVersions *Version
+	lastUpdated    time.Time
+}
+
+func (m *manifest) Init(
+	k8sClient client.Client,
+	recorder record.EventRecorder,
+	k8sVersion *version.Version,
+) {
+	m.k8sClient = k8sClient
+	m.recorder = recorder
+	m.k8sVersion = k8sVersion
 }
 
 // GetVersions returns the version manifest for the given cluster version
 // The version manifest contains all the images of corresponding components
 // that are to be installed with given cluster version.
-func GetVersions(
+func (m *manifest) GetVersions(
 	cluster *corev1alpha1.StorageCluster,
-	k8sClient client.Client,
-	recorder record.EventRecorder,
-	k8sVersion *version.Version,
+	force bool,
 ) *Version {
-	var m manifest
+	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
 	if err == nil {
 		pxVer2_6, _ := version.NewVersion("2.6")
 		if currPxVer.LessThan(pxVer2_6) {
-			m = newDeprecatedManifest(ver)
+			provider = newDeprecatedManifest(ver)
 		}
 	}
 
-	if m == nil {
-		m, err = newConfigMapManifest(k8sClient, cluster)
+	if provider == nil {
+		provider, err = newConfigMapManifest(m.k8sClient, cluster)
 		if err != nil {
 			logrus.Debugf("Unable to get versions from ConfigMap. %v", err)
-			m = newRemoteManifest(cluster)
+			provider = newRemoteManifest(cluster)
 		}
 	}
 
-	rel, err := m.Get()
+	cacheExpired := m.lastUpdated.Add(refreshInterval()).Before(time.Now())
+	if _, ok := provider.(*configMap); !ok && !cacheExpired && !force {
+		return m.cachedVersions.DeepCopy()
+	}
+
+	rel, err := provider.Get()
 	if err != nil {
 		msg := fmt.Sprintf("Using default version due to: %v", err)
 		logrus.Error(msg)
-		recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
-		return defaultRelease(k8sVersion)
+		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
+		return defaultRelease(m.k8sVersion)
 	}
 
-	fillDefaults(rel, k8sVersion)
-	return rel
+	fillDefaults(rel, m.k8sVersion)
+	m.lastUpdated = time.Now()
+	m.cachedVersions = rel
+	return rel.DeepCopy()
 }
 
 func defaultRelease(
@@ -167,4 +226,19 @@ func fillCSIDefaults(
 	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
 	rel.Components.CSIResizer = csiImages.Resizer
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
+}
+
+func manifestRefreshInterval() time.Duration {
+	return defaultManifestRefreshInterval
+}
+
+// DeepCopy returns a deepcopy of the version object
+func (in *Version) DeepCopy() *Version {
+	if in == nil {
+		return nil
+	}
+	out := new(Version)
+	out.PortworxVersion = in.PortworxVersion
+	out.Components = in.Components
+	return out
 }

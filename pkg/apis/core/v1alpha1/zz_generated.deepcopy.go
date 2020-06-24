@@ -670,6 +670,11 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		*out = new(StorageClusterDeleteStrategy)
 		**out = **in
 	}
+	if in.AutoUpdateComponents != nil {
+		in, out := &in.AutoUpdateComponents, &out.AutoUpdateComponents
+		*out = new(AutoUpdateComponentStrategyType)
+		**out = **in
+	}
 	if in.RevisionHistoryLimit != nil {
 		in, out := &in.RevisionHistoryLimit, &out.RevisionHistoryLimit
 		*out = new(int32)

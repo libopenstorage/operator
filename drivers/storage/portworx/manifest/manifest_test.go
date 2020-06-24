@@ -2,12 +2,14 @@ package manifest
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -47,7 +49,9 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil, nil)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
 
@@ -93,7 +97,9 @@ components:
 		}, nil
 	}
 
-	rel := GetVersions(cluster, k8sClient, nil, nil)
+	m := Instance()
+	m.Init(k8sClient, nil, nil)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
 
@@ -110,7 +116,9 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder, k8sVersion)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, defaultRelease(k8sVersion), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -162,7 +170,9 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil, nil)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
 
@@ -200,7 +210,9 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder, k8sVersion)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, defaultRelease(k8sVersion), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -243,7 +255,9 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 		},
 	}
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil, nil)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
 
@@ -271,7 +285,9 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), recorder, k8sVersion)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
+	rel := m.GetVersions(cluster, true)
 	require.Equal(t, defaultRelease(k8sVersion), rel)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -310,7 +326,9 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
 
-	r := GetVersions(cluster, k8sClient, nil, nil)
+	m := Instance()
+	m.Init(k8sClient, nil, nil)
+	r := m.GetVersions(cluster, true)
 	require.Equal(t, expected, r)
 }
 
@@ -341,7 +359,9 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		CSIProvisioner: "image/csiprovisioner:3.0.0",
 	}
 
-	rel := GetVersions(cluster, testutil.FakeK8sClient(), nil, k8sVersion)
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	rel := m.GetVersions(cluster, true)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
 	require.Equal(t, "image/stork:3.0.0", rel.Components.Stork)
@@ -358,7 +378,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, use all default components
 	expected.Components = Release{}
 
-	rel = GetVersions(cluster, testutil.FakeK8sClient(), nil, k8sVersion)
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
 	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1", rel.Components.CSIProvisioner)
@@ -366,10 +387,251 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
 
-	rel = GetVersions(cluster, testutil.FakeK8sClient(), nil, nil)
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(nil).Components, rel.Components)
 	require.Empty(t, rel.Components.CSIProvisioner)
+}
+
+func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "2.6.0",
+		Components: Release{
+			Stork: "image/stork:2.6.0",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(expected)
+		return &http.Response{
+			Body: ioutil.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	m := &manifest{}
+	SetInstance(m)
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+
+	// TestCase: Should return the expected versions correct first time
+	rel := m.GetVersions(cluster, false)
+	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
+
+	// TestCase: Should not return the updated version if not forced
+	expected.Components.Stork = "image/stork:2.6.1"
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.6.0", rel.Components.Stork)
+
+	// TestCase: Should return the updated version if forced
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, "image/stork:2.6.1", rel.Components.Stork)
+}
+
+func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
+	linkPath := path.Join(
+		os.Getenv("GOPATH"),
+		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
+	)
+	os.Symlink(linkPath, manifestDir)
+	os.Remove(path.Join(linkPath, remoteReleaseManifest))
+
+	defer func() {
+		os.Remove(path.Join(linkPath, remoteReleaseManifest))
+		os.RemoveAll(manifestDir)
+		setupHTTPFailure()
+	}()
+
+	expected := &Version{
+		PortworxVersion: "2.5.0",
+		Components: Release{
+			Stork: "image/stork:2.5.0",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(map[string]interface{}{
+			"releases": map[string]*Release{
+				expected.PortworxVersion: &expected.Components,
+			},
+		})
+		return &http.Response{
+			Body: ioutil.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	m := &manifest{}
+	SetInstance(m)
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+
+	// TestCase: Should return the expected versions correct first time
+	rel := m.GetVersions(cluster, false)
+	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
+
+	// TestCase: Should not return the updated version if not forced
+	expected.Components.Stork = "image/stork:2.5.1"
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.5.0", rel.Components.Stork)
+
+	// TestCase: Should return the updated version if forced
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
+}
+
+func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "2.6.0",
+		Components: Release{
+			Stork: "image/stork:2.6.0",
+		},
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			versionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+
+	m := &manifest{}
+	SetInstance(m)
+	m.Init(k8sClient, nil, nil)
+
+	// TestCase: Should return the expected versions correct first time
+	rel := m.GetVersions(cluster, false)
+	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
+
+	// TestCase: Should return the updated version even if not forced
+	expected.Components.Stork = "image/stork:2.5.1"
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
+
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
+}
+
+func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
+	defer func() {
+		refreshInterval = manifestRefreshInterval
+	}()
+
+	expected := &Version{
+		PortworxVersion: "2.6.0",
+		Components: Release{
+			Stork: "image/stork:2.6.0",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(expected)
+		return &http.Response{
+			Body: ioutil.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	m := &manifest{}
+	SetInstance(m)
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+
+	// TestCase: Should return the expected versions correct first time
+	rel := m.GetVersions(cluster, false)
+	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
+
+	// TestCase: Should not return the updated version if cache has not expired
+	expected.Components.Stork = "image/stork:2.6.1"
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.6.0", rel.Components.Stork)
+
+	// TestCase: Should return the updated version if cache has expired
+	refreshInterval = func() time.Duration {
+		return 0 * time.Second
+	}
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.6.1", rel.Components.Stork)
+}
+
+func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
+	linkPath := path.Join(
+		os.Getenv("GOPATH"),
+		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
+	)
+	os.Symlink(linkPath, manifestDir)
+	os.Remove(path.Join(linkPath, remoteReleaseManifest))
+
+	defer func() {
+		os.Remove(path.Join(linkPath, remoteReleaseManifest))
+		os.RemoveAll(manifestDir)
+		setupHTTPFailure()
+		refreshInterval = manifestRefreshInterval
+	}()
+
+	expected := &Version{
+		PortworxVersion: "2.5.0",
+		Components: Release{
+			Stork: "image/stork:2.5.0",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(map[string]interface{}{
+			"releases": map[string]*Release{
+				expected.PortworxVersion: &expected.Components,
+			},
+		})
+		return &http.Response{
+			Body: ioutil.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	m := &manifest{}
+	SetInstance(m)
+	m.Init(testutil.FakeK8sClient(), nil, nil)
+
+	// TestCase: Should return the expected versions correct first time
+	rel := m.GetVersions(cluster, false)
+	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
+
+	// TestCase: Should not return the updated version if cache has not expired
+	expected.Components.Stork = "image/stork:2.5.1"
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.5.0", rel.Components.Stork)
+
+	// TestCase: Should return the updated version if cache has expired
+	refreshInterval = func() time.Duration {
+		return 0 * time.Second
+	}
+	rel = m.GetVersions(cluster, false)
+	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
 }
 
 func TestMain(m *testing.M) {

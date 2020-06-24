@@ -42,6 +42,8 @@ type StorageClusterSpec struct {
 	UpdateStrategy StorageClusterUpdateStrategy `json:"updateStrategy,omitempty"`
 	// A delete strategy to uninstall and wipe an existing StorageCluster
 	DeleteStrategy *StorageClusterDeleteStrategy `json:"deleteStrategy,omitempty"`
+	// AutoUpdateComponents determines how components are to be updated automatically
+	AutoUpdateComponents *AutoUpdateComponentStrategyType `json:"autoUpdateComponents,omitempty"`
 	// RevisionHistoryLimit is the number of old history to retain to allow rollback.
 	// This is a pointer to distinguish between explicit zero and not specified.
 	// Defaults to 10.
@@ -231,6 +233,20 @@ type StorageClusterDeleteStrategy struct {
 	// Type of storage cluster delete strategy.
 	Type StorageClusterDeleteStrategyType `json:"type,omitempty"`
 }
+
+// AutoUpdateComponentStrategyType is enum for auto updating
+// storage cluster components
+type AutoUpdateComponentStrategyType string
+
+const (
+	// AlwaysAutoUpdate always updates components if a new version is available
+	AlwaysAutoUpdate AutoUpdateComponentStrategyType = "Always"
+	// NeverAutoUpdate does not automatically update components
+	NeverAutoUpdate AutoUpdateComponentStrategyType = "Never"
+	// OnceAutoUpdate updates the version of a component only once.
+	// Useful for manually updating component versions.
+	OnceAutoUpdate AutoUpdateComponentStrategyType = "Once"
+)
 
 // KvdbSpec contains the details to access kvdb
 type KvdbSpec struct {

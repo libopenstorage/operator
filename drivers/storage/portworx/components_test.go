@@ -4732,19 +4732,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:2.3.4",
+		customRegistry+"/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:2.3.4",
+		customRegistry+"/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4752,7 +4752,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:2.3.4",
+		customRegistry+"/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4833,19 +4833,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:2.3.4",
+		customRegistry+"/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:2.3.4",
+		customRegistry+"/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4853,7 +4853,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:2.3.4",
+		customRegistry+"/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -4927,19 +4927,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:2.3.4",
+		"portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:2.3.4",
+		"portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:2.3.4",
+		"portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:2.3.4",
+		"portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -4947,7 +4947,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:2.3.4",
+		"portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5028,19 +5028,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/px-lighthouse:2.3.4",
+		customRegistry+"/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-stork-connector:2.3.4",
+		customRegistry+"/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRegistry+"/portworx/lh-config-sync:2.3.4",
+		customRegistry+"/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5048,7 +5048,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/portworx/autopilot:2.3.4",
+		customRegistry+"/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5451,19 +5451,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:2.3.4",
+		customRepo+"/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:2.3.4",
+		customRepo+"/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5471,7 +5471,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:2.3.4",
+		customRepo+"/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5546,19 +5546,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:2.3.4",
+		customRepo+"/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:2.3.4",
+		customRepo+"/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5566,7 +5566,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:2.3.4",
+		customRepo+"/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5640,19 +5640,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:2.3.4",
+		"portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:2.3.4",
+		"portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:2.3.4",
+		"portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:2.3.4",
+		"portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5660,7 +5660,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:2.3.4",
+		"portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5735,19 +5735,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/px-lighthouse:2.3.4",
+		customRepo+"/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-stork-connector:2.3.4",
+		customRepo+"/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		customRepo+"/lh-config-sync:2.3.4",
+		customRepo+"/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -5755,7 +5755,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/autopilot:2.3.4",
+		customRepo+"/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 

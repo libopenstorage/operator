@@ -41,11 +41,6 @@ const (
 	labelPortworxVersion              = "PX Version"
 )
 
-var (
-	// getVersionManifest is extracted as a var for testing
-	getVersionManifest = manifest.GetVersions
-)
-
 type portworx struct {
 	k8sClient          client.Client
 	k8sVersion         *version.Version
@@ -83,6 +78,7 @@ func (p *portworx) Init(
 	}
 	p.k8sVersion = k8sVersion
 
+	manifest.Instance().Init(k8sClient, recorder, k8sVersion)
 	p.initializeComponents()
 	return nil
 }
@@ -156,8 +152,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	pxVersionChanged := toUpdate.Spec.Version == "" ||
 		toUpdate.Spec.Version != toUpdate.Status.Version
 
-	if pxVersionChanged || hasComponentChanged(toUpdate) {
-		release := getVersionManifest(toUpdate, p.k8sClient, p.recorder, p.k8sVersion)
+	if pxVersionChanged || autoUpdateComponents(toUpdate) || hasComponentChanged(toUpdate) {
+		// Force latest versions only if the component update strategy is Once
+		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
+			*toUpdate.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate)
+		release := manifest.Instance().GetVersions(toUpdate, force)
+
 		if toUpdate.Spec.Version == "" {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
@@ -168,22 +168,30 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Status.Version = toUpdate.Spec.Version
 
 		if autoUpdateStork(toUpdate) &&
-			(toUpdate.Status.DesiredImages.Stork == "" || pxVersionChanged) {
+			(toUpdate.Status.DesiredImages.Stork == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
 		}
 
 		if autoUpdateAutopilot(toUpdate) &&
-			(toUpdate.Status.DesiredImages.Autopilot == "" || pxVersionChanged) {
+			(toUpdate.Status.DesiredImages.Autopilot == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Autopilot = release.Components.Autopilot
 		}
 
 		if autoUpdateLighthouse(toUpdate) &&
-			(toUpdate.Status.DesiredImages.UserInterface == "" || pxVersionChanged) {
+			(toUpdate.Status.DesiredImages.UserInterface == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
 		}
 
 		if pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) &&
-			(toUpdate.Status.DesiredImages.CSIProvisioner == "" || pxVersionChanged) {
+			(toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
 			toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
 			toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
@@ -200,6 +208,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 			toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
 			toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
 			toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
+		}
+
+		// Reset the component update strategy if it is 'Once', so that we don't
+		// upgrade components again during next reconcile loop
+		if toUpdate.Spec.AutoUpdateComponents != nil &&
+			*toUpdate.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate {
+			toUpdate.Spec.AutoUpdateComponents = nil
 		}
 	}
 
@@ -708,6 +723,12 @@ func autoUpdateLighthouse(cluster *corev1alpha1.StorageCluster) bool {
 	return cluster.Spec.UserInterface != nil &&
 		cluster.Spec.UserInterface.Enabled &&
 		cluster.Spec.UserInterface.Image == ""
+}
+
+func autoUpdateComponents(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.AutoUpdateComponents != nil &&
+		(*cluster.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate ||
+			*cluster.Spec.AutoUpdateComponents == corev1alpha1.AlwaysAutoUpdate)
 }
 
 func init() {
