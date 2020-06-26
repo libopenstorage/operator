@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	version "github.com/hashicorp/go-version"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
@@ -14,7 +15,9 @@ import (
 
 func TestRemoteManifestWithMatchingVersion(t *testing.T) {
 	pxVersion := "3.2.1"
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expectedManifestURL := manifestURLFromVersion(pxVersion)
+	expectedManifestURL = expectedManifestURL + "?kbver=" + k8sVersion.String()
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
@@ -32,7 +35,7 @@ components:
 		},
 	}
 
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.NoError(t, err)
 	require.Equal(t, pxVersion, r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
@@ -40,7 +43,9 @@ components:
 
 func TestRemoteManifestWithoutMatchingVersion(t *testing.T) {
 	pxVersion := "3.2.1"
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expectedManifestURL := manifestURLFromVersion(pxVersion)
+	expectedManifestURL = expectedManifestURL + "?kbver=" + k8sVersion.String()
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
@@ -60,14 +65,16 @@ components:
 
 	// Even if the image version does not match the one
 	// returned by manifest, we still return those versions
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.NoError(t, err)
 	require.Equal(t, "3.2.1.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1.1", r.Components.Stork)
 }
 
 func TestRemoteManifestWithoutVersion(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expectedManifestURL := manifestURLFromVersion("")
+	expectedManifestURL = expectedManifestURL + "?kbver=" + k8sVersion.String()
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
@@ -86,7 +93,7 @@ components:
 		},
 	}
 
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.NoError(t, err)
 	require.Equal(t, "3.2.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
@@ -94,7 +101,7 @@ components:
 	// TestCase: Cluster with no Portworx image
 	cluster.Spec.Image = ""
 
-	r, err = newRemoteManifest(cluster).Get()
+	r, err = newRemoteManifest(cluster, k8sVersion).Get()
 	require.NoError(t, err)
 	require.Equal(t, "3.2.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
@@ -107,14 +114,16 @@ func TestRemoteManifestWithInvalidVersion(t *testing.T) {
 		},
 	}
 
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, nil).Get()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid Portworx version")
 	require.Nil(t, r)
 }
 
 func TestRemoteManifestWithCustomURL(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	customURL := "http://edge-install/3.3.3/customversion"
+	customURL = customURL + "?kbver=" + k8sVersion.String()
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, customURL, url)
 		return &http.Response{
@@ -142,13 +151,14 @@ components:
 
 	// If a custom manifest URL is given we just blindly
 	// return whatever versions are returned
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.NoError(t, err)
 	require.Equal(t, "3.2.1", r.PortworxVersion)
 	require.Equal(t, "stork/image:3.2.1", r.Components.Stork)
 }
 
 func TestRemoteManifestWithInvalidResponse(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
 			Body: ioutil.NopCloser(bytes.NewReader([]byte(`invalid_yaml`))),
@@ -161,13 +171,14 @@ func TestRemoteManifestWithInvalidResponse(t *testing.T) {
 		},
 	}
 
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot unmarshal")
 	require.Nil(t, r)
 }
 
 func TestRemoteManifestWithEmptyResponse(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
 			Body: ioutil.NopCloser(bytes.NewReader([]byte{})),
@@ -180,12 +191,13 @@ func TestRemoteManifestWithEmptyResponse(t *testing.T) {
 		},
 	}
 
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.Equal(t, err, ErrReleaseNotFound)
 	require.Nil(t, r)
 }
 
 func TestRemoteManifestWithFailedRequest(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	httpGet = func(url string) (*http.Response, error) {
 		return nil, fmt.Errorf("http error")
 	}
@@ -197,7 +209,7 @@ func TestRemoteManifestWithFailedRequest(t *testing.T) {
 	}
 
 	// TestCase: HTTP request failed
-	r, err := newRemoteManifest(cluster).Get()
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "http error")
 	require.Nil(t, r)
@@ -209,7 +221,7 @@ func TestRemoteManifestWithFailedRequest(t *testing.T) {
 		}, nil
 	}
 
-	r, err = newRemoteManifest(cluster).Get()
+	r, err = newRemoteManifest(cluster, k8sVersion).Get()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Read failed")
 	require.Nil(t, r)

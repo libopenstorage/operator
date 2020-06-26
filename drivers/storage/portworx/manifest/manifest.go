@@ -133,7 +133,7 @@ func (m *manifest) GetVersions(
 		provider, err = newConfigMapManifest(m.k8sClient, cluster)
 		if err != nil {
 			logrus.Debugf("Unable to get versions from ConfigMap. %v", err)
-			provider = newRemoteManifest(cluster)
+			provider = newRemoteManifest(cluster, m.k8sVersion)
 		}
 	}
 
@@ -215,6 +215,7 @@ func fillCSIDefaults(
 		return
 	}
 
+	logrus.Debugf("CSI images not found in manifest, using default")
 	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
 	csiGenerator := pxutil.NewCSIGenerator(
 		*k8sVersion, *pxVersion, false, false)

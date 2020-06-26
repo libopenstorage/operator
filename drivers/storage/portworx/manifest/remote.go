@@ -17,12 +17,17 @@ const (
 )
 
 type remote struct {
-	cluster *corev1alpha1.StorageCluster
+	cluster    *corev1alpha1.StorageCluster
+	k8sVersion *version.Version
 }
 
-func newRemoteManifest(cluster *corev1alpha1.StorageCluster) versionProvider {
+func newRemoteManifest(
+	cluster *corev1alpha1.StorageCluster,
+	k8sVersion *version.Version,
+) versionProvider {
 	return &remote{
-		cluster: cluster,
+		cluster:    cluster,
+		k8sVersion: k8sVersion,
 	}
 }
 
@@ -46,13 +51,21 @@ func (m *remote) Get() (*Version, error) {
 	}
 
 	logrus.Debugf("Getting version manifest from %v", manifestURL)
-	return downloadVersionManifest(manifestURL)
+	return m.downloadVersionManifest(manifestURL)
 }
 
-func downloadVersionManifest(
+func (m *remote) downloadVersionManifest(
 	manifestURL string,
 ) (*Version, error) {
-	body, err := getManifestFromURL(manifestURL)
+	u, err := url.Parse(manifestURL)
+	if err != nil {
+		return nil, err
+	}
+	params := url.Values{}
+	params.Add("kbver", m.k8sVersion.String())
+	u.RawQuery = params.Encode()
+
+	body, err := getManifestFromURL(u.String())
 	if err != nil {
 		return nil, err
 	}
