@@ -23,6 +23,7 @@ import (
 )
 
 func TestManifestWithNewerPortworxVersion(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
@@ -30,6 +31,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			Autopilot:                 "image/autopilo:2.6.0",
 			Lighthouse:                "image/lighthouse:2.6.0",
 			NodeWiper:                 "image/nodewiper:2.6.0",
+			CSIProvisioner:            "image/csi-provisioner:2.6.0",
 			Prometheus:                "image/prometheus:2.6.0",
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
@@ -50,7 +52,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 	}
 
 	m := Instance()
-	m.Init(testutil.FakeK8sClient(), nil, nil)
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
@@ -221,6 +223,7 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 }
 
 func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
 		PortworxVersion: "edge",
 		Components: Release{
@@ -228,6 +231,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			Autopilot:                 "image/autopilo:2.6.0",
 			Lighthouse:                "image/lighthouse:2.6.0",
 			NodeWiper:                 "image/nodewiper:2.6.0",
+			CSIProvisioner:            "image/csi-provisioner:2.6.0",
 			Prometheus:                "image/prometheus:2.6.0",
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
@@ -256,7 +260,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	}
 
 	m := Instance()
-	m.Init(testutil.FakeK8sClient(), nil, nil)
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 	rel := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
 }
@@ -337,19 +341,24 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		PortworxVersion: "3.0.0",
 	}
 
-	httpGet = func(url string) (*http.Response, error) {
-		body, _ := yaml.Marshal(expected)
-		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
-		}, nil
-	}
-
 	k8sVersion, _ := version.NewSemver("1.16.8")
 	cluster := &corev1alpha1.StorageCluster{
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
+
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			versionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
 
 	// TestCase: Partial components, use defaults for remaining
 	expected.Components = Release{
@@ -358,9 +367,12 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		Prometheus:     "image/prometheus:3.0.0",
 		CSIProvisioner: "image/csiprovisioner:3.0.0",
 	}
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	m := Instance()
-	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	m.Init(k8sClient, nil, k8sVersion)
 	rel := m.GetVersions(cluster, true)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
@@ -377,8 +389,11 @@ func TestManifestWithPartialComponents(t *testing.T) {
 
 	// TestCase: No components at all, use all default components
 	expected.Components = Release{}
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
 
-	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	m.Init(k8sClient, nil, k8sVersion)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
@@ -386,8 +401,11 @@ func TestManifestWithPartialComponents(t *testing.T) {
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
 
-	m.Init(testutil.FakeK8sClient(), nil, nil)
+	m.Init(k8sClient, nil, nil)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(nil).Components, rel.Components)
@@ -395,6 +413,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 }
 
 func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
@@ -416,7 +435,7 @@ func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 
 	m := &manifest{}
 	SetInstance(m)
-	m.Init(testutil.FakeK8sClient(), nil, nil)
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 
 	// TestCase: Should return the expected versions correct first time
 	rel := m.GetVersions(cluster, false)
@@ -535,6 +554,7 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 		refreshInterval = manifestRefreshInterval
 	}()
 
+	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
@@ -556,7 +576,7 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 
 	m := &manifest{}
 	SetInstance(m)
-	m.Init(testutil.FakeK8sClient(), nil, nil)
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 
 	// TestCase: Should return the expected versions correct first time
 	rel := m.GetVersions(cluster, false)
