@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -2642,6 +2644,21 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
+func validateTokenLifetime(t *testing.T, cluster *corev1alpha1.StorageCluster, jwtClaims jwt.MapClaims) {
+	iat, ok := jwtClaims["iat"]
+	require.True(t, ok, "iat should present in token")
+	iatFloat64, ok := iat.(float64)
+	require.True(t, ok, "iat should be a number")
+	exp, ok := jwtClaims["exp"]
+	require.True(t, ok, "exp should present in token")
+	expFloat64, ok := exp.(float64)
+	require.True(t, ok, "exp should be a number")
+	iatTime := time.Unix(int64(iatFloat64), 0)
+	expTime := time.Unix(int64(expFloat64), 0)
+	tokenLifetime := expTime.Sub(iatTime)
+	require.Equal(t, tokenLifetime, cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime.Duration)
+}
+
 func TestSecurityInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -2657,10 +2674,22 @@ func TestSecurityInstall(t *testing.T) {
 		Spec: corev1alpha1.StorageClusterSpec{
 			Security: &corev1alpha1.SecuritySpec{
 				Enabled: true,
+				Auth: &corev1alpha1.AuthSpec{
+					Authenticators: &corev1alpha1.AuthenticatorsSpec{
+						SelfSigned: &corev1alpha1.SelfSignedSpec{
+							TokenLifetime: &metav1.Duration{
+								// Since we have a token expiration buffer of one minute,
+								// a new token will constantly be fetched.
+								Duration: time.Second * 1,
+							},
+						},
+					},
+				},
 			},
 		},
 	}
-
+	// Initial run
+	setSecuritySpecDefaults(cluster)
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -2668,23 +2697,77 @@ func TestSecurityInstall(t *testing.T) {
 	securitySecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, 64, len(securitySecret.Data[component.SecuritySystemSecretKey]))
+	require.Equal(t, 64, len(securitySecret.Data[component.SecuritySharedSecretKey]))
+	oldSystemSecret := securitySecret.Data[component.SecuritySystemSecretKey]
+	oldSharedSecret := securitySecret.Data[component.SecuritySharedSecretKey]
+	require.NotEqual(t, securitySecret.Data[component.SecuritySystemSecretKey], securitySecret.Data[component.SecuritySharedSecretKey])
 
-	require.Equal(t, 64, len(securitySecret.StringData[component.SecuritySystemSecretKey]))
-	require.Equal(t, 64, len(securitySecret.StringData[component.SecuritySharedSecretKey]))
-	require.NotEqual(t, securitySecret.StringData[component.SecuritySystemSecretKey], securitySecret.StringData[component.SecuritySharedSecretKey])
+	// No changes should happen to the auto-generated secrets
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, oldSystemSecret, securitySecret.Data[component.SecuritySystemSecretKey])
+	require.Equal(t, oldSharedSecret, securitySecret.Data[component.SecuritySharedSecretKey])
+
+	// Token secrets should be created and be valid jwt tokens
+	jwtClaims := jwt.MapClaims{}
+	adminSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, adminSecret, component.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	require.NoError(t, err)
+	groups := jwtClaims["groups"].([]interface{})
+	require.Equal(t, "*", groups[0])
+	roles := jwtClaims["roles"].([]interface{})
+	require.Equal(t, "system.admin", roles[0])
+	require.Equal(t, "px-admin-token", jwtClaims["name"])
+	require.Equal(t, "px-admin-token@portworx.io", jwtClaims["sub"])
+	require.Equal(t, "px-admin-token@portworx.io", jwtClaims["email"])
+	require.Equal(t, "portworx.io", jwtClaims["iss"])
+	validateTokenLifetime(t, cluster, jwtClaims)
+
+	userSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	require.NoError(t, err)
+	groups = jwtClaims["groups"].([]interface{})
+	require.Equal(t, 0, len(groups))
+	roles = jwtClaims["roles"].([]interface{})
+	require.Equal(t, "system.user", roles[0])
+	require.Equal(t, "px-user-token", jwtClaims["name"])
+	require.Equal(t, "px-user-token@portworx.io", jwtClaims["sub"])
+	require.Equal(t, "px-user-token@portworx.io", jwtClaims["email"])
+	require.Equal(t, "portworx.io", jwtClaims["iss"])
+	validateTokenLifetime(t, cluster, jwtClaims)
+
+	// Token secrets should be refreshed
+	oldUserToken := userSecret.Data[component.SecurityAuthTokenKey]
+	time.Sleep(2 * time.Second)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	newUserSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, newUserSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(newUserSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	require.NoError(t, err)
+	newUserToken := newUserSecret.Data[component.SecurityAuthTokenKey]
+	require.NotEqual(t, oldUserToken, newUserToken)
 
 	// User pre-configured values should not be overwritten
 	err = testutil.Delete(k8sClient, securitySecret)
 	require.NoError(t, err)
-	systemSecretKey := "systemSecretKey"
-	sharedSecretKey := "sharedSecretKey"
+	systemSecretKey := pxutil.EncodeBase64([]byte("systemSecretKey"))
+	sharedSecretKey := pxutil.EncodeBase64([]byte("sharedSecretKey"))
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  pxutil.EnvKeyPortworxAuthSystemKey,
-		Value: systemSecretKey,
+		Value: string(systemSecretKey),
 	})
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  pxutil.EnvKeyPortworxAuthJwtSharedSecret,
-		Value: sharedSecretKey,
+		Value: string(sharedSecretKey),
 	})
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2692,8 +2775,8 @@ func TestSecurityInstall(t *testing.T) {
 	securitySecret = &v1.Secret{}
 	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, systemSecretKey, securitySecret.StringData[component.SecuritySystemSecretKey])
-	require.Equal(t, sharedSecretKey, securitySecret.StringData[component.SecuritySharedSecretKey])
+	require.Equal(t, systemSecretKey, securitySecret.Data[component.SecuritySystemSecretKey])
+	require.Equal(t, sharedSecretKey, securitySecret.Data[component.SecuritySharedSecretKey])
 
 	// Disable security, secret should not be deleted.
 	cluster.Spec.Security.Enabled = false
@@ -2703,26 +2786,32 @@ func TestSecurityInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
 	require.NoError(t, err)
 
-	// Delete cluster (cluster wipe) by setting deletion timestamp, secret should be deleted.
-	cluster.Spec.Security.Enabled = true
-	now := metav1.Now()
-	cluster.DeletionTimestamp = &now
-	err = driver.PreInstall(cluster)
+	// Delete cluster (cluster wipe) by setting deletion timestamp and strategy, secrets should be deleted.
+	err = testutil.Delete(k8sClient, securitySecret)
 	require.NoError(t, err)
-	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
+	err = testutil.Delete(k8sClient, adminSecret)
+	require.NoError(t, err)
+	err = testutil.Delete(k8sClient, userSecret)
 	require.NoError(t, err)
 
-	// Delete cluster (cluster wipe) by setting deletion strategy, secret should be deleted.
-	cluster.Spec.Security.Enabled = true
-	cluster.DeletionTimestamp = nil
+	// recreate with same owner
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	cluster.Spec.Security.Enabled = false
+	now := metav1.Now()
+	cluster.DeletionTimestamp = &now
 	cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
 		Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
 	}
-
+	// delete with same owner
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, securitySecret, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace)
-	require.NoError(t, err)
+	require.Error(t, err)
+	err = testutil.Get(k8sClient, userSecret, component.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.Error(t, err)
+	err = testutil.Get(k8sClient, adminSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.Error(t, err)
 }
 
 func TestCSIInstall(t *testing.T) {

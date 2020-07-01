@@ -4,14 +4,20 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/pkg/auth"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -23,10 +29,20 @@ const (
 	SecuritySharedSecretKey = "shared-secret"
 	// SecuritySystemSecretKey is the key for accessing the system secret auth key
 	SecuritySystemSecretKey = "system-secret"
+	// SecurityAuthTokenKey is the key for accessing a PX auth token in a k8s secret
+	SecurityAuthTokenKey = "auth-token"
+	// SecurityPXAdminTokenSecretName is the secret name for storing an auto-generated admin token
+	SecurityPXAdminTokenSecretName = "px-admin-token"
+	// SecurityPXUserTokenSecretName is the secret name for storing an auto-generated user token
+	SecurityPXUserTokenSecretName = "px-user-token"
+	// SecurityTokenBufferLength is the time ahead of the token
+	// expiration that we will start refreshing the token
+	SecurityTokenBufferLength = time.Minute * 1
 )
 
 type security struct {
-	k8sClient client.Client
+	k8sClient        client.Client
+	tokenExpiryCache map[string]int64
 }
 
 // Initialize initializes the componenet
@@ -37,6 +53,7 @@ func (c *security) Initialize(
 	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.tokenExpiryCache = make(map[string]int64)
 }
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
@@ -53,6 +70,16 @@ func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 		return err
 	}
 
+	err = c.maintainAuthTokenSecret(cluster, ownerRef, SecurityPXAdminTokenSecretName, "system.admin", []string{"*"})
+	if err != nil {
+		return fmt.Errorf("failed to maintain auth token secret %s: %s ", SecurityPXAdminTokenSecretName, err.Error())
+	}
+
+	err = c.maintainAuthTokenSecret(cluster, ownerRef, SecurityPXUserTokenSecretName, "system.user", []string{})
+	if err != nil {
+		return fmt.Errorf("failed to maintain auth token secret %s: %s ", SecurityPXUserTokenSecretName, err.Error())
+	}
+
 	return nil
 }
 
@@ -60,14 +87,25 @@ func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	// Only delete the component if a cluster wipe has been initiated
+	// delete token secrets - these are ephemeral and can be recreated easily
+	err := c.deleteSecret(cluster, ownerRef, SecurityPXAdminTokenSecretName)
+	if err != nil {
+		return err
+	}
+
+	err = c.deleteSecret(cluster, ownerRef, SecurityPXUserTokenSecretName)
+	if err != nil {
+		return err
+	}
+
+	// Only delete auth secrets if a cluster wipe has been initiated
 	if cluster.DeletionTimestamp == nil ||
 		cluster.Spec.DeleteStrategy == nil ||
 		cluster.Spec.DeleteStrategy.Type == "" {
 		return nil
 	}
 
-	err := c.deletePrivateKeysSecret(cluster, ownerRef)
+	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXAuthKeysSecretName)
 	if err != nil {
 		return err
 	}
@@ -90,21 +128,30 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1alpha1.StorageCluster,
 			privateKey, err = pxutil.GetValueFromEnvVar(context.TODO(), c.k8sClient, &envVar, cluster.Namespace)
 			if err != nil {
 				return "", err
-			}
 
+			}
 			return privateKey, nil
 		}
 	}
 
-	// If we did not find a secret, generate and add it
-	if privateKey == "" {
+	// check for pre-existing secret
+	secret := &v1.Secret{}
+	c.k8sClient.Get(context.TODO(), types.NamespacedName{
+		Namespace: cluster.Namespace,
+		Name:      secretName,
+	}, secret)
+	if errors.IsNotFound(err) || len(secret.Data) == 0 {
 		privateKey, err = generateAuthSecret()
 		if err != nil {
 			return "", err
 		}
+
+		return privateKey, nil
+	} else if err != nil {
+		return "", err
 	}
 
-	return privateKey, nil
+	return string(secret.Data[secretKey]), nil
 }
 
 func (c *security) createPrivateKeysSecret(
@@ -138,10 +185,9 @@ func (c *security) createPrivateKeysSecret(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.SecurityPXAuthKeysSecretName,
 			Namespace: cluster.Namespace,
-		},
-		StringData: map[string]string{
-			SecuritySharedSecretKey: sharedSecretKey,
-			SecuritySystemSecretKey: internalSystemSecretKey,
+		}, Data: map[string][]byte{
+			SecuritySharedSecretKey: []byte(sharedSecretKey),
+			SecuritySystemSecretKey: []byte(internalSystemSecretKey),
 		},
 	}
 
@@ -153,6 +199,113 @@ func (c *security) createPrivateKeysSecret(
 	return nil
 }
 
+func getTokenExpiry(token string) (int64, error) {
+	t, _, err := new(jwt.Parser).ParseUnverified(token, &jwt.StandardClaims{})
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse authorization token: %s", err.Error())
+	}
+
+	claims, ok := t.Claims.(*jwt.StandardClaims)
+	if !ok {
+		return 0, fmt.Errorf("failed to get token claims")
+	}
+
+	return claims.ExpiresAt, nil
+}
+
+// maintainAuthTokenSecret maintains a PX auth token inside of a given k8s secret.
+// Before token expiration, the token is refreshed for the user.
+func (c *security) maintainAuthTokenSecret(
+	cluster *corev1alpha1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	authTokenSecretName string,
+	role string,
+	groups []string,
+) error {
+
+	expired, err := c.isTokenSecretExpired(cluster, authTokenSecretName)
+	if err != nil {
+		return err
+	}
+	if expired {
+		// Get PX auth secret from k8s secret.
+		var authSecret string
+		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXAuthKeysSecretName, SecuritySharedSecretKey)
+		if err != nil {
+			return err
+		}
+
+		// Generate token and add to metadata.
+		claims := &auth.Claims{
+			Issuer:  *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+			Subject: fmt.Sprintf("%s@portworx.io", authTokenSecretName),
+			Name:    authTokenSecretName,
+			Email:   fmt.Sprintf("%s@portworx.io", authTokenSecretName),
+			Roles:   []string{role},
+			Groups:  groups,
+		}
+		token, err := pxutil.GenerateToken(cluster, authSecret, claims)
+		if err != nil {
+			return fmt.Errorf("failed to generate token: %v", err.Error())
+		}
+
+		secret := &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authTokenSecretName,
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string][]byte{
+				SecurityAuthTokenKey: []byte(token),
+			},
+		}
+		err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+		if err != nil {
+			return err
+		}
+		exp, err := getTokenExpiry(token)
+		if err != nil {
+			return err
+		}
+		c.tokenExpiryCache[authTokenSecretName] = exp
+	}
+
+	return nil
+}
+
+func (c *security) isTokenSecretExpired(
+	cluster *corev1alpha1.StorageCluster,
+	authTokenSecretName string,
+) (bool, error) {
+	var err error
+
+	exp, ok := c.tokenExpiryCache[authTokenSecretName]
+	if !ok {
+		// Not in cache - try from k8s token secret itself
+		var authToken string
+		authToken, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, SecurityAuthTokenKey)
+		if errors.IsNotFound(err) {
+			// Secret treated as expired if not found
+			return true, nil
+		} else if err != nil {
+			return false, fmt.Errorf("failed to check token secret expiration %s: %s ", authTokenSecretName, err.Error())
+		}
+
+		// Get token expiry from fetched token and add to cache
+		exp, err = getTokenExpiry(authToken)
+		if err != nil {
+			return false, err
+		}
+		c.tokenExpiryCache[authTokenSecretName] = exp
+	}
+
+	// add some buffer to prevent missing a token refresh
+	tokenExpiryBuffer := time.Now().Add(SecurityTokenBufferLength).Unix()
+	if tokenExpiryBuffer > exp {
+		return true, nil
+	}
+	return false, nil
+}
+
 func generateAuthSecret() (string, error) {
 	var randBytes = make([]byte, 128)
 	_, err := rand.Read(randBytes)
@@ -160,17 +313,16 @@ func generateAuthSecret() (string, error) {
 		return "", err
 	}
 
-	password := base64.StdEncoding.EncodeToString([]byte(randBytes))
-	password = password[:64]
-
-	return string(password), nil
+	password := base64.StdEncoding.EncodeToString(randBytes)
+	return password[:64], nil
 }
 
-func (c *security) deletePrivateKeysSecret(
+func (c *security) deleteSecret(
 	cluster *corev1alpha1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	name string,
 ) error {
-	return k8sutil.DeleteSecret(c.k8sClient, pxutil.SecurityPXAuthKeysSecretName, cluster.Namespace, *ownerRef)
+	return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace, *ownerRef)
 }
 
 // RegisterSecurityComponent registers the security component
