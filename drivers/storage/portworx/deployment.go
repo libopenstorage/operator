@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
@@ -792,7 +790,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 					LocalObjectReference: v1.LocalObjectReference{
 						Name: pxutil.SecurityPXSharedSecretSecretName,
 					},
-					Key: component.SecuritySharedSecretKey,
+					Key: pxutil.SecuritySharedSecretKey,
 				},
 			},
 		}
@@ -803,7 +801,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 					LocalObjectReference: v1.LocalObjectReference{
 						Name: pxutil.SecurityPXSystemSecretsSecretName,
 					},
-					Key: component.SecuritySystemSecretKey,
+					Key: pxutil.SecuritySystemSecretKey,
 				},
 			},
 		}

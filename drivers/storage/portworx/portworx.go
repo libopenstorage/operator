@@ -452,7 +452,7 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 			SharedSecret: &corev1alpha1.SecretKeyReference{
 				SecretName:      pxutil.SecurityPXSharedSecretSecretName,
 				SecretNamespace: toUpdate.Namespace,
-				Key:             component.SecuritySharedSecretKey,
+				Key:             pxutil.SecuritySharedSecretKey,
 			},
 		},
 	}

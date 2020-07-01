@@ -98,10 +98,21 @@ const (
 	EnvKeyPortworxAuthJwtSharedSecret = "PORTWORX_AUTH_JWT_SHAREDSECRET"
 	// EnvKeyPortworxAuthJwtIssuer is an environment variable defining the PX Security JWT Issuer
 	EnvKeyPortworxAuthJwtIssuer = "PORTWORX_AUTH_JWT_ISSUER"
+
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
 	// SecurityPXSharedSecretSecretName is the secret name for the PX Security shared secret
 	SecurityPXSharedSecretSecretName = "px-shared-secret"
+	// SecuritySharedSecretKey is the key for accessing the jwt shared secret
+	SecuritySharedSecretKey = "shared-secret"
+	// SecuritySystemSecretKey is the key for accessing the system secret auth key
+	SecuritySystemSecretKey = "system-secret"
+	// SecurityAuthTokenKey is the key for accessing a PX auth token in a k8s secret
+	SecurityAuthTokenKey = "auth-token"
+	// SecurityPXAdminTokenSecretName is the secret name for storing an auto-generated admin token
+	SecurityPXAdminTokenSecretName = "px-admin-token"
+	// SecurityPXUserTokenSecretName is the secret name for storing an auto-generated user token
+	SecurityPXUserTokenSecretName = "px-user-token"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"

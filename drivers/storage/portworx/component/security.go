@@ -25,16 +25,6 @@ import (
 const (
 	// SecurityComponentName is the name for registering this component
 	SecurityComponentName = "Security"
-	// SecuritySharedSecretKey is the key for accessing the jwt shared secret
-	SecuritySharedSecretKey = "shared-secret"
-	// SecuritySystemSecretKey is the key for accessing the system secret auth key
-	SecuritySystemSecretKey = "system-secret"
-	// SecurityAuthTokenKey is the key for accessing a PX auth token in a k8s secret
-	SecurityAuthTokenKey = "auth-token"
-	// SecurityPXAdminTokenSecretName is the secret name for storing an auto-generated admin token
-	SecurityPXAdminTokenSecretName = "px-admin-token"
-	// SecurityPXUserTokenSecretName is the secret name for storing an auto-generated user token
-	SecurityPXUserTokenSecretName = "px-user-token"
 	// SecurityTokenBufferLength is the time ahead of the token
 	// expiration that we will start refreshing the token
 	SecurityTokenBufferLength = time.Minute * 1
@@ -70,14 +60,14 @@ func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 		return err
 	}
 
-	err = c.maintainAuthTokenSecret(cluster, ownerRef, SecurityPXAdminTokenSecretName, "system.admin", []string{"*"})
+	err = c.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName, "system.admin", []string{"*"})
 	if err != nil {
-		return fmt.Errorf("failed to maintain auth token secret %s: %s ", SecurityPXAdminTokenSecretName, err.Error())
+		return fmt.Errorf("failed to maintain auth token secret %s: %s ", pxutil.SecurityPXAdminTokenSecretName, err.Error())
 	}
 
-	err = c.maintainAuthTokenSecret(cluster, ownerRef, SecurityPXUserTokenSecretName, "system.user", []string{})
+	err = c.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName, "system.user", []string{})
 	if err != nil {
-		return fmt.Errorf("failed to maintain auth token secret %s: %s ", SecurityPXUserTokenSecretName, err.Error())
+		return fmt.Errorf("failed to maintain auth token secret %s: %s ", pxutil.SecurityPXUserTokenSecretName, err.Error())
 	}
 
 	return nil
@@ -88,12 +78,12 @@ func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	// delete token secrets - these are ephemeral and can be recreated easily
-	err := c.deleteSecret(cluster, ownerRef, SecurityPXAdminTokenSecretName)
+	err := c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName)
 	if err != nil {
 		return err
 	}
 
-	err = c.deleteSecret(cluster, ownerRef, SecurityPXUserTokenSecretName)
+	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName)
 	if err != nil {
 		return err
 	}
@@ -170,7 +160,7 @@ func (c *security) createPrivateKeysSecret(
 		cluster,
 		pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 		pxutil.SecurityPXSharedSecretSecretName,
-		SecuritySharedSecretKey,
+		pxutil.SecuritySharedSecretKey,
 	)
 	if err != nil {
 		return err
@@ -180,7 +170,7 @@ func (c *security) createPrivateKeysSecret(
 		cluster,
 		pxutil.EnvKeyPortworxAuthSystemKey,
 		pxutil.SecurityPXSystemSecretsSecretName,
-		SecuritySystemSecretKey,
+		pxutil.SecuritySystemSecretKey,
 	)
 	if err != nil {
 		return err
@@ -191,7 +181,7 @@ func (c *security) createPrivateKeysSecret(
 			Name:      pxutil.SecurityPXSharedSecretSecretName,
 			Namespace: cluster.Namespace,
 		}, Data: map[string][]byte{
-			SecuritySharedSecretKey: []byte(sharedSecretKey),
+			pxutil.SecuritySharedSecretKey: []byte(sharedSecretKey),
 		},
 	}
 	systemKeysSecret := &v1.Secret{
@@ -199,7 +189,7 @@ func (c *security) createPrivateKeysSecret(
 			Name:      pxutil.SecurityPXSystemSecretsSecretName,
 			Namespace: cluster.Namespace,
 		}, Data: map[string][]byte{
-			SecuritySystemSecretKey: []byte(internalSystemSecretKey),
+			pxutil.SecuritySystemSecretKey: []byte(internalSystemSecretKey),
 		},
 	}
 
@@ -247,7 +237,7 @@ func (c *security) maintainAuthTokenSecret(
 	if expired {
 		// Get PX auth secret from k8s secret.
 		var authSecret string
-		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXSharedSecretSecretName, SecuritySharedSecretKey)
+		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXSharedSecretSecretName, pxutil.SecuritySharedSecretKey)
 		if err != nil {
 			return err
 		}
@@ -272,7 +262,7 @@ func (c *security) maintainAuthTokenSecret(
 				Namespace: cluster.Namespace,
 			},
 			Data: map[string][]byte{
-				SecurityAuthTokenKey: []byte(token),
+				pxutil.SecurityAuthTokenKey: []byte(token),
 			},
 		}
 		err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
@@ -299,7 +289,7 @@ func (c *security) isTokenSecretExpired(
 	if !ok {
 		// Not in cache - try from k8s token secret itself
 		var authToken string
-		authToken, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, SecurityAuthTokenKey)
+		authToken, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, pxutil.SecurityAuthTokenKey)
 		if errors.IsNotFound(err) {
 			// Secret treated as expired if not found
 			return true, nil

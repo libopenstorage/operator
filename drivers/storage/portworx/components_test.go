@@ -2698,11 +2698,11 @@ func TestSecurityInstall(t *testing.T) {
 	systemSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, 64, len(systemSecret.Data[component.SecuritySystemSecretKey]))
-	require.Equal(t, 64, len(sharedSecret.Data[component.SecuritySharedSecretKey]))
-	oldSystemSecret := systemSecret.Data[component.SecuritySystemSecretKey]
-	oldSharedSecret := sharedSecret.Data[component.SecuritySharedSecretKey]
-	require.NotEqual(t, systemSecret.Data[component.SecuritySystemSecretKey], sharedSecret.Data[component.SecuritySharedSecretKey])
+	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
+	require.Equal(t, 64, len(sharedSecret.Data[pxutil.SecuritySharedSecretKey]))
+	oldSystemSecret := systemSecret.Data[pxutil.SecuritySystemSecretKey]
+	oldSharedSecret := sharedSecret.Data[pxutil.SecuritySharedSecretKey]
+	require.NotEqual(t, systemSecret.Data[pxutil.SecuritySystemSecretKey], sharedSecret.Data[pxutil.SecuritySharedSecretKey])
 
 	// No changes should happen to the auto-generated secrets
 	err = driver.PreInstall(cluster)
@@ -2711,15 +2711,15 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, sharedSecret, pxutil.SecurityPXSharedSecretSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, oldSystemSecret, systemSecret.Data[component.SecuritySystemSecretKey])
-	require.Equal(t, oldSharedSecret, sharedSecret.Data[component.SecuritySharedSecretKey])
+	require.Equal(t, oldSystemSecret, systemSecret.Data[pxutil.SecuritySystemSecretKey])
+	require.Equal(t, oldSharedSecret, sharedSecret.Data[pxutil.SecuritySharedSecretKey])
 
 	// Token secrets should be created and be valid jwt tokens
 	jwtClaims := jwt.MapClaims{}
 	adminSecret := &v1.Secret{}
-	err = testutil.Get(k8sClient, adminSecret, component.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups := jwtClaims["groups"].([]interface{})
 	require.Equal(t, "*", groups[0])
@@ -2732,9 +2732,9 @@ func TestSecurityInstall(t *testing.T) {
 	validateTokenLifetime(t, cluster, jwtClaims)
 
 	userSecret := &v1.Secret{}
-	err = testutil.Get(k8sClient, userSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups = jwtClaims["groups"].([]interface{})
 	require.Equal(t, 0, len(groups))
@@ -2747,16 +2747,16 @@ func TestSecurityInstall(t *testing.T) {
 	validateTokenLifetime(t, cluster, jwtClaims)
 
 	// Token secrets should be refreshed
-	oldUserToken := userSecret.Data[component.SecurityAuthTokenKey]
+	oldUserToken := userSecret.Data[pxutil.SecurityAuthTokenKey]
 	time.Sleep(2 * time.Second)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	newUserSecret := &v1.Secret{}
-	err = testutil.Get(k8sClient, newUserSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, newUserSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	_, _, err = new(jwt.Parser).ParseUnverified(string(newUserSecret.Data[component.SecurityAuthTokenKey]), &jwtClaims)
+	_, _, err = new(jwt.Parser).ParseUnverified(string(newUserSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
-	newUserToken := newUserSecret.Data[component.SecurityAuthTokenKey]
+	newUserToken := newUserSecret.Data[pxutil.SecurityAuthTokenKey]
 	require.NotEqual(t, oldUserToken, newUserToken)
 
 	// User pre-configured values should not be overwritten
@@ -2780,12 +2780,12 @@ func TestSecurityInstall(t *testing.T) {
 	sharedSecret = &v1.Secret{}
 	err = testutil.Get(k8sClient, sharedSecret, pxutil.SecurityPXSharedSecretSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, sharedSecretKey, sharedSecret.Data[component.SecuritySharedSecretKey])
+	require.Equal(t, sharedSecretKey, sharedSecret.Data[pxutil.SecuritySharedSecretKey])
 
 	systemSecret = &v1.Secret{}
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, systemSecretKey, systemSecret.Data[component.SecuritySystemSecretKey])
+	require.Equal(t, systemSecretKey, systemSecret.Data[pxutil.SecuritySystemSecretKey])
 
 	// Disable security, secrets should not be deleted.
 	cluster.Spec.Security.Enabled = false
@@ -2823,9 +2823,9 @@ func TestSecurityInstall(t *testing.T) {
 	require.Error(t, err)
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.Error(t, err)
-	err = testutil.Get(k8sClient, userSecret, component.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
 	require.Error(t, err)
-	err = testutil.Get(k8sClient, adminSecret, component.SecurityPXUserTokenSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.Error(t, err)
 }
 
