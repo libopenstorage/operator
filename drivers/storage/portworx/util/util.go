@@ -424,7 +424,7 @@ func GenerateToken(
 	}
 	token, err := auth.Token(claims, signature, &auth.Options{
 		Expiration: time.Now().
-			Add(cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime.Duration).Unix(),
+			Add(cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration).Unix(),
 	})
 	if err != nil {
 		return "", err

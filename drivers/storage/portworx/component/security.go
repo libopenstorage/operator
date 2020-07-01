@@ -237,7 +237,7 @@ func (c *security) maintainAuthTokenSecret(
 
 		// Generate token and add to metadata.
 		claims := &auth.Claims{
-			Issuer:  *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+			Issuer:  *cluster.Spec.Security.Auth.SelfSigned.Issuer,
 			Subject: fmt.Sprintf("%s@portworx.io", authTokenSecretName),
 			Name:    authTokenSecretName,
 			Email:   fmt.Sprintf("%s@portworx.io", authTokenSecretName),

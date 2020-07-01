@@ -446,38 +446,32 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	// all default values if one is not provided below.
 	defaultAuthTemplate := &corev1alpha1.AuthSpec{
-		Authenticators: &corev1alpha1.AuthenticatorsSpec{
-			SelfSigned: &corev1alpha1.SelfSignedSpec{
-				Issuer:        stringPtr(defaultSelfSignedIssuer),
-				TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
-			},
+		SelfSigned: &corev1alpha1.SelfSignedSpec{
+			Issuer:        stringPtr(defaultSelfSignedIssuer),
+			TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
 		},
 	}
 
 	if toUpdate.Spec.Security != nil {
 		if toUpdate.Spec.Security.Enabled {
 			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1alpha1.AuthSpec{}) {
-				if toUpdate.Spec.Security.Auth.Authenticators != nil && (*toUpdate.Spec.Security.Auth.Authenticators != corev1alpha1.AuthenticatorsSpec{}) {
-					if toUpdate.Spec.Security.Auth.Authenticators.SelfSigned != nil && (*toUpdate.Spec.Security.Auth.Authenticators.SelfSigned != corev1alpha1.SelfSignedSpec{}) {
-						selfSignedIssuerEnvVal := pxutil.GetClusterEnvVarValue(context.TODO(), toUpdate, pxutil.EnvKeyPortworxAuthJwtIssuer)
-						if toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.Issuer != nil && (*toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.Issuer != "") {
-							// leave as is, non-nil and non-empty
-						} else {
-							// use environment variable if passed, otherwise use default
-							if selfSignedIssuerEnvVal == "" {
-								toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = defaultAuthTemplate.Authenticators.SelfSigned.Issuer
-							} else {
-								toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = &selfSignedIssuerEnvVal
-							}
-						}
-						if toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime == nil {
-							toUpdate.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime = defaultAuthTemplate.Authenticators.SelfSigned.TokenLifetime
-						}
+				if toUpdate.Spec.Security.Auth.SelfSigned != nil && (*toUpdate.Spec.Security.Auth.SelfSigned != corev1alpha1.SelfSignedSpec{}) {
+					selfSignedIssuerEnvVal := pxutil.GetClusterEnvVarValue(context.TODO(), toUpdate, pxutil.EnvKeyPortworxAuthJwtIssuer)
+					if toUpdate.Spec.Security.Auth.SelfSigned.Issuer != nil && (*toUpdate.Spec.Security.Auth.SelfSigned.Issuer != "") {
+						// leave as is, non-nil and non-empty
 					} else {
-						toUpdate.Spec.Security.Auth.Authenticators.SelfSigned = defaultAuthTemplate.Authenticators.SelfSigned
+						// use environment variable if passed, otherwise use default
+						if selfSignedIssuerEnvVal == "" {
+							toUpdate.Spec.Security.Auth.SelfSigned.Issuer = defaultAuthTemplate.Authenticators.SelfSigned.Issuer
+						} else {
+							toUpdate.Spec.Security.Auth.SelfSigned.Issuer = &selfSignedIssuerEnvVal
+						}
+					}
+					if toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime == nil {
+						toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime = defaultAuthTemplate.Authenticators.SelfSigned.TokenLifetime
 					}
 				} else {
-					toUpdate.Spec.Security.Auth.Authenticators = defaultAuthTemplate.Authenticators
+					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.Authenticators.SelfSigned
 				}
 			} else {
 				// security enabled, but no auth configuration

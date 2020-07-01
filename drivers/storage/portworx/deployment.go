@@ -809,7 +809,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 		}
 		envMap[pxutil.EnvKeyPortworxAuthJwtIssuer] = &v1.EnvVar{
 			Name:  pxutil.EnvKeyPortworxAuthJwtIssuer,
-			Value: *t.cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+			Value: *t.cluster.Spec.Security.Auth.SelfSigned.Issuer,
 		}
 	}
 

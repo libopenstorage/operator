@@ -840,10 +840,10 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluster) {
 	require.NotNil(t, cluster.Spec.Security)
 	require.Equal(t, true, cluster.Spec.Security.Enabled)
-	require.NotNil(t, true, cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
-	require.Equal(t, "portworx.io", *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
-	require.NotNil(t, true, cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
-	require.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, *cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
+	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
+	require.Equal(t, "portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
+	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, *cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 }
 
 func TestStorageClusterDefaultsForSecurity(t *testing.T) {
@@ -887,8 +887,15 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 
 	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
 		Enabled: true,
+		Auth:    &corev1alpha1.AuthSpec{},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
 		Auth: &corev1alpha1.AuthSpec{
-			Authenticators: &corev1alpha1.AuthenticatorsSpec{},
+			SelfSigned: &corev1alpha1.SelfSignedSpec{},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -897,21 +904,8 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
 		Enabled: true,
 		Auth: &corev1alpha1.AuthSpec{
-			Authenticators: &corev1alpha1.AuthenticatorsSpec{
-				SelfSigned: &corev1alpha1.SelfSignedSpec{},
-			},
-		},
-	}
-	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
-
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
-		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
-			Authenticators: &corev1alpha1.AuthenticatorsSpec{
-				SelfSigned: &corev1alpha1.SelfSignedSpec{
-					Issuer: stringPtr(""),
-				},
+			SelfSigned: &corev1alpha1.SelfSignedSpec{
+				Issuer: stringPtr(""),
 			},
 		},
 	}
@@ -919,14 +913,14 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	assertDefaultSecuritySpec(t, cluster)
 
 	// issuer, when manually set, is not overwritten.
-	cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = stringPtr("myissuer.io")
+	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("myissuer.io")
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "myissuer.io", *cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer)
+	require.Equal(t, "myissuer.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
 
 	// token lifetime, when manually set, is not overwritten.
 	driver.SetDefaultsOnStorageCluster(cluster)
-	cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime = metav1DurationPtr(time.Hour * 1)
-	require.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, *cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime)
+	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = metav1DurationPtr(time.Hour * 1)
+	require.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, *cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 
 }
 

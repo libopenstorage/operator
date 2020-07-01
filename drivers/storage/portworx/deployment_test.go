@@ -2362,7 +2362,7 @@ func TestSecuritySetEnv(t *testing.T) {
 	assert.Equal(t, expectedJwtIssuer, jwtIssuer)
 
 	expectedJwtIssuer = "test.io"
-	cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer = stringPtr(expectedJwtIssuer)
+	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr(expectedJwtIssuer)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	var sharedSecretSet bool

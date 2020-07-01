@@ -2656,7 +2656,7 @@ func validateTokenLifetime(t *testing.T, cluster *corev1alpha1.StorageCluster, j
 	iatTime := time.Unix(int64(iatFloat64), 0)
 	expTime := time.Unix(int64(expFloat64), 0)
 	tokenLifetime := expTime.Sub(iatTime)
-	require.Equal(t, tokenLifetime, cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime.Duration)
+	require.Equal(t, tokenLifetime, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
 }
 
 func TestSecurityInstall(t *testing.T) {
@@ -2675,13 +2675,11 @@ func TestSecurityInstall(t *testing.T) {
 			Security: &corev1alpha1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1alpha1.AuthSpec{
-					Authenticators: &corev1alpha1.AuthenticatorsSpec{
-						SelfSigned: &corev1alpha1.SelfSignedSpec{
-							TokenLifetime: &metav1.Duration{
-								// Since we have a token expiration buffer of one minute,
-								// a new token will constantly be fetched.
-								Duration: time.Second * 1,
-							},
+					SelfSigned: &corev1alpha1.SelfSignedSpec{
+						TokenLifetime: &metav1.Duration{
+							// Since we have a token expiration buffer of one minute,
+							// a new token will constantly be fetched.
+							Duration: time.Second * 1,
 						},
 					},
 				},
