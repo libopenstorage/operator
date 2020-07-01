@@ -105,7 +105,12 @@ func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
 		return nil
 	}
 
-	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXAuthKeysSecretName)
+	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXSharedSecretSecretName)
+	if err != nil {
+		return err
+	}
+
+	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXSystemSecretsSecretName)
 	if err != nil {
 		return err
 	}
@@ -164,7 +169,7 @@ func (c *security) createPrivateKeysSecret(
 	sharedSecretKey, err = c.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthJwtSharedSecret,
-		pxutil.SecurityPXAuthKeysSecretName,
+		pxutil.SecurityPXSharedSecretSecretName,
 		SecuritySharedSecretKey,
 	)
 	if err != nil {
@@ -174,24 +179,36 @@ func (c *security) createPrivateKeysSecret(
 	internalSystemSecretKey, err = c.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthSystemKey,
-		pxutil.SecurityPXAuthKeysSecretName,
+		pxutil.SecurityPXSystemSecretsSecretName,
 		SecuritySystemSecretKey,
 	)
 	if err != nil {
 		return err
 	}
 
-	privateKeysSecret := &v1.Secret{
+	sharedSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.SecurityPXAuthKeysSecretName,
+			Name:      pxutil.SecurityPXSharedSecretSecretName,
 			Namespace: cluster.Namespace,
 		}, Data: map[string][]byte{
 			SecuritySharedSecretKey: []byte(sharedSecretKey),
+		},
+	}
+	systemKeysSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.SecurityPXSystemSecretsSecretName,
+			Namespace: cluster.Namespace,
+		}, Data: map[string][]byte{
 			SecuritySystemSecretKey: []byte(internalSystemSecretKey),
 		},
 	}
 
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, privateKeysSecret, ownerRef)
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, sharedSecret, ownerRef)
+	if err != nil {
+		return err
+	}
+
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, systemKeysSecret, ownerRef)
 	if err != nil {
 		return err
 	}
@@ -230,7 +247,7 @@ func (c *security) maintainAuthTokenSecret(
 	if expired {
 		// Get PX auth secret from k8s secret.
 		var authSecret string
-		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXAuthKeysSecretName, SecuritySharedSecretKey)
+		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXSharedSecretSecretName, SecuritySharedSecretKey)
 		if err != nil {
 			return err
 		}

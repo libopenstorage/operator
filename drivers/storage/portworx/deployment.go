@@ -783,14 +783,14 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
-	// Add JWT Issuer from spec if security is enabled
+	// Add self signed values from spec if security is enabled
 	if pxutil.SecurityEnabled(t.cluster) {
 		envMap[pxutil.EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXAuthKeysSecretName,
+						Name: pxutil.SecurityPXSharedSecretSecretName,
 					},
 					Key: component.SecuritySharedSecretKey,
 				},
@@ -801,7 +801,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXAuthKeysSecretName,
+						Name: pxutil.SecurityPXSystemSecretsSecretName,
 					},
 					Key: component.SecuritySystemSecretKey,
 				},

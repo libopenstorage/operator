@@ -449,6 +449,11 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 		SelfSigned: &corev1alpha1.SelfSignedSpec{
 			Issuer:        stringPtr(defaultSelfSignedIssuer),
 			TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
+			SharedSecret: &corev1alpha1.SecretKeyReference{
+				SecretName:      pxutil.SecurityPXSharedSecretSecretName,
+				SecretNamespace: toUpdate.Namespace,
+				Key:             component.SecuritySharedSecretKey,
+			},
 		},
 	}
 
@@ -462,16 +467,16 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 					} else {
 						// use environment variable if passed, otherwise use default
 						if selfSignedIssuerEnvVal == "" {
-							toUpdate.Spec.Security.Auth.SelfSigned.Issuer = defaultAuthTemplate.Authenticators.SelfSigned.Issuer
+							toUpdate.Spec.Security.Auth.SelfSigned.Issuer = defaultAuthTemplate.SelfSigned.Issuer
 						} else {
 							toUpdate.Spec.Security.Auth.SelfSigned.Issuer = &selfSignedIssuerEnvVal
 						}
 					}
 					if toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime == nil {
-						toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime = defaultAuthTemplate.Authenticators.SelfSigned.TokenLifetime
+						toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime = defaultAuthTemplate.SelfSigned.TokenLifetime
 					}
 				} else {
-					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.Authenticators.SelfSigned
+					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.SelfSigned
 				}
 			} else {
 				// security enabled, but no auth configuration

@@ -24,7 +24,7 @@ func TestSetupContextWithToken(t *testing.T) {
 	var defaultSecret = []v1.Secret{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
+				Name:      pxutil.SecurityPXSharedSecretSecretName,
 				Namespace: "ns",
 			},
 			Data: map[string][]byte{
@@ -36,7 +36,7 @@ func TestSetupContextWithToken(t *testing.T) {
 	var defaultConfigMap = []v1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
+				Name:      pxutil.SecurityPXSharedSecretSecretName,
 				Namespace: "ns",
 			},
 			// no data in secret
