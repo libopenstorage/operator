@@ -123,16 +123,9 @@ type AuthSpec struct {
 
 // SelfSignedSpec defines a configuration for self signed authentication
 type SelfSignedSpec struct {
-	Issuer        *string             `json:"issuer,omitempty"`
-	TokenLifetime *meta.Duration      `json:"tokenLifetime,omitempty"`
-	SharedSecret  *SecretKeyReference `json:"sharedSecretRef,omitempty"`
-}
-
-// SecretKeyReference is a user-friendly reference to a value based on a secret name and key
-type SecretKeyReference struct {
-	SecretName      string `json:"secretName,omitempty"`
-	SecretNamespace string `json:"secretNamespace,omitempty"`
-	Key             string `json:"key,omitempty"`
+	Issuer        *string        `json:"issuer,omitempty"`
+	TokenLifetime *meta.Duration `json:"tokenLifetime,omitempty"`
+	SharedSecret  *string        `json:"sharedSecret,omitempty"`
 }
 
 // CommonConfig are common configurations that are exposed at both

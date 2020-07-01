@@ -449,11 +449,7 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 		SelfSigned: &corev1alpha1.SelfSignedSpec{
 			Issuer:        stringPtr(defaultSelfSignedIssuer),
 			TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
-			SharedSecret: &corev1alpha1.SecretKeyReference{
-				SecretName:      pxutil.SecurityPXSharedSecretSecretName,
-				SecretNamespace: toUpdate.Namespace,
-				Key:             pxutil.SecuritySharedSecretKey,
-			},
+			SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
 		},
 	}
 
@@ -474,6 +470,9 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 					}
 					if toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime == nil {
 						toUpdate.Spec.Security.Auth.SelfSigned.TokenLifetime = defaultAuthTemplate.SelfSigned.TokenLifetime
+					}
+					if toUpdate.Spec.Security.Auth.SelfSigned.SharedSecret == nil {
+						toUpdate.Spec.Security.Auth.SelfSigned.SharedSecret = defaultAuthTemplate.SelfSigned.SharedSecret
 					}
 				} else {
 					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.SelfSigned

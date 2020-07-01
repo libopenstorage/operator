@@ -3879,6 +3879,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 			DesiredImages: &corev1alpha1.ComponentImages{},
 		},
 	}
+	setSecuritySpecDefaults(cluster)
 
 	// Install all components
 	err := driver.PreInstall(cluster)

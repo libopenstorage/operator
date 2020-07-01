@@ -95,6 +95,7 @@ func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
 		return nil
 	}
 
+	// only deleted our default generated one. If they provide a secret name in the spec, do not delete it.
 	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXSharedSecretSecretName)
 	if err != nil {
 		return err
@@ -159,7 +160,7 @@ func (c *security) createPrivateKeysSecret(
 	sharedSecretKey, err = c.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthJwtSharedSecret,
-		pxutil.SecurityPXSharedSecretSecretName,
+		*cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 		pxutil.SecuritySharedSecretKey,
 	)
 	if err != nil {
@@ -178,7 +179,7 @@ func (c *security) createPrivateKeysSecret(
 
 	sharedSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.SecurityPXSharedSecretSecretName,
+			Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 			Namespace: cluster.Namespace,
 		}, Data: map[string][]byte{
 			pxutil.SecuritySharedSecretKey: []byte(sharedSecretKey),
@@ -237,7 +238,7 @@ func (c *security) maintainAuthTokenSecret(
 	if expired {
 		// Get PX auth secret from k8s secret.
 		var authSecret string
-		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, pxutil.SecurityPXSharedSecretSecretName, pxutil.SecuritySharedSecretKey)
+		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, pxutil.SecuritySharedSecretKey)
 		if err != nil {
 			return err
 		}

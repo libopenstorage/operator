@@ -788,7 +788,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXSharedSecretSecretName,
+						Name: *t.cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 					},
 					Key: pxutil.SecuritySharedSecretKey,
 				},
