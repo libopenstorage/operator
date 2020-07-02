@@ -320,12 +320,7 @@ func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.En
 				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
 			}
 
-			decodedValue, err := DecodeBase64(value)
-			if err != nil {
-				return "", err
-			}
-
-			return string(decodedValue), nil
+			return string(value), nil
 		} else if valueFrom.ConfigMapKeyRef != nil {
 			cmName := valueFrom.ConfigMapKeyRef.Name
 			key := valueFrom.ConfigMapKeyRef.Key
@@ -497,18 +492,6 @@ func SetupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageClu
 		"authorization": "bearer " + pxAdminToken,
 	})
 	return metadata.NewOutgoingContext(ctx, md), nil
-}
-
-// DecodeBase64 decodes a given src byte slice.
-// This returns the byte slice based on the length decoded.
-func DecodeBase64(src []byte) ([]byte, error) {
-	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(src)))
-	l, err := base64.StdEncoding.Decode(decoded, src)
-	if err != nil {
-		return nil, err
-	}
-
-	return decoded[:l], nil
 }
 
 // EncodeBase64 encode a given src byte slice.

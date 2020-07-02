@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -321,8 +320,8 @@ func generateAuthSecret() (string, error) {
 		return "", err
 	}
 
-	password := base64.StdEncoding.EncodeToString(randBytes)
-	return password[:64], nil
+	password := pxutil.EncodeBase64(randBytes)
+	return string(password[:64]), nil
 }
 
 func (c *security) deleteSecret(
