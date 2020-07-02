@@ -118,11 +118,6 @@ type SecuritySpec struct {
 // AuthSpec lets the user define authorization configurations
 // for creating a PX Security enabled cluster
 type AuthSpec struct {
-	Authenticators *AuthenticatorsSpec `json:"authenticators,omitempty"`
-}
-
-// AuthenticatorsSpec defines which auth mechanisms are setup for PX Security
-type AuthenticatorsSpec struct {
 	SelfSigned *SelfSignedSpec `json:"selfSigned,omitempty"`
 }
 
@@ -130,6 +125,7 @@ type AuthenticatorsSpec struct {
 type SelfSignedSpec struct {
 	Issuer        *string        `json:"issuer,omitempty"`
 	TokenLifetime *meta.Duration `json:"tokenLifetime,omitempty"`
+	SharedSecret  *string        `json:"sharedSecret,omitempty"`
 }
 
 // CommonConfig are common configurations that are exposed at both

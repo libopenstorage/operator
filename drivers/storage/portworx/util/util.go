@@ -99,8 +99,20 @@ const (
 	// EnvKeyPortworxAuthJwtIssuer is an environment variable defining the PX Security JWT Issuer
 	EnvKeyPortworxAuthJwtIssuer = "PORTWORX_AUTH_JWT_ISSUER"
 
-	// SecurityPXAuthKeysSecretName is the admin secret name for PX security
-	SecurityPXAuthKeysSecretName = "px-auth-keys"
+	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
+	SecurityPXSystemSecretsSecretName = "px-system-secrets"
+	// SecurityPXSharedSecretSecretName is the secret name for the PX Security shared secret
+	SecurityPXSharedSecretSecretName = "px-shared-secret"
+	// SecuritySharedSecretKey is the key for accessing the jwt shared secret
+	SecuritySharedSecretKey = "shared-secret"
+	// SecuritySystemSecretKey is the key for accessing the system secret auth key
+	SecuritySystemSecretKey = "system-secret"
+	// SecurityAuthTokenKey is the key for accessing a PX auth token in a k8s secret
+	SecurityAuthTokenKey = "auth-token"
+	// SecurityPXAdminTokenSecretName is the secret name for storing an auto-generated admin token
+	SecurityPXAdminTokenSecretName = "px-admin-token"
+	// SecurityPXUserTokenSecretName is the secret name for storing an auto-generated user token
+	SecurityPXUserTokenSecretName = "px-user-token"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
@@ -424,7 +436,7 @@ func GenerateToken(
 	}
 	token, err := auth.Token(claims, signature, &auth.Options{
 		Expiration: time.Now().
-			Add(cluster.Spec.Security.Auth.Authenticators.SelfSigned.TokenLifetime.Duration).Unix(),
+			Add(cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration).Unix(),
 	})
 	if err != nil {
 		return "", err

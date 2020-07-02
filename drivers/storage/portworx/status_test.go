@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 
 	"google.golang.org/grpc/metadata"
@@ -24,11 +23,11 @@ func TestSetupContextWithToken(t *testing.T) {
 	var defaultSecret = []v1.Secret{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
+				Name:      pxutil.SecurityPXSharedSecretSecretName,
 				Namespace: "ns",
 			},
 			Data: map[string][]byte{
-				component.SecuritySharedSecretKey: []byte("mysecret"),
+				pxutil.SecuritySharedSecretKey: []byte("mysecret"),
 			},
 		},
 	}
@@ -36,12 +35,12 @@ func TestSetupContextWithToken(t *testing.T) {
 	var defaultConfigMap = []v1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      pxutil.SecurityPXAuthKeysSecretName,
+				Name:      pxutil.SecurityPXSharedSecretSecretName,
 				Namespace: "ns",
 			},
 			// no data in secret
 			Data: map[string]string{
-				component.SecuritySharedSecretKey: "mysecret",
+				pxutil.SecuritySharedSecretKey: "mysecret",
 			},
 		},
 	}
@@ -135,7 +134,7 @@ func TestSetupContextWithToken(t *testing.T) {
 							LocalObjectReference: v1.LocalObjectReference{
 								Name: tc.pxSecretName,
 							},
-							Key: component.SecuritySharedSecretKey,
+							Key: pxutil.SecuritySharedSecretKey,
 						},
 					},
 				})
@@ -150,7 +149,7 @@ func TestSetupContextWithToken(t *testing.T) {
 							LocalObjectReference: v1.LocalObjectReference{
 								Name: tc.pxConfigMapName,
 							},
-							Key: component.SecuritySharedSecretKey,
+							Key: pxutil.SecuritySharedSecretKey,
 						},
 					},
 				})

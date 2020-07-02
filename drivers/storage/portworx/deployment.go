@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
@@ -783,16 +781,16 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
-	// Add JWT Issuer from spec if security is enabled
+	// Add self signed values from spec if security is enabled
 	if pxutil.SecurityEnabled(t.cluster) {
 		envMap[pxutil.EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXAuthKeysSecretName,
+						Name: *t.cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 					},
-					Key: component.SecuritySharedSecretKey,
+					Key: pxutil.SecuritySharedSecretKey,
 				},
 			},
 		}
@@ -801,15 +799,15 @@ func (t *template) getEnvList() []v1.EnvVar {
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXAuthKeysSecretName,
+						Name: pxutil.SecurityPXSystemSecretsSecretName,
 					},
-					Key: component.SecuritySystemSecretKey,
+					Key: pxutil.SecuritySystemSecretKey,
 				},
 			},
 		}
 		envMap[pxutil.EnvKeyPortworxAuthJwtIssuer] = &v1.EnvVar{
 			Name:  pxutil.EnvKeyPortworxAuthJwtIssuer,
-			Value: *t.cluster.Spec.Security.Auth.Authenticators.SelfSigned.Issuer,
+			Value: *t.cluster.Spec.Security.Auth.SelfSigned.Issuer,
 		}
 	}
 
