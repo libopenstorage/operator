@@ -975,3 +975,7 @@ func boolPtr(val bool) *bool {
 func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
 	return &val
 }
+
+func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
+	return &val
+}

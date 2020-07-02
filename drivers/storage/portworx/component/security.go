@@ -8,10 +8,13 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,10 +30,49 @@ const (
 	// SecurityTokenBufferLength is the time ahead of the token
 	// expiration that we will start refreshing the token
 	SecurityTokenBufferLength = time.Minute * 1
+	// SecuritySystemGuestRoleName is the role name to maintain for the guest role
+	SecuritySystemGuestRoleName = "system.guest"
 )
+
+// GuestRoleEnabled is the default configuration for the guest role
+var GuestRoleEnabled = api.SdkRole{
+	Name: SecuritySystemGuestRoleName,
+	Rules: []*api.SdkRule{
+		{
+			Services: []string{"mountattach", "volume", "cloudbackup", "migrate"},
+			Apis:     []string{"*"},
+		},
+		{
+			Services: []string{"identity"},
+			Apis:     []string{"version"},
+		},
+		{
+			Services: []string{
+				"cluster",
+				"node",
+			},
+			Apis: []string{
+				"inspect*",
+				"enumerate*",
+			},
+		},
+	},
+}
+
+// GuestRoleDisabled is the disabled configuration for the guest role
+var GuestRoleDisabled = api.SdkRole{
+	Name: SecuritySystemGuestRoleName,
+	Rules: []*api.SdkRule{
+		{
+			Services: []string{"!*"},
+			Apis:     []string{"!*"},
+		},
+	},
+}
 
 type security struct {
 	k8sClient client.Client
+	sdkConn   *grpc.ClientConn
 }
 
 // Initialize initializes the componenet
@@ -65,6 +107,11 @@ func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	err = c.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName, "system.user", []string{})
 	if err != nil {
 		return fmt.Errorf("failed to maintain auth token secret %s: %s ", pxutil.SecurityPXUserTokenSecretName, err.Error())
+	}
+
+	err = c.updateSystemGuestRole(cluster)
+	if err != nil {
+		return fmt.Errorf("failed to update system guest role: %s ", err.Error())
 	}
 
 	return nil
@@ -322,6 +369,79 @@ func (c *security) deleteSecret(
 		return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace)
 	}
 	return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace, *ownerRef)
+}
+
+// closeSdkConn closes the sdk connection and resets it to nil
+func (c *security) closeSdkConn() {
+	if c.sdkConn == nil {
+		return
+	}
+
+	if err := c.sdkConn.Close(); err != nil {
+		logrus.Errorf("failed to close sdk connection: %s", err.Error())
+	}
+	c.sdkConn = nil
+}
+
+func (c *security) updateSystemGuestRole(cluster *corev1alpha1.StorageCluster) error {
+	if *cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleEnabled &&
+		*cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleDisabled &&
+		*cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleManaged {
+		return fmt.Errorf("invalid guest access type: %s", *cluster.Spec.Security.Auth.GuestAccess)
+	}
+
+	// Guest access added in PX 2.6.0, skip this feature if below 2.6.0
+	systemGuestMinimumVersion, err := version.NewVersion("2.6.0")
+	if err != nil {
+		return err
+	}
+	if pxutil.GetPortworxVersion(cluster).LessThan(systemGuestMinimumVersion) {
+		return nil
+	}
+
+	// managed, do not interfere with system.guest role
+	if *cluster.Spec.Security.Auth.GuestAccess == corev1alpha1.GuestRoleManaged {
+		return nil
+	}
+
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	roleClient := api.NewOpenStorageRoleClient(c.sdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
+	if err != nil {
+		c.closeSdkConn()
+		return err
+	}
+
+	// Only updated when required
+	var desiredRole api.SdkRole
+	if *cluster.Spec.Security.Auth.GuestAccess == corev1alpha1.GuestRoleEnabled {
+		desiredRole = GuestRoleEnabled
+	} else {
+		desiredRole = GuestRoleDisabled
+	}
+	currentRoleResp, err := roleClient.Inspect(ctx, &api.SdkRoleInspectRequest{
+		Name: SecuritySystemGuestRoleName,
+	})
+	if err != nil {
+		c.closeSdkConn()
+		return nil
+	}
+	currentRole := *currentRoleResp.GetRole()
+	if currentRole.String() != desiredRole.String() {
+		_, err = roleClient.Update(ctx, &api.SdkRoleUpdateRequest{
+			Role: &desiredRole,
+		})
+		if err != nil {
+			c.closeSdkConn()
+			return err
+		}
+	}
+
+	return nil
 }
 
 // RegisterSecurityComponent registers the security component

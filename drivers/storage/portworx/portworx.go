@@ -446,6 +446,7 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	// all default values if one is not provided below.
 	defaultAuthTemplate := &corev1alpha1.AuthSpec{
+		GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleEnabled),
 		SelfSigned: &corev1alpha1.SelfSignedSpec{
 			Issuer:        stringPtr(defaultSelfSignedIssuer),
 			TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
@@ -456,6 +457,10 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	if toUpdate.Spec.Security != nil {
 		if toUpdate.Spec.Security.Enabled {
 			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1alpha1.AuthSpec{}) {
+				if toUpdate.Spec.Security.Auth.GuestAccess == nil || (*toUpdate.Spec.Security.Auth.GuestAccess == "") {
+					// if not provided, enabled by default.
+					toUpdate.Spec.Security.Auth.GuestAccess = defaultAuthTemplate.GuestAccess
+				}
 				if toUpdate.Spec.Security.Auth.SelfSigned != nil && (*toUpdate.Spec.Security.Auth.SelfSigned != corev1alpha1.SelfSignedSpec{}) {
 					selfSignedIssuerEnvVal := pxutil.GetClusterEnvVarValue(context.TODO(), toUpdate, pxutil.EnvKeyPortworxAuthJwtIssuer)
 					if toUpdate.Spec.Security.Auth.SelfSigned.Issuer != nil && (*toUpdate.Spec.Security.Auth.SelfSigned.Issuer != "") {

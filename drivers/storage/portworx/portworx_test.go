@@ -912,6 +912,22 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			GuestAccess: guestAccessTypePtr(corev1alpha1.GuestAccessType("")),
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			GuestAccess: nil,
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster)
+
 	// issuer, when manually set, is not overwritten.
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("myissuer.io")
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -3687,6 +3703,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 		},
 	}
 	setSecuritySpecDefaults(cluster)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -3903,6 +3920,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 		},
 	}
 	setSecuritySpecDefaults(cluster)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -4493,6 +4511,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 		},
 	}
 	setSecuritySpecDefaults(cluster)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
