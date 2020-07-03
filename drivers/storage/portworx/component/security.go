@@ -30,8 +30,7 @@ const (
 )
 
 type security struct {
-	k8sClient        client.Client
-	tokenExpiryCache map[string]int64
+	k8sClient client.Client
 }
 
 // Initialize initializes the componenet
@@ -42,7 +41,6 @@ func (c *security) Initialize(
 	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
-	c.tokenExpiryCache = make(map[string]int64)
 }
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
@@ -269,11 +267,6 @@ func (c *security) maintainAuthTokenSecret(
 		if err != nil {
 			return err
 		}
-		exp, err := getTokenExpiry(token)
-		if err != nil {
-			return err
-		}
-		c.tokenExpiryCache[authTokenSecretName] = exp
 	}
 
 	return nil
@@ -283,26 +276,20 @@ func (c *security) isTokenSecretExpired(
 	cluster *corev1alpha1.StorageCluster,
 	authTokenSecretName string,
 ) (bool, error) {
-	var err error
 
-	exp, ok := c.tokenExpiryCache[authTokenSecretName]
-	if !ok {
-		// Not in cache - try from k8s token secret itself
-		var authToken string
-		authToken, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, pxutil.SecurityAuthTokenKey)
-		if errors.IsNotFound(err) {
-			// Secret treated as expired if not found
-			return true, nil
-		} else if err != nil {
-			return false, fmt.Errorf("failed to check token secret expiration %s: %s ", authTokenSecretName, err.Error())
-		}
+	var authToken string
+	authToken, err := pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, pxutil.SecurityAuthTokenKey)
+	if errors.IsNotFound(err) {
+		// Secret treated as expired if not found
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("failed to check token secret expiration %s: %s ", authTokenSecretName, err.Error())
+	}
 
-		// Get token expiry from fetched token and add to cache
-		exp, err = getTokenExpiry(authToken)
-		if err != nil {
-			return false, err
-		}
-		c.tokenExpiryCache[authTokenSecretName] = exp
+	// Get token expiry from fetched token and add to cache
+	exp, err := getTokenExpiry(authToken)
+	if err != nil {
+		return false, err
 	}
 
 	// add some buffer to prevent missing a token refresh
@@ -310,6 +297,7 @@ func (c *security) isTokenSecretExpired(
 	if tokenExpiryBuffer > exp {
 		return true, nil
 	}
+
 	return false, nil
 }
 
