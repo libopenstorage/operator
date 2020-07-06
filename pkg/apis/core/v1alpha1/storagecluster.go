@@ -437,15 +437,19 @@ type StorageClusterStatus struct {
 
 // ComponentImages is a collection of all the images managed by the operator
 type ComponentImages struct {
-	Stork                  string `json:"stork,omitempty"`
-	UserInterface          string `json:"userInterface,omitempty"`
-	Autopilot              string `json:"autopilot,omitempty"`
-	CSINodeDriverRegistrar string `json:"csiNodeDriverRegistrar,omitempty"`
-	CSIDriverRegistrar     string `json:"csiDriverRegistrar,omitempty"`
-	CSIProvisioner         string `json:"csiProvisioner,omitempty"`
-	CSIAttacher            string `json:"csiAttacher,omitempty"`
-	CSIResizer             string `json:"csiResizer,omitempty"`
-	CSISnapshotter         string `json:"csiSnapshotter,omitempty"`
+	Stork                     string `json:"stork,omitempty"`
+	UserInterface             string `json:"userInterface,omitempty"`
+	Autopilot                 string `json:"autopilot,omitempty"`
+	CSINodeDriverRegistrar    string `json:"csiNodeDriverRegistrar,omitempty"`
+	CSIDriverRegistrar        string `json:"csiDriverRegistrar,omitempty"`
+	CSIProvisioner            string `json:"csiProvisioner,omitempty"`
+	CSIAttacher               string `json:"csiAttacher,omitempty"`
+	CSIResizer                string `json:"csiResizer,omitempty"`
+	CSISnapshotter            string `json:"csiSnapshotter,omitempty"`
+	PrometheusOperator        string `json:"prometheusOperator,omitempty"`
+	PrometheusConfigMapReload string `json:"prometheusConfigMapReload,omitempty"`
+	PrometheusConfigReloader  string `json:"prometheusConfigReloader,omitempty"`
+	Prometheus                string `json:"prometheus,omitempty"`
 }
 
 // Storage represents cluster storage details

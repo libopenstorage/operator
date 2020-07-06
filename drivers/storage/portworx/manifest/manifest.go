@@ -19,25 +19,33 @@ const (
 	envKeyReleaseManifestURL = "PX_RELEASE_MANIFEST_URL"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion = "2.5.2"
-	defaultStorkImage      = "openstorage/stork:2.4.1"
-	defaultAutopilotImage  = "portworx/autopilot:1.2.1"
-	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
+	DefaultPortworxVersion                = "2.5.2"
+	defaultStorkImage                     = "openstorage/stork:2.4.1"
+	defaultAutopilotImage                 = "portworx/autopilot:1.2.1"
+	defaultLighthouseImage                = "portworx/px-lighthouse:2.0.7"
+	defaultNodeWiperImage                 = "portworx/px-node-wiper:2.5.0"
+	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
+	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
+	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
+	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
 )
 
 // Release is a single release object with images for different components
 type Release struct {
-	Stork                  string `yaml:"stork,omitempty"`
-	Lighthouse             string `yaml:"lighthouse,omitempty"`
-	Autopilot              string `yaml:"autopilot,omitempty"`
-	NodeWiper              string `yaml:"nodeWiper,omitempty"`
-	CSIDriverRegistrar     string `yaml:"csiDriverRegistrar,omitempty"`
-	CSINodeDriverRegistrar string `yaml:"csiNodeDriverRegistrar,omitempty"`
-	CSIProvisioner         string `yaml:"csiProvisioner,omitempty"`
-	CSIAttacher            string `yaml:"csiAttacher,omitempty"`
-	CSIResizer             string `yaml:"csiResizer,omitempty"`
-	CSISnapshotter         string `yaml:"csiSnapshotter,omitempty"`
+	Stork                     string `yaml:"stork,omitempty"`
+	Lighthouse                string `yaml:"lighthouse,omitempty"`
+	Autopilot                 string `yaml:"autopilot,omitempty"`
+	NodeWiper                 string `yaml:"nodeWiper,omitempty"`
+	CSIDriverRegistrar        string `yaml:"csiDriverRegistrar,omitempty"`
+	CSINodeDriverRegistrar    string `yaml:"csiNodeDriverRegistrar,omitempty"`
+	CSIProvisioner            string `yaml:"csiProvisioner,omitempty"`
+	CSIAttacher               string `yaml:"csiAttacher,omitempty"`
+	CSIResizer                string `yaml:"csiResizer,omitempty"`
+	CSISnapshotter            string `yaml:"csiSnapshotter,omitempty"`
+	Prometheus                string `yaml:"prometheus,omitempty"`
+	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
+	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
+	PrometheusConfigReloader  string `yaml:"prometheusConfigReloader,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -95,10 +103,14 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:      defaultStorkImage,
-			Autopilot:  defaultAutopilotImage,
-			Lighthouse: defaultLighthouseImage,
-			NodeWiper:  defaultNodeWiperImage,
+			Stork:                     defaultStorkImage,
+			Autopilot:                 defaultAutopilotImage,
+			Lighthouse:                defaultLighthouseImage,
+			NodeWiper:                 defaultNodeWiperImage,
+			Prometheus:                defaultPrometheusImage,
+			PrometheusOperator:        defaultPrometheusOperatorImage,
+			PrometheusConfigMapReload: defaultPrometheusConfigMapReloadImage,
+			PrometheusConfigReloader:  defaultPrometheusConfigReloaderImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
@@ -120,6 +132,18 @@ func fillDefaults(
 	}
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
+	}
+	if rel.Components.Prometheus == "" {
+		rel.Components.Prometheus = defaultPrometheusImage
+	}
+	if rel.Components.PrometheusOperator == "" {
+		rel.Components.PrometheusOperator = defaultPrometheusOperatorImage
+	}
+	if rel.Components.PrometheusConfigMapReload == "" {
+		rel.Components.PrometheusConfigMapReload = defaultPrometheusConfigMapReloadImage
+	}
+	if rel.Components.PrometheusConfigReloader == "" {
+		rel.Components.PrometheusConfigReloader = defaultPrometheusConfigReloaderImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 }

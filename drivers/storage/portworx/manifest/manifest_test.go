@@ -24,10 +24,14 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
-			Stork:      "image/stork:2.6.0",
-			Autopilot:  "image/autopilo:2.6.0",
-			Lighthouse: "image/lighthouse:2.6.0",
-			NodeWiper:  "image/nodewiper:2.6.0",
+			Stork:                     "image/stork:2.6.0",
+			Autopilot:                 "image/autopilo:2.6.0",
+			Lighthouse:                "image/lighthouse:2.6.0",
+			NodeWiper:                 "image/nodewiper:2.6.0",
+			Prometheus:                "image/prometheus:2.6.0",
+			PrometheusOperator:        "image/prometheus-operator:2.6.0",
+			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
+			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -51,10 +55,14 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
-			Stork:      "image/stork:2.6.0",
-			Autopilot:  "image/autopilo:2.6.0",
-			Lighthouse: "image/lighthouse:2.6.0",
-			NodeWiper:  "image/nodewiper:2.6.0",
+			Stork:                     "image/stork:2.6.0",
+			Autopilot:                 "image/autopilo:2.6.0",
+			Lighthouse:                "image/lighthouse:2.6.0",
+			NodeWiper:                 "image/nodewiper:2.6.0",
+			Prometheus:                "image/prometheus:2.6.0",
+			PrometheusOperator:        "image/prometheus-operator:2.6.0",
+			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
+			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 		},
 	}
 
@@ -127,10 +135,14 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 	expected := &Version{
 		PortworxVersion: "2.5.0",
 		Components: Release{
-			Stork:      "image/stork:2.5.0",
-			Autopilot:  "image/autopilo:2.5.0",
-			Lighthouse: "image/lighthouse:2.5.0",
-			NodeWiper:  "image/nodewiper:2.5.0",
+			Stork:                     "image/stork:2.5.0",
+			Autopilot:                 "image/autopilo:2.5.0",
+			Lighthouse:                "image/lighthouse:2.5.0",
+			NodeWiper:                 "image/nodewiper:2.5.0",
+			Prometheus:                "image/prometheus:2.5.0",
+			PrometheusOperator:        "image/prometheus-operator:2.5.0",
+			PrometheusConfigMapReload: "image/configmap-reload:2.5.0",
+			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -200,10 +212,14 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	expected := &Version{
 		PortworxVersion: "edge",
 		Components: Release{
-			Stork:      "image/stork:2.6.0",
-			Autopilot:  "image/autopilo:2.6.0",
-			Lighthouse: "image/lighthouse:2.6.0",
-			NodeWiper:  "image/nodewiper:2.6.0",
+			Stork:                     "image/stork:2.6.0",
+			Autopilot:                 "image/autopilo:2.6.0",
+			Lighthouse:                "image/lighthouse:2.6.0",
+			NodeWiper:                 "image/nodewiper:2.6.0",
+			Prometheus:                "image/prometheus:2.6.0",
+			PrometheusOperator:        "image/prometheus-operator:2.6.0",
+			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
+			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -267,10 +283,14 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 	expected := &Version{
 		PortworxVersion: "2.6.0",
 		Components: Release{
-			Stork:      "image/stork:2.6.0",
-			Autopilot:  "image/autopilo:2.6.0",
-			Lighthouse: "image/lighthouse:2.6.0",
-			NodeWiper:  "image/nodewiper:2.6.0",
+			Stork:                     "image/stork:2.6.0",
+			Autopilot:                 "image/autopilo:2.6.0",
+			Lighthouse:                "image/lighthouse:2.6.0",
+			NodeWiper:                 "image/nodewiper:2.6.0",
+			Prometheus:                "image/prometheus:2.6.0",
+			PrometheusOperator:        "image/prometheus-operator:2.6.0",
+			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
+			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 		},
 	}
 	cluster := &corev1alpha1.StorageCluster{
@@ -317,6 +337,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	expected.Components = Release{
 		Stork:          "image/stork:3.0.0",
 		NodeWiper:      "image/nodewiper:3.0.0",
+		Prometheus:     "image/prometheus:3.0.0",
 		CSIProvisioner: "image/csiprovisioner:3.0.0",
 	}
 
@@ -327,6 +348,10 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, "image/nodewiper:3.0.0", rel.Components.NodeWiper)
 	require.Equal(t, defaultAutopilotImage, rel.Components.Autopilot)
 	require.Equal(t, defaultLighthouseImage, rel.Components.Lighthouse)
+	require.Equal(t, "image/prometheus:3.0.0", rel.Components.Prometheus)
+	require.Equal(t, defaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
+	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
+	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
 	require.Equal(t, "image/csiprovisioner:3.0.0", rel.Components.CSIProvisioner)
 	require.Empty(t, rel.Components.CSIAttacher)
 

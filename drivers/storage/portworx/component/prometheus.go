@@ -49,14 +49,6 @@ const (
 	PrometheusServiceName = "px-prometheus"
 	// PrometheusInstanceName name of the prometheus instance
 	PrometheusInstanceName = "px-prometheus"
-	// DefaultPrometheusOperatorImage is the default prometheus operator image
-	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.34.0"
-	// DefaultConfigReloaderImage is the default config reloader image
-	DefaultConfigReloaderImage = "quay.io/coreos/configmap-reload:v0.0.1"
-	// DefaultPrometheusConfigReloaderImage is the default prometheus config reloader image
-	DefaultPrometheusConfigReloaderImage = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	// DefaultPrometheusImage is the default prometheus image
-	DefaultPrometheusImage = "quay.io/prometheus/prometheus:v2.7.1"
 )
 
 type prometheus struct {
@@ -370,7 +362,10 @@ func (c *prometheus) createOperatorDeployment(
 		existingImageName = existingDeployment.Spec.Template.Spec.Containers[0].Image
 	}
 
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, DefaultPrometheusOperatorImage)
+	imageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		cluster.Status.DesiredImages.PrometheusOperator,
+	)
 
 	modified := existingImageName != imageName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
@@ -400,11 +395,11 @@ func getPrometheusOperatorDeploymentSpec(
 	}
 	configReloaderImageName := util.GetImageURN(
 		cluster.Spec.CustomImageRegistry,
-		DefaultConfigReloaderImage,
+		cluster.Status.DesiredImages.PrometheusConfigMapReload,
 	)
 	prometheusConfigReloaderImageName := util.GetImageURN(
 		cluster.Spec.CustomImageRegistry,
-		DefaultPrometheusConfigReloaderImage,
+		cluster.Status.DesiredImages.PrometheusConfigReloader,
 	)
 	args := make([]string, 0)
 	args = append(args,
@@ -519,7 +514,7 @@ func (c *prometheus) createPrometheusInstance(
 	replicas := int32(1)
 	prometheusImageName := util.GetImageURN(
 		cluster.Spec.CustomImageRegistry,
-		DefaultPrometheusImage,
+		cluster.Status.DesiredImages.Prometheus,
 	)
 
 	prometheusInst := &monitoringv1.Prometheus{

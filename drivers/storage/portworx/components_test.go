@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -4292,6 +4291,8 @@ func TestPrometheusInstall(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Placement = nil
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4645,17 +4646,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -4663,7 +4662,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		customRegistry+"/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -4748,17 +4747,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -4766,7 +4763,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		customRegistry+"/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -4844,15 +4841,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		component.DefaultPrometheusOperatorImage,
+		"quay.io/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+component.DefaultConfigReloaderImage,
+		"--config-reloader-image=quay.io/coreos/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+component.DefaultPrometheusConfigReloaderImage,
+		"--prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -4860,7 +4857,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		component.DefaultPrometheusImage,
+		"quay.io/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -4945,17 +4942,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusOperatorImage, "quay.io/"),
+		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultConfigReloaderImage, "quay.io/"),
+		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/"+
-			strings.TrimPrefix(component.DefaultPrometheusConfigReloaderImage, "quay.io/"),
+		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -4963,7 +4958,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/"+strings.TrimPrefix(component.DefaultPrometheusImage, "quay.io/"),
+		customRegistry+"/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -5365,36 +5360,28 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
-	parts := strings.Split(component.DefaultPrometheusOperatorImage, "/")
-	expectedPrometheusImage := parts[len(parts)-1]
-	parts = strings.Split(component.DefaultConfigReloaderImage, "/")
-	expectedConfigReloaderImage := parts[len(parts)-1]
-	parts = strings.Split(component.DefaultPrometheusConfigReloaderImage, "/")
-	expectedPrometheusConfigReloaderImage := parts[len(parts)-1]
 	prometheusOperatorDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, prometheusOperatorDeployment,
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusImage,
+		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
-	parts = strings.Split(component.DefaultPrometheusImage, "/")
-	expectedPrometheusInstanceImage := parts[len(parts)-1]
 	prometheusInstance := &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusInstanceImage,
+		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -5473,15 +5460,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusImage,
+		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -5489,7 +5476,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusInstanceImage,
+		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -5567,15 +5554,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		component.DefaultPrometheusOperatorImage,
+		"quay.io/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+component.DefaultConfigReloaderImage,
+		"--config-reloader-image=quay.io/coreos/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+component.DefaultPrometheusConfigReloaderImage,
+		"--prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -5583,7 +5570,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		component.DefaultPrometheusImage,
+		"quay.io/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -5662,15 +5649,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		component.PrometheusOperatorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusImage,
+		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/"+expectedConfigReloaderImage,
+		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
 	)
 	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/"+expectedPrometheusConfigReloaderImage,
+		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
 	)
 
@@ -5678,7 +5665,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/"+expectedPrometheusInstanceImage,
+		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
 	)
 
@@ -7772,6 +7759,7 @@ func TestRemovePrometheus(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -7873,6 +7861,7 @@ func TestDisablePrometheus(t *testing.T) {
 			},
 		},
 	}
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)

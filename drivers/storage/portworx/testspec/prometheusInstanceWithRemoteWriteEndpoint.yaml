@@ -7,7 +7,7 @@ spec:
   replicas: 1
   logLevel: debug
   serviceAccountName: px-prometheus
-  image: quay.io/prometheus/prometheus:v2.7.1
+  image: quay.io/prometheus/prometheus:v1.2.3
   serviceMonitorSelector:
     matchExpressions:
     - key: prometheus
