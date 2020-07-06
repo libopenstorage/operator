@@ -667,6 +667,177 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
 }
 
+func TestStorageClusterDefaultsForCSI(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Don't enable CSI if not enabled
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Use images from release manifest if enabled
+	cluster.Spec.FeatureGates = map[string]string{
+		string(pxutil.FeatureCSI): "true",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		cluster.Status.DesiredImages.CSIProvisioner)
+	require.Equal(t, "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+		cluster.Status.DesiredImages.CSINodeDriverRegistrar)
+	require.Equal(t, "quay.io/k8scsi/driver-registrar:v1.2.3",
+		cluster.Status.DesiredImages.CSIDriverRegistrar)
+	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
+		cluster.Status.DesiredImages.CSIAttacher)
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
+		cluster.Status.DesiredImages.CSIResizer)
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		cluster.Status.DesiredImages.CSISnapshotter)
+
+	// Use images from release manifest if desired was reset
+	cluster.Status.DesiredImages.CSIProvisioner = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Do not overwrite desired images if nothing has changed
+	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "k8scsi/csi-provisioner:old",
+		cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Do not overwrite desired images even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "k8scsi/csi-provisioner:old",
+		cluster.Status.DesiredImages.CSIProvisioner)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4",
+		cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired images if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Change desired images if px image has changed
+	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Reset desired images if CSI has been disabled
+	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
+	require.Empty(t, cluster.Status.DesiredImages.CSIAttacher)
+	require.Empty(t, cluster.Status.DesiredImages.CSIDriverRegistrar)
+	require.Empty(t, cluster.Status.DesiredImages.CSINodeDriverRegistrar)
+	require.Empty(t, cluster.Status.DesiredImages.CSIResizer)
+	require.Empty(t, cluster.Status.DesiredImages.CSISnapshotter)
+}
+
+func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Don't enable prometheus if monitoring spec is nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring)
+	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
+
+	// Don't enable prometheus if prometheus spec is nil
+	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
+
+	// Don't enable prometheus if nothing specified in prometheus spec
+	cluster.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
+
+	// Use images from release manifest if enabled
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/prometheus/prometheus:v1.2.3",
+		cluster.Status.DesiredImages.Prometheus)
+	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusOperator)
+	require.Equal(t, "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusConfigReloader)
+	require.Equal(t, "quay.io/coreos/configmap-reload:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusConfigMapReload)
+
+	// Use images from release manifest if desired was reset
+	cluster.Status.DesiredImages.PrometheusOperator = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusOperator)
+
+	// Do not overwrite desired images if nothing has changed
+	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "coreos/prometheus-operator:old",
+		cluster.Status.DesiredImages.PrometheusOperator)
+
+	// Do not overwrite desired images even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "coreos/prometheus-operator:old",
+		cluster.Status.DesiredImages.PrometheusOperator)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4",
+		cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired images if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusOperator)
+
+	// Change desired images if px image has changed
+	cluster.Spec.Image = "px/image:3.0.0"
+	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
+		cluster.Status.DesiredImages.PrometheusOperator)
+
+	// Reset desired images if prometheus has been disabled
+	cluster.Spec.Monitoring.Prometheus.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.PrometheusOperator)
+	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigReloader)
+	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigMapReload)
+}
+
 func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
@@ -5407,16 +5578,20 @@ func manifestSetup() {
 		return &manifest.Version{
 			PortworxVersion: "2.1.5.1",
 			Components: manifest.Release{
-				Stork:                  "openstorage/stork:2.3.4",
-				Autopilot:              "portworx/autopilot:2.3.4",
-				Lighthouse:             "portworx/px-lighthouse:2.3.4",
-				NodeWiper:              "portworx/px-node-wiper:2.3.4",
-				CSIProvisioner:         "quay.io/k8scsi/csi-provisioner:v1.2.3",
-				CSIAttacher:            "quay.io/k8scsi/csi-attacher:v1.2.3",
-				CSIDriverRegistrar:     "quay.io/k8scsi/driver-registrar:v1.2.3",
-				CSINodeDriverRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
-				CSISnapshotter:         "quay.io/k8scsi/csi-snapshotter:v1.2.3",
-				CSIResizer:             "quay.io/k8scsi/csi-resizer:v1.2.3",
+				Stork:                     "openstorage/stork:2.3.4",
+				Autopilot:                 "portworx/autopilot:2.3.4",
+				Lighthouse:                "portworx/px-lighthouse:2.3.4",
+				NodeWiper:                 "portworx/px-node-wiper:2.3.4",
+				CSIProvisioner:            "quay.io/k8scsi/csi-provisioner:v1.2.3",
+				CSIAttacher:               "quay.io/k8scsi/csi-attacher:v1.2.3",
+				CSIDriverRegistrar:        "quay.io/k8scsi/driver-registrar:v1.2.3",
+				CSINodeDriverRegistrar:    "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+				CSISnapshotter:            "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+				CSIResizer:                "quay.io/k8scsi/csi-resizer:v1.2.3",
+				Prometheus:                "quay.io/prometheus/prometheus:v1.2.3",
+				PrometheusOperator:        "quay.io/coreos/prometheus-operator:v1.2.3",
+				PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+				PrometheusConfigMapReload: "quay.io/coreos/configmap-reload:v1.2.3",
 			},
 		}
 	}

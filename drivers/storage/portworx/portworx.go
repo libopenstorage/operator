@@ -191,6 +191,16 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
 			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 		}
+
+		if toUpdate.Spec.Monitoring != nil &&
+			toUpdate.Spec.Monitoring.Prometheus != nil &&
+			toUpdate.Spec.Monitoring.Prometheus.Enabled &&
+			(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged) {
+			toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
+			toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
+			toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
+			toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
+		}
 	}
 
 	if !autoUpdateStork(toUpdate) {
@@ -212,6 +222,15 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Status.DesiredImages.CSIAttacher = ""
 		toUpdate.Status.DesiredImages.CSIResizer = ""
 		toUpdate.Status.DesiredImages.CSISnapshotter = ""
+	}
+
+	if toUpdate.Spec.Monitoring == nil ||
+		toUpdate.Spec.Monitoring.Prometheus == nil ||
+		!toUpdate.Spec.Monitoring.Prometheus.Enabled {
+		toUpdate.Status.DesiredImages.Prometheus = ""
+		toUpdate.Status.DesiredImages.PrometheusOperator = ""
+		toUpdate.Status.DesiredImages.PrometheusConfigMapReload = ""
+		toUpdate.Status.DesiredImages.PrometheusConfigReloader = ""
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
@@ -608,7 +627,8 @@ func hasComponentChanged(cluster *corev1alpha1.StorageCluster) bool {
 	return hasStorkChanged(cluster) ||
 		hasAutopilotChanged(cluster) ||
 		hasLighthouseChanged(cluster) ||
-		hasCSIChanged(cluster)
+		hasCSIChanged(cluster) ||
+		hasPrometheusChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1alpha1.StorageCluster) bool {
@@ -626,6 +646,13 @@ func hasLighthouseChanged(cluster *corev1alpha1.StorageCluster) bool {
 func hasCSIChanged(cluster *corev1alpha1.StorageCluster) bool {
 	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) &&
 		cluster.Status.DesiredImages.CSIProvisioner == ""
+}
+
+func hasPrometheusChanged(cluster *corev1alpha1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Prometheus != nil &&
+		cluster.Spec.Monitoring.Prometheus.Enabled &&
+		cluster.Status.DesiredImages.PrometheusOperator == ""
 }
 
 func autoUpdateStork(cluster *corev1alpha1.StorageCluster) bool {
