@@ -3678,201 +3678,8 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
-		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{},
-		},
-	}
-
-	// Install all components
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	serviceAccountList := &v1.ServiceAccountList{}
-	err = testutil.List(k8sClient, serviceAccountList)
-	require.NoError(t, err)
-	require.NotEmpty(t, serviceAccountList.Items)
-
-	clusterRoleList := &rbacv1.ClusterRoleList{}
-	err = testutil.List(k8sClient, clusterRoleList)
-	require.NoError(t, err)
-	require.NotEmpty(t, clusterRoleList.Items)
-
-	crbList := &rbacv1.ClusterRoleBindingList{}
-	err = testutil.List(k8sClient, crbList)
-	require.NoError(t, err)
-	require.NotEmpty(t, crbList.Items)
-
-	roleList := &rbacv1.RoleList{}
-	err = testutil.List(k8sClient, roleList)
-	require.NoError(t, err)
-	require.NotEmpty(t, roleList.Items)
-
-	rbList := &rbacv1.RoleBindingList{}
-	err = testutil.List(k8sClient, rbList)
-	require.NoError(t, err)
-	require.NotEmpty(t, rbList.Items)
-
-	serviceList := &v1.ServiceList{}
-	err = testutil.List(k8sClient, serviceList)
-	require.NoError(t, err)
-	require.NotEmpty(t, serviceList.Items)
-
-	dsList := &appsv1.DaemonSetList{}
-	err = testutil.List(k8sClient, dsList)
-	require.NoError(t, err)
-	require.NotEmpty(t, dsList.Items)
-
-	deploymentList := &appsv1.DeploymentList{}
-	err = testutil.List(k8sClient, deploymentList)
-	require.NoError(t, err)
-	require.NotEmpty(t, deploymentList.Items)
-
-	prometheusList := &monitoringv1.PrometheusList{}
-	err = testutil.List(k8sClient, prometheusList)
-	require.NoError(t, err)
-	require.NotEmpty(t, prometheusList.Items)
-
-	smList := &monitoringv1.ServiceMonitorList{}
-	err = testutil.List(k8sClient, smList)
-	require.NoError(t, err)
-	require.NotEmpty(t, smList.Items)
-
-	prList := &monitoringv1.PrometheusRuleList{}
-	err = testutil.List(k8sClient, prList)
-	require.NoError(t, err)
-	require.NotEmpty(t, prList.Items)
-
-	csiDriverList := &storagev1beta1.CSIDriverList{}
-	err = testutil.List(k8sClient, csiDriverList)
-	require.NoError(t, err)
-	require.NotEmpty(t, csiDriverList.Items)
-
-	storageClassList := &storagev1.StorageClassList{}
-	err = testutil.List(k8sClient, storageClassList)
-	require.NoError(t, err)
-	require.NotEmpty(t, storageClassList.Items)
-
-	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
-	condition, err := driver.DeleteStorage(cluster)
-	require.NoError(t, err)
-
-	// If no delete strategy is provided, condition should be complete
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
-	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
-
-	// Verify that all components have been removed
-	err = testutil.List(k8sClient, serviceAccountList)
-	require.NoError(t, err)
-	require.Empty(t, serviceAccountList.Items)
-
-	err = testutil.List(k8sClient, clusterRoleList)
-	require.NoError(t, err)
-	require.Empty(t, clusterRoleList.Items)
-
-	err = testutil.List(k8sClient, crbList)
-	require.NoError(t, err)
-	require.Empty(t, crbList.Items)
-
-	err = testutil.List(k8sClient, roleList)
-	require.NoError(t, err)
-	require.Empty(t, roleList.Items)
-
-	err = testutil.List(k8sClient, rbList)
-	require.NoError(t, err)
-	require.Empty(t, rbList.Items)
-
-	err = testutil.List(k8sClient, serviceList)
-	require.NoError(t, err)
-	require.Empty(t, serviceList.Items)
-
-	err = testutil.List(k8sClient, dsList)
-	require.NoError(t, err)
-	require.Empty(t, dsList.Items)
-
-	err = testutil.List(k8sClient, deploymentList)
-	require.NoError(t, err)
-	require.Empty(t, deploymentList.Items)
-
-	err = testutil.List(k8sClient, prometheusList)
-	require.NoError(t, err)
-	require.Empty(t, prometheusList.Items)
-
-	err = testutil.List(k8sClient, smList)
-	require.NoError(t, err)
-	require.Empty(t, smList.Items)
-
-	err = testutil.List(k8sClient, prList)
-	require.NoError(t, err)
-	require.Empty(t, prList.Items)
-
-	err = testutil.List(k8sClient, csiDriverList)
-	require.NoError(t, err)
-	require.Empty(t, csiDriverList.Items)
-
-	// Storage classes should not get deleted if there is no
-	// delete strategy
-	err = testutil.List(k8sClient, storageClassList)
-	require.NoError(t, err)
-	require.NotEmpty(t, storageClassList.Items)
-}
-
-func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
-		GitVersion: "v1.15.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	startPort := uint32(10001)
-
-	pxutil.SpecsBaseDir = func() string {
-		return "../../../bin/configs"
-	}
-	defer func() {
-		pxutil.SpecsBaseDir = func() string {
-			return pxutil.PortworxSpecsDir
-		}
-	}()
-
-	cluster := &corev1alpha1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-			Annotations: map[string]string{
-				annotationPVCController: "true",
-			},
-		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
-			},
-
-			Image:     "portworx/image:2.2",
-			StartPort: &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			Security: &corev1alpha1.SecuritySpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:test",
-			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
-				Enabled: true,
-				Image:   "portworx/autopilot:test",
-			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
-					Enabled:       true,
-					ExportMetrics: true,
-				},
-			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
 			},
 		},
 		Status: corev1alpha1.StorageClusterStatus{
@@ -3949,6 +3756,227 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
 	require.NotEmpty(t, storageClassList.Items)
+
+	secretList := &v1.SecretList{}
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Len(t, secretList.Items, 4)
+
+	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// If no delete strategy is provided, condition should be complete
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+
+	// Verify that all components have been removed
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.Empty(t, serviceAccountList.Items)
+
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.Empty(t, clusterRoleList.Items)
+
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.Empty(t, crbList.Items)
+
+	err = testutil.List(k8sClient, roleList)
+	require.NoError(t, err)
+	require.Empty(t, roleList.Items)
+
+	err = testutil.List(k8sClient, rbList)
+	require.NoError(t, err)
+	require.Empty(t, rbList.Items)
+
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.Empty(t, serviceList.Items)
+
+	err = testutil.List(k8sClient, dsList)
+	require.NoError(t, err)
+	require.Empty(t, dsList.Items)
+
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.Empty(t, deploymentList.Items)
+
+	err = testutil.List(k8sClient, prometheusList)
+	require.NoError(t, err)
+	require.Empty(t, prometheusList.Items)
+
+	err = testutil.List(k8sClient, smList)
+	require.NoError(t, err)
+	require.Empty(t, smList.Items)
+
+	err = testutil.List(k8sClient, prList)
+	require.NoError(t, err)
+	require.Empty(t, prList.Items)
+
+	err = testutil.List(k8sClient, csiDriverList)
+	require.NoError(t, err)
+	require.Empty(t, csiDriverList.Items)
+
+	// Storage classes should not get deleted if there is no
+	// delete strategy
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.NotEmpty(t, storageClassList.Items)
+
+	// Security secret keys should not be deleted,
+	// but tokens should be deleted
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Len(t, secretList.Items, 2)
+	secret := &v1.Secret{}
+	err = testutil.Get(k8sClient, secret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, secret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
+	require.NoError(t, err)
+}
+
+func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.15.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	pxutil.SpecsBaseDir = func() string {
+		return "../../../bin/configs"
+	}
+	defer func() {
+		pxutil.SpecsBaseDir = func() string {
+			return pxutil.PortworxSpecsDir
+		}
+	}()
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
+				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			},
+
+			Image:     "portworx/image:2.2",
+			StartPort: &startPort,
+			UserInterface: &corev1alpha1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "portworx/px-lighthouse:test",
+			},
+			Autopilot: &corev1alpha1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Monitoring: &corev1alpha1.MonitoringSpec{
+				Prometheus: &corev1alpha1.PrometheusSpec{
+					Enabled:       true,
+					ExportMetrics: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "1",
+			},
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			DesiredImages: &corev1alpha1.ComponentImages{},
+		},
+	}
+	setSecuritySpecDefaults(cluster)
+
+	// Install all components
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	serviceAccountList := &v1.ServiceAccountList{}
+	err = testutil.List(k8sClient, serviceAccountList)
+	require.NoError(t, err)
+	require.NotEmpty(t, serviceAccountList.Items)
+
+	clusterRoleList := &rbacv1.ClusterRoleList{}
+	err = testutil.List(k8sClient, clusterRoleList)
+	require.NoError(t, err)
+	require.NotEmpty(t, clusterRoleList.Items)
+
+	crbList := &rbacv1.ClusterRoleBindingList{}
+	err = testutil.List(k8sClient, crbList)
+	require.NoError(t, err)
+	require.NotEmpty(t, crbList.Items)
+
+	roleList := &rbacv1.RoleList{}
+	err = testutil.List(k8sClient, roleList)
+	require.NoError(t, err)
+	require.NotEmpty(t, roleList.Items)
+
+	rbList := &rbacv1.RoleBindingList{}
+	err = testutil.List(k8sClient, rbList)
+	require.NoError(t, err)
+	require.NotEmpty(t, rbList.Items)
+
+	serviceList := &v1.ServiceList{}
+	err = testutil.List(k8sClient, serviceList)
+	require.NoError(t, err)
+	require.NotEmpty(t, serviceList.Items)
+
+	dsList := &appsv1.DaemonSetList{}
+	err = testutil.List(k8sClient, dsList)
+	require.NoError(t, err)
+	require.NotEmpty(t, dsList.Items)
+
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.NotEmpty(t, deploymentList.Items)
+
+	prometheusList := &monitoringv1.PrometheusList{}
+	err = testutil.List(k8sClient, prometheusList)
+	require.NoError(t, err)
+	require.NotEmpty(t, prometheusList.Items)
+
+	smList := &monitoringv1.ServiceMonitorList{}
+	err = testutil.List(k8sClient, smList)
+	require.NoError(t, err)
+	require.NotEmpty(t, smList.Items)
+
+	prList := &monitoringv1.PrometheusRuleList{}
+	err = testutil.List(k8sClient, prList)
+	require.NoError(t, err)
+	require.NotEmpty(t, prList.Items)
+
+	csiDriverList := &storagev1beta1.CSIDriverList{}
+	err = testutil.List(k8sClient, csiDriverList)
+	require.NoError(t, err)
+	require.NotEmpty(t, csiDriverList.Items)
+
+	storageClassList := &storagev1.StorageClassList{}
+	err = testutil.List(k8sClient, storageClassList)
+	require.NoError(t, err)
+	require.NotEmpty(t, storageClassList.Items)
+
+	secretList := &v1.SecretList{}
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Len(t, secretList.Items, 4)
 
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	condition, err := driver.DeleteStorage(cluster)
@@ -4052,6 +4080,10 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
 	require.Empty(t, storageClassList.Items)
+
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Empty(t, secretList.Items)
 }
 
 func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
@@ -4452,11 +4484,15 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+			},
 		},
 		Status: corev1alpha1.StorageClusterStatus{
 			DesiredImages: &corev1alpha1.ComponentImages{},
 		},
 	}
+	setSecuritySpecDefaults(cluster)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -4526,6 +4562,11 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
 	require.NotEmpty(t, storageClassList.Items)
+
+	secretList := &v1.SecretList{}
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Len(t, secretList.Items, 4)
 
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	condition, err := driver.DeleteStorage(cluster)
@@ -4629,6 +4670,10 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
 	require.Empty(t, storageClassList.Items)
+
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Empty(t, secretList.Items)
 }
 
 func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {

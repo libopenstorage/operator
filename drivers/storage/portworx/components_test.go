@@ -2695,13 +2695,17 @@ func TestSecurityInstall(t *testing.T) {
 	sharedSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
+	require.Empty(t, sharedSecret.OwnerReferences)
+	require.Equal(t, 64, len(sharedSecret.Data[pxutil.SecuritySharedSecretKey]))
+	oldSharedSecret := sharedSecret.Data[pxutil.SecuritySharedSecretKey]
+
 	systemSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Empty(t, sharedSecret.OwnerReferences)
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
-	require.Equal(t, 64, len(sharedSecret.Data[pxutil.SecuritySharedSecretKey]))
 	oldSystemSecret := systemSecret.Data[pxutil.SecuritySystemSecretKey]
-	oldSharedSecret := sharedSecret.Data[pxutil.SecuritySharedSecretKey]
+
 	require.NotEqual(t, systemSecret.Data[pxutil.SecuritySystemSecretKey], sharedSecret.Data[pxutil.SecuritySharedSecretKey])
 
 	// No changes should happen to the auto-generated secrets
@@ -2719,6 +2723,8 @@ func TestSecurityInstall(t *testing.T) {
 	adminSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, adminSecret.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, adminSecret.OwnerReferences[0].Name)
 	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups := jwtClaims["groups"].([]interface{})
@@ -2734,6 +2740,8 @@ func TestSecurityInstall(t *testing.T) {
 	userSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, userSecret.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, userSecret.OwnerReferences[0].Name)
 	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups = jwtClaims["groups"].([]interface{})
@@ -2786,47 +2794,57 @@ func TestSecurityInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, systemSecretKey, systemSecret.Data[pxutil.SecuritySystemSecretKey])
+}
 
-	// Disable security, secrets should not be deleted.
-	cluster.Spec.Security.Enabled = false
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+func TestDisableSecurity(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
-	require.NoError(t, err)
-
-	// Delete cluster (cluster wipe) by setting deletion timestamp and strategy, secrets should be deleted.
-	err = testutil.Delete(k8sClient, sharedSecret)
-	require.NoError(t, err)
-	err = testutil.Delete(k8sClient, systemSecret)
-	require.NoError(t, err)
-	err = testutil.Delete(k8sClient, adminSecret)
-	require.NoError(t, err)
-	err = testutil.Delete(k8sClient, userSecret)
-	require.NoError(t, err)
-
-	// recreate with same owner
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-	cluster.Spec.Security.Enabled = false
-	now := metav1.Now()
-	cluster.DeletionTimestamp = &now
-	cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
-		Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+			},
+		},
 	}
-	// delete with same owner
+	setSecuritySpecDefaults(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sharedSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
+	require.NoError(t, err)
+	systemSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	adminSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	userSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable security, secrets should not be deleted, but tokens should be deleted
+	cluster.Spec.Security.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
+
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
-	require.Error(t, err)
+	require.NoError(t, err)
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
-	require.Error(t, err)
-	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
-	require.Error(t, err)
-	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
-	require.Error(t, err)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, adminSecret, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestCSIInstall(t *testing.T) {

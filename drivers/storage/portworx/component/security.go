@@ -93,12 +93,12 @@ func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
 	}
 
 	// only deleted our default generated one. If they provide a secret name in the spec, do not delete it.
-	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXSharedSecretSecretName)
+	err = c.deleteSecret(cluster, nil, pxutil.SecurityPXSharedSecretSecretName)
 	if err != nil {
 		return err
 	}
 
-	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXSystemSecretsSecretName)
+	err = c.deleteSecret(cluster, nil, pxutil.SecurityPXSystemSecretsSecretName)
 	if err != nil {
 		return err
 	}
@@ -191,12 +191,12 @@ func (c *security) createPrivateKeysSecret(
 		},
 	}
 
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, sharedSecret, ownerRef)
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, sharedSecret, nil)
 	if err != nil {
 		return err
 	}
 
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, systemKeysSecret, ownerRef)
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, systemKeysSecret, nil)
 	if err != nil {
 		return err
 	}
@@ -256,8 +256,9 @@ func (c *security) maintainAuthTokenSecret(
 
 		secret := &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      authTokenSecretName,
-				Namespace: cluster.Namespace,
+				Name:            authTokenSecretName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: map[string][]byte{
 				pxutil.SecurityAuthTokenKey: []byte(token),
@@ -317,6 +318,9 @@ func (c *security) deleteSecret(
 	ownerRef *metav1.OwnerReference,
 	name string,
 ) error {
+	if ownerRef == nil {
+		return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace)
+	}
 	return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace, *ownerRef)
 }
 

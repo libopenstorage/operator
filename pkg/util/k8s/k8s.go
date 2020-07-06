@@ -1361,7 +1361,7 @@ func CreateOrUpdateSecret(
 	modified := !reflect.DeepEqual(secret.Data, existingSecret.Data)
 
 	for _, o := range existingSecret.OwnerReferences {
-		if o.UID != ownerRef.UID {
+		if ownerRef != nil && o.UID != ownerRef.UID {
 			secret.OwnerReferences = append(secret.OwnerReferences, o)
 		}
 	}
