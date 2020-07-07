@@ -424,9 +424,16 @@ func (c *Controller) createStorkService(
 				Selector: getStorkServiceLabels(),
 				Ports: []v1.ServicePort{
 					{
+						Name:       "extender",
 						Protocol:   v1.ProtocolTCP,
 						Port:       int32(storkServicePort),
 						TargetPort: intstr.FromInt(storkServicePort),
+					},
+					{
+						Name:       "webhook",
+						Protocol:   v1.ProtocolTCP,
+						Port:       int32(443),
+						TargetPort: intstr.FromInt(443),
 					},
 				},
 				Type: v1.ServiceTypeClusterIP,
