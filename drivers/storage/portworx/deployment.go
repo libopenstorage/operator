@@ -809,6 +809,38 @@ func (t *template) getEnvList() []v1.EnvVar {
 			Name:  pxutil.EnvKeyPortworxAuthJwtIssuer,
 			Value: *t.cluster.Spec.Security.Auth.SelfSigned.Issuer,
 		}
+		pxVersion := pxutil.GetPortworxVersion(t.cluster)
+		pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
+		if err != nil {
+			logrus.Errorf("failed to create PX version variable 2.6.0: %s", err.Error())
+		}
+		// apps issuer was added in PX version 2.6.0
+		if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) {
+			envMap[pxutil.EnvKeyPortworxAuthSystemAppsKey] = &v1.EnvVar{
+				Name: pxutil.EnvKeyPortworxAuthSystemAppsKey,
+				ValueFrom: &v1.EnvVarSource{
+					SecretKeyRef: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: pxutil.SecurityPXSystemSecretsSecretName,
+						},
+						Key: pxutil.SecurityAppsSecretKey,
+					},
+				},
+			}
+		} else {
+			// otherwise, use the stork issuer for pre-2.6 support
+			envMap[pxutil.EnvKeyPortworxAuthStorkKey] = &v1.EnvVar{
+				Name: pxutil.EnvKeyPortworxAuthStorkKey,
+				ValueFrom: &v1.EnvVarSource{
+					SecretKeyRef: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: pxutil.SecurityPXSystemSecretsSecretName,
+						},
+						Key: pxutil.SecurityAppsSecretKey,
+					},
+				},
+			}
+		}
 	}
 
 	envList := make([]v1.EnvVar, 0)

@@ -98,6 +98,13 @@ const (
 	EnvKeyPortworxAuthJwtSharedSecret = "PORTWORX_AUTH_JWT_SHAREDSECRET"
 	// EnvKeyPortworxAuthJwtIssuer is an environment variable defining the PX Security JWT Issuer
 	EnvKeyPortworxAuthJwtIssuer = "PORTWORX_AUTH_JWT_ISSUER"
+	// EnvKeyPortworxAuthSystemAppsKey is an environment variable defining the PX Security shared secret for Portworx Apps
+	EnvKeyPortworxAuthSystemAppsKey = "PORTWORX_AUTH_SYSTEM_APPS_KEY"
+	// EnvKeyStorkPXSharedSecret is an environment variable defining the shared secret for Stork
+	EnvKeyStorkPXSharedSecret = "PX_SHARED_SECRET"
+	// EnvKeyPortworxAuthStorkKey is an environment variable for the auth secret
+	// that stork and the operator use to communicate with portworx
+	EnvKeyPortworxAuthStorkKey = "PORTWORX_AUTH_STORK_KEY"
 
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
@@ -107,12 +114,18 @@ const (
 	SecuritySharedSecretKey = "shared-secret"
 	// SecuritySystemSecretKey is the key for accessing the system secret auth key
 	SecuritySystemSecretKey = "system-secret"
+	// SecurityAppsSecretKey is the secret key for the apps issuer
+	SecurityAppsSecretKey = "apps-secret"
 	// SecurityAuthTokenKey is the key for accessing a PX auth token in a k8s secret
 	SecurityAuthTokenKey = "auth-token"
 	// SecurityPXAdminTokenSecretName is the secret name for storing an auto-generated admin token
 	SecurityPXAdminTokenSecretName = "px-admin-token"
 	// SecurityPXUserTokenSecretName is the secret name for storing an auto-generated user token
 	SecurityPXUserTokenSecretName = "px-user-token"
+	// SecurityPortworxAppsIssuer is the issuer for portworx apps to communicate with the PX SDK
+	SecurityPortworxAppsIssuer = "apps.portworx.io"
+	// SecurityPortworxStorkIssuer is the issuer for stork to communicate with the PX SDK pre-2.6
+	SecurityPortworxStorkIssuer = "stork.openstorage.io"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
@@ -423,7 +436,7 @@ func GenerateToken(
 	cluster *corev1alpha1.StorageCluster,
 	secretkey string,
 	claims *auth.Claims,
-
+	duration time.Duration,
 ) (string, error) {
 	signature, err := auth.NewSignatureSharedSecret(secretkey)
 	if err != nil {
@@ -431,7 +444,7 @@ func GenerateToken(
 	}
 	token, err := auth.Token(claims, signature, &auth.Options{
 		Expiration: time.Now().
-			Add(cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration).Unix(),
+			Add(duration).Unix(),
 	})
 	if err != nil {
 		return "", err
@@ -480,16 +493,39 @@ func SetupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageClu
 		return ctx, nil
 	}
 
-	pxAdminToken, err := GetSecretValue(ctx, cluster, k8sClient, "px-admin-token", "auth-token")
+	pxAppsSecret, err := GetSecretValue(ctx, cluster, k8sClient, SecurityPXSystemSecretsSecretName, SecurityAppsSecretKey)
 	if err != nil {
-		return ctx, fmt.Errorf("failed to get px-admin-token: %v", err.Error())
+		return ctx, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
 	}
-	if pxAdminToken == "" {
+	if pxAppsSecret == "" {
 		return ctx, nil
 	}
 
+	// Generate token and add to metadata.
+	name := "operator"
+	pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
+	if err != nil {
+		return ctx, err
+	}
+	pxVersion := GetPortworxVersion(cluster)
+	issuer := SecurityPortworxAppsIssuer
+	if !pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) {
+		issuer = SecurityPortworxStorkIssuer
+	}
+	token, err := GenerateToken(cluster, pxAppsSecret, &auth.Claims{
+		Issuer:  issuer,
+		Subject: fmt.Sprintf("%s@%s", name, issuer),
+		Name:    name,
+		Email:   fmt.Sprintf("%s@%s", name, issuer),
+		Roles:   []string{"system.admin"},
+		Groups:  []string{"*"},
+	}, 24*time.Hour)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to generate token: %v", err.Error())
+	}
+
 	md := metadata.New(map[string]string{
-		"authorization": "bearer " + pxAdminToken,
+		"authorization": "bearer " + token,
 	})
 	return metadata.NewOutgoingContext(ctx, md), nil
 }

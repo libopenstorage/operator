@@ -21,7 +21,7 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -4842,6 +4842,174 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageClusterSecurity(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		labelKeyName:       cluster.Name,
+		labelKeyDriverName: driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	oldPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), oldPod)
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// TestCase: Change security to enabled
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: enabled -> disabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security.Enabled = false
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: disabled -> enabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1alpha1.AuthSpec{
+			SelfSigned: &corev1alpha1.SelfSignedSpec{
+				Issuer:       stringPtr("defaultissuer"),
+				SharedSecret: stringPtr("defaultsecret"),
+			},
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update issuer
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer")
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update shared secret
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = stringPtr("newsecret")
+
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: no change, no pod to delete.
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string(nil), podControl.DeletePodName)
+
+	// TestCase: guest access type update, no pod to delete.
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleDisabled)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string(nil), podControl.DeletePodName)
+
+	// TestCase: remove shared secret, set to nil
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = nil
+
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+}
+
 func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -5441,6 +5609,9 @@ func createStorageCluster() *corev1alpha1.StorageCluster {
 			Stork: &corev1alpha1.StorkSpec{
 				Enabled: false,
 			},
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: false,
+			},
 			RevisionHistoryLimit: &revisionLimit,
 			UpdateStrategy: corev1alpha1.StorageClusterUpdateStrategy{
 				Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
@@ -5532,4 +5703,8 @@ func stringSlicePtr(slice []string) *[]string {
 
 func stringPtr(str string) *string {
 	return &str
+}
+
+func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
+	return &val
 }

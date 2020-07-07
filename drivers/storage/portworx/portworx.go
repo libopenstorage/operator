@@ -30,7 +30,7 @@ const (
 	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = time.Hour * 24
-	defaultSelfSignedIssuer           = "portworx.io"
+	defaultSelfSignedIssuer           = "operator.portworx.io"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
@@ -102,7 +102,7 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 }
 
 func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
-	return []v1.EnvVar{
+	envList := []v1.EnvVar{
 		{
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
@@ -112,6 +112,21 @@ func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.En
 			Value: component.PxAPIServiceName,
 		},
 	}
+
+	if pxutil.SecurityEnabled(cluster) {
+		envList = append(envList, v1.EnvVar{
+			Name: pxutil.EnvKeyStorkPXSharedSecret,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: pxutil.SecurityPXSystemSecretsSecretName,
+					},
+					Key: pxutil.SecurityAppsSecretKey,
+				},
+			}})
+	}
+
+	return envList
 }
 
 func (p *portworx) GetSelectorLabels() map[string]string {
