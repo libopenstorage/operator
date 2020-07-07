@@ -499,6 +499,7 @@ func (c *Controller) createStorkDeployment(
 	command := append([]string{"/stork"}, argList...)
 
 	imageName = util.GetImageURN(cluster.Spec.CustomImageRegistry, imageName)
+	hostNetwork := cluster.Spec.Stork.HostNetwork != nil && *cluster.Spec.Stork.HostNetwork
 
 	envVars := c.Driver.GetStorkEnvList(cluster)
 	for _, env := range cluster.Spec.Stork.Env {
@@ -527,7 +528,7 @@ func (c *Controller) createStorkDeployment(
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
-		!reflect.DeepEqual(cluster.Spec.Stork.HostNetwork, &existingDeployment.Spec.Template.Spec.HostNetwork) ||
+		existingDeployment.Spec.Template.Spec.HostNetwork != hostNetwork ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
