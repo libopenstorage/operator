@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -1386,6 +1387,176 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
+func TestPodSpecWithEssentials(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.8",
+	}
+
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				annotationMiscArgs: "--oem custom",
+			},
+		},
+	}
+	driver := portworx{}
+
+	// TestCase: Replace existing oem value to use essentials
+	os.Setenv(pxutil.EnvKeyPortworxEssentials, "true")
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+	}
+
+	actual, _ := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Do not change anything if oem is already essentials
+	cluster.Annotations[annotationMiscArgs] = "--oem esse"
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Add oem flag if misc args are empty
+	cluster.Annotations[annotationMiscArgs] = ""
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Add oem flag if misc arg annotation not present
+	cluster.Annotations = nil
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Add oem flag if misc arg does not have oem flag
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: "-k1 v1",
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-k1", "v1",
+		"--oem", "esse",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Add oem value even if existing oem arg is invalid
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: "-k1 v1 --oem ",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Update oem value even if in the middle
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: "-k1  v1  --oem  custom  -k2  v2",
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-k1", "v1",
+		"--oem", "esse",
+		"-k2", "v2",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Marketplace name is present
+	os.Setenv(pxutil.EnvKeyMarketplaceName, "operatorhub")
+	cluster.Annotations = nil
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+		"-marketplace_name", "operatorhub",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Marketplace name should not be passed for older portworx releases
+	cluster.Spec.Image = "image/portworx:2.5.4"
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Marketplace name should be passed for newer portworx releases
+	cluster.Spec.Image = "image/portworx:2.5.5"
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+		"-marketplace_name", "operatorhub",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Marketplace name is empty
+	os.Setenv(pxutil.EnvKeyMarketplaceName, "")
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Marketplace name is empty string on trimming
+	os.Setenv(pxutil.EnvKeyMarketplaceName, "    ")
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "esse",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Do not update oem value if essentials is disabled
+	os.Setenv(pxutil.EnvKeyPortworxEssentials, "false")
+	os.Setenv(pxutil.EnvKeyMarketplaceName, "operatorhub")
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: "--oem custom",
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"--oem", "custom",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase: Do not add oem value if essentials is disabled
+	cluster.Annotations = nil
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
