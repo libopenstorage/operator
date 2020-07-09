@@ -2,6 +2,7 @@ package util
 
 import (
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,10 @@ const (
 	// EnvKeyDisableCSIAlpha key for the env var that is used to disable CSI
 	// alpha features
 	EnvKeyDisableCSIAlpha = "PORTWORX_DISABLE_CSI_ALPHA"
+	// EnvKeyPortworxEssentials env var to deploy Portworx Essentials cluster
+	EnvKeyPortworxEssentials = "PORTWORX_ESSENTIALS"
+	// EnvKeyMarketplaceName env var for the name of the source marketplace
+	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
@@ -244,4 +249,11 @@ func StorageClusterKind() schema.GroupVersionKind {
 
 func getSpecsBaseDir() string {
 	return PortworxSpecsDir
+}
+
+// EssentialsEnabled returns true if the env var has an override
+// to deploy an PX Essentials cluster
+func EssentialsEnabled() bool {
+	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEssentials))
+	return err == nil && enabled
 }

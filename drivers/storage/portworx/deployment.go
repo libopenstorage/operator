@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -710,6 +711,31 @@ func (t *template) getArguments() []string {
 			args = append(args, parts...)
 		} else {
 			logrus.Warnf("error parsing misc args: %v", err)
+		}
+	}
+
+	if pxutil.EssentialsEnabled() {
+		for args[len(args)-1] == "--oem" {
+			args = args[:len(args)-1]
+		}
+		essePresent := false
+		for i, arg := range args {
+			if arg == "--oem" {
+				args[i+1] = "esse"
+				essePresent = true
+				break
+			}
+		}
+		if !essePresent {
+			args = append(args, "--oem", "esse")
+		}
+
+		marketplaceName := strings.TrimSpace(os.Getenv(pxutil.EnvKeyMarketplaceName))
+		if marketplaceName != "" {
+			pxVer2_5_5, _ := version.NewVersion("2.5.5")
+			if t.pxVersion.GreaterThanOrEqual(pxVer2_5_5) {
+				args = append(args, "-marketplace_name", marketplaceName)
+			}
 		}
 	}
 
