@@ -105,6 +105,10 @@ const (
 	// EnvKeyPortworxAuthStorkKey is an environment variable for the auth secret
 	// that stork and the operator use to communicate with portworx
 	EnvKeyPortworxAuthStorkKey = "PORTWORX_AUTH_STORK_KEY"
+	// EnvKeyPortworxEssentials env var to deploy Portworx Essentials cluster
+	EnvKeyPortworxEssentials = "PORTWORX_ESSENTIALS"
+	// EnvKeyMarketplaceName env var for the name of the source marketplace
+	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
 
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
@@ -536,4 +540,11 @@ func EncodeBase64(src []byte) []byte {
 	base64.StdEncoding.Encode(encoded, src)
 
 	return encoded
+}
+
+// EssentialsEnabled returns true if the env var has an override
+// to deploy an PX Essentials cluster
+func EssentialsEnabled() bool {
+	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEssentials))
+	return err == nil && enabled
 }
