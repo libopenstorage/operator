@@ -120,6 +120,11 @@ get-release-manifest: clean-release-manifest
 	mkdir -p manifests
 	wget -q '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
+mockgen:
+	go get github.com/golang/mock/gomock
+	go get github.com/golang/mock/mockgen
+	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer	
+
 clean: clean-release-manifest
 	-rm -rf $(BIN)
 	@echo "Deleting image "$(STORAGE_OPERATOR_IMG)

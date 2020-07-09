@@ -113,6 +113,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			driver := portworx{}
 			driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 			setSecuritySpecDefaults(cluster)
+			cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
 
 			err := driver.PreInstall(cluster)
 			assert.NoError(t, err)

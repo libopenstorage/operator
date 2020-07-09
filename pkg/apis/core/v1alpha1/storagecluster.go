@@ -118,7 +118,8 @@ type SecuritySpec struct {
 // AuthSpec lets the user define authorization configurations
 // for creating a PX Security enabled cluster
 type AuthSpec struct {
-	SelfSigned *SelfSignedSpec `json:"selfSigned,omitempty"`
+	GuestAccess *GuestAccessType `json:"guestAccess,omitempty"`
+	SelfSigned  *SelfSignedSpec  `json:"selfSigned,omitempty"`
 }
 
 // SelfSignedSpec defines a configuration for self signed authentication
@@ -127,6 +128,19 @@ type SelfSignedSpec struct {
 	TokenLifetime *meta.Duration `json:"tokenLifetime,omitempty"`
 	SharedSecret  *string        `json:"sharedSecret,omitempty"`
 }
+
+// GuestAccessType lets the user choose the
+// level of permissions the system.user has
+type GuestAccessType string
+
+const (
+	// GuestRoleEnabled sets the guest role to the default volume lifecycle permissions
+	GuestRoleEnabled GuestAccessType = "Enabled"
+	// GuestRoleManaged lets the admin manage the guest role
+	GuestRoleManaged GuestAccessType = "Managed"
+	// GuestRoleDisabled disables all access for the guest role
+	GuestRoleDisabled GuestAccessType = "Disabled"
+)
 
 // CommonConfig are common configurations that are exposed at both
 // cluster and node level
