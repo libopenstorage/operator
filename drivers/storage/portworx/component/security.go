@@ -180,7 +180,7 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1alpha1.StorageCluster,
 		Namespace: cluster.Namespace,
 		Name:      secretName,
 	}, secret)
-	if errors.IsNotFound(err) || len(secret.Data) == 0 {
+	if errors.IsNotFound(err) || len(secret.Data) == 0 || string(secret.Data[secretKey]) == "" {
 		privateKey, err = generateAuthSecret()
 		if err != nil {
 			return "", err
@@ -221,6 +221,16 @@ func (c *security) createPrivateKeysSecret(
 		return err
 	}
 
+	appsSecretKey, err := c.getPrivateKeyOrGenerate(
+		cluster,
+		pxutil.EnvKeyPortworxAuthSystemAppsKey,
+		pxutil.SecurityPXSystemSecretsSecretName,
+		pxutil.SecurityAppsSecretKey,
+	)
+	if err != nil {
+		return err
+	}
+
 	sharedSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
@@ -235,6 +245,7 @@ func (c *security) createPrivateKeysSecret(
 			Namespace: cluster.Namespace,
 		}, Data: map[string][]byte{
 			pxutil.SecuritySystemSecretKey: []byte(internalSystemSecretKey),
+			pxutil.SecurityAppsSecretKey:   []byte(appsSecretKey),
 		},
 	}
 
@@ -288,15 +299,16 @@ func (c *security) maintainAuthTokenSecret(
 		}
 
 		// Generate token and add to metadata.
+		issuer := *cluster.Spec.Security.Auth.SelfSigned.Issuer
 		claims := &auth.Claims{
-			Issuer:  *cluster.Spec.Security.Auth.SelfSigned.Issuer,
-			Subject: fmt.Sprintf("%s@portworx.io", authTokenSecretName),
+			Issuer:  issuer,
+			Subject: fmt.Sprintf("%s@%s", authTokenSecretName, issuer),
 			Name:    authTokenSecretName,
-			Email:   fmt.Sprintf("%s@portworx.io", authTokenSecretName),
+			Email:   fmt.Sprintf("%s@%s", authTokenSecretName, issuer),
 			Roles:   []string{role},
 			Groups:  groups,
 		}
-		token, err := pxutil.GenerateToken(cluster, authSecret, claims)
+		token, err := pxutil.GenerateToken(cluster, authSecret, claims, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
 		if err != nil {
 			return fmt.Errorf("failed to generate token: %v", err.Error())
 		}

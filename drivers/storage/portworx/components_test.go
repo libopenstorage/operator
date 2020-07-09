@@ -2711,11 +2711,15 @@ func TestSecurityInstall(t *testing.T) {
 	systemSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Empty(t, sharedSecret.OwnerReferences)
+	require.Empty(t, systemSecret.OwnerReferences)
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
 	oldSystemSecret := systemSecret.Data[pxutil.SecuritySystemSecretKey]
+	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecurityAppsSecretKey]))
+	oldAppsSecret := systemSecret.Data[pxutil.SecurityAppsSecretKey]
 
 	require.NotEqual(t, systemSecret.Data[pxutil.SecuritySystemSecretKey], sharedSecret.Data[pxutil.SecuritySharedSecretKey])
+	require.NotEqual(t, sharedSecret.Data[pxutil.SecuritySharedSecretKey], systemSecret.Data[pxutil.SecurityAppsSecretKey])
+	require.NotEqual(t, systemSecret.Data[pxutil.SecurityAppsSecretKey], systemSecret.Data[pxutil.SecuritySystemSecretKey])
 
 	// No changes should happen to the auto-generated secrets
 	err = driver.PreInstall(cluster)
@@ -2726,6 +2730,7 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, oldSystemSecret, systemSecret.Data[pxutil.SecuritySystemSecretKey])
 	require.Equal(t, oldSharedSecret, sharedSecret.Data[pxutil.SecuritySharedSecretKey])
+	require.Equal(t, oldAppsSecret, systemSecret.Data[pxutil.SecurityAppsSecretKey])
 
 	// Token secrets should be created and be valid jwt tokens
 	jwtClaims := jwt.MapClaims{}
@@ -2741,9 +2746,9 @@ func TestSecurityInstall(t *testing.T) {
 	roles := jwtClaims["roles"].([]interface{})
 	require.Equal(t, "system.admin", roles[0])
 	require.Equal(t, "px-admin-token", jwtClaims["name"])
-	require.Equal(t, "px-admin-token@portworx.io", jwtClaims["sub"])
-	require.Equal(t, "px-admin-token@portworx.io", jwtClaims["email"])
-	require.Equal(t, "portworx.io", jwtClaims["iss"])
+	require.Equal(t, "px-admin-token@operator.portworx.io", jwtClaims["sub"])
+	require.Equal(t, "px-admin-token@operator.portworx.io", jwtClaims["email"])
+	require.Equal(t, "operator.portworx.io", jwtClaims["iss"])
 	validateTokenLifetime(t, cluster, jwtClaims)
 
 	userSecret := &v1.Secret{}
@@ -2758,9 +2763,9 @@ func TestSecurityInstall(t *testing.T) {
 	roles = jwtClaims["roles"].([]interface{})
 	require.Equal(t, "system.user", roles[0])
 	require.Equal(t, "px-user-token", jwtClaims["name"])
-	require.Equal(t, "px-user-token@portworx.io", jwtClaims["sub"])
-	require.Equal(t, "px-user-token@portworx.io", jwtClaims["email"])
-	require.Equal(t, "portworx.io", jwtClaims["iss"])
+	require.Equal(t, "px-user-token@operator.portworx.io", jwtClaims["sub"])
+	require.Equal(t, "px-user-token@operator.portworx.io", jwtClaims["email"])
+	require.Equal(t, "operator.portworx.io", jwtClaims["iss"])
 	validateTokenLifetime(t, cluster, jwtClaims)
 
 	// Token secrets should be refreshed
@@ -2783,6 +2788,7 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	systemSecretKey := pxutil.EncodeBase64([]byte("systemSecretKey"))
 	sharedSecretKey := pxutil.EncodeBase64([]byte("sharedSecretKey"))
+	appsSecretKey := pxutil.EncodeBase64([]byte("appsSecretKey"))
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  pxutil.EnvKeyPortworxAuthSystemKey,
 		Value: string(systemSecretKey),
@@ -2790,6 +2796,10 @@ func TestSecurityInstall(t *testing.T) {
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 		Value: string(sharedSecretKey),
+	})
+	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+		Name:  pxutil.EnvKeyPortworxAuthSystemAppsKey,
+		Value: string(appsSecretKey),
 	})
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2803,7 +2813,37 @@ func TestSecurityInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, systemSecretKey, systemSecret.Data[pxutil.SecuritySystemSecretKey])
+	require.Equal(t, appsSecretKey, systemSecret.Data[pxutil.SecurityAppsSecretKey])
 
+	// User pre-configured partial px-system-secrets should not be overwritten
+	cluster.Spec.Env = []v1.EnvVar{}
+	err = testutil.Delete(k8sClient, sharedSecret)
+	require.NoError(t, err)
+	err = testutil.Delete(k8sClient, systemSecret)
+	require.NoError(t, err)
+	sharedSecretKey = pxutil.EncodeBase64([]byte("sharedSecretKey"))
+	appsSecretKey = pxutil.EncodeBase64([]byte("appsSecretKey"))
+	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+		Name:  pxutil.EnvKeyPortworxAuthJwtSharedSecret,
+		Value: string(sharedSecretKey),
+	})
+	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+		Name:  pxutil.EnvKeyPortworxAuthSystemAppsKey,
+		Value: string(appsSecretKey),
+	})
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sharedSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, sharedSecretKey, sharedSecret.Data[pxutil.SecuritySharedSecretKey])
+
+	systemSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
+	require.Equal(t, appsSecretKey, systemSecret.Data[pxutil.SecurityAppsSecretKey])
 }
 
 func TestGuestAccessSecurity(t *testing.T) {
@@ -2812,8 +2852,6 @@ func TestGuestAccessSecurity(t *testing.T) {
 
 	// Create the mock servers that can be used to mock SDK calls
 	mockRoleServer := mock.NewMockOpenStorageRoleServer(mockCtrl)
-	// mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
-	// mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 
 	// Start a sdk server that implements the mock servers
 	sdkServerIP := "127.0.0.1"

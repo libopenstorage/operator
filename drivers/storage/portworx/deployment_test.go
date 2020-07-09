@@ -2351,7 +2351,7 @@ func TestSecuritySetEnv(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	expectedJwtIssuer := "portworx.io"
+	expectedJwtIssuer := "operator.portworx.io"
 	var jwtIssuer string
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == pxutil.EnvKeyPortworxAuthJwtIssuer {
@@ -2367,6 +2367,8 @@ func TestSecuritySetEnv(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	var sharedSecretSet bool
 	var systemSecretSet bool
+	var appsSecretSet bool
+	var storkSecretSet bool
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == pxutil.EnvKeyPortworxAuthJwtIssuer {
 			jwtIssuer = env.Value
@@ -2377,11 +2379,30 @@ func TestSecuritySetEnv(t *testing.T) {
 		if env.Name == pxutil.EnvKeyPortworxAuthSystemKey {
 			systemSecretSet = true
 		}
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthStorkKey {
+			storkSecretSet = true
+		}
 	}
 	assert.Equal(t, expectedJwtIssuer, jwtIssuer)
 	assert.True(t, sharedSecretSet)
 	assert.True(t, systemSecretSet)
+	assert.True(t, appsSecretSet)
+	assert.False(t, storkSecretSet)
 
+	// for px < 2.6, use stork secret env var
+	cluster.Spec.Image = "portworx/image:2.5.0"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	storkSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthStorkKey {
+			storkSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
 }
 
 func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {

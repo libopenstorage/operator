@@ -94,15 +94,32 @@ func TestGetStorkEnvList(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+			},
+		},
 	}
 
+	cluster.Spec.Image = "portworx/image:2.6.0"
 	envVars := driver.GetStorkEnvList(cluster)
-
-	require.Len(t, envVars, 2)
+	require.Len(t, envVars, 3)
 	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
 	require.Equal(t, cluster.Namespace, envVars[0].Value)
 	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
 	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
+	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName, envVars[2].ValueFrom.SecretKeyRef.Name)
+	require.Equal(t, pxutil.SecurityAppsSecretKey, envVars[2].ValueFrom.SecretKeyRef.Key)
+
+	cluster.Spec.Image = "portworx/image:2.5.0"
+	envVars = driver.GetStorkEnvList(cluster)
+	require.Equal(t, pxutil.EnvKeyStorkPXSharedSecret, envVars[2].Name)
+	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName, envVars[2].ValueFrom.SecretKeyRef.Name)
+	require.Equal(t, pxutil.SecurityAppsSecretKey, envVars[2].ValueFrom.SecretKeyRef.Key)
+
+	cluster.Spec.Security.Enabled = false
+	envVars = driver.GetStorkEnvList(cluster)
+	require.Len(t, envVars, 2)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
@@ -841,7 +858,7 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluste
 	require.NotNil(t, cluster.Spec.Security)
 	require.Equal(t, true, cluster.Spec.Security.Enabled)
 	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
-	require.Equal(t, "portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
+	require.Equal(t, "operator.portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
 	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, *cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 }

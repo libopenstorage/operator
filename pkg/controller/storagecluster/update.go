@@ -29,7 +29,7 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -586,8 +586,40 @@ func matchSelectedFields(
 		return false, nil
 	} else if !isEnvEqual(oldSpec.Env, currentSpec.Env) {
 		return false, nil
+	} else if isBounceRequired(oldSpec, currentSpec) {
+		return false, nil
 	}
 	return true, nil
+}
+
+// isBounceRequired handles miscellaneous fields that requrie a pod bounce
+func isBounceRequired(oldSpec, currentSpec *corev1alpha1.StorageClusterSpec) bool {
+	return isSecurityBounceRequired(oldSpec, currentSpec)
+}
+
+// isSecurityBounceRequired specific security spec fields that require a pod bounce
+func isSecurityBounceRequired(oldSpec, currentSpec *corev1alpha1.StorageClusterSpec) bool {
+	// security disabled or nil updated to enabled
+	if (oldSpec.Security == nil || !oldSpec.Security.Enabled) && currentSpec.Security != nil && currentSpec.Security.Enabled {
+		return true
+	}
+	// security enabled updated to disabled or nil
+	if (oldSpec.Security != nil && oldSpec.Security.Enabled) && (currentSpec.Security == nil || !currentSpec.Security.Enabled) {
+		return true
+	}
+
+	// security enabled and certain field is updated
+	if currentSpec.Security != nil && currentSpec.Security.Enabled {
+		// safe to assume currentSpec.Security.Auth.SelfSigned is non-nil as it will always be have defaults.
+		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
+		if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.Issuer, oldSpec.Security.Auth.SelfSigned.Issuer) {
+			return true
+		} else if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.SharedSecret, oldSpec.Security.Auth.SelfSigned.SharedSecret) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // clusterSpecForNode returns the corresponding StorageCluster spec for given node.
