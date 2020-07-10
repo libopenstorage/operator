@@ -71,8 +71,9 @@ var GuestRoleDisabled = api.SdkRole{
 }
 
 type security struct {
-	k8sClient client.Client
-	sdkConn   *grpc.ClientConn
+	k8sClient            client.Client
+	sdkConn              *grpc.ClientConn
+	resourceVersionCache map[string]string
 }
 
 // Initialize initializes the componenet
@@ -83,6 +84,7 @@ func (c *security) Initialize(
 	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.resourceVersionCache = make(map[string]string)
 }
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
@@ -262,18 +264,42 @@ func (c *security) createPrivateKeysSecret(
 	return nil
 }
 
-func getTokenExpiry(token string) (int64, error) {
+func getTokenClaims(token string) (*jwt.StandardClaims, error) {
 	t, _, err := new(jwt.Parser).ParseUnverified(token, &jwt.StandardClaims{})
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse authorization token: %s", err.Error())
+		return nil, fmt.Errorf("failed to parse authorization token: %s", err.Error())
 	}
 
 	claims, ok := t.Claims.(*jwt.StandardClaims)
 	if !ok {
-		return 0, fmt.Errorf("failed to get token claims")
+		return nil, fmt.Errorf("failed to get token claims")
 	}
 
-	return claims.ExpiresAt, nil
+	return claims, nil
+}
+
+func (c *security) createToken(
+	cluster *corev1alpha1.StorageCluster,
+	authTokenSecretName string,
+	role string,
+	authSecret string,
+	groups []string) (string, error) {
+	// Generate token
+	claims := auth.Claims{
+		Issuer:  *cluster.Spec.Security.Auth.SelfSigned.Issuer,
+		Subject: fmt.Sprintf("%s@%s", authTokenSecretName, *cluster.Spec.Security.Auth.SelfSigned.Issuer),
+		Name:    authTokenSecretName,
+		Email:   fmt.Sprintf("%s@%s", authTokenSecretName, *cluster.Spec.Security.Auth.SelfSigned.Issuer),
+		Roles:   []string{role},
+		Groups:  groups,
+	}
+	token, err := pxutil.GenerateToken(cluster, authSecret, &claims, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate token: %v", err.Error())
+	}
+
+	return token, nil
+
 }
 
 // maintainAuthTokenSecret maintains a PX auth token inside of a given k8s secret.
@@ -286,33 +312,36 @@ func (c *security) maintainAuthTokenSecret(
 	groups []string,
 ) error {
 
-	expired, err := c.isTokenSecretExpired(cluster, authTokenSecretName)
+	// Check if token is expired or the signature has changed
+	updateNeeded, err := c.isTokenSecretRefreshRequired(cluster, authTokenSecretName)
 	if err != nil {
 		return err
 	}
-	if expired {
-		// Get PX auth secret from k8s secret.
-		var authSecret string
-		authSecret, err = pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, pxutil.SecuritySharedSecretKey)
+	if updateNeeded {
+		k8sAuthSecret := v1.Secret{}
+		err = c.k8sClient.Get(context.TODO(),
+			types.NamespacedName{
+				Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
+				Namespace: cluster.Namespace,
+			},
+			&k8sAuthSecret,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to get shared secret: %s", err.Error())
+		}
+
+		// Get auth secret and generate token
+		authSecret, err := pxutil.GetSecretKeyValue(cluster, &k8sAuthSecret, pxutil.SecuritySharedSecretKey)
 		if err != nil {
 			return err
 		}
 
-		// Generate token and add to metadata.
-		issuer := *cluster.Spec.Security.Auth.SelfSigned.Issuer
-		claims := &auth.Claims{
-			Issuer:  issuer,
-			Subject: fmt.Sprintf("%s@%s", authTokenSecretName, issuer),
-			Name:    authTokenSecretName,
-			Email:   fmt.Sprintf("%s@%s", authTokenSecretName, issuer),
-			Roles:   []string{role},
-			Groups:  groups,
-		}
-		token, err := pxutil.GenerateToken(cluster, authSecret, claims, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
+		token, err := c.createToken(cluster, authTokenSecretName, role, authSecret, groups)
 		if err != nil {
-			return fmt.Errorf("failed to generate token: %v", err.Error())
+			return err
 		}
 
+		// Store new token
 		secret := &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            authTokenSecretName,
@@ -327,18 +356,58 @@ func (c *security) maintainAuthTokenSecret(
 		if err != nil {
 			return err
 		}
+
+		// Cache new resource version
+
+		// Store which resource version the given authTokenSecret was last generated with
+		c.resourceVersionCache[authTokenSecretName] = k8sAuthSecret.ResourceVersion
 	}
 
 	return nil
 }
 
-func (c *security) isTokenSecretExpired(
+func (c *security) isTokenSecretRefreshRequired(
 	cluster *corev1alpha1.StorageCluster,
 	authTokenSecretName string,
 ) (bool, error) {
 
-	var authToken string
-	authToken, err := pxutil.GetSecretValue(context.TODO(), cluster, c.k8sClient, authTokenSecretName, pxutil.SecurityAuthTokenKey)
+	// Get auth secret and key value inside
+	k8sAuthSecret := v1.Secret{}
+	err := c.k8sClient.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
+			Namespace: cluster.Namespace,
+		},
+		&k8sAuthSecret,
+	)
+	if err != nil {
+		return true, err
+	}
+	// Check if auth secret has been updated for the given authTokenSecret
+	lastResourceVersion, ok := c.resourceVersionCache[authTokenSecretName]
+	if k8sAuthSecret.ResourceVersion != lastResourceVersion || !ok {
+		return true, nil
+	}
+
+	// Get Token Secret
+	k8sTokenSecret := v1.Secret{}
+	err = c.k8sClient.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      authTokenSecretName,
+			Namespace: cluster.Namespace,
+		},
+		&k8sTokenSecret,
+	)
+	if errors.IsNotFound(err) {
+		// Secret treated as expired if not found.
+		// Return authSecretValue for token generation.
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("failed to check token secret expiration %s: %s ", authTokenSecretName, err.Error())
+	}
+
+	// Get auth token
+	authToken, err := pxutil.GetSecretKeyValue(cluster, &k8sTokenSecret, pxutil.SecurityAuthTokenKey)
 	if errors.IsNotFound(err) {
 		// Secret treated as expired if not found
 		return true, nil
@@ -347,14 +416,21 @@ func (c *security) isTokenSecretExpired(
 	}
 
 	// Get token expiry from fetched token and add to cache
-	exp, err := getTokenExpiry(authToken)
+	claims, err := getTokenClaims(authToken)
 	if err != nil {
 		return false, err
 	}
 
 	// add some buffer to prevent missing a token refresh
-	tokenExpiryBuffer := time.Now().Add(SecurityTokenBufferLength).Unix()
-	if tokenExpiryBuffer > exp {
+	currentTimeWithBuffer := time.Now().Add(SecurityTokenBufferLength).Unix()
+	if currentTimeWithBuffer > claims.ExpiresAt {
+		// token has expired
+		return true, nil
+	}
+
+	// Get issuer to check if it has changed
+	if claims.Issuer != *cluster.Spec.Security.Auth.SelfSigned.Issuer {
+		// issuer has changed
 		return true, nil
 	}
 

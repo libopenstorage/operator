@@ -2846,6 +2846,121 @@ func TestSecurityInstall(t *testing.T) {
 	require.Equal(t, appsSecretKey, systemSecret.Data[pxutil.SecurityAppsSecretKey])
 }
 
+func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Security: &corev1alpha1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1alpha1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
+					SelfSigned: &corev1alpha1.SelfSignedSpec{
+						TokenLifetime: &metav1.Duration{
+							Duration: time.Hour * 1,
+						},
+					},
+				},
+			},
+		},
+	}
+	// Initial run
+	setPortworxDefaults(cluster)
+
+	// token should be refreshed if the issuer changes
+	err = driver.PreInstall(cluster) // regenerate token with long lifetime
+	require.NoError(t, err)
+	updateSharedSecretResourceVersion(t, k8sClient, cluster) // initial resource version
+
+	userSecret := &v1.Secret{}
+	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer_for_newtoken")
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldUserToken := userSecret.Data[pxutil.SecurityAuthTokenKey]
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newUserToken := userSecret.Data[pxutil.SecurityAuthTokenKey]
+	require.NotEqual(t, oldUserToken, newUserToken)
+
+	// token should be refreshed if the shared-secret content changes
+	userSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+
+	sharedSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
+	require.NoError(t, err)
+	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
+	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret")
+	err = testutil.Update(k8sClient, sharedSecret)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	userSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+	require.NotEqual(t, oldUserToken, newUserToken)
+
+	// token should be refreshed if the shared-secret changes to a new secret
+	userSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+
+	sharedSecret = &v1.Secret{}
+	newSharedSecretName := "newsharedsecret"
+	sharedSecret.Name = newSharedSecretName
+	sharedSecret.Namespace = cluster.Namespace
+	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
+	sharedSecret.Data = make(map[string][]byte)
+	sharedSecret.StringData = make(map[string]string)
+	sharedSecret.Type = v1.SecretTypeOpaque
+	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret_in_different_location")
+	sharedSecret.StringData[pxutil.SecuritySharedSecretKey] = "mynewsecret_in_different_location"
+	err = k8sClient.Create(context.TODO(), sharedSecret)
+	require.NoError(t, err)
+	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = &newSharedSecretName
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	userSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+	require.NotEqual(t, oldUserToken, newUserToken)
+
+	// no changes, token remains the same.
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
+	require.Equal(t, oldUserToken, newUserToken)
+}
+
 func TestGuestAccessSecurity(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -7966,6 +8081,29 @@ func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 		return err
 	}
 	return testutil.ActivateCRDWhenCreated(fakeClient, crdName)
+}
+
+// updateSharedSecretResourceVersion mocks the behavior of the API server assigning a resource version.
+func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cluster *corev1alpha1.StorageCluster) {
+	secret := &v1.Secret{}
+	err := testutil.Get(k8sClient, secret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
+	if err != nil {
+		t.Fatalf("failed to get k8s secret to update resource ver: %s", err.Error())
+	}
+
+	// assign resource ver
+	secret.ResourceVersion = testutil.NewResourceVersion()
+
+	// update does not work for this. Need to delete/recreate.
+	err = k8sClient.Delete(context.TODO(), secret)
+	if err != nil {
+		t.Fatalf("failed to delete k8s secret to update resource ver: %s", err.Error())
+	}
+	err = k8sClient.Create(context.TODO(), secret)
+	if err != nil {
+		t.Fatalf("failed to create k8s secret to update resource ver: %s", err.Error())
+	}
+
 }
 
 func reregisterComponents() {

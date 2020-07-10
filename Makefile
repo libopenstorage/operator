@@ -103,7 +103,7 @@ deploy-catalog:
 verify-catalog:
 	docker run -it --rm \
 		-v $(BASE_DIR)/deploy:/deploy \
-		python:3 bash -c "pip3 install operator-courier && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
+		python:3 bash -c "pip3 install operator-courier==2.1.7 && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
 
 downloads: getconfigs get-release-manifest
 
