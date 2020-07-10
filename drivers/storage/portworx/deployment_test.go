@@ -1362,6 +1362,10 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 }
 
 func TestPodSpecWithEssentials(t *testing.T) {
+	defer func() {
+		os.Unsetenv(pxutil.EnvKeyPortworxEssentials)
+		os.Unsetenv(pxutil.EnvKeyMarketplaceName)
+	}()
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{

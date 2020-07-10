@@ -478,8 +478,7 @@ func (c *Controller) manage(
 ) error {
 	// Run the pre install hook for the driver to ensure we are ready to create storage pods
 	if err := c.Driver.PreInstall(cluster); err != nil {
-		return fmt.Errorf("failed to run preinstall hooks for %v/%v: %v",
-			cluster.Namespace, cluster.Name, err)
+		return fmt.Errorf("pre-install hook failed: %v", err)
 	}
 
 	// Find out the pods which are created for the nodes by StorageCluster
