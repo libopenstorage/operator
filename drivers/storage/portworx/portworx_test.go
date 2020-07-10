@@ -1004,6 +1004,72 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
+func TestValidationsForEssentials(t *testing.T) {
+	component.DeregisterAllComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	cluster := &corev1alpha1.StorageCluster{}
+	os.Setenv(pxutil.EnvKeyPortworxEssentials, "True")
+
+	// TestCase: Should fail if px-essential secret not present
+	err := driver.PreInstall(cluster)
+	require.Equal(t, err.Error(), "secret kube-system/px-essential "+
+		"should be present to deploy a Portworx Essentials cluster")
+
+	// TestCase: Should fail if essentials user id not present
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.EssentialsSecretName,
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{},
+	}
+	k8sClient.Create(context.TODO(), secret)
+
+	err = driver.PreInstall(cluster)
+	require.Equal(t, err.Error(), "secret kube-system/px-essential "+
+		"does not have Essentials Entitlement ID (px-essen-user-id)")
+
+	// TestCase: Should fail if essentials user id is empty
+	secret.Data[pxutil.EssentialsUserIDKey] = []byte("")
+	k8sClient.Update(context.TODO(), secret)
+
+	err = driver.PreInstall(cluster)
+	require.Equal(t, err.Error(), "secret kube-system/px-essential "+
+		"does not have Essentials Entitlement ID (px-essen-user-id)")
+
+	// TestCase: Should fail if OSB endpoint is not present
+	secret.Data[pxutil.EssentialsUserIDKey] = []byte("user-id")
+	k8sClient.Update(context.TODO(), secret)
+
+	err = driver.PreInstall(cluster)
+	require.Equal(t, err.Error(), "secret kube-system/px-essential "+
+		"does not have Portworx OSB endpoint (px-osb-endpoint)")
+
+	// TestCase: Should fail if OSB endpoint is empty
+	secret.Data[pxutil.EssentialsOSBEndpointKey] = []byte("")
+	k8sClient.Update(context.TODO(), secret)
+
+	err = driver.PreInstall(cluster)
+	require.Equal(t, err.Error(), "secret kube-system/px-essential "+
+		"does not have Portworx OSB endpoint (px-osb-endpoint)")
+
+	// TestCase: Should not fail if both user id and osb endpoint present
+	secret.Data[pxutil.EssentialsOSBEndpointKey] = []byte("osb-endpoint")
+	k8sClient.Update(context.TODO(), secret)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// TestCase: Should not fail if essentials is disabled
+	k8sClient.Delete(context.TODO(), secret)
+	os.Unsetenv(pxutil.EnvKeyPortworxEssentials)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+}
+
 func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	driver := portworx{}
 
