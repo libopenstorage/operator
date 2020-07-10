@@ -46,6 +46,12 @@ const (
 	PortworxSDKPortName = "px-sdk"
 	// PortworxKVDBPortName name of the Portworx internal KVDB port
 	PortworxKVDBPortName = "px-kvdb"
+	// EssentialsSecretName name of the Portworx Essentials secret
+	EssentialsSecretName = "px-essential"
+	// EssentialsUserIDKey is the secret key for Essentials user ID
+	EssentialsUserIDKey = "px-essen-user-id"
+	// EssentialsOSBEndpointKey is the secret key for Essentials OSB endpoint
+	EssentialsOSBEndpointKey = "px-osb-endpoint"
 
 	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"

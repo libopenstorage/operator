@@ -20,7 +20,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -216,6 +218,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 }
 
 func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
+	if err := p.validateEssentials(); err != nil {
+		return err
+	}
+
 	for componentName, comp := range component.GetAll() {
 		if comp.IsEnabled(cluster) {
 			err := comp.Reconcile(cluster)
@@ -233,6 +239,34 @@ func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
 			}
 		}
 	}
+	return nil
+}
+
+func (p *portworx) validateEssentials() error {
+	if pxutil.EssentialsEnabled() {
+		resource := types.NamespacedName{
+			Name:      pxutil.EssentialsSecretName,
+			Namespace: api.NamespaceSystem,
+		}
+		secret := &v1.Secret{}
+		err := p.k8sClient.Get(context.TODO(), resource, secret)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("secret %s/%s should be present to deploy a "+
+				"Portworx Essentials cluster", api.NamespaceSystem, pxutil.EssentialsSecretName)
+		} else if err != nil {
+			return fmt.Errorf("unable to get secret %s/%s. %v",
+				api.NamespaceSystem, pxutil.EssentialsSecretName, err)
+		}
+		if len(secret.Data[pxutil.EssentialsUserIDKey]) == 0 {
+			return fmt.Errorf("secret %s/%s does not have Essentials Entitlement ID (%s)",
+				api.NamespaceSystem, pxutil.EssentialsSecretName, pxutil.EssentialsUserIDKey)
+		}
+		if len(secret.Data[pxutil.EssentialsOSBEndpointKey]) == 0 {
+			return fmt.Errorf("secret %s/%s does not have Portworx OSB endpoint (%s)",
+				api.NamespaceSystem, pxutil.EssentialsSecretName, pxutil.EssentialsOSBEndpointKey)
+		}
+	}
+
 	return nil
 }
 
