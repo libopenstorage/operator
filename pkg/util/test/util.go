@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -79,6 +81,14 @@ func Get(k8sClient client.Client, obj runtime.Object, name, namespace string) er
 // Delete deletes an object using the given Kubernetes client
 func Delete(k8sClient client.Client, obj runtime.Object) error {
 	return k8sClient.Delete(context.TODO(), obj)
+}
+
+// Update changes an object using the given Kubernetes client and updates the resource version
+func Update(k8sClient client.Client, obj runtime.Object) error {
+	return k8sClient.Update(
+		context.TODO(),
+		obj,
+	)
 }
 
 // GetExpectedClusterRole returns the ClusterRole object from given yaml spec file
@@ -331,6 +341,21 @@ func ValidateStorageCluster(
 
 	}
 	return nil
+}
+
+// NewResourceVersion creates a random 16 character string
+// to simulate a k8s resource version
+func NewResourceVersion() string {
+	var randBytes = make([]byte, 32)
+	_, err := rand.Read(randBytes)
+	if err != nil {
+		return ""
+	}
+
+	ver := make([]byte, base64.StdEncoding.EncodedLen(len(randBytes)))
+	base64.StdEncoding.Encode(ver, randBytes)
+
+	return string(ver[:16])
 }
 
 func getSdkConnection(cluster *corev1alpha1.StorageCluster) (*grpc.ClientConn, error) {

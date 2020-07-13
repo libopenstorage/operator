@@ -463,6 +463,21 @@ func GenerateToken(
 	return token, nil
 }
 
+// GetSecretKeyValue gets any key value from a k8s secret
+func GetSecretKeyValue(
+	cluster *corev1alpha1.StorageCluster,
+	secret *v1.Secret,
+	secretKey string,
+) (string, error) {
+	// check for secretName
+	value, ok := secret.Data[secretKey]
+	if !ok || len(value) <= 0 {
+		return "", fmt.Errorf("failed to get key %s inside secret %s/%s", secretKey, cluster.Namespace, secret.Name)
+	}
+
+	return string(value), nil
+}
+
 // GetSecretValue gets any secret key value from k8s and decodes to a string value
 func GetSecretValue(
 	ctx context.Context,
@@ -483,12 +498,8 @@ func GetSecretValue(
 	if err != nil {
 		return "", err
 	}
-	value, ok := secret.Data[secretKey]
-	if !ok || len(value) <= 0 {
-		return "", fmt.Errorf("failed to get key %s inside secret %s/%s", secretKey, cluster.Namespace, secretName)
-	}
 
-	return string(value), nil
+	return GetSecretKeyValue(cluster, &secret, secretKey)
 }
 
 // SecurityEnabled checks if the security flag is set for a cluster
