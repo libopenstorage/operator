@@ -2159,7 +2159,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1alpha1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: "Maintenance",
 		},
 	}
 
