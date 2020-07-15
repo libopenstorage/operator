@@ -360,8 +360,12 @@ func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
 	var latestCondition *corev1alpha1.NodeCondition
 
 	for _, condition := range status.Conditions {
+		// Find the latest condition. If it is InitCondition, and has
+		// the same timestamp as the latest one then don't make it latest
 		if latestTime.Before(&condition.LastTransitionTime) ||
-			latestTime.Equal(&condition.LastTransitionTime) {
+			latestTime.IsZero() ||
+			(latestTime.Equal(&condition.LastTransitionTime) &&
+				condition.Type != corev1alpha1.NodeInitCondition) {
 			latestCondition = condition.DeepCopy()
 			latestTime = condition.LastTransitionTime
 		}
