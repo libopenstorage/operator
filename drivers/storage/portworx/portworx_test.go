@@ -5082,6 +5082,21 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	err = k8sClient.List(context.TODO(), dsList)
 	require.NoError(t, err)
 	require.Empty(t, dsList.Items)
+
+	// TestCase: Wiper daemonset should not be created again if already
+	// completed and deleted
+	cluster.Status.Phase = "DeleteCompleted"
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+
+	dsList = &appsv1.DaemonSetList{}
+	err = k8sClient.List(context.TODO(), dsList)
+	require.NoError(t, err)
+	require.Empty(t, dsList.Items)
 }
 
 func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T) {
@@ -5192,6 +5207,21 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 
 	// Node wiper daemon set should be removed
 	dsList := &appsv1.DaemonSetList{}
+	err = k8sClient.List(context.TODO(), dsList)
+	require.NoError(t, err)
+	require.Empty(t, dsList.Items)
+
+	// TestCase: Wiper daemonset should not be created again if already
+	// completed and deleted
+	cluster.Status.Phase = "DeleteCompleted"
+	condition, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	dsList = &appsv1.DaemonSetList{}
 	err = k8sClient.List(context.TODO(), dsList)
 	require.NoError(t, err)
 	require.Empty(t, dsList.Items)

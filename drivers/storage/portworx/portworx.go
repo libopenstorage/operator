@@ -313,10 +313,18 @@ func (p *portworx) DeleteStorage(
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
+	deleteCompleted := string(corev1alpha1.ClusterConditionTypeDelete) +
+		string(corev1alpha1.ClusterOperationCompleted)
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
-		// Run the node wiper
+		if cluster.Status.Phase == deleteCompleted {
+			return &corev1alpha1.ClusterCondition{
+				Type:   corev1alpha1.ClusterConditionTypeDelete,
+				Status: corev1alpha1.ClusterOperationCompleted,
+				Reason: completeMsg,
+			}, nil
+		}
 		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
 			return &corev1alpha1.ClusterCondition{
 				Type:   corev1alpha1.ClusterConditionTypeDelete,
