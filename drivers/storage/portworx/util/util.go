@@ -137,6 +137,9 @@ const (
 	// SecurityPortworxStorkIssuer is the issuer for stork to communicate with the PX SDK pre-2.6
 	SecurityPortworxStorkIssuer = "stork.openstorage.io"
 
+	// ErrMsgGrpcConnection error message if failed to connect to GRPC server
+	ErrMsgGrpcConnection = "error connecting to GRPC server"
+
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
 	defaultSDKPort     = 9020
@@ -416,7 +419,7 @@ func GetGrpcConn(endpoint string) (*grpc.ClientConn, error) {
 	}
 	sdkConn, err := grpcserver.Connect(endpoint, dialOptions)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to GRPC server [%s]: %v", endpoint, err)
+		return nil, fmt.Errorf("%s [%s]: %v", ErrMsgGrpcConnection, endpoint, err)
 	}
 	return sdkConn, nil
 }
