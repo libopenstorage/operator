@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
+	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -49,15 +49,26 @@ func NewK8sClient(scheme *runtime.Scheme) (client.Client, error) {
 
 // GetVersion returns the kubernetes server version
 func GetVersion() (*version.Version, error) {
+	ver, _, err := GetFullVersion()
+	return ver, err
+}
+
+// GetFullVersion returns the full kubernetes server version
+func GetFullVersion() (*version.Version, string, error) {
 	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get kubernetes version: %v", err)
+		return nil, "", fmt.Errorf("unable to get kubernetes version: %v", err)
 	}
 	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
 	if len(matches) < 2 {
-		return nil, fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+		return nil, "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
-	return version.NewVersion(matches[1])
+
+	ver, err := version.NewVersion(matches[1])
+	if len(matches) == 3 {
+		return ver, matches[2], err
+	}
+	return ver, "", err
 }
 
 // ParseObjectFromFile reads the given file and loads the object from the file in obj

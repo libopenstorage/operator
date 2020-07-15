@@ -668,7 +668,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForCSI(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -683,6 +684,14 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	// Don't enable CSI if not enabled
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Enable CSI if running in k3s cluster
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.18.4+k3s",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates))
+	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Use images from release manifest if enabled
 	cluster.Spec.FeatureGates = map[string]string{

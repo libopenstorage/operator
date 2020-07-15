@@ -465,6 +465,35 @@ func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
 			},
 		}
 	}
+	if t.runOnMaster {
+		masterTolerationFound := false
+		for _, t := range toUpdate.Spec.Placement.Tolerations {
+			if t.Key == "node-role.kubernetes.io/master" &&
+				t.Effect == v1.TaintEffectNoSchedule {
+				masterTolerationFound = true
+				break
+			}
+		}
+		if !masterTolerationFound {
+			toUpdate.Spec.Placement.Tolerations = append(
+				toUpdate.Spec.Placement.Tolerations,
+				v1.Toleration{
+					Key:    "node-role.kubernetes.io/master",
+					Effect: v1.TaintEffectNoSchedule,
+				},
+			)
+		}
+	}
+
+	if t.isK3s {
+		// Enable CSI if running in k3s environment
+		if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
+			if toUpdate.Spec.FeatureGates == nil {
+				toUpdate.Spec.FeatureGates = make(map[string]string)
+			}
+			toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
+		}
+	}
 
 	setSecuritySpecDefaults(toUpdate)
 }

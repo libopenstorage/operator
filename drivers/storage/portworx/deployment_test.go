@@ -1754,6 +1754,61 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecForK3s(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.4+k3s1",
+	}
+	expected := getExpectedPodSpec(t, "testspec/px_k3s.yaml")
+
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.6.0",
+		},
+	}
+	driver := portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
+func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	expected := getExpectedPodSpec(t, "testspec/px_master.yaml")
+
+	nodeName := "testNode"
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationRunOnMaster: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.6.0",
+		},
+	}
+	driver := portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
 func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
