@@ -2744,6 +2744,31 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	require.Len(t, storageNodes.Items, 1)
 	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
 
+	// TestCase: NodeInit condition happened at the same time as NodeState, then
+	// phase should have use NodeState as that is the latest response from SDK
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	commonTime := metav1.Now()
+	conditions := make([]corev1alpha1.NodeCondition, len(storageNodes.Items[0].Status.Conditions))
+	for i, c := range storageNodes.Items[0].Status.Conditions {
+		conditions[i] = *c.DeepCopy()
+		conditions[i].LastTransitionTime = commonTime
+	}
+	storageNodes.Items[0].Status.Conditions = conditions
+	k8sClient.Status().Update(context.TODO(), &storageNodes.Items[0])
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
+
 	// TestCase: Node state has transitioned
 	expectedNode.Status = api.Status_STATUS_DECOMMISSION
 	mockNodeServer.EXPECT().
