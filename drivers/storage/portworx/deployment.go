@@ -173,6 +173,8 @@ type template struct {
 	cluster         *corev1alpha1.StorageCluster
 	isPKS           bool
 	isOpenshift     bool
+	isK3s           bool
+	runOnMaster     bool
 	imagePullPolicy v1.PullPolicy
 	serviceType     v1.ServiceType
 	startPort       int
@@ -193,11 +195,14 @@ func newTemplate(
 	t := &template{cluster: cluster}
 
 	var err error
-	t.k8sVersion, err = k8sutil.GetVersion()
+	var ext string
+	t.k8sVersion, ext, err = k8sutil.GetFullVersion()
 	if err != nil {
 		return nil, err
 	}
 
+	t.isK3s = isK3sCluster(ext)
+	t.runOnMaster = t.isK3s || pxutil.RunOnMaster(cluster)
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
@@ -513,22 +518,24 @@ func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
 		},
 	}
 
-	if t.isOpenshift {
+	if !t.runOnMaster {
+		if t.isOpenshift {
+			selectorRequirements = append(
+				selectorRequirements,
+				v1.NodeSelectorRequirement{
+					Key:      "node-role.kubernetes.io/infra",
+					Operator: v1.NodeSelectorOpDoesNotExist,
+				},
+			)
+		}
 		selectorRequirements = append(
 			selectorRequirements,
 			v1.NodeSelectorRequirement{
-				Key:      "node-role.kubernetes.io/infra",
+				Key:      "node-role.kubernetes.io/master",
 				Operator: v1.NodeSelectorOpDoesNotExist,
 			},
 		)
 	}
-	selectorRequirements = append(
-		selectorRequirements,
-		v1.NodeSelectorRequirement{
-			Key:      "node-role.kubernetes.io/master",
-			Operator: v1.NodeSelectorOpDoesNotExist,
-		},
-	)
 
 	return selectorRequirements
 }
@@ -878,7 +885,11 @@ func (t *template) getEnvList() []v1.EnvVar {
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
-	volumeMounts := make([]v1.VolumeMount, 0)
+	if t.isK3s {
+		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	}
+
+	volumeMounts := make([]v1.VolumeMount, 0, len(volumeInfoList))
 	for _, v := range volumeInfoList {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
@@ -911,8 +922,11 @@ func (t *template) getVolumes() []v1.Volume {
 	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
 		volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
 	}
+	if t.isK3s {
+		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	}
 
-	volumes := make([]v1.Volume, 0)
+	volumes := make([]v1.Volume, 0, len(volumeInfoList))
 	for _, v := range volumeInfoList {
 		volume := v1.Volume{
 			Name: v.name,
@@ -992,6 +1006,17 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 	return volumeInfoList
 }
 
+func (t *template) getK3sVolumeInfoList() []volumeInfo {
+	return []volumeInfo{
+		{
+			name:         "containerd-k3s",
+			hostPath:     "/run/k3s/containerd/containerd.sock",
+			mountPath:    "/run/containerd/containerd.sock",
+			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
+		},
+	}
+}
+
 func (t *template) loadKvdbAuth() map[string]string {
 	if len(t.kvdb) > 0 {
 		return t.kvdb
@@ -1036,4 +1061,11 @@ func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
 
 func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
 	return &val
+}
+
+func isK3sCluster(ext string) bool {
+	if len(ext) > 0 {
+		return strings.HasPrefix(ext[1:], "k3s")
+	}
+	return false
 }

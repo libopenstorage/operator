@@ -78,6 +78,8 @@ const (
 	// AnnotationDisableStorageClass annotation to disable installing default portworx
 	// storage classes
 	AnnotationDisableStorageClass = pxAnnotationPrefix + "/disable-storage-class"
+	// AnnotationRunOnMaster annotation to enable running Portworx on master nodes
+	AnnotationRunOnMaster = pxAnnotationPrefix + "/run-on-master"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -181,6 +183,12 @@ func IsEKS(cluster *corev1alpha1.StorageCluster) bool {
 // IsOpenshift returns true if the annotation has an OpenShift annotation and is true value
 func IsOpenshift(cluster *corev1alpha1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOpenshift])
+	return err == nil && enabled
+}
+
+// RunOnMaster returns true if the annotation has truth value for running on master
+func RunOnMaster(cluster *corev1alpha1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationRunOnMaster])
 	return err == nil && enabled
 }
 
