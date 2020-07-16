@@ -2292,6 +2292,19 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
 	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+
+	// TestCase: If the cluster is initializing then do not return an error on
+	// grpc connection timeout
+	cluster.Status.Phase = string(corev1alpha1.ClusterInit)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1alpha1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, 1)
+	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
