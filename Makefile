@@ -97,7 +97,7 @@ deploy-catalog:
 	docker run -it --rm \
 		-v $(BASE_DIR)/deploy:/deploy \
 	  -e QUAY_TOKEN="$$QUAY_TOKEN" \
-		python:3 bash -c "pip3 install operator-courier && \
+		python:3 bash -c "pip3 install operator-courier==2.1.7 && \
 			operator-courier --verbose push /deploy/olm-catalog/portworx $(QUAY_STORAGE_OPERATOR_REPO) $(QUAY_STORAGE_OPERATOR_APP) $(OLM_VERSION) \"$$QUAY_TOKEN\""
 
 verify-catalog:
@@ -123,7 +123,8 @@ get-release-manifest: clean-release-manifest
 mockgen:
 	go get github.com/golang/mock/gomock
 	go get github.com/golang/mock/mockgen
-	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer	
+	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer
+	mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 
 clean: clean-release-manifest
 	-rm -rf $(BIN)
