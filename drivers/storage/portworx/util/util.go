@@ -425,7 +425,7 @@ func GetGrpcConn(endpoint string) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	sdkConn, err := grpcserver.Connect(endpoint, dialOptions)
+	sdkConn, err := grpcserver.ConnectWithTimeout(endpoint, dialOptions, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("%s [%s]: %v", ErrMsgGrpcConnection, endpoint, err)
 	}
