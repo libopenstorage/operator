@@ -17,9 +17,11 @@ package grpcserver
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
@@ -27,11 +29,39 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
-// Connect address by grpc
+// GetTlsDialOptions returns the appropriate gRPC dial options to connect to a gRPC server over TLS.
+// If caCertData is nil then it will use the CA from the host.
+func GetTlsDialOptions(caCertData []byte) ([]grpc.DialOption, error) {
+	// Read the provided CA cert from the user
+	capool, err := x509.SystemCertPool()
+	if err != nil || capool == nil {
+		logrus.Warnf("cannot load system root certificates: %v", err)
+		capool = x509.NewCertPool()
+	}
+
+	// If user provided CA cert, then append it to systemCertPool.
+	if len(caCertData) != 0 {
+		if !capool.AppendCertsFromPEM(caCertData) {
+			return nil, fmt.Errorf("cannot parse CA certificate")
+		}
+	}
+
+	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(
+		credentials.NewClientTLSFromCert(capool, ""))}
+	return dialOptions, nil
+}
+
+// Connect to address by grpc
 func Connect(address string, dialOptions []grpc.DialOption) (*grpc.ClientConn, error) {
+	return ConnectWithTimeout(address, dialOptions, 1*time.Minute)
+}
+
+// ConnectWithTimeout to address by grpc with timeout
+func ConnectWithTimeout(address string, dialOptions []grpc.DialOption, timeout time.Duration) (*grpc.ClientConn, error) {
 	u, err := url.Parse(address)
 	if err == nil && (!u.IsAbs() || u.Scheme == "unix") {
 		dialOptions = append(dialOptions,
@@ -47,9 +77,9 @@ func Connect(address string, dialOptions []grpc.DialOption) (*grpc.ClientConn, e
 		return nil, err
 	}
 
-	// We wait for 1 minute until conn.GetState() is READY.
-	// The interval for this check is 1 second.
-	if err := util.WaitFor(1*time.Minute, 10*time.Millisecond, func() (bool, error) {
+	// We wait for given timeout until conn.GetState() is READY.
+	// The interval for this check is 10 ms.
+	if err := util.WaitFor(timeout, 10*time.Millisecond, func() (bool, error) {
 		if conn.GetState() == connectivity.Ready {
 			return false, nil
 		}
@@ -75,4 +105,24 @@ func AddMetadataToContext(ctx context.Context, k, v string) context.Context {
 
 func GetMetadataValueFromKey(ctx context.Context, k string) string {
 	return metautils.ExtractIncoming(ctx).Get(k)
+}
+
+// GetMethodInformation returns the service and API of a gRPC fullmethod string.
+// For example, if the full method is:
+//   /openstorage.api.OpenStorage<service>/<method>
+// Then, to extract the service and api we would call it as follows:
+//   s, a := GetMethodInformation("openstorage.api.OpenStorage", info.FullMethod)
+//      where info.FullMethod comes from the gRPC interceptor
+func GetMethodInformation(constPath, fullmethod string) (service, api string) {
+	parts := strings.Split(fullmethod, "/")
+
+	if len(parts) > 1 {
+		service = strings.TrimPrefix(strings.ToLower(parts[1]), strings.ToLower(constPath))
+	}
+
+	if len(parts) > 2 {
+		api = strings.ToLower(parts[2])
+	}
+
+	return service, api
 }

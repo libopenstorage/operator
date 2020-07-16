@@ -64,12 +64,12 @@
   version = "v3.3.13"
 
 [[projects]]
-  digest = "1:f6e5e1bc64c2908167e6aa9a1fe0c084d515132a1c63ad5b6c84036aa06dc0c1"
+  digest = "1:910c5b111ca13127693df80a59be2c952ad97313626116c0c9895e7b588f2a29"
   name = "github.com/coreos/go-oidc"
   packages = ["."]
   pruneopts = "UT"
-  revision = "1180514eaf4d9f38d0d19eef639a1d695e066e72"
-  version = "v2.0.0"
+  revision = "8d771559cf6e5111c9b9159810d0e4538e7cdc82"
+  version = "v2.2.1"
 
 [[projects]]
   digest = "1:05ffeeed3f0f05520de0679f6aa3219ffee69cfd6d9fb6c194879d4c818ad670"
@@ -406,8 +406,8 @@
   revision = "6e0d676b6c3e2552378867ca53456c658c63060c"
 
 [[projects]]
-  branch = "release-6.0"
-  digest = "1:84bdb388ad5babcefc31f5e553ff8e2e8f3dc4b0453e382da0e36b2f010f6400"
+  branch = "release-8.0"
+  digest = "1:3a3e91cee97ffe60232f7f9cc4caa0d67a5200fd21e8e486571c4c1bbd9f632c"
   name = "github.com/libopenstorage/openstorage"
   packages = [
     "api",
@@ -418,7 +418,7 @@
     "volume",
   ]
   pruneopts = "UT"
-  revision = "8d0fa3f1af89702ffe7ad3a99e070feb6600338b"
+  revision = "6fc7d3eec1c045d2a95ddd13ed0ada0b898d85e0"
 
 [[projects]]
   branch = "revert-114-master"
@@ -1449,6 +1449,7 @@
   input-imports = [
     "github.com/coreos/prometheus-operator/pkg/apis/monitoring",
     "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1",
+    "github.com/dgrijalva/jwt-go",
     "github.com/golang/mock/gomock",
     "github.com/golang/protobuf/protoc-gen-go",
     "github.com/google/shlex",
@@ -1459,6 +1460,7 @@
     "github.com/libopenstorage/cloudops/pkg/parser",
     "github.com/libopenstorage/cloudops/specs/decisionmatrix",
     "github.com/libopenstorage/openstorage/api",
+    "github.com/libopenstorage/openstorage/pkg/auth",
     "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
     "github.com/operator-framework/operator-sdk/pkg/metrics",
@@ -1481,6 +1483,7 @@
     "github.com/urfave/cli",
     "google.golang.org/grpc",
     "google.golang.org/grpc/credentials",
+    "google.golang.org/grpc/metadata",
     "google.golang.org/grpc/reflection",
     "gopkg.in/yaml.v2",
     "k8s.io/api/apps/v1",
