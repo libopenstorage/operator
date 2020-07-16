@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/libopenstorage/openstorage/pkg/auth"
-
 	"github.com/mohae/deepcopy"
 )
 
@@ -19,6 +18,7 @@ const (
 	Name                     = "name"
 	Token                    = "token"
 	TokenSecret              = "token_secret"
+	TokenSecretNamespace     = "token_secret_namespace"
 	SpecNodes                = "nodes"
 	SpecParent               = "parent"
 	SpecEphemeral            = "ephemeral"
@@ -53,6 +53,13 @@ const (
 	SpecIoProfile            = "io_profile"
 	SpecAsyncIo              = "async_io"
 	SpecEarlyAck             = "early_ack"
+	SpecExportProtocol       = "export"
+	SpecExportProtocolISCSI  = "iscsi"
+	SpecExportProtocolPXD    = "pxd"
+	SpecExportProtocolNFS    = "nfs"
+	SpecExportProtocolCustom = "custom"
+	SpecExportOptions        = "export_options"
+	SpecExportOptionsEmpty   = "empty_export_options"
 	// SpecBestEffortLocationProvisioning default is false. If set provisioning request will succeed
 	// even if specified data location parameters could not be satisfied.
 	SpecBestEffortLocationProvisioning = "best_effort_location_provisioning"
@@ -60,8 +67,16 @@ const (
 	// the VolumeSpec.force_unsupported_fs_type. When set to true it asks
 	// the driver to use an unsupported value of VolumeSpec.format if possible
 	SpecForceUnsupportedFsType = "force_unsupported_fs_type"
-	SpecNodiscard              = "nodiscard"
-	StoragePolicy              = "storagepolicy"
+	// SpecMatchSrcVolProvision defaults to false. Applicable to cloudbackup restores only.
+	// If set to "true", cloudbackup restore volume gets provisioned on same pools as
+	// backup, allowing for inplace restore after.
+	SpecMatchSrcVolProvision = "match_src_vol_provision"
+	SpecNodiscard            = "nodiscard"
+	StoragePolicy            = "storagepolicy"
+	SpecCowOnDemand          = "cow_ondemand"
+	SpecDirectIo             = "direct_io"
+	SpecScanPolicyTrigger    = "scan_policy_trigger"
+	SpecScanPolicyAction     = "scan_policy_action"
 )
 
 // OptionKey specifies a set of recognized query params.
@@ -96,6 +111,9 @@ const (
 	OptCredDisableSSL = "CredDisableSSL"
 	// OptCredDisablePathStyle does not enforce path style for s3
 	OptCredDisablePathStyle = "CredDisablePathStyle"
+	// OptCredStorageClass indicates the storage class to be used for puts
+	// allowed values are STANDARD and STANDARD_IA
+	OptCredStorageClass = "CredStorageClass"
 	// OptCredEndpoint indicate the cloud endpoint
 	OptCredEndpoint = "CredEndpoint"
 	// OptCredAccKey for s3
@@ -116,8 +134,14 @@ const (
 	OptCredAzureAccountKey = "CredAccountKey"
 	// Credential ownership key in params
 	OptCredOwnership = "CredOwnership"
+	// OptCredProxy proxy key in params
+	OptCredProxy = "CredProxy"
+	// OptCredIAMPolicy if "true", indicates IAM creds to be used
+	OptCredIAMPolicy = "CredIAMPolicy"
 	// OptCloudBackupID is the backID in the cloud
 	OptCloudBackupID = "CloudBackID"
+	// OptCloudBackupIgnoreCreds ignores credentials for incr backups
+	OptCloudBackupIgnoreCreds = "CloudBackupIgnoreCreds"
 	// OptSrcVolID is the source volume ID of the backup
 	OptSrcVolID = "SrcVolID"
 	// OptBkupOpState is the desired operational state
@@ -129,6 +153,8 @@ const (
 	OptCatalogSubFolder = "subfolder"
 	// OptCatalogMaxDepth query parameter used to limit the depth we return
 	OptCatalogMaxDepth = "depth"
+	// OptVolumeService query parameter used to request background volume services
+	OptVolService = "volservice"
 )
 
 // Api clientserver Constants
@@ -147,6 +173,24 @@ const (
 const (
 	// AutoAggregation value indicates driver to select aggregation level.
 	AutoAggregation = math.MaxUint32
+)
+
+// The main goal of the following label keys is for the Kubernetes intree middleware
+// to keep track of the source location of the PVC with labels that cannot be modified
+// by the owner of the volume, but only by the storage administrator.
+const (
+	// KubernetesPvcNameKey is a label on the openstorage volume
+	// which tracks the source PVC for the volume.
+	KubernetesPvcNameKey = "openstorage.io/pvc-name"
+
+	// KubernetesPvcNamespaceKey is a label on the openstorage volume
+	// which tracks the source PVC namespace for the volume
+	KubernetesPvcNamespaceKey = "openstorage.io/pvc-namespace"
+)
+
+const (
+	// gRPC root path used to extract service and API information
+	SdkRootPath = "openstorage.api.OpenStorage"
 )
 
 // Node describes the state of a node.
@@ -194,6 +238,8 @@ type Node struct {
 	NodeLabels map[string]string
 	// GossipPort is the port used by the gossip protocol
 	GossipPort string
+	// HWType is the type of the underlying hardware used by the node
+	HWType HardwareType
 }
 
 // FluentDConfig describes ip and port of a fluentdhost.
@@ -203,16 +249,6 @@ type Node struct {
 type FluentDConfig struct {
 	IP   string `json:"ip"`
 	Port string `json:"port"`
-}
-
-// TunnelConfig describes key, cert and endpoint of a reverse proxy tunnel
-// DEPRECATED
-//
-// swagger:model
-type TunnelConfig struct {
-	Key      string `json:"key"`
-	Cert     string `json:"cert"`
-	Endpoint string `json:"tunnel_endpoint"`
 }
 
 // Cluster represents the state of the cluster.
@@ -230,19 +266,13 @@ type Cluster struct {
 	NodeId string
 
 	// array of all the nodes in the cluster.
-	Nodes []Node
-
-	// Logging url for the cluster.
-	LoggingURL string
+	Nodes []*Node
 
 	// Management url for the cluster
 	ManagementURL string
 
 	// FluentD Host for the cluster
 	FluentDConfig FluentDConfig
-
-	// TunnelConfig for the cluster [key, cert, endpoint]
-	TunnelConfig TunnelConfig
 }
 
 // CredCreateRequest is the input for CredCreate command
@@ -284,6 +314,14 @@ type CloudBackupCreateRequest struct {
 	// Labels are list of key value pairs to tag the cloud backup. These labels
 	// are stored in the metadata associated with the backup.
 	Labels map[string]string
+	// FullBackupFrequency indicates number of incremental backup after whcih
+	// a fullbackup must be created. This is to override the default value for
+	// manual/user triggerred backups and not applicable for scheduled backups.
+	// Value of 0 retains the default behavior.
+	FullBackupFrequency uint32
+	// DeleteLocal indicates if local snap must be deleted after the
+	// backup is complete
+	DeleteLocal bool
 }
 
 type CloudBackupCreateResponse struct {
@@ -304,6 +342,9 @@ type CloudBackupGroupCreateRequest struct {
 	CredentialUUID string
 	// Full indicates if full backup is desired even though incremental is possible
 	Full bool
+	// DeleteLocal indicates if local snap must be deleted after the
+	// backup is complete
+	DeleteLocal bool
 }
 
 type CloudBackupRestoreRequest struct {
@@ -320,6 +361,13 @@ type CloudBackupRestoreRequest struct {
 	// Name is optional unique id to be used for this restore op
 	// restore creates this by default
 	Name string
+	// Optional RestoreVolumeSpec allows some of the restoreVolume fields to be modified.
+	// These fields default to the volume spec stored with cloudbackup.
+	// The request fails if both RestoreVolSpec and NodeID are specified.
+	Spec *RestoreVolumeSpec
+	// Optional Locator for restoreVolume. Request fails if both Name and
+	// locator are specified
+	Locator *VolumeLocator
 }
 
 type CloudBackupGroupCreateResponse struct {
@@ -345,6 +393,13 @@ type CloudBackupGenericRequest struct {
 	CredentialUUID string
 	// All if set to true, backups for all clusters in the cloud are processed
 	All bool
+	// StatusFilter indicates backups based on status
+	StatusFilter CloudBackupStatusType
+	// MetadataFilter indicates backups whose metadata has these kv pairs
+	MetadataFilter map[string]string
+	// CloudBackupID must be specified if one needs to enumerate known single
+	// backup( format is clusteruuidORBucketName/srcVolId-SnapId(-incr)
+	CloudBackupID string
 }
 
 type CloudBackupInfo struct {
@@ -365,11 +420,17 @@ type CloudBackupInfo struct {
 
 type CloudBackupEnumerateRequest struct {
 	CloudBackupGenericRequest
+	// MaxBackups indicates maxBackups to return in this enumerate list
+	MaxBackups uint64
+	// ContinuationToken returned in the enumerate response if all of the
+	// requested backups could not be returned in one response
+	ContinuationToken string
 }
 
 type CloudBackupEnumerateResponse struct {
 	// Backups is list of backups in cloud for given volume/cluster/s
-	Backups []CloudBackupInfo
+	Backups           []CloudBackupInfo
+	ContinuationToken string
 }
 
 type CloudBackupDeleteRequest struct {
@@ -411,6 +472,12 @@ const (
 	CloudRestoreOp = CloudBackupOpType("Restore")
 )
 
+// Allowed storage classes s3
+const (
+	S3StorageClassStandard   = "STANDARD"
+	S3StorageClassStandardIa = "STANDARD_IA"
+)
+
 type CloudBackupStatusType string
 
 const (
@@ -422,6 +489,9 @@ const (
 	CloudBackupStatusActive     = CloudBackupStatusType("Active")
 	CloudBackupStatusQueued     = CloudBackupStatusType("Queued")
 	CloudBackupStatusFailed     = CloudBackupStatusType("Failed")
+	// Invalid includes Failed, Stopped, and Aborted used as filter to enumerate
+	// cloud backups
+	CloudBackupStatusInvalid = CloudBackupStatusType("Invalid")
 )
 
 const (
@@ -524,10 +594,21 @@ type CloudBackupScheduleInfo struct {
 	Labels map[string]string
 	// Full indicates if scheduled backups must be full always
 	Full bool
+	// RetentionDays is the number of days that the scheduled backups will be kept
+	// and after these number of days it will be deleted
+	RetentionDays uint32
 }
 
 type CloudBackupSchedCreateRequest struct {
 	CloudBackupScheduleInfo
+}
+
+// Callers must read the existing schedule and modify
+// required fields
+type CloudBackupSchedUpdateRequest struct {
+	CloudBackupScheduleInfo
+	// SchedUUID for which the schedule is being updated
+	SchedUUID string
 }
 
 type CloudBackupGroupSchedCreateRequest struct {
@@ -550,6 +631,16 @@ type CloudBackupGroupSchedCreateRequest struct {
 	MaxBackups uint
 	// Full indicates if scheduled backups must be full always
 	Full bool
+	// RetentionDays is the number of days that the scheduled backups will be kept
+	// and after these number of days it will be deleted
+	RetentionDays uint32
+}
+
+type CloudBackupGroupSchedUpdateRequest struct {
+	// Any parameters in this can be updated
+	CloudBackupGroupSchedCreateRequest
+	// UUID of the group schedule being upated
+	SchedUUID string
 }
 
 type CloudBackupSchedCreateResponse struct {
@@ -682,6 +773,28 @@ func simpleString(typeString string, nameMap map[int32]string, v int32) string {
 	return strings.TrimPrefix(strings.ToLower(s), fmt.Sprintf("%s_", strings.ToLower(typeString)))
 }
 
+// ScanPolicyTriggerValueof returns value of string
+func ScanPolicy_ScanTriggerSimpleValueOf(s string) (ScanPolicy_ScanTrigger, error) {
+	obj, err := simpleValueOf("scan_trigger", ScanPolicy_ScanTrigger_value, s)
+	return ScanPolicy_ScanTrigger(obj), err
+}
+
+// SimpleString returns the string format of ScanPolicy_ScanTrigger
+func (x ScanPolicy_ScanTrigger) SimpleString() string {
+	return simpleString("scan_trigger", ScanPolicy_ScanTrigger_name, int32(x))
+}
+
+// ScanPolicyActioinValueof returns value of string
+func ScanPolicy_ScanActionSimpleValueOf(s string) (ScanPolicy_ScanAction, error) {
+	obj, err := simpleValueOf("scan_action", ScanPolicy_ScanAction_value, s)
+	return ScanPolicy_ScanAction(obj), err
+}
+
+// SimpleString returns the string format of ScanPolicy_ScanAction
+func (x ScanPolicy_ScanAction) SimpleString() string {
+	return simpleString("scan_action", ScanPolicy_ScanAction_name, int32(x))
+}
+
 func toSec(ms uint64) uint64 {
 	return ms / 1000
 }
@@ -743,16 +856,26 @@ func (v *Volume) Scaled() bool {
 	return v.Spec.Scale > 1
 }
 
-// Contains returns true if mid is a member of volume's replication set.
-func (m *Volume) Contains(mid string) bool {
+// Contains returns true if locationConstraint is a member of volume's replication set.
+func (m *Volume) Contains(locationConstraint string) bool {
 	rsets := m.GetReplicaSets()
 	for _, rset := range rsets {
 		for _, node := range rset.Nodes {
-			if node == mid {
+			if node == locationConstraint {
 				return true
 			}
 		}
 	}
+
+	// also check storage pool UUIDs
+	for _, replSet := range m.ReplicaSets {
+		for _, uid := range replSet.PoolUuids {
+			if uid == locationConstraint {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -803,11 +926,15 @@ func (s *Node) ToStorageNode() *StorageNode {
 		MgmtIp:            s.MgmtIp,
 		DataIp:            s.DataIp,
 		Hostname:          s.Hostname,
+		HWType:            s.HWType,
 	}
 
 	node.Disks = make(map[string]*StorageResource)
 	for k, v := range s.Disks {
-		node.Disks[k] = &v
+		// need to take the address of a local variable and not of v
+		// since its address does not change
+		vv := v
+		node.Disks[k] = &vv
 	}
 
 	node.NodeLabels = make(map[string]string)
@@ -817,7 +944,10 @@ func (s *Node) ToStorageNode() *StorageNode {
 
 	node.Pools = make([]*StoragePool, len(s.Pools))
 	for i, v := range s.Pools {
-		node.Pools[i] = &v
+		// need to take the address of a local variable and not of v
+		// since its address does not change
+		vv := v
+		node.Pools[i] = &vv
 	}
 
 	return node
@@ -856,6 +986,8 @@ func CloudBackupStatusTypeToSdkCloudBackupStatusType(
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeFailed
 	case CloudBackupStatusQueued:
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeQueued
+	case CloudBackupStatusInvalid:
+		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeInvalid
 	default:
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeUnknown
 	}
@@ -881,6 +1013,8 @@ func SdkCloudBackupStatusTypeToCloudBackupStatusString(
 		return string(CloudBackupStatusFailed)
 	case SdkCloudBackupStatusType_SdkCloudBackupStatusTypeQueued:
 		return string(CloudBackupStatusQueued)
+	case SdkCloudBackupStatusType_SdkCloudBackupStatusTypeInvalid:
+		return string(CloudBackupStatusInvalid)
 	default:
 		return string(CloudBackupStatusFailed)
 	}
@@ -912,7 +1046,7 @@ func (r *CloudBackupEnumerateResponse) ToSdkCloudBackupEnumerateWithFiltersRespo
 	for i, v := range r.Backups {
 		resp.Backups[i] = v.ToSdkCloudBackupInfo()
 	}
-
+	resp.ContinuationToken = r.ContinuationToken
 	return resp
 }
 
@@ -997,6 +1131,10 @@ func (r *CloudBackupHistoryResponse) ToSdkCloudBackupHistoryResponse() *SdkCloud
 }
 
 func (l *VolumeLocator) MergeVolumeSpecLabels(s *VolumeSpec) *VolumeLocator {
+	if l.VolumeLabels == nil && len(s.GetVolumeLabels()) > 0 {
+		l.VolumeLabels = make(map[string]string)
+	}
+
 	for k, v := range s.GetVolumeLabels() {
 		l.VolumeLabels[k] = v
 	}
@@ -1013,7 +1151,7 @@ func (v *VolumeSpec) IsPermitted(ctx context.Context, accessType Ownership_Acces
 }
 
 func (v *VolumeSpec) IsPermittedFromUserInfo(user *auth.UserInfo, accessType Ownership_AccessType) bool {
-	if v.IsPublic() {
+	if v.IsPublic(accessType) {
 		return true
 	}
 
@@ -1023,8 +1161,8 @@ func (v *VolumeSpec) IsPermittedFromUserInfo(user *auth.UserInfo, accessType Own
 	return true
 }
 
-func (v *VolumeSpec) IsPublic() bool {
-	return v.GetOwnership() == nil || v.GetOwnership().IsPublic()
+func (v *VolumeSpec) IsPublic(accessType Ownership_AccessType) bool {
+	return v.GetOwnership() == nil || v.GetOwnership().IsPublic(accessType)
 }
 
 // GetCloneCreatorOwnership returns the appropriate ownership for the
@@ -1034,7 +1172,6 @@ func (v *VolumeSpec) GetCloneCreatorOwnership(ctx context.Context) (*Ownership, 
 
 	// If there is user information, then auth is enabled
 	if userinfo, ok := auth.NewUserInfoFromContext(ctx); ok {
-
 		// Check if the owner is the one who cloned it
 		if o != nil && o.IsOwner(userinfo) {
 			return o, false
@@ -1051,7 +1188,7 @@ func (v *VolumeSpec) GetCloneCreatorOwnership(ctx context.Context) (*Ownership, 
 // Check access permission of SdkStoragePolicy Objects
 
 func (s *SdkStoragePolicy) IsPermitted(ctx context.Context, accessType Ownership_AccessType) bool {
-	if s.IsPublic() {
+	if s.IsPublic(accessType) {
 		return true
 	}
 
@@ -1067,7 +1204,7 @@ func (s *SdkStoragePolicy) IsPermitted(ctx context.Context, accessType Ownership
 }
 
 func (s *SdkStoragePolicy) IsPermittedFromUserInfo(user *auth.UserInfo, accessType Ownership_AccessType) bool {
-	if s.IsPublic() {
+	if s.IsPublic(accessType) {
 		return true
 	}
 
@@ -1077,8 +1214,8 @@ func (s *SdkStoragePolicy) IsPermittedFromUserInfo(user *auth.UserInfo, accessTy
 	return true
 }
 
-func (s *SdkStoragePolicy) IsPublic() bool {
-	return s.GetOwnership() == nil || s.GetOwnership().IsPublic()
+func (s *SdkStoragePolicy) IsPublic(accessType Ownership_AccessType) bool {
+	return s.GetOwnership() == nil || s.GetOwnership().IsPublic(accessType)
 }
 
 func CloudBackupRequestedStateToSdkCloudBackupRequestedState(
@@ -1111,4 +1248,20 @@ func (m *VolumeStateAction) IsMount() bool {
 
 func (m *VolumeStateAction) IsUnMount() bool {
 	return m.GetMount() == VolumeActionParam_VOLUME_ACTION_PARAM_OFF
+}
+
+// IsAttached checks if a volume is attached
+func (v *Volume) IsAttached() bool {
+	return len(v.AttachedOn) > 0 &&
+		v.State == VolumeState_VOLUME_STATE_ATTACHED &&
+		v.AttachedState != AttachState_ATTACH_STATE_INTERNAL
+}
+
+// TokenSecretContext contains all nessesary information to get a
+// token secret from any provider
+type TokenSecretContext struct {
+	SecretName      string
+	SecretNamespace string
+	PvcName         string
+	PvcNamespace    string
 }
