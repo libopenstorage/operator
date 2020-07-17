@@ -92,7 +92,7 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
-			Namespace: "kube-system",
+			Namespace: "kube-test",
 		},
 		Spec: corev1alpha1.StorageClusterSpec{
 			Image:           "portworx/oci-monitor:2.0.3.4",
@@ -122,14 +122,37 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
 	assert.Len(t, actual.Containers[0].Env, 5)
-	var actualEnv v1.EnvVar
+	var regConfigEnv *v1.EnvVar
+	var regSecretEnv *v1.EnvVar
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == "REGISTRY_CONFIG" {
-			actualEnv = env
-			break
+			regConfigEnv = env.DeepCopy()
+		} else if env.Name == "REGISTRY_SECRET" {
+			regSecretEnv = env.DeepCopy()
 		}
 	}
-	assert.Equal(t, expectedRegistryEnv, actualEnv)
+	assert.Equal(t, expectedRegistryEnv, *regConfigEnv)
+	assert.Nil(t, regSecretEnv)
+
+	// TestCase: Portworx version is newer than 2.3.2
+	cluster.Spec.Image = "portworx/oci-monitor:2.3.2"
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.Len(t, actual.ImagePullSecrets, 1)
+	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
+	assert.Len(t, actual.Containers[0].Env, 5)
+	regConfigEnv = nil
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == "REGISTRY_CONFIG" {
+			regConfigEnv = env.DeepCopy()
+		} else if env.Name == "REGISTRY_SECRET" {
+			regSecretEnv = env.DeepCopy()
+		}
+	}
+	assert.Equal(t, "px-secret", regSecretEnv.Value)
+	assert.Nil(t, regConfigEnv)
 }
 
 func TestPodSpecWithTolerations(t *testing.T) {
