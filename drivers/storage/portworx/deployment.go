@@ -796,16 +796,24 @@ func (t *template) getEnvList() []v1.EnvVar {
 	}
 
 	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
-		envMap["REGISTRY_CONFIG"] = &v1.EnvVar{
-			Name: "REGISTRY_CONFIG",
-			ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					Key: ".dockerconfigjson",
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: *t.cluster.Spec.ImagePullSecret,
+		pxVer2_3_2, _ := version.NewVersion("2.3.2")
+		if t.pxVersion.LessThan(pxVer2_3_2) {
+			envMap["REGISTRY_CONFIG"] = &v1.EnvVar{
+				Name: "REGISTRY_CONFIG",
+				ValueFrom: &v1.EnvVarSource{
+					SecretKeyRef: &v1.SecretKeySelector{
+						Key: ".dockerconfigjson",
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: *t.cluster.Spec.ImagePullSecret,
+						},
 					},
 				},
-			},
+			}
+		} else {
+			envMap["REGISTRY_SECRET"] = &v1.EnvVar{
+				Name:  "REGISTRY_SECRET",
+				Value: *t.cluster.Spec.ImagePullSecret,
+			}
 		}
 	}
 
