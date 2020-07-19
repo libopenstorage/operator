@@ -313,13 +313,8 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 		},
 	}
 
-	// Only portworx image and version should be set
+	// No defaults should be set
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
-	require.Equal(t, "3.0.0", cluster.Spec.Version)
-	require.Equal(t, "3.0.0", cluster.Status.Version)
-	cluster.Spec.Image = ""
-	cluster.Spec.Version = ""
 	require.Empty(t, cluster.Spec)
 
 	// Use default component versions if components are enabled
@@ -336,9 +331,9 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
-	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
-	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
-	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
+	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 }
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
