@@ -136,7 +136,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		toUpdate.Status.DesiredImages = &corev1alpha1.ComponentImages{}
 	}
 
-	if pxutil.IsPortworxEnabled(toUpdate) {
+	pxEnabled := pxutil.IsPortworxEnabled(toUpdate)
+	if pxEnabled {
 		if toUpdate.Spec.Stork == nil {
 			toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{
 				Enabled: true,
@@ -149,8 +150,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 
 	toUpdate.Spec.Image = strings.TrimSpace(toUpdate.Spec.Image)
 	toUpdate.Spec.Version = pxutil.GetImageTag(toUpdate.Spec.Image)
-	pxVersionChanged := toUpdate.Spec.Version == "" ||
-		toUpdate.Spec.Version != toUpdate.Status.Version
+	pxVersionChanged := pxEnabled &&
+		(toUpdate.Spec.Version == "" || toUpdate.Spec.Version != toUpdate.Status.Version)
 
 	if pxVersionChanged || autoUpdateComponents(toUpdate) || hasComponentChanged(toUpdate) {
 		// Force latest versions only if the component update strategy is Once
@@ -158,7 +159,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 			*toUpdate.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate)
 		release := manifest.Instance().GetVersions(toUpdate, force)
 
-		if toUpdate.Spec.Version == "" {
+		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
 			}
