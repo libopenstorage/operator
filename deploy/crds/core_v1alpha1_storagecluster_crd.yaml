@@ -71,6 +71,9 @@ spec:
               format: int32
               minimum: 0
               description: Start port is the starting port in the range of ports used by the cluster.
+            autoUpdateComponents:
+              type: string
+              description: A strategy to determine how component versions are to be updated automatically.
             updateStrategy:
               type: object
               description: An update strategy to replace existing StorageCluster pods with new pods.
@@ -620,6 +623,34 @@ spec:
                     remoteWriteEndpoint:
                       type: string
                       description: Specifies the remote write endpoint for Prometheus.
+            security:
+              type: object
+              description: Contains security configuration for the storage cluster.
+              properties:
+                enabled:
+                  type: boolean
+                  description: Flag indicating whether security features need to be enabled for the storage cluster.
+                auth:
+                  type: object
+                  description: Authorization configurations for a RBAC enabled storage cluster
+                  properties:
+                    guestAccess:
+                      type: string
+                      description: Defines the access mode of a guest user
+                    selfSigned:
+                      type: object
+                      description: Configuration for self signed authentication
+                      properties:
+                        issuer:
+                          type: string
+                          description: Token issuer for the tokens used to connect with storage cluster.
+                        tokenLifetime:
+                          type: string
+                          description: Lifetime of auto-generated RBAC tokens to access the storage cluster.
+                        sharedSecret:
+                          type: string
+                          description: Shared secret is the name of the Kubernetes secret containing the shared key
+                            used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
             env:
               type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes
