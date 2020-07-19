@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	kversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
@@ -85,48 +86,64 @@ func TestRegisterCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 2)
 
-	crd, err := fakeExtClient.ApiextensionsV1beta1().
+	scCRD, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
 		Get(storageClusterCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
-	require.Equal(t, storageClusterCRDName, crd.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, crd.Spec.Group)
-	require.Len(t, crd.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
-	require.True(t, crd.Spec.Versions[0].Served)
-	require.True(t, crd.Spec.Versions[0].Storage)
-	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, crd.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageClusterResourceName, crd.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageClusterResourcePlural, crd.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(), crd.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageClusterList{}).Name(), crd.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageClusterShortName}, crd.Spec.Names.ShortNames)
+	require.Equal(t, storageClusterCRDName, scCRD.Name)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, scCRD.Spec.Group)
+	require.Len(t, scCRD.Spec.Versions, 1)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, scCRD.Spec.Versions[0].Name)
+	require.True(t, scCRD.Spec.Versions[0].Served)
+	require.True(t, scCRD.Spec.Versions[0].Storage)
+	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, scCRD.Spec.Scope)
+	require.Equal(t, corev1alpha1.StorageClusterResourceName, scCRD.Spec.Names.Singular)
+	require.Equal(t, corev1alpha1.StorageClusterResourcePlural, scCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(), scCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageClusterList{}).Name(), scCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1alpha1.StorageClusterShortName}, scCRD.Spec.Names.ShortNames)
 	subresource := &apiextensionsv1beta1.CustomResourceSubresources{
 		Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 	}
-	require.Equal(t, subresource, crd.Spec.Subresources)
-	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
+	require.Equal(t, subresource, scCRD.Spec.Subresources)
+	require.NotEmpty(t, scCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
-	crd, err = fakeExtClient.ApiextensionsV1beta1().
+	snCRD, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
 		Get(storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
-	require.Equal(t, storageNodeCRDName, crd.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, crd.Spec.Group)
-	require.Len(t, crd.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
-	require.True(t, crd.Spec.Versions[0].Served)
-	require.True(t, crd.Spec.Versions[0].Storage)
-	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, crd.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageNodeResourceName, crd.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, crd.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), crd.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), crd.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, crd.Spec.Names.ShortNames)
-	require.Equal(t, subresource, crd.Spec.Subresources)
-	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
+	require.Equal(t, storageNodeCRDName, snCRD.Name)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, snCRD.Spec.Group)
+	require.Len(t, snCRD.Spec.Versions, 1)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
+	require.True(t, snCRD.Spec.Versions[0].Served)
+	require.True(t, snCRD.Spec.Versions[0].Storage)
+	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, snCRD.Spec.Scope)
+	require.Equal(t, corev1alpha1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
+	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
+	require.Equal(t, subresource, snCRD.Spec.Subresources)
+	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
-	// If CRDs are already present, then should not fail
+	// If CRDs are already present, then should update it
+	scCRD.ResourceVersion = "1000"
+	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(scCRD)
+	snCRD.ResourceVersion = "1000"
+	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(snCRD)
+
+	// The fake client overwrites the status in Update call which real client
+	// does not. This will keep the CRD activated so validation does not get stuck.
+	go func() {
+		err := keepCRDActivated(fakeExtClient, storageClusterCRDName)
+		require.NoError(t, err)
+	}()
+	go func() {
+		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
+		require.NoError(t, err)
+	}()
+
 	err = controller.RegisterCRD()
 	require.NoError(t, err)
 
@@ -137,6 +154,18 @@ func TestRegisterCRD(t *testing.T) {
 	require.Len(t, crds.Items, 2)
 	require.Equal(t, storageClusterCRDName, crds.Items[0].Name)
 	require.Equal(t, storageNodeCRDName, crds.Items[1].Name)
+
+	scCRD, err = fakeExtClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(storageClusterCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "1000", scCRD.ResourceVersion)
+
+	snCRD, err = fakeExtClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(storageNodeCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "1000", snCRD.ResourceVersion)
 }
 
 func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
@@ -5707,4 +5736,24 @@ func stringPtr(str string) *string {
 
 func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
 	return &val
+}
+
+func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
+	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		crd, err := fakeClient.ApiextensionsV1beta1().
+			CustomResourceDefinitions().
+			Get(crdName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if len(crd.Status.Conditions) == 0 {
+			crd.Status.Conditions = []apiextensionsv1beta1.CustomResourceDefinitionCondition{{
+				Type:   apiextensionsv1beta1.Established,
+				Status: apiextensionsv1beta1.ConditionTrue,
+			}}
+			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			return true, nil
+		}
+		return false, nil
+	})
 }

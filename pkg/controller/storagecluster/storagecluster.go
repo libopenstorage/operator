@@ -287,9 +287,18 @@ func (c *Controller) RegisterCRD() error {
 	if err != nil {
 		return err
 	}
-	err = apiextensionsops.Instance().RegisterCRD(crd)
-	if err != nil && !errors.IsAlreadyExists(err) {
+	latestCRD, err := apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRD(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
+	} else {
+		crd.ResourceVersion = latestCRD.ResourceVersion
+		if _, err := apiextensionsops.Instance().UpdateCRD(crd); err != nil {
+			return err
+		}
 	}
 
 	resource := apiextensionsops.CustomResource{
@@ -306,9 +315,18 @@ func (c *Controller) RegisterCRD() error {
 	if err != nil {
 		return err
 	}
-	err = apiextensionsops.Instance().RegisterCRD(crd)
-	if err != nil && !errors.IsAlreadyExists(err) {
+	latestCRD, err = apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRD(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
+	} else {
+		crd.ResourceVersion = latestCRD.ResourceVersion
+		if _, err := apiextensionsops.Instance().UpdateCRD(crd); err != nil {
+			return err
+		}
 	}
 
 	resource = apiextensionsops.CustomResource{
