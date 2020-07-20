@@ -21,6 +21,7 @@ import (
 	kversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -2047,4 +2048,17 @@ func TestGetCRDFromFile(t *testing.T) {
 			require.Contains(t, err.Error(), test.expectedErr)
 		}
 	}
+}
+
+func TestWarningEvent(t *testing.T) {
+	recorder := record.NewFakeRecorder(10)
+	n1 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "n1",
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+	WarningEvent(recorder, n1, "test reason", "test message")
 }

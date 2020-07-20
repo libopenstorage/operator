@@ -8,18 +8,24 @@ import (
 
 	"github.com/golang/mock/gomock"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
+	k8scontroller "k8s.io/kubernetes/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -148,6 +154,7 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 }
 
 func TestReconcile(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
 	defaultQuantity, _ := resource.ParseQuantity("0")
 	testNS := "test-ns"
@@ -209,6 +216,7 @@ func TestReconcile(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
 
 	// reconcile storage node
 	podNode1 := createStoragePod(cluster, "pod-node1", testStorageNode, nil, clusterRef)
@@ -233,6 +241,34 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
+	checkStoragePod := &v1.Pod{}
+	err = controller.client.Get(context.TODO(), client.ObjectKey{
+		Name:      podNode1.Name,
+		Namespace: podNode1.Namespace,
+	}, checkStoragePod)
+	require.NoError(t, err)
+	value, present := checkStoragePod.Labels[constants.LabelKeyStoragePod]
+	require.True(t, present)
+	require.Equal(t, "true", value)
+
+	// now makes this node non-storage and ensure reconcile removes the label
+	storageNode.Status.Conditions = nil
+	err = controller.client.Update(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	checkStoragePod = &v1.Pod{}
+	err = controller.client.Get(context.TODO(), client.ObjectKey{
+		Name:      podNode1.Name,
+		Namespace: podNode1.Namespace,
+	}, checkStoragePod)
+	require.NoError(t, err)
+	_, present = checkStoragePod.Labels[constants.LabelKeyStoragePod]
+	require.False(t, present)
+
 	// reconcile storageless node
 	request = reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -253,6 +289,151 @@ func TestReconcile(t *testing.T) {
 	}
 	_, err = controller.Reconcile(request)
 	require.NoError(t, err)
+}
+
+// TestReconcileKVDB focuses on reconcilign a StorageNode which is running KVDB
+func TestReconcileKVDB(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	mockCtrl := gomock.NewController(t)
+	testNS := "test-ns"
+	clusterName := "test-cluster"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: testNS,
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Internal: true,
+			},
+		},
+	}
+
+	controllerKind := corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+	// node1 will not have any kvdb pods. So test will create
+	testKVDBNode1 := "node1"
+	kvdbNode1 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            testKVDBNode1,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+			Conditions: []corev1alpha1.NodeCondition{
+				{
+					Type:   corev1alpha1.NodeKVDBCondition,
+					Status: corev1alpha1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	k8sNode1 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testKVDBNode1,
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+
+	// node2 will have kvdb pods but node is no longer kvdb. So test will check for deleted pods
+	testKVDBNode2 := "node2"
+	kvdbNode2 := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            testKVDBNode2,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+			Storage: corev1alpha1.StorageStatus{
+				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
+				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+			Conditions: []corev1alpha1.NodeCondition{
+				{
+					Type:   corev1alpha1.NodeStateCondition,
+					Status: corev1alpha1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	k8sNode2 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testKVDBNode2,
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(kvdbNode1, kvdbNode2, k8sNode1, k8sNode2, cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	controller := Controller{
+		client:     k8sClient,
+		recorder:   recorder,
+		Driver:     driver,
+		podControl: podControl,
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      testKVDBNode1,
+			Namespace: testNS,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// check if reconcile created kvdb pods
+	podList := &v1.PodList{}
+	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": kvdbNode1.Name})
+	err = controller.client.List(context.TODO(), podList, &client.ListOptions{
+		Namespace:     kvdbNode1.Namespace,
+		LabelSelector: labels.SelectorFromSet(controller.kvdbPodLabels(cluster)),
+		FieldSelector: fieldSelector,
+	})
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 1)
+
+	// test reconcile when k8s node has been deleted
+	err = controller.client.Delete(context.TODO(), k8sNode1)
+	require.NoError(t, err)
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	podNode2 := createStoragePod(cluster, "kvdb-pod-node2", testKVDBNode2, controller.kvdbPodLabels(cluster), clusterRef)
+	k8sClient.Create(context.TODO(), podNode2)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      testKVDBNode2,
+			Namespace: testNS,
+		},
+	}
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	checkPod := &v1.Pod{}
+	err = k8sClient.Get(context.TODO(), client.ObjectKey{
+		Name:      podNode2.Name,
+		Namespace: podNode2.Namespace,
+	}, checkPod)
+	require.Error(t, err)
+	require.Empty(t, checkPod.Name)
+
 }
 
 func createStoragePod(

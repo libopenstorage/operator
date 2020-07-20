@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/constants"
-
-	k8scontroller "k8s.io/kubernetes/pkg/controller"
-
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -23,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,9 +40,8 @@ const (
 )
 
 var (
-	_              reconcile.Reconciler = &Controller{}
-	crdBaseDir                          = getCRDBasePath
-	controllerKind                      = corev1alpha1.SchemeGroupVersion.WithKind("StorageNode")
+	_          reconcile.Reconciler = &Controller{}
+	crdBaseDir                      = getCRDBasePath
 )
 
 // Controller reconciles a StorageCluster object
@@ -151,36 +148,53 @@ func (c *Controller) RegisterCRD() error {
 	return nil
 }
 
-func (c *Controller) syncStorageNode(storagenode *corev1alpha1.StorageNode) error {
-	// currently the only thing we do here is if this storagenode has drives (aks not storageless), ensure the PX pods
-	// running on this node has the storage label set
-	c.log(storagenode).Infof("Reconciling StorageNode")
-	ownerRefs := storagenode.GetOwnerReferences()
+func (c *Controller) syncStorageNode(storageNode *corev1alpha1.StorageNode) error {
+	c.log(storageNode).Infof("Reconciling StorageNode")
+	ownerRefs := storageNode.GetOwnerReferences()
 	if len(ownerRefs) == 0 {
-		c.log(storagenode).Warnf("owner reference not set for storagenode: %s", storagenode.Name)
+		c.log(storageNode).Warnf("owner reference not set")
 		return nil
 	}
 
 	owner := ownerRefs[0]
 	if owner.Kind != "StorageCluster" {
-		return fmt.Errorf("unknown owner kind: %s for storage node: %s", owner.Kind, storagenode.Name)
+		return fmt.Errorf("unknown owner kind: %s for storage node: %s", owner.Kind, storageNode.Name)
 	}
 
 	cluster := &corev1alpha1.StorageCluster{}
 	err := c.client.Get(context.TODO(), client.ObjectKey{
 		Name:      owner.Name,
-		Namespace: storagenode.Namespace,
+		Namespace: storageNode.Namespace,
 	}, cluster)
 	if err != nil {
 		return err
 	}
 
+	if err := c.syncKVDB(cluster, storageNode); err != nil {
+		return err
+	}
+
+	if err := c.syncStorage(cluster, storageNode); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Controller) syncKVDB(
+	cluster *corev1alpha1.StorageCluster,
+	storageNode *corev1alpha1.StorageNode,
+) error {
+	if cluster.Spec.Kvdb != nil && !cluster.Spec.Kvdb.Internal {
+		return nil
+	}
+
 	// ensure kvdb pods are present on nodes running kvdb
 	// list kvdb nodes on the node for this cluster
 	kvdbPodList := &v1.PodList{}
-	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": storagenode.Name})
-	err = c.client.List(context.TODO(), kvdbPodList, &client.ListOptions{
-		Namespace:     storagenode.Namespace,
+	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": storageNode.Name})
+	err := c.client.List(context.TODO(), kvdbPodList, &client.ListOptions{
+		Namespace:     storageNode.Namespace,
 		LabelSelector: labels.SelectorFromSet(c.kvdbPodLabels(cluster)),
 		FieldSelector: fieldSelector,
 	})
@@ -188,56 +202,59 @@ func (c *Controller) syncStorageNode(storagenode *corev1alpha1.StorageNode) erro
 		return err
 	}
 
-	c.log(storagenode).Infof("[debug] dumping pods on node: %s", storagenode.Name)
-	for _, p := range kvdbPodList.Items {
-		c.log(storagenode).Infof("[debug] pods on node: [%s] %s", p.Namespace, p.Name)
-	}
-
-	if isNodeRunningKVDB(storagenode) { // create kvdb pod if not present
+	if isNodeRunningKVDB(storageNode) { // create kvdb pod if not present
 		node := &v1.Node{}
 		isBeingDeleted := false
-		err = c.client.Get(context.TODO(), client.ObjectKey{Name: storagenode.Name}, node)
+		err = c.client.Get(context.TODO(), client.ObjectKey{Name: storageNode.Name}, node)
 		if err != nil {
-			c.log(storagenode).Warnf("failed to get node: %s due to: %s", storagenode.Name, err)
+			if errors.IsNotFound(err) {
+				c.log(storageNode).Debugf("Kubernetes node is no longer present")
+				isBeingDeleted = true
+			} else {
+				c.log(storageNode).Warnf("failed to get node: %s due to: %s", storageNode.Name, err)
+			}
 		} else {
 			isBeingDeleted, err = k8s.IsNodeBeingDeleted(node, c.client)
 			if err != nil {
-				c.log(storagenode).Warnf("failed to check if node: %s is being deleted due to: %v", node.Name, err)
+				c.log(storageNode).Warnf("failed to check if node: %s is being deleted due to: %v", node.Name, err)
 			}
 		}
 
 		if !isBeingDeleted && len(kvdbPodList.Items) == 0 {
-			c.log(storagenode).Infof("[debug] need to ensure kvdb pods on: %s", storagenode.Name)
-			pod, err := c.createKVDBPod(cluster, storagenode)
+			pod, err := c.createKVDBPod(cluster, storageNode)
 			if err != nil {
 				return err
 			}
 
-			c.log(storagenode).Infof("creating pod: %v", pod)
+			c.log(storageNode).Infof("creating kvdb pod: %s/%s", pod.Namespace, pod.Name)
 			err = c.client.Create(context.TODO(), pod)
 			if err != nil {
 				return err
 			}
 		}
 	} else { // delete pods if present
-		c.log(storagenode).Infof("[debug] need to ensure NO kvdb pods")
 		for _, p := range kvdbPodList.Items {
-			c.log(storagenode).Debugf("deleting kvdb pod: %s/%s", p.Namespace, p.Name)
-			err = c.podControl.DeletePod(p.Namespace, p.Name, storagenode)
+			c.log(storageNode).Debugf("deleting kvdb pod: %s/%s", p.Namespace, p.Name)
+			err = c.client.Delete(context.TODO(), &p)
 			if err != nil {
-				c.log(storagenode).Warnf("failed to delete pod: %s/%s due to: %v", p.Namespace, p.Name, err)
+				c.log(storageNode).Warnf("failed to delete pod: %s/%s due to: %v", p.Namespace, p.Name, err)
 			}
 		}
 	}
-
+	return nil
+}
+func (c *Controller) syncStorage(
+	cluster *corev1alpha1.StorageCluster,
+	storageNode *corev1alpha1.StorageNode,
+) error {
 	// sync the storage labels on pods
 	portworxPodList := &v1.PodList{}
 	pxLabels := c.Driver.GetSelectorLabels()
-	err = c.client.List(
+	err := c.client.List(
 		context.TODO(),
 		portworxPodList,
 		&client.ListOptions{
-			Namespace:     storagenode.Namespace,
+			Namespace:     storageNode.Namespace,
 			LabelSelector: labels.SelectorFromSet(pxLabels),
 		},
 	)
@@ -248,21 +265,22 @@ func (c *Controller) syncStorageNode(storagenode *corev1alpha1.StorageNode) erro
 	for _, pod := range portworxPodList.Items {
 		podCopy := pod.DeepCopy()
 		controllerRef := metav1.GetControllerOf(podCopy)
-		if controllerRef != nil && controllerRef.UID == owner.UID &&
-			len(pod.Spec.NodeName) != 0 && storagenode.Name == podCopy.Spec.NodeName {
+		if controllerRef != nil && controllerRef.UID == cluster.UID &&
+			len(pod.Spec.NodeName) != 0 && storageNode.Name == podCopy.Spec.NodeName {
 			updateNeeded := false
-			value, present := podCopy.GetLabels()[constants.StoragePodLabelKey]
-			if canNodeServeStorage(storagenode) { // node has storage
-				// ensure pod has quorum member label
-				if value != constants.TrueLabelValue {
+			value, present := podCopy.GetLabels()[constants.LabelKeyStoragePod]
+			if canNodeServeStorage(storageNode) { // node has storage
+				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
 						podCopy.Labels = make(map[string]string)
 					}
-					podCopy.Labels[constants.StoragePodLabelKey] = constants.TrueLabelValue
+					podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
 					updateNeeded = true
 				}
-			} else if present { // ensure pod does not have quorum member label
-				delete(podCopy.Labels, constants.StoragePodLabelKey)
+			} else if present {
+				c.log(storageNode).Debugf("removing storage label from pod: %s/%s",
+					podCopy.Namespace, pod.Name)
+				delete(podCopy.Labels, constants.LabelKeyStoragePod)
 				updateNeeded = true
 			}
 
@@ -302,15 +320,15 @@ func (c *Controller) createKVDBPod(
 
 func (c *Controller) kvdbPodLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
 	return map[string]string{
-		constants.LabelKeyName:       cluster.Name,
-		constants.LabelKeyDriverName: c.Driver.String(),
-		constants.KVDBPodLabelKey:    constants.TrueLabelValue,
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  c.Driver.String(),
+		constants.LabelKeyKVDBPod:     constants.LabelValueTrue,
 	}
 }
 
 func (c *Controller) log(storageNode *corev1alpha1.StorageNode) *logrus.Entry {
 	fields := logrus.Fields{
-		"node": storageNode.Name,
+		"storagenode": storageNode.Name,
 	}
 
 	return logrus.WithFields(fields)

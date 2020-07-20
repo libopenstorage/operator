@@ -80,8 +80,6 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
-	// ClusterAPIMachineAnnotation is the present on the k8s node object if it is being managed by a machine object
-
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -1184,7 +1182,7 @@ func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageC
 	if clusterLabels == nil {
 		clusterLabels = make(map[string]string)
 	}
-	clusterLabels[constants.LabelKeyName] = cluster.Name
+	clusterLabels[constants.LabelKeyClusterName] = cluster.Name
 	clusterLabels[constants.LabelKeyDriverName] = c.Driver.String()
 	return clusterLabels
 }

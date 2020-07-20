@@ -337,9 +337,6 @@ func (p *portworx) updateStorageNodeStatus(
 			}
 		}
 
-		if k != len(storageNode.Status.Conditions) {
-			logrus.Debugf("[debug] removing kvdb condition from storage node: %s", storageNode.Name)
-		}
 		storageNode.Status.Conditions = storageNode.Status.Conditions[:k]
 	}
 

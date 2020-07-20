@@ -8,20 +8,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/constants"
-
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/openstorage/pkg/dbg"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/api/bootstrap/k8s"
 	"github.com/portworx/kvdb/consul"
 	e2 "github.com/portworx/kvdb/etcd/v2"
 	e3 "github.com/portworx/kvdb/etcd/v3"
@@ -29,6 +28,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -5444,7 +5444,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	}
 
 	// Test etcd v3 without http/https
-	kvdbMem, err := kvdb.New(mem.Name, pxKvdbPrefix, nil, nil, dbg.Panicf)
+	kvdbMem, err := kvdb.New(mem.Name, pxKvdbPrefix, nil, nil, kvdb.LogFatalErrorCB)
 	require.NoError(t, err)
 	kvdbMem.Put(cluster.Name+"/foo", "bar", 0)
 	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
@@ -5617,7 +5617,7 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 		return kvdb.EtcdVersion3, nil
 	}
 	newKVDB = func(_, prefix string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
-		return kvdb.New(mem.Name, prefix, machines, opts, dbg.Panicf)
+		return kvdb.New(mem.Name, prefix, machines, opts, kvdb.LogFatalErrorCB)
 	}
 
 	condition, err := driver.DeleteStorage(cluster)
@@ -5718,6 +5718,157 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
 	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
 
+}
+
+func TestUpdateStorageNodeKVDB(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	// Create fake k8s client without any nodes to lookup
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+
+	mockCtrl := gomock.NewController(t)
+	//defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	clusterName := "px-cluster"
+	clusterNS := "kube-test"
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// TODO add k8s objects to the world here
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: clusterNS,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: clusterNS,
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Kvdb: &corev1alpha1.KvdbSpec{
+				Internal: true,
+			},
+		},
+		Status: corev1alpha1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	cmName := k8s.GetBootstrapConfigMapName(cluster.GetName())
+
+	// TEST 1: Add missing KVDB condition
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+	// Mock node enumerate response
+	expectedNodeOne := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		DataIp:            "10.0.1.1",
+		MgmtIp:            "10.0.1.2",
+		Status:            api.Status_STATUS_NONE,
+	}
+	expectedNodeTwo := &api.StorageNode{
+		Id:                "node-2",
+		SchedulerNodeName: "node-two",
+		DataIp:            "10.0.2.1",
+		MgmtIp:            "10.0.2.2",
+		Status:            api.Status_STATUS_OK,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
+	}
+
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: clusterNS,
+		},
+		Data: map[string]string{
+			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-1","Index":0,"State":2,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-2","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+		},
+	}
+
+	driver.k8sClient.Create(context.TODO(), cm)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(2)
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	// check if both storage nodes exist and have the KVDB condition
+	for _, n := range []string{"node-one", "node-two"} {
+		found := false
+		checkStorageNode := &corev1alpha1.StorageNode{}
+		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+			Name:      n,
+			Namespace: clusterNS,
+		}, checkStorageNode)
+		require.NoError(t, err)
+
+		for _, c := range checkStorageNode.Status.Conditions {
+			if c.Type == corev1alpha1.NodeKVDBCondition {
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+	}
+
+	// TEST 2: Remove KVDB condition
+	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-3","Index":0,"State":2,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-4","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
+	driver.k8sClient.Update(context.TODO(), cm)
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	// check if both storage nodes exist and DONT have the KVDB condition
+	for _, n := range []string{"node-one", "node-two"} {
+		found := false
+		checkStorageNode := &corev1alpha1.StorageNode{}
+		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+			Name:      n,
+			Namespace: clusterNS,
+		}, checkStorageNode)
+		require.NoError(t, err)
+
+		for _, c := range checkStorageNode.Status.Conditions {
+			if c.Type == corev1alpha1.NodeKVDBCondition {
+				found = true
+				break
+			}
+		}
+		require.False(t, found)
+	}
 }
 
 func fakeClientWithWiperPod(namespace string) client.Client {

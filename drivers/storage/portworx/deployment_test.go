@@ -153,6 +153,26 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	}
 	assert.Equal(t, "px-secret", regSecretEnv.Value)
 	assert.Nil(t, regConfigEnv)
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "must-exist",
+			Operator: v1.TolerationOpExists,
+			Effect:   v1.TaintEffectNoExecute,
+		},
+		{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
+		Tolerations: tolerations,
+	}
+	kvdbPodSpec, err := driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.NotNil(t, kvdbPodSpec)
 }
 
 func TestPodSpecWithTolerations(t *testing.T) {
