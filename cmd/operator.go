@@ -164,13 +164,21 @@ func run(c *cli.Context) {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
-	// init controllers
+	// init and start controllers
 	if err := storageClusterController.Init(mgr); err != nil {
 		log.Fatalf("Error initializing storage cluster controller: %v", err)
 	}
 
 	if err := storageNodeController.Init(mgr); err != nil {
 		log.Fatalf("Error initializing storage node controller: %v", err)
+	}
+
+	if err := storageClusterController.StartWatch(); err != nil {
+		log.Fatalf("Error start watch on storage cluster controller: %v", err)
+	}
+
+	if err := storageNodeController.StartWatch(); err != nil {
+		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {

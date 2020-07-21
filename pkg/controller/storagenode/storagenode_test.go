@@ -5,6 +5,12 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
+
+	"k8s.io/client-go/rest"
+
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
+	"github.com/libopenstorage/operator/pkg/mock"
 
 	"github.com/golang/mock/gomock"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
@@ -22,12 +28,49 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+func TestInit(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakeClient))
+	recorder := record.NewFakeRecorder(10)
+
+	mgr := mock.NewMockManager(mockCtrl)
+	mgr.EXPECT().GetClient().Return(k8sClient).AnyTimes()
+	mgr.EXPECT().GetScheme().Return(scheme.Scheme).AnyTimes()
+	mgr.EXPECT().GetEventRecorderFor(gomock.Any()).Return(recorder).AnyTimes()
+	mgr.EXPECT().GetConfig().Return(&rest.Config{
+		Host:    "127.0.0.1",
+		APIPath: "fake",
+	}).AnyTimes()
+	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().GetCache().Return(nil).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
+
+	controller := Controller{
+		client:   k8sClient,
+		recorder: recorder,
+	}
+	err := controller.Init(mgr)
+	require.NoError(t, err)
+
+	ctrl := mock.NewMockController(mockCtrl)
+	controller.ctrl = ctrl
+	ctrl.EXPECT().Watch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	err = controller.StartWatch()
+	require.NoError(t, err)
+}
 
 func TestRegisterCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
@@ -90,6 +133,33 @@ func TestRegisterCRD(t *testing.T) {
 	require.Equal(t, subresource, crd.Spec.Subresources)
 	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
 
+	snCRD, err := fakeExtClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(storageNodeCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, storageNodeCRDName, snCRD.Name)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, snCRD.Spec.Group)
+	require.Len(t, snCRD.Spec.Versions, 1)
+	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
+	require.True(t, snCRD.Spec.Versions[0].Served)
+	require.True(t, snCRD.Spec.Versions[0].Storage)
+	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, snCRD.Spec.Scope)
+	require.Equal(t, corev1alpha1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
+	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
+	require.Equal(t, subresource, snCRD.Spec.Subresources)
+	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
+
+	snCRD.ResourceVersion = "1000"
+	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(snCRD)
+
+	go func() {
+		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
+		require.NoError(t, err)
+	}()
+
 	// If CRDs are already present, then should not fail
 	err = controller.RegisterCRD()
 	require.NoError(t, err)
@@ -100,6 +170,12 @@ func TestRegisterCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 	require.Equal(t, storageNodeCRDName, crds.Items[0].Name)
+
+	snCRD, err = fakeExtClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Get(storageNodeCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "1000", snCRD.ResourceVersion)
 }
 
 func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
@@ -436,6 +512,69 @@ func TestReconcileKVDB(t *testing.T) {
 
 }
 
+func TestSyncStorageNodeErrors(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	mockCtrl := gomock.NewController(t)
+	testNS := "test-ns"
+	clusterName := "test-cluster"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: testNS,
+		},
+	}
+
+	testStorageNode := "node1"
+	storageNode := &corev1alpha1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testStorageNode,
+			Namespace: cluster.Namespace,
+		},
+		Status: corev1alpha1.NodeStatus{
+			Phase: string(corev1alpha1.NodeInitStatus),
+			Storage: corev1alpha1.StorageStatus{
+				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
+				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+			Conditions: []corev1alpha1.NodeCondition{
+				{
+					Type:   corev1alpha1.NodeStateCondition,
+					Status: corev1alpha1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(storageNode, cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	controller := Controller{
+		client:   k8sClient,
+		recorder: recorder,
+		Driver:   driver,
+	}
+
+	// no owner refs
+	err := controller.syncStorageNode(storageNode)
+	require.NoError(t, err)
+
+	// invalid owner kind
+	controllerKind := corev1alpha1.SchemeGroupVersion.WithKind("InvalidOwner")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+	storageNode.OwnerReferences = []metav1.OwnerReference{*clusterRef}
+	err = controller.syncStorageNode(storageNode)
+	require.Error(t, err)
+
+	// invalid owner name
+	cluster.Name = "invalid-owner-name"
+	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef = metav1.NewControllerRef(cluster, controllerKind)
+	storageNode.OwnerReferences = []metav1.OwnerReference{*clusterRef}
+	err = controller.syncStorageNode(storageNode)
+	require.Error(t, err)
+}
+
 func createStoragePod(
 	cluster *corev1alpha1.StorageCluster,
 	podName, nodeName string,
@@ -453,4 +592,24 @@ func createStoragePod(
 			NodeName: nodeName,
 		},
 	}
+}
+
+func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
+	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		crd, err := fakeClient.ApiextensionsV1beta1().
+			CustomResourceDefinitions().
+			Get(crdName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if len(crd.Status.Conditions) == 0 {
+			crd.Status.Conditions = []apiextensionsv1beta1.CustomResourceDefinitionCondition{{
+				Type:   apiextensionsv1beta1.Established,
+				Status: apiextensionsv1beta1.ConditionTrue,
+			}}
+			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			return true, nil
+		}
+		return false, nil
+	})
 }

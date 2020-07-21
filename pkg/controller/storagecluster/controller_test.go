@@ -9,11 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/mock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -39,6 +42,7 @@ import (
 	kversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
@@ -46,6 +50,44 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+func TestInit(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakeClient))
+	recorder := record.NewFakeRecorder(10)
+
+	mgr := mock.NewMockManager(mockCtrl)
+	mockCache := mock.NewMockCache(mockCtrl)
+	mockCache.EXPECT().IndexField(gomock.Any(), nodeNameIndex, gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().GetClient().Return(k8sClient).AnyTimes()
+	mgr.EXPECT().GetScheme().Return(scheme.Scheme).AnyTimes()
+	mgr.EXPECT().GetEventRecorderFor(gomock.Any()).Return(recorder).AnyTimes()
+	mgr.EXPECT().GetConfig().Return(&rest.Config{
+		Host:    "127.0.0.1",
+		APIPath: "fake",
+	}).AnyTimes()
+	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().GetCache().Return(mockCache).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
+
+	controller := Controller{
+		client:   k8sClient,
+		recorder: recorder,
+	}
+	err := controller.Init(mgr)
+	require.NoError(t, err)
+
+	ctrl := mock.NewMockController(mockCtrl)
+	controller.ctrl = ctrl
+	ctrl.EXPECT().Watch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	err = controller.StartWatch()
+	require.NoError(t, err)
+}
 
 func TestRegisterCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
@@ -106,39 +148,14 @@ func TestRegisterCRD(t *testing.T) {
 	require.Equal(t, subresource, scCRD.Spec.Subresources)
 	require.NotEmpty(t, scCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
-	snCRD, err := fakeExtClient.ApiextensionsV1beta1().
-		CustomResourceDefinitions().
-		Get(storageNodeCRDName, metav1.GetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, storageNodeCRDName, snCRD.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, snCRD.Spec.Group)
-	require.Len(t, snCRD.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
-	require.True(t, snCRD.Spec.Versions[0].Served)
-	require.True(t, snCRD.Spec.Versions[0].Storage)
-	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, snCRD.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
-	require.Equal(t, subresource, snCRD.Spec.Subresources)
-	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
-
 	// If CRDs are already present, then should update it
 	scCRD.ResourceVersion = "1000"
 	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(scCRD)
-	snCRD.ResourceVersion = "1000"
-	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(snCRD)
 
 	// The fake client overwrites the status in Update call which real client
 	// does not. This will keep the CRD activated so validation does not get stuck.
 	go func() {
 		err := keepCRDActivated(fakeExtClient, storageClusterCRDName)
-		require.NoError(t, err)
-	}()
-	go func() {
-		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
 		require.NoError(t, err)
 	}()
 
@@ -152,70 +169,12 @@ func TestRegisterCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 	require.Equal(t, storageClusterCRDName, crds.Items[0].Name)
-	require.Equal(t, storageNodeCRDName, crds.Items[1].Name)
 
 	scCRD, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
 		Get(storageClusterCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "1000", scCRD.ResourceVersion)
-
-	snCRD, err = fakeExtClient.ApiextensionsV1beta1().
-		CustomResourceDefinitions().
-		Get(storageNodeCRDName, metav1.GetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, "1000", snCRD.ResourceVersion)
-}
-
-func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
-	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		storageNodeStatusPlural,
-		corev1alpha1.SchemeGroupVersion.Group,
-	)
-	nodeStatusCRD := &apiextensionsv1beta1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nodeStatusCRDName,
-		},
-	}
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	fakeExtClient := fakeextclient.NewSimpleClientset(nodeStatusCRD)
-	coreops.SetInstance(coreops.New(fakeClient))
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	crdBaseDir = func() string {
-		return "../../../deploy/crds"
-	}
-	defer func() {
-		crdBaseDir = getCRDBasePath
-	}()
-
-	group := corev1alpha1.SchemeGroupVersion.Group
-	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
-	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
-
-	// When the CRDs are created, just updated their status so the validation
-	// does not get stuck until timeout.
-	go func() {
-		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
-		require.NoError(t, err)
-	}()
-	go func() {
-		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
-		require.NoError(t, err)
-	}()
-
-	controller := Controller{}
-
-	err := controller.RegisterCRD()
-	require.NoError(t, err)
-
-	crds, err := fakeExtClient.ApiextensionsV1beta1().
-		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
-	require.NoError(t, err)
-	require.Len(t, crds.Items, 2)
-	for _, crd := range crds.Items {
-		require.NotEqual(t, nodeStatusCRDName, crd.Name)
-	}
 }
 
 func TestKubernetesVersionValidation(t *testing.T) {
@@ -5814,4 +5773,25 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 		}
 		return false, nil
 	})
+}
+
+func TestIndexByPodNodeName(t *testing.T) {
+	p := &v1.Pod{
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: v1.PodSpec{
+			NodeName: "n1",
+		},
+		Status: v1.PodStatus{},
+	}
+
+	retVal := indexByPodNodeName(p)
+	require.Equal(t, retVal, []string{"n1"})
+
+	p.Spec.NodeName = ""
+	retVal = indexByPodNodeName(p)
+	require.Empty(t, retVal)
+
+	retVal = indexByPodNodeName(&v1.Node{})
+	require.Empty(t, retVal)
 }

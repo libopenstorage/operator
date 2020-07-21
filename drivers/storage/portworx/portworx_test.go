@@ -5815,7 +5815,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-1","Index":0,"State":2,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-2","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-1","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-2","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
@@ -5823,7 +5823,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
-		Times(2)
+		Times(3)
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
@@ -5847,7 +5847,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	}
 
 	// TEST 2: Remove KVDB condition
-	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-3","Index":0,"State":2,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-4","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
+	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-3","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-4","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
 	driver.k8sClient.Update(context.TODO(), cm)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -5869,6 +5869,11 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		}
 		require.False(t, found)
 	}
+
+	// TEST 3: config map not found
+	driver.k8sClient.Delete(context.TODO(), cm)
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
 }
 
 func fakeClientWithWiperPod(namespace string) client.Client {

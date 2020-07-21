@@ -102,49 +102,18 @@ type Controller struct {
 	kubernetesVersion             *version.Version
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
+	ctrl                          controller.Controller
 }
 
 // Init initialize the storage cluster controller
 func (c *Controller) Init(mgr manager.Manager) error {
+	var err error
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 
 	// Create a new controller
-	ctrl, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource StorageCluster
-	err = ctrl.Watch(
-		&source.Kind{Type: &corev1alpha1.StorageCluster{}},
-		&handler.EnqueueRequestForObject{},
-	)
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to Pods that belong to StorageCluster object
-	err = ctrl.Watch(
-		&source.Kind{Type: &v1.Pod{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to ControllerRevisions that belong to StorageCluster object
-	err = ctrl.Watch(
-		&source.Kind{Type: &apps.ControllerRevision{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
-		},
-	)
+	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
 	if err != nil {
 		return err
 	}
@@ -168,6 +137,43 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	err = mgr.GetCache().IndexField(&v1.Pod{}, nodeNameIndex, indexByPodNodeName)
 	if err != nil {
 		return fmt.Errorf("error setting node name index on pod cache: %v", err)
+	}
+
+	return nil
+}
+
+// StartWatch starts the watch on the StorageCluster
+func (c *Controller) StartWatch() error {
+	err := c.ctrl.Watch(
+		&source.Kind{Type: &corev1alpha1.StorageCluster{}},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to Pods that belong to StorageCluster object
+	err = c.ctrl.Watch(
+		&source.Kind{Type: &v1.Pod{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &corev1alpha1.StorageCluster{},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ControllerRevisions that belong to StorageCluster object
+	err = c.ctrl.Watch(
+		&source.Kind{Type: &apps.ControllerRevision{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &corev1alpha1.StorageCluster{},
+		},
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil

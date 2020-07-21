@@ -53,6 +53,7 @@ type Controller struct {
 	scheme     *runtime.Scheme
 	recorder   record.EventRecorder
 	podControl k8scontroller.PodControlInterface
+	ctrl       controller.Controller
 }
 
 // Init initialize the storage storagenode controller
@@ -72,13 +73,17 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	}
 
 	// Create a new controller
-	ctrl, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
+	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to StorageNode
-	err = ctrl.Watch(
+	return nil
+}
+
+// StartWatch starts the watch on the StorageNode
+func (c *Controller) StartWatch() error {
+	err := c.ctrl.Watch(
 		&source.Kind{Type: &corev1alpha1.StorageNode{}},
 		&handler.EnqueueRequestForObject{},
 	)
@@ -122,9 +127,19 @@ func (c *Controller) RegisterCRD() error {
 	if err != nil {
 		return err
 	}
-	err = apiextensionsops.Instance().RegisterCRD(crd)
-	if err != nil && !errors.IsAlreadyExists(err) {
+
+	latestCRD, err := apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRD(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
+	} else {
+		crd.ResourceVersion = latestCRD.ResourceVersion
+		if _, err := apiextensionsops.Instance().UpdateCRD(crd); err != nil {
+			return err
+		}
 	}
 
 	resource := apiextensionsops.CustomResource{
