@@ -307,11 +307,22 @@ func (c *Controller) createKVDBPod(
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
 	podSpec.NodeName = storageNode.Name
 
+	trueVar := true
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%s-kvdb-", c.Driver.String()),
 			Namespace:    storageNode.Namespace,
 			Labels:       c.kvdbPodLabels(cluster),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         corev1alpha1.SchemeGroupVersion.String(),
+					Kind:               "StorageNode",
+					Name:               storageNode.Namespace,
+					UID:                storageNode.UID,
+					Controller:         &trueVar,
+					BlockOwnerDeletion: &trueVar,
+				},
+			},
 		},
 		Spec: podSpec,
 	}

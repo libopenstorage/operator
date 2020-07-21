@@ -9,20 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/constants"
-
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -43,6 +42,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -330,6 +330,8 @@ func TestStorageClusterDefaults(t *testing.T) {
 		client: k8sClient,
 		Driver: driver,
 	}
+
+	controller.log(cluster).Debugf("testing default cluster")
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 
@@ -5584,6 +5586,58 @@ func TestHistoryCleanup(t *testing.T) {
 	require.Len(t, revisions.Items, 2)
 	require.Equal(t, int64(3), revisions.Items[0].Revision)
 	require.Equal(t, int64(5), revisions.Items[1].Revision)
+}
+
+func TestNodeShouldRunStoragePod(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	cluster := createStorageCluster()
+
+	now := metav1.Now()
+	m2 := &cluster_v1alpha1.Machine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "m2",
+			Namespace:         "default",
+			DeletionTimestamp: &now,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster, m2)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-storage").AnyTimes()
+
+	controller := Controller{
+		Driver:     driver,
+		client:     k8sClient,
+		podControl: podControl,
+		recorder:   recorder,
+	}
+
+	// TEST 1: machine for node is being deleted
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode1.Annotations = map[string]string{
+		constants.AnnotationClusterAPIMachine: "m2",
+	}
+
+	wantToRun, shouldSchedule, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode1, cluster)
+	require.NoError(t, err)
+	require.False(t, wantToRun)
+	require.False(t, shouldSchedule)
+	require.True(t, shouldContinueRunning)
+
+	// TEST 2: machine for node is not found
+	k8sNode1.Annotations = map[string]string{
+		constants.AnnotationClusterAPIMachine: "m3",
+	}
+	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode1, cluster)
+	require.NoError(t, err)
+	require.True(t, wantToRun)
+	require.True(t, shouldSchedule)
+	require.True(t, shouldContinueRunning)
 }
 
 func replaceOldPod(
