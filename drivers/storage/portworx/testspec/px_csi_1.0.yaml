@@ -35,7 +35,7 @@ spec:
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
             - name: CSI_ENDPOINT
-              value: unix:///var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock
+              value: unix:///var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
@@ -84,7 +84,7 @@ spec:
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
-            - "--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock"
+            - "--kubelet-registration-path=/var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock"
           imagePullPolicy: Always
           env:
             - name: ADDRESS
@@ -125,7 +125,7 @@ spec:
             type: DirectoryOrCreate
         - name: csi-driver-path
           hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
             type: DirectoryOrCreate
         - name: etcpwx
           hostPath:

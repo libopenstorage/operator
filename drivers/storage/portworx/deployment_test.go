@@ -1874,14 +1874,13 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[3],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
 	)
 }
 
 func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
-	// Should use 0.3 csi version for k8s version less than 1.13
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.2",
 	}
@@ -1920,7 +1919,7 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
 	)
 }
 
@@ -1966,7 +1965,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock",
 	)
 
 	// If version cannot be found from the Portworx image tag, then check the annotation
@@ -1981,7 +1980,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock",
 	)
 
 	// If valid version is not found from the image or the annotation, then assume latest
@@ -1994,7 +1993,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
 	)
 }
 
@@ -2039,7 +2038,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock",
 	)
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME has true value, use old CSI driver name.
@@ -2050,7 +2049,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock",
 	)
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is false, use new CSI driver name.
@@ -2061,7 +2060,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
 	)
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is invalid, use new CSI driver name.
@@ -2072,7 +2071,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	assert.Equal(t,
 		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
 	)
 }
 

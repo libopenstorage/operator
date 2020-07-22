@@ -76,5 +76,5 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/pxd.portworx.com
+            path: /var/lib/kubelet/csi-plugins/pxd.portworx.com
             type: DirectoryOrCreate
