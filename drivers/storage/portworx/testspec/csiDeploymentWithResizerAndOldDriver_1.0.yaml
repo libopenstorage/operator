@@ -65,5 +65,5 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
             type: DirectoryOrCreate

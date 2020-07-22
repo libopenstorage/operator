@@ -3683,7 +3683,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1.0.yaml")
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeploymentWithResizer_1_17.yaml")
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -3694,6 +3694,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// Case: Should deploy all sidecars even in k8s 1.14, as alpha features are not disabled
+	k8sClient.Delete(context.TODO(), deployment)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
