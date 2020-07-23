@@ -317,6 +317,7 @@ func TestReconcile(t *testing.T) {
 
 	checkStoragePod := &v1.Pod{}
 	err = testutil.Get(controller.client, checkStoragePod, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
 	value, present := checkStoragePod.Labels[constants.LabelKeyStoragePod]
 	require.Truef(t, present, "pod: %s/%s should have had the %s label",
 		podNode1.Namespace, podNode1.Name, constants.LabelKeyStoragePod)
