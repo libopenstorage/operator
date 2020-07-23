@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -68,7 +68,7 @@ func GetImageURN(registryAndRepo, image string) string {
 // HasPullSecretChanged checks if the imagePullSecret in the cluster is the only one
 // in the given list of pull secrets
 func HasPullSecretChanged(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	existingPullSecrets []v1.LocalObjectReference,
 ) bool {
 	return len(existingPullSecrets) > 1 ||
@@ -81,7 +81,7 @@ func HasPullSecretChanged(
 // HaveTolerationsChanged checks if the tolerations in the cluster are same as the
 // given list of tolerations
 func HaveTolerationsChanged(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	existingTolerations []v1.Toleration,
 ) bool {
 	if cluster.Spec.Placement == nil {
@@ -93,7 +93,7 @@ func HaveTolerationsChanged(
 // HasNodeAffinityChanged checks if the nodeAffinity in the cluster is same as the
 // node affinity in the given affinity
 func HasNodeAffinityChanged(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	existingAffinity *v1.Affinity,
 ) bool {
 	if cluster.Spec.Placement == nil {

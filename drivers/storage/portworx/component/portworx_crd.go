@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	"github.com/sirupsen/logrus"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -35,11 +35,11 @@ func (c *portworxCRD) Initialize(
 	// k8sClient is not needed as we use k8s.Instance for CRDs
 }
 
-func (c *portworxCRD) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *portworxCRD) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster)
 }
 
-func (c *portworxCRD) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxCRD) Reconcile(cluster *corev1.StorageCluster) error {
 	if !c.isVolumePlacementStrategyCRDCreated {
 		if err := createVolumePlacementStrategyCRD(); err != nil {
 			return NewError(ErrCritical, err)
@@ -49,7 +49,7 @@ func (c *portworxCRD) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *portworxCRD) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxCRD) Delete(cluster *corev1.StorageCluster) error {
 	c.MarkDeleted()
 	return nil
 }

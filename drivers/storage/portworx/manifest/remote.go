@@ -7,7 +7,7 @@ import (
 
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 )
@@ -17,12 +17,12 @@ const (
 )
 
 type remote struct {
-	cluster    *corev1alpha1.StorageCluster
+	cluster    *corev1.StorageCluster
 	k8sVersion *version.Version
 }
 
 func newRemoteManifest(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	k8sVersion *version.Version,
 ) versionProvider {
 	return &remote{

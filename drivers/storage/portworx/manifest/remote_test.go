@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	version "github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
 )
@@ -29,8 +29,8 @@ components:
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + pxVersion,
 		},
 	}
@@ -57,8 +57,8 @@ components:
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + pxVersion,
 		},
 	}
@@ -87,8 +87,8 @@ components:
 	}
 
 	// TestCase: Cluster with no Portworx image tag
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image",
 		},
 	}
@@ -108,8 +108,8 @@ components:
 }
 
 func TestRemoteManifestWithInvalidVersion(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:invalid_version",
 		},
 	}
@@ -135,10 +135,10 @@ components:
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:custom_version",
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  envKeyReleaseManifestURL,
@@ -165,8 +165,8 @@ func TestRemoteManifestWithInvalidResponse(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:3.2.1",
 		},
 	}
@@ -185,8 +185,8 @@ func TestRemoteManifestWithEmptyResponse(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:3.2.1",
 		},
 	}
@@ -202,8 +202,8 @@ func TestRemoteManifestWithFailedRequest(t *testing.T) {
 		return nil, fmt.Errorf("http error")
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:3.2.1",
 		},
 	}

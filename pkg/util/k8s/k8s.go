@@ -10,7 +10,7 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -983,9 +983,9 @@ func DeleteDaemonSet(
 // on the latest copy
 func UpdateStorageClusterStatus(
 	k8sClient client.Client,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
-	existingCluster := &corev1alpha1.StorageCluster{}
+	existingCluster := &corev1.StorageCluster{}
 	if err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
@@ -1004,10 +1004,10 @@ func UpdateStorageClusterStatus(
 // CreateOrUpdateStorageNode creates a StorageNode if not present, else updates it
 func CreateOrUpdateStorageNode(
 	k8sClient client.Client,
-	node *corev1alpha1.StorageNode,
+	node *corev1.StorageNode,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	existingNode := &corev1alpha1.StorageNode{}
+	existingNode := &corev1.StorageNode{}
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{

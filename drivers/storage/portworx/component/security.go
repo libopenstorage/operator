@@ -11,7 +11,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -88,12 +88,12 @@ func (c *security) Initialize(
 }
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
-func (c *security) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *security) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.SecurityEnabled(cluster)
 }
 
 // Reconcile reconciles the component to match the current state of the StorageCluster
-func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *security) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	err := c.createPrivateKeysSecret(cluster, ownerRef)
@@ -120,7 +120,7 @@ func (c *security) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 }
 
 // Delete deletes the component if present
-func (c *security) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *security) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	// delete token secrets - these are ephemeral and can be recreated easily
@@ -160,7 +160,7 @@ func (c *security) MarkDeleted() {
 
 }
 
-func (c *security) getPrivateKeyOrGenerate(cluster *corev1alpha1.StorageCluster, envVarKey, secretName, secretKey string) (string, error) {
+func (c *security) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVarKey, secretName, secretKey string) (string, error) {
 	var privateKey string
 	var err error
 
@@ -197,7 +197,7 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1alpha1.StorageCluster,
 }
 
 func (c *security) createPrivateKeysSecret(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	var sharedSecretKey, internalSystemSecretKey string
@@ -279,7 +279,7 @@ func getTokenClaims(token string) (*jwt.StandardClaims, error) {
 }
 
 func (c *security) createToken(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	authTokenSecretName string,
 	role string,
 	authSecret string,
@@ -309,7 +309,7 @@ func (c *security) createToken(
 // maintainAuthTokenSecret maintains a PX auth token inside of a given k8s secret.
 // Before token expiration, the token is refreshed for the user.
 func (c *security) maintainAuthTokenSecret(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	authTokenSecretName string,
 	role string,
@@ -371,7 +371,7 @@ func (c *security) maintainAuthTokenSecret(
 }
 
 func (c *security) isTokenSecretRefreshRequired(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	authTokenSecretName string,
 ) (bool, error) {
 
@@ -453,7 +453,7 @@ func generateAuthSecret() (string, error) {
 }
 
 func (c *security) deleteSecret(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	name string,
 ) error {
@@ -475,10 +475,10 @@ func (c *security) closeSdkConn() {
 	c.sdkConn = nil
 }
 
-func (c *security) updateSystemGuestRole(cluster *corev1alpha1.StorageCluster) error {
-	if *cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleEnabled &&
-		*cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleDisabled &&
-		*cluster.Spec.Security.Auth.GuestAccess != corev1alpha1.GuestRoleManaged {
+func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
+	if *cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleEnabled &&
+		*cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleDisabled &&
+		*cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleManaged {
 		return fmt.Errorf("invalid guest access type: %s", *cluster.Spec.Security.Auth.GuestAccess)
 	}
 
@@ -492,7 +492,7 @@ func (c *security) updateSystemGuestRole(cluster *corev1alpha1.StorageCluster) e
 	}
 
 	// managed, do not interfere with system.guest role
-	if *cluster.Spec.Security.Auth.GuestAccess == corev1alpha1.GuestRoleManaged {
+	if *cluster.Spec.Security.Auth.GuestAccess == corev1.GuestRoleManaged {
 		return nil
 	}
 
@@ -510,7 +510,7 @@ func (c *security) updateSystemGuestRole(cluster *corev1alpha1.StorageCluster) e
 
 	// Only updated when required
 	var desiredRole api.SdkRole
-	if *cluster.Spec.Security.Auth.GuestAccess == corev1alpha1.GuestRoleEnabled {
+	if *cluster.Spec.Security.Auth.GuestAccess == corev1.GuestRoleEnabled {
 		desiredRole = GuestRoleEnabled
 	} else {
 		desiredRole = GuestRoleDisabled

@@ -14,7 +14,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -94,8 +94,8 @@ func TestRegisterCRD(t *testing.T) {
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	group := corev1alpha1.SchemeGroupVersion.Group
-	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
+	group := corev1.SchemeGroupVersion.Group
+	storageClusterCRDName := corev1.StorageClusterResourcePlural + "." + group
 
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
@@ -131,17 +131,17 @@ func TestRegisterCRD(t *testing.T) {
 		Get(storageClusterCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, storageClusterCRDName, scCRD.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, scCRD.Spec.Group)
+	require.Equal(t, corev1.SchemeGroupVersion.Group, scCRD.Spec.Group)
 	require.Len(t, scCRD.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, scCRD.Spec.Versions[0].Name)
+	require.Equal(t, corev1.SchemeGroupVersion.Version, scCRD.Spec.Versions[0].Name)
 	require.True(t, scCRD.Spec.Versions[0].Served)
 	require.True(t, scCRD.Spec.Versions[0].Storage)
 	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, scCRD.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageClusterResourceName, scCRD.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageClusterResourcePlural, scCRD.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageCluster{}).Name(), scCRD.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageClusterList{}).Name(), scCRD.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageClusterShortName}, scCRD.Spec.Names.ShortNames)
+	require.Equal(t, corev1.StorageClusterResourceName, scCRD.Spec.Names.Singular)
+	require.Equal(t, corev1.StorageClusterResourcePlural, scCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1.StorageCluster{}).Name(), scCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1.StorageClusterList{}).Name(), scCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1.StorageClusterShortName}, scCRD.Spec.Names.ShortNames)
 	subresource := &apiextensionsv1beta1.CustomResourceSubresources{
 		Status: &apiextensionsv1beta1.CustomResourceSubresourceStatus{},
 	}
@@ -184,7 +184,7 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	}
 	coreops.SetInstance(coreops.New(fakeClient))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-ns",
@@ -230,14 +230,14 @@ func TestKubernetesVersionValidation(t *testing.T) {
 }
 
 func TestSingleClusterValidation(t *testing.T) {
-	existingCluster := &corev1alpha1.StorageCluster{
+	existingCluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "main-cluster",
 			Namespace:  "main-ns",
 			Finalizers: []string{deleteFinalizerName},
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "extra-cluster",
 			Namespace: "extra-ns",
@@ -275,7 +275,7 @@ func TestStorageClusterDefaults(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "kube-test",
@@ -323,7 +323,7 @@ func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "kube-test",
@@ -343,48 +343,48 @@ func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
 	// Use rolling update as default update strategy if nothing specified
 	err := controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Equal(t, 1, cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntValue())
 
 	// Use default max unavailable if rolling update is set but empty
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
 	}
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Equal(t, 1, cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntValue())
 
 	// Use default max unavailable if rolling update is set but max unavailable not set
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type:          corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{},
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type:          corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{},
 	}
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Equal(t, 1, cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntValue())
 
 	// Don't use default max unavailable if rolling update and max unavailable is set
 	maxUnavailable := intstr.FromString("20%")
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
 			MaxUnavailable: &maxUnavailable,
 		},
 	}
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Equal(t, "20%", cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.String())
 
 	// Don't overwrite update strategy is specified
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.OnDeleteStorageClusterStrategyType,
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.OnDeleteStorageClusterStrategyType,
 	}
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1alpha1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Nil(t, cluster.Spec.UpdateStrategy.RollingUpdate)
 }
 
@@ -392,7 +392,7 @@ func TestStorageClusterDefaultsForFinalizer(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "kube-test",
@@ -434,7 +434,7 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "kube-test",
@@ -451,11 +451,11 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 
 	driver.EXPECT().
 		SetDefaultsOnStorageCluster(gomock.Any()).
-		Do(func(cluster *corev1alpha1.StorageCluster) {
-			cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-				Type: corev1alpha1.OnDeleteStorageClusterStrategyType,
+		Do(func(cluster *corev1.StorageCluster) {
+			cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+				Type: corev1.OnDeleteStorageClusterStrategyType,
 			}
-			cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+			cluster.Spec.Stork = &corev1.StorkSpec{
 				Enabled: false,
 			}
 			revisionHistoryLimit := int32(5)
@@ -473,13 +473,13 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	require.Equal(t, v1.PullIfNotPresent, cluster.Spec.ImagePullPolicy)
 	require.False(t, cluster.Spec.Stork.Enabled)
 	require.Empty(t, cluster.Spec.Stork.Image)
-	require.Equal(t, corev1alpha1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
 	require.Empty(t, cluster.Spec.UpdateStrategy.RollingUpdate)
 
 	// Should update cluster even if status is modified
 	driver.EXPECT().
 		SetDefaultsOnStorageCluster(gomock.Any()).
-		Do(func(cluster *corev1alpha1.StorageCluster) {
+		Do(func(cluster *corev1.StorageCluster) {
 			cluster.Status.Version = "1.2.3"
 		})
 
@@ -704,7 +704,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
-		Do(func(c *corev1alpha1.StorageCluster) {
+		Do(func(c *corev1.StorageCluster) {
 			hash := computeHash(&c.Spec, nil)
 			expectedPodTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
 		})
@@ -789,16 +789,16 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, recorder.Events)
 
 	defaultQuantity, _ := resource.ParseQuantity("0")
-	expectedStorageNode1 := &corev1alpha1.StorageNode{
+	expectedStorageNode1 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            k8sNode1.Name,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 			Labels:          storageLabels,
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Storage: corev1alpha1.StorageStatus{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Storage: corev1.StorageStatus{
 				TotalSize: defaultQuantity,
 				UsedSize:  defaultQuantity,
 			},
@@ -806,9 +806,9 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	}
 	expectedStorageNode2 := expectedStorageNode1.DeepCopy()
 	expectedStorageNode2.Name = k8sNode2.Name
-	expectedStorageNodes := []corev1alpha1.StorageNode{*expectedStorageNode1, *expectedStorageNode2}
+	expectedStorageNodes := []corev1.StorageNode{*expectedStorageNode1, *expectedStorageNode2}
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.ElementsMatch(t,
@@ -821,7 +821,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	testutil.List(k8sClient, pods)
 	require.Empty(t, pods.Items)
 
-	storageNodes.Items[0].Status.Phase = string(corev1alpha1.NodeOnlineStatus)
+	storageNodes.Items[0].Status.Phase = string(corev1.NodeOnlineStatus)
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 
 	result, err = controller.Reconcile(request)
@@ -829,12 +829,12 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodes.Items[0].Status.Phase)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[1].Status.Phase)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[1].Status.Phase)
 
 	// TestCase: Should recreate the storage nodes when re-creating pods
 	pods = &v1.PodList{}
@@ -849,7 +849,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 2)
@@ -862,10 +862,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	useAllDevices := true
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: &useAllDevices,
 	}
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1.NetworkSpec{
 		DataInterface: stringPtr("cluster_data_intf"),
 		MgmtInterface: stringPtr("cluster_mgmt_intf"),
 	}
@@ -882,17 +882,17 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	cluster.Spec.RuntimeOpts = map[string]string{
 		"cluster_rt_one": "rt_val_1",
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
 			// Match using node name
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "k8s-node-1",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"dev1"}),
 				},
-				Network: &corev1alpha1.NetworkSpec{
+				Network: &corev1.NetworkSpec{
 					DataInterface: stringPtr("dface"),
 					MgmtInterface: stringPtr("mface"),
 				},
@@ -914,7 +914,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		},
 		{
 			// Match using a label selector
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test": "node2",
@@ -925,11 +925,11 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Duplicate selector with same node name. If the node has already
 			// matched a previous spec, then this spec will not be used by that node.
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "k8s-node-1",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -937,15 +937,15 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Even though the labels match a valid node, if the node has already
 			// matched a previous spec, then this spec will not be used by that node.
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test2": "node2",
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -953,11 +953,11 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Even though the node name matches a valid node, if the node has already
 			// matched a previous spec, then this spec will not be used by that node.
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "k8s-node-2",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -965,15 +965,15 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Even though the labels match a valid node, if the node has already
 			// matched a previous spec, then this spec will not be used by that node.
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test": "node1",
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -981,11 +981,11 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Selector with node name that does not exist. No pod should
 			// be deployed with this configuration
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "non-existent-node",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -993,15 +993,15 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Selector with requirements that do not match any node. No pod
 			// should be deployed with this configuration
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test": "not-matching-label",
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -1009,7 +1009,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Selector with invalid requirements. No pod should be
 			// deployed with this configuration
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
 						{
@@ -1019,8 +1019,8 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: stringSlicePtr([]string{"unused"}),
 				},
 			},
@@ -1080,7 +1080,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
-		Do(func(c *corev1alpha1.StorageCluster) {
+		Do(func(c *corev1.StorageCluster) {
 			hash := computeHash(&c.Spec, nil)
 			expectedPodTemplates[0].Labels[defaultStorageClusterUniqueLabelKey] = hash
 			expectedPodTemplates[1].Labels[defaultStorageClusterUniqueLabelKey] = hash
@@ -1088,7 +1088,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		})
 	gomock.InOrder(
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
-			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
 				require.Equal(t, cluster.Spec.Nodes[0].Network, c.Spec.Network)
 				require.Equal(t, cluster.Spec.Nodes[0].RuntimeOpts, c.Spec.RuntimeOpts)
@@ -1113,7 +1113,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			}).
 			Times(1),
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-2").
-			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Empty(t, cluster.Spec.Nodes[1].CommonConfig, c.Spec.CommonConfig)
 				nodeLabels, _ := json.Marshal(k8sNode2.Labels)
 				expectedPodTemplates[1].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
@@ -1121,7 +1121,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			}).
 			Times(1),
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-3").
-			DoAndReturn(func(c *corev1alpha1.StorageCluster, _ string) (v1.PodSpec, error) {
+			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.CommonConfig, c.Spec.CommonConfig)
 				return expectedPodSpec, nil
 			}).
@@ -1503,7 +1503,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
+	cluster.Spec.Placement = &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -1595,7 +1595,7 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
+	cluster.Spec.Placement = &corev1.PlacementSpec{
 		Tolerations: []v1.Toleration{
 			{
 				Key:      "must-exist",
@@ -1727,12 +1727,12 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	useAllDevices := true
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: &useAllDevices,
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "k8s-node-1",
 			},
 		},
@@ -1957,7 +1957,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
-		Do(func(c *corev1alpha1.StorageCluster) {
+		Do(func(c *corev1.StorageCluster) {
 			c.Status.Phase = "Online"
 		}).
 		Return(nil)
@@ -1974,7 +1974,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 
 	require.Len(t, recorder.Events, 0)
 
-	newCluster := &corev1alpha1.StorageCluster{}
+	newCluster := &corev1.StorageCluster{}
 	testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.Equal(t, "Online", newCluster.Status.Phase)
 }
@@ -2007,7 +2007,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
-		Do(func(c *corev1alpha1.StorageCluster) {
+		Do(func(c *corev1.StorageCluster) {
 			c.Status.Phase = "Offline"
 		}).
 		Return(fmt.Errorf("update status error"))
@@ -2026,7 +2026,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	require.Equal(t, <-recorder.Events,
 		fmt.Sprintf("%v %v update status error", v1.EventTypeWarning, util.FailedSyncReason))
 
-	newCluster := &corev1alpha1.StorageCluster{}
+	newCluster := &corev1.StorageCluster{}
 	testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.Equal(t, "Offline", newCluster.Status.Phase)
 }
@@ -2276,11 +2276,11 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 	require.ElementsMatch(t, []string{storagePod.Name}, podControl.DeletePodName)
 
-	updatedCluster := &corev1alpha1.StorageCluster{}
+	updatedCluster := &corev1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
 	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
@@ -2297,24 +2297,24 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 	require.Contains(t, raisedEvent, "delete error")
 
-	updatedCluster = &corev1alpha1.StorageCluster{}
+	updatedCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
 	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is not present already, then add to the cluster
-	updatedCluster.Status.Conditions = []corev1alpha1.ClusterCondition{
+	updatedCluster.Status.Conditions = []corev1.ClusterCondition{
 		{
-			Type: corev1alpha1.ClusterConditionTypeInstall,
+			Type: corev1.ClusterConditionTypeInstall,
 		},
 	}
 	k8sClient.Update(context.TODO(), updatedCluster)
-	condition := &corev1alpha1.ClusterCondition{
-		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationFailed,
+	condition := &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationFailed,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -2323,7 +2323,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	updatedCluster = &corev1alpha1.StorageCluster{}
+	updatedCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
@@ -2331,9 +2331,9 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is present, then update it
-	condition = &corev1alpha1.ClusterCondition{
-		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationTimeout,
+	condition = &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationTimeout,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -2342,7 +2342,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	updatedCluster = &corev1alpha1.StorageCluster{}
+	updatedCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
@@ -2350,9 +2350,9 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition status is completed, then remove delete finalizer
-	condition = &corev1alpha1.ClusterCondition{
-		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationCompleted,
+	condition = &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -2361,7 +2361,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	updatedCluster = &corev1alpha1.StorageCluster{}
+	updatedCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
 	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
@@ -2372,13 +2372,13 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
 				Enabled: true,
 				Image:   "osd/stork:test",
 			},
@@ -2688,9 +2688,9 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 
 	// Should delete pods only up to maxUnavailable value. In this case - 2 pods
 	maxUnavailable := intstr.FromInt(2)
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
 			MaxUnavailable: &maxUnavailable,
 		},
 	}
@@ -2875,9 +2875,9 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 
 	// Should delete pods only up to maxUnavailable value. In this case - 75%
 	maxUnavailable := intstr.FromString("75%")
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
 			MaxUnavailable: &maxUnavailable,
 		},
 	}
@@ -2978,9 +2978,9 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 
 	// Reconcile should fail due to invalid maxUnavailable value in RollingUpdate strategy
 	maxUnavailable := intstr.FromString("invalid-value")
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
 			MaxUnavailable: &maxUnavailable,
 		},
 	}
@@ -3364,7 +3364,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	k8sClient.Create(context.TODO(), oldPod)
 
 	// TestCase: Change spec.kvdb.internal
-	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		Internal: true,
 	}
 	k8sClient.Update(context.TODO(), cluster)
@@ -3470,7 +3470,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	// TestCase: Add spec.cloudStorage.deviceSpecs
 	deviceSpecs := []string{"spec1", "spec2"}
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 		DeviceSpecs: &deviceSpecs,
 	}
 	k8sClient.Update(context.TODO(), cluster)
@@ -3501,7 +3501,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Add spec.cloudStorage.capacitySpecs
-	cluster.Spec.CloudStorage.CapacitySpecs = []corev1alpha1.CloudStorageCapacitySpec{{MinIOPS: uint32(1000)}}
+	cluster.Spec.CloudStorage.CapacitySpecs = []corev1.CloudStorageCapacitySpec{{MinIOPS: uint32(1000)}}
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -3514,7 +3514,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	// TestCase: Change spec.cloudStorage.deviceSpecs
 	cluster.Spec.CloudStorage.CapacitySpecs = append(
 		cluster.Spec.CloudStorage.CapacitySpecs,
-		corev1alpha1.CloudStorageCapacitySpec{MinIOPS: uint32(2000)},
+		corev1.CloudStorageCapacitySpec{MinIOPS: uint32(2000)},
 	)
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -3638,7 +3638,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	// TestCase: Add spec.storage.devices
 	devices := []string{"spec1", "spec2"}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		Devices: &devices,
 	}
 	k8sClient.Update(context.TODO(), cluster)
@@ -3792,7 +3792,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 
 	// TestCase: Change spec.network.dataInterface
 	nwInterface := "eth0"
-	cluster.Spec.Network = &corev1alpha1.NetworkSpec{
+	cluster.Spec.Network = &corev1.NetworkSpec{
 		DataInterface: &nwInterface,
 	}
 	k8sClient.Update(context.TODO(), cluster)
@@ -4246,7 +4246,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	useAllDevices := true
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: &useAllDevices,
 	}
 	cluster.Spec.Env = []v1.EnvVar{
@@ -4307,20 +4307,20 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// TestCase: Add node specific storage configuration.
 	// Should start with that instead of cluster level configuration.
 	devices := []string{"dev1", "dev2"}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test": "foo",
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					Devices: &devices,
 				},
-				Network: &corev1alpha1.NetworkSpec{
+				Network: &corev1.NetworkSpec{
 					DataInterface: stringPtr("dface_1"),
 					MgmtInterface: stringPtr("mface_1"),
 				},
@@ -4341,7 +4341,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 		},
 		{
 			// Should ignore spec blocks if it has invalid label selectors
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
 						{
@@ -4351,21 +4351,21 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					ForceUseDisks: &useAllDevices,
 				},
 			},
 		},
 		{
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				NodeName: "k8s-node",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					UseAllWithPartitions: &useAllDevices,
 				},
-				Network: &corev1alpha1.NetworkSpec{
+				Network: &corev1.NetworkSpec{
 					DataInterface: stringPtr("dface_2"),
 					MgmtInterface: stringPtr("mface_2"),
 				},
@@ -4619,17 +4619,17 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	useAllDevices := true
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			Selector: corev1alpha1.NodeSelector{
+			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"test": "foo",
 					},
 				},
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
 					UseAll: &useAllDevices,
 				},
 			},
@@ -4770,9 +4770,9 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	// TestCase: Change spec.updateStrategy
 	maxUnavailable := intstr.FromInt(10)
-	cluster.Spec.UpdateStrategy = corev1alpha1.StorageClusterUpdateStrategy{
-		Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-		RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		Type: corev1.RollingUpdateStorageClusterStrategyType,
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
 			MaxUnavailable: &maxUnavailable,
 		},
 	}
@@ -4792,8 +4792,8 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change spec.deleteStrategy
-	cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
-		Type: corev1alpha1.UninstallStorageClusterStrategyType,
+	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+		Type: corev1.UninstallStorageClusterStrategyType,
 	}
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -4839,7 +4839,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change spec.userInterface
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{Enabled: true}
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{Enabled: true}
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -4850,7 +4850,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change spec.stork
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{Image: "test/image"}
+	cluster.Spec.Stork = &corev1.StorkSpec{Image: "test/image"}
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -5000,7 +5000,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 
 	// TestCase: Change security to enabled
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 	}
 	k8sClient.Update(context.TODO(), cluster)
@@ -5030,10 +5030,10 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 
 	// TestCase: disabled -> enabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
-			SelfSigned: &corev1alpha1.SelfSignedSpec{
+		Auth: &corev1.AuthSpec{
+			SelfSigned: &corev1.SelfSignedSpec{
 				Issuer:       stringPtr("defaultissuer"),
 				SharedSecret: stringPtr("defaultsecret"),
 			},
@@ -5085,7 +5085,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 
 	// TestCase: guest access type update, no pod to delete.
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleDisabled)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 
 	podControl.DeletePodName = nil
 
@@ -5293,7 +5293,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
-	currCluster := &corev1alpha1.StorageCluster{}
+	currCluster := &corev1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.Nil(t, currCluster.Status.CollisionCount)
 
@@ -5304,7 +5304,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	// TestCase: Hash collision with two revisions should result in an error, but the
 	// CollisionCount should be increased so it does not conflict on next reconcile.
-	_, err = fakeClient.CoreV1alpha1().StorageClusters(cluster.Namespace).Create(cluster)
+	_, err = fakeClient.CoreV1().StorageClusters(cluster.Namespace).Create(cluster)
 	require.NoError(t, err)
 
 	result, err = controller.Reconcile(request)
@@ -5316,7 +5316,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
-	currCluster = &corev1alpha1.StorageCluster{}
+	currCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
 
@@ -5344,7 +5344,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
-	currCluster = &corev1alpha1.StorageCluster{}
+	currCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
 
@@ -5354,7 +5354,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	// TestCase: Hash collision with two revisions should result in an error, but the
 	// CollisionCount should be increased to avoid conflict on next reconcile.
-	_, err = fakeClient.CoreV1alpha1().StorageClusters(cluster.Namespace).Update(currCluster)
+	_, err = fakeClient.CoreV1().StorageClusters(cluster.Namespace).Update(currCluster)
 	require.NoError(t, err)
 
 	result, err = controller.Reconcile(request)
@@ -5366,7 +5366,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 
-	currCluster = &corev1alpha1.StorageCluster{}
+	currCluster = &corev1.StorageCluster{}
 	testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.Equal(t, int32(2), *currCluster.Status.CollisionCount)
 
@@ -5709,7 +5709,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 
 func replaceOldPod(
 	oldPod *v1.Pod,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	controller *Controller,
 	podControl *k8scontroller.FakePodControl,
 ) *v1.Pod {
@@ -5748,28 +5748,28 @@ func replaceOldPod(
 	return newPod
 }
 
-func createStorageCluster() *corev1alpha1.StorageCluster {
+func createStorageCluster() *corev1.StorageCluster {
 	maxUnavailable := intstr.FromInt(defaultMaxUnavailablePods)
 	revisionLimit := int32(defaultRevisionHistoryLimit)
-	return &corev1alpha1.StorageCluster{
+	return &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:        "test-uid",
 			Name:       "test-cluster",
 			Namespace:  "test-ns",
 			Finalizers: []string{deleteFinalizerName},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			ImagePullPolicy: v1.PullAlways,
-			Stork: &corev1alpha1.StorkSpec{
+			Stork: &corev1.StorkSpec{
 				Enabled: false,
 			},
-			Security: &corev1alpha1.SecuritySpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: false,
 			},
 			RevisionHistoryLimit: &revisionLimit,
-			UpdateStrategy: corev1alpha1.StorageClusterUpdateStrategy{
-				Type: corev1alpha1.RollingUpdateStorageClusterStrategyType,
-				RollingUpdate: &corev1alpha1.RollingUpdateStorageCluster{
+			UpdateStrategy: corev1.StorageClusterUpdateStrategy{
+				Type: corev1.RollingUpdateStorageClusterStrategyType,
+				RollingUpdate: &corev1.RollingUpdateStorageCluster{
 					MaxUnavailable: &maxUnavailable,
 				},
 			},
@@ -5779,7 +5779,7 @@ func createStorageCluster() *corev1alpha1.StorageCluster {
 
 func createRevision(
 	k8sClient client.Client,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	driverName string,
 ) (string, error) {
 	history, err := getRevision(k8sClient, cluster, driverName)
@@ -5794,7 +5794,7 @@ func createRevision(
 
 func getRevision(
 	k8sClient client.Client,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	driverName string,
 ) (*appsv1.ControllerRevision, error) {
 	patch, err := getPatch(cluster)
@@ -5820,7 +5820,7 @@ func getRevision(
 }
 
 func createStoragePod(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	podName, nodeName string,
 	labels map[string]string,
 ) *v1.Pod {
@@ -5859,7 +5859,7 @@ func stringPtr(str string) *string {
 	return &str
 }
 
-func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
+func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
 }
 

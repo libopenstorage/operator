@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -50,7 +50,7 @@ const (
 )
 
 func (c *Controller) syncStork(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		_, err := c.Driver.GetStorkDriverName()
@@ -70,7 +70,7 @@ func (c *Controller) syncStork(
 	return nil
 }
 
-func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setupStork(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := c.createStorkConfigMap(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -96,7 +96,7 @@ func (c *Controller) setupStork(cluster *corev1alpha1.StorageCluster) error {
 	return c.setupStorkScheduler(cluster)
 }
 
-func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setupStorkScheduler(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := c.createStorkSchedServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -113,7 +113,7 @@ func (c *Controller) setupStorkScheduler(cluster *corev1alpha1.StorageCluster) e
 	return nil
 }
 
-func (c *Controller) removeStork(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) removeStork(cluster *corev1.StorageCluster) error {
 	namespace := cluster.Namespace
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
 	if err := k8sutil.DeleteConfigMap(c.client, storkConfigMapName, namespace, *ownerRef); err != nil {
@@ -445,7 +445,7 @@ func (c *Controller) createStorkService(
 }
 
 func (c *Controller) createStorkDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	storkDriverName, err := c.Driver.GetStorkDriverName()
@@ -547,7 +547,7 @@ func (c *Controller) createStorkDeployment(
 }
 
 func (c *Controller) getStorkDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
@@ -671,7 +671,7 @@ func (c *Controller) getStorkDeploymentSpec(
 }
 
 func (c *Controller) createStorkSchedDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	targetCPU := defaultStorkCPU
@@ -738,7 +738,7 @@ func (c *Controller) createStorkSchedDeployment(
 }
 
 func getStorkSchedDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
@@ -861,7 +861,7 @@ func getStorkSchedDeploymentSpec(
 	return deployment
 }
 
-func getDesiredStorkImage(cluster *corev1alpha1.StorageCluster) string {
+func getDesiredStorkImage(cluster *corev1.StorageCluster) string {
 	if cluster.Spec.Stork.Image != "" {
 		return cluster.Spec.Stork.Image
 	} else if cluster.Status.DesiredImages != nil {
@@ -876,7 +876,7 @@ func getStorkServiceLabels() map[string]string {
 	}
 }
 
-func imagePullPolicy(cluster *corev1alpha1.StorageCluster) v1.PullPolicy {
+func imagePullPolicy(cluster *corev1.StorageCluster) v1.PullPolicy {
 	imagePullPolicy := v1.PullAlways
 	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
 		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {

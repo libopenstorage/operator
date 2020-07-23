@@ -1,7 +1,7 @@
 package cloudstorage
 
 import (
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 )
 
 // CloudDriveConfig is the configuration for a single drive
@@ -34,7 +34,7 @@ type Manager interface {
 	CreateStorageDistributionMatrix() error
 	// GetStorageNodeConfig based on the cloud provider will return
 	// the storage configuration for a single node
-	GetStorageNodeConfig([]corev1alpha1.CloudStorageCapacitySpec, int) (*Config, error)
+	GetStorageNodeConfig([]corev1.CloudStorageCapacitySpec, int) (*Config, error)
 	// GetInstancesPerZoneNum calculates an amount of StorageNode instances per zone
 	GetInstancesPerZoneNum(int) int
 }

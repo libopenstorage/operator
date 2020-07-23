@@ -11,7 +11,7 @@ import (
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/cloudops/mock"
 	"github.com/libopenstorage/cloudops/pkg/parser"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
@@ -128,7 +128,7 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -227,7 +227,7 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -329,7 +329,7 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),
@@ -447,7 +447,7 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 		k8sClient:          k8sClient,
 	}
 
-	inputSpecs := []corev1alpha1.CloudStorageCapacitySpec{
+	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
 			MinIOPS:          uint32(100),
 			MinCapacityInGiB: uint64(100),

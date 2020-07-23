@@ -1,7 +1,7 @@
 package storage
 
 import (
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -42,7 +42,7 @@ type StorkInterface interface {
 	// GetStorkDriverName returns the string name of the driver in Stork
 	GetStorkDriverName() (string, error)
 	// GetStorkEnvList returns a list of env vars that need to be passed to Stork
-	GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar
+	GetStorkEnvList(cluster *corev1.StorageCluster) []v1.EnvVar
 }
 
 // ClusterPluginInterface interface to manage storage cluster
@@ -50,27 +50,27 @@ type ClusterPluginInterface interface {
 	// PreInstall the driver should do whatever it is needed before the pods
 	// start to make sure the cluster comes up correctly. This should be
 	// idempotent and subsequent calls should result in the same result.
-	PreInstall(*corev1alpha1.StorageCluster) error
+	PreInstall(*corev1.StorageCluster) error
 	// GetStoragePodSpec given the storage cluster spec and node name it returns the pod spec for a specific node
-	GetStoragePodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
+	GetStoragePodSpec(*corev1.StorageCluster, string) (v1.PodSpec, error)
 	//  GetKVDBPodSpec given the storage cluster spec and node name it returns the pod spec for a kvdb node
-	GetKVDBPodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
+	GetKVDBPodSpec(*corev1.StorageCluster, string) (v1.PodSpec, error)
 	// IsPodUpdated for given storage cluster and pod spec it returns whether the pod
 	// is updated as per the latest spec
-	IsPodUpdated(*corev1alpha1.StorageCluster, *v1.Pod) bool
+	IsPodUpdated(*corev1.StorageCluster, *v1.Pod) bool
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
 	GetSelectorLabels() map[string]string
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage
 	// cluster spec if they are not set
-	SetDefaultsOnStorageCluster(*corev1alpha1.StorageCluster)
+	SetDefaultsOnStorageCluster(*corev1.StorageCluster)
 	// UpdateStorageClusterStatus update the status of storage cluster
-	UpdateStorageClusterStatus(*corev1alpha1.StorageCluster) error
+	UpdateStorageClusterStatus(*corev1.StorageCluster) error
 	// DeleteStorage is going to uninstall and delete the storage service based on
 	// StorageClusterDeleteStrategy. DeleteStorage should provide idempotent behavior
 	// and subsequent calls should result in the same result.
 	// If the storage service has already been deleted then it will return nil
 	// If the storage service deletion is in progress then it will return the appropriate status
-	DeleteStorage(*corev1alpha1.StorageCluster) (*corev1alpha1.ClusterCondition, error)
+	DeleteStorage(*corev1.StorageCluster) (*corev1.ClusterCondition, error)
 }
 
 var (

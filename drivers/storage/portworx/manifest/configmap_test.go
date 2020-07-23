@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestConfigMapManifestWithValidData(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-test",
 		},
@@ -42,7 +42,7 @@ components:
 }
 
 func TestConfigMapManifestWithValidDataButDifferentKey(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-test",
 		},
@@ -90,7 +90,7 @@ components:
 }
 
 func TestConfigMapManifestWhenConfigMapMissing(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-test",
 		},
@@ -103,7 +103,7 @@ func TestConfigMapManifestWhenConfigMapMissing(t *testing.T) {
 }
 
 func TestConfigMapManifestWithEmptyData(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-test",
 		},
@@ -139,7 +139,7 @@ func TestConfigMapManifestWithEmptyData(t *testing.T) {
 }
 
 func TestConfigMapManifestWithInvalidData(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-test",
 		},

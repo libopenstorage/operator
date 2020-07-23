@@ -15,7 +15,7 @@ import (
 	// importing azure cloud provider so that it registers itself
 	// as a provider of the StorageManager interface
 	_ "github.com/libopenstorage/cloudops/azure/storagemanager"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +38,7 @@ type portworxCloudStorage struct {
 }
 
 func (p *portworxCloudStorage) GetStorageNodeConfig(
-	specs []corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1.CloudStorageCapacitySpec,
 	instancesPerZone int,
 ) (*cloudstorage.Config, error) {
 	// Get the decision matrix config map
@@ -158,7 +158,7 @@ func (p *portworxCloudStorage) CreateStorageDistributionMatrix() error {
 }
 
 func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
-	specs []corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1.CloudStorageCapacitySpec,
 	instancesPerZone int,
 ) *cloudops.StorageDistributionRequest {
 	request := &cloudops.StorageDistributionRequest{
@@ -179,7 +179,7 @@ func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
 }
 
 func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
-	specs []corev1alpha1.CloudStorageCapacitySpec,
+	specs []corev1.CloudStorageCapacitySpec,
 	response *cloudops.StorageDistributionResponse,
 ) *cloudstorage.Config {
 	config := &cloudstorage.Config{}

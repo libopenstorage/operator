@@ -12,7 +12,7 @@ import (
 	"time"
 
 	version "github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
@@ -45,8 +45,8 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -72,8 +72,8 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 		},
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -111,8 +111,8 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 	}
 
 	k8sVersion, _ := version.NewSemver("1.16.8")
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.6.0",
 		},
 	}
@@ -166,8 +166,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -205,8 +205,8 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 	}
 
 	k8sVersion, _ := version.NewSemver("1.16.8")
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.5.0",
 		},
 	}
@@ -245,10 +245,10 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  envKeyReleaseManifestURL,
@@ -274,10 +274,10 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	}
 
 	k8sVersion, _ := version.NewSemver("1.16.8")
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:edge",
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  envKeyReleaseManifestURL,
@@ -313,8 +313,8 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image",
 		},
 	}
@@ -342,8 +342,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	}
 
 	k8sVersion, _ := version.NewSemver("1.16.8")
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -427,8 +427,8 @@ func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -482,8 +482,8 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -514,8 +514,8 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 		},
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -568,8 +568,8 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}
@@ -627,8 +627,8 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 		}, nil
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
-		Spec: corev1alpha1.StorageClusterSpec{
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
 		},
 	}

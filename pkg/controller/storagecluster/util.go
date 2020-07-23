@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"reflect"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
@@ -16,7 +16,7 @@ import (
 // computeHash returns a hash value calculated from StorageClusterSpec and
 // a collisionCount to avoid hash collision. The hash will be safe encoded to
 // avoid bad words.
-func computeHash(clusterSpec *corev1alpha1.StorageClusterSpec, collisionCount *int32) string {
+func computeHash(clusterSpec *corev1.StorageClusterSpec, collisionCount *int32) string {
 	storageClusterSpecHasher := fnv.New32a()
 	hashutil.DeepHashObject(storageClusterSpecHasher, *clusterSpec)
 
@@ -48,7 +48,7 @@ func historyName(clusterName, hash string) string {
 	return clusterName + "-" + hash
 }
 
-func deleteFinalizerExists(cluster *corev1alpha1.StorageCluster) bool {
+func deleteFinalizerExists(cluster *corev1.StorageCluster) bool {
 	for _, finalizerName := range cluster.Finalizers {
 		if finalizerName == deleteFinalizerName {
 			return true

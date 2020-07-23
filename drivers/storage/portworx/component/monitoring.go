@@ -8,7 +8,7 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -52,13 +52,13 @@ func (c *monitoring) Initialize(
 	c.recorder = recorder
 }
 
-func (c *monitoring) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *monitoring) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.ExportMetrics
 }
 
-func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *monitoring) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createServiceMonitor(cluster, ownerRef); metaerrors.IsNoMatchError(err) {
 		if success := c.retryCreate(monitoringv1.ServiceMonitorsKind, c.createServiceMonitor, cluster, err); !success {
@@ -77,7 +77,7 @@ func (c *monitoring) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *monitoring) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *monitoring) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	err := k8sutil.DeleteServiceMonitor(c.k8sClient, PxServiceMonitor, cluster.Namespace, *ownerRef)
 	if err != nil && !metaerrors.IsNoMatchError(err) {
@@ -93,7 +93,7 @@ func (c *monitoring) Delete(cluster *corev1alpha1.StorageCluster) error {
 func (c *monitoring) MarkDeleted() {}
 
 func (c *monitoring) createServiceMonitor(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	svcMonitor := &monitoringv1.ServiceMonitor{
@@ -130,7 +130,7 @@ func (c *monitoring) createServiceMonitor(
 }
 
 func (c *monitoring) createPrometheusRule(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	filename := path.Join(pxutil.SpecsBaseDir(), pxPrometheusRuleFile)
@@ -148,7 +148,7 @@ func (c *monitoring) createPrometheusRule(
 }
 
 func (c *monitoring) warningEvent(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
 	logrus.Warn(message)
@@ -157,8 +157,8 @@ func (c *monitoring) warningEvent(
 
 func (c *monitoring) retryCreate(
 	kind string,
-	createFunc func(*corev1alpha1.StorageCluster, *metav1.OwnerReference) error,
-	cluster *corev1alpha1.StorageCluster,
+	createFunc func(*corev1.StorageCluster, *metav1.OwnerReference) error,
+	cluster *corev1.StorageCluster,
 	err error,
 ) bool {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())

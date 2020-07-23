@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -170,7 +170,7 @@ var (
 )
 
 type template struct {
-	cluster         *corev1alpha1.StorageCluster
+	cluster         *corev1.StorageCluster
 	isPKS           bool
 	isOpenshift     bool
 	isK3s           bool
@@ -186,7 +186,7 @@ type template struct {
 }
 
 func newTemplate(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) (*template, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("storage cluster cannot be empty")
@@ -224,8 +224,8 @@ func newTemplate(
 }
 
 func (p *portworx) generateCloudStorageSpecs(
-	cluster *corev1alpha1.StorageCluster,
-	nodes []*corev1alpha1.StorageNode,
+	cluster *corev1.StorageCluster,
+	nodes []*corev1.StorageNode,
 ) (*cloudstorage.Config, error) {
 
 	var cloudConfig *cloudstorage.Config
@@ -264,7 +264,7 @@ func (p *portworx) generateCloudStorageSpecs(
 }
 
 func (p *portworx) GetKVDBPodSpec(
-	cluster *corev1alpha1.StorageCluster, nodeName string,
+	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
 	t, err := newTemplate(cluster)
 	if err != nil {
@@ -303,7 +303,7 @@ func (p *portworx) GetKVDBPodSpec(
 
 // TODO [Imp] Validate the cluster spec and return errors in the configuration
 func (p *portworx) GetStoragePodSpec(
-	cluster *corev1alpha1.StorageCluster, nodeName string,
+	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
 
 	t, err := newTemplate(cluster)
@@ -374,17 +374,17 @@ func (p *portworx) GetStoragePodSpec(
 	return podSpec, nil
 }
 
-func (p *portworx) createStorageNode(cluster *corev1alpha1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
+func (p *portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            nodeName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			Labels:          p.GetSelectorLabels(),
 		},
-		Status: corev1alpha1.NodeStatus{},
+		Status: corev1.NodeStatus{},
 	}
 
 	configureStorageNodeSpec(storageNode, cloudConfig)
@@ -403,10 +403,10 @@ func (p *portworx) createStorageNode(cluster *corev1alpha1.StorageCluster, nodeN
 	return nil
 }
 
-func (p *portworx) storageNodesList(cluster *corev1alpha1.StorageCluster) ([]*corev1alpha1.StorageNode, error) {
+func (p *portworx) storageNodesList(cluster *corev1.StorageCluster) ([]*corev1.StorageNode, error) {
 
-	nodes := &corev1alpha1.StorageNodeList{}
-	storageNodes := make([]*corev1alpha1.StorageNode, 0)
+	nodes := &corev1.StorageNodeList{}
+	storageNodes := make([]*corev1.StorageNode, 0)
 
 	err := p.k8sClient.List(context.TODO(), nodes,
 		&client.ListOptions{Namespace: cluster.Namespace})
@@ -425,7 +425,7 @@ func (p *portworx) storageNodesList(cluster *corev1alpha1.StorageCluster) ([]*co
 	return storageNodes, nil
 }
 
-func storageNodeExists(nodeName string, nodes []*corev1alpha1.StorageNode) bool {
+func storageNodeExists(nodeName string, nodes []*corev1.StorageNode) bool {
 	for _, node := range nodes {
 		if nodeName == node.Name {
 			return true
@@ -434,10 +434,10 @@ func storageNodeExists(nodeName string, nodes []*corev1alpha1.StorageNode) bool 
 	return false
 }
 
-func configureStorageNodeSpec(node *corev1alpha1.StorageNode, config *cloudstorage.Config) {
-	node.Spec = corev1alpha1.StorageNodeSpec{CloudStorage: corev1alpha1.StorageNodeCloudDriveConfigs{}}
+func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Config) {
+	node.Spec = corev1.StorageNodeSpec{CloudStorage: corev1.StorageNodeCloudDriveConfigs{}}
 	for _, conf := range config.CloudStorage {
-		sc := corev1alpha1.StorageNodeCloudDriveConfig{
+		sc := corev1.StorageNodeCloudDriveConfig{
 			Type:      conf.Type,
 			IOPS:      conf.IOPS,
 			SizeInGiB: conf.SizeInGiB,
@@ -1136,7 +1136,7 @@ func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
 	return &val
 }
 
-func guestAccessTypePtr(val corev1alpha1.GuestAccessType) *corev1alpha1.GuestAccessType {
+func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
 }
 

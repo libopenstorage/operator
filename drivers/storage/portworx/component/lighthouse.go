@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -68,11 +68,11 @@ func (c *lighthouse) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *lighthouse) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *lighthouse) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled
 }
 
-func (c *lighthouse) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *lighthouse) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -92,7 +92,7 @@ func (c *lighthouse) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *lighthouse) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *lighthouse) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, LhServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -225,7 +225,7 @@ func (c *lighthouse) createClusterRoleBinding(
 }
 
 func (c *lighthouse) createService(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	labels := getLighthouseLabels()
@@ -266,7 +266,7 @@ func (c *lighthouse) createService(
 }
 
 func (c *lighthouse) createDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	lhImage := getDesiredLighthouseImage(cluster)
@@ -337,7 +337,7 @@ func (c *lighthouse) createDeployment(
 }
 
 func getLighthouseDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	lhImageName string,
 	configSyncImageName string,
@@ -482,7 +482,7 @@ func getLighthouseDeploymentSpec(
 	return deployment
 }
 
-func getDesiredLighthouseImage(cluster *corev1alpha1.StorageCluster) string {
+func getDesiredLighthouseImage(cluster *corev1.StorageCluster) string {
 	if cluster.Spec.UserInterface.Image != "" {
 		return cluster.Spec.UserInterface.Image
 	} else if cluster.Status.DesiredImages != nil {
