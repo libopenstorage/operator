@@ -15,7 +15,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "core.libopenstorage.org/v1alpha1",
+          "apiVersion": "core.libopenstorage.org/v1",
           "kind": "StorageCluster",
           "metadata": {
             "name": "portworx",
@@ -31,7 +31,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "core.libopenstorage.org/v1alpha1",
+          "apiVersion": "core.libopenstorage.org/v1",
           "kind": "StorageNode",
           "metadata": {
             "name": "example",
@@ -226,7 +226,7 @@ spec:
     owned:
     - kind: StorageCluster
       name: storageclusters.core.libopenstorage.org
-      version: v1alpha1
+      version: v1
       displayName: Storage Cluster
       description: Storage Cluster installs Portworx in the cluster.
         It has all the necessary configurations to setup and update a Portworx cluster.
@@ -331,7 +331,7 @@ spec:
         version: v1
     - kind: StorageNode
       name: storagenodes.core.libopenstorage.org
-      version: v1alpha1
+      version: v1
       displayName: Storage Node
       description: DO NOT CREATE Storage Node as it is internally created by the operator.
         It represents the status of a Portworx node.
