@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -55,7 +55,7 @@ func (c *pvcController) Initialize(
 	c.k8sVersion = k8sVersion
 }
 
-func (c *pvcController) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *pvcController) IsEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[pxutil.AnnotationPVCController])
 	if err == nil {
 		return enabled
@@ -76,7 +76,7 @@ func (c *pvcController) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
 	return false
 }
 
-func (c *pvcController) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *pvcController) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -93,7 +93,7 @@ func (c *pvcController) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *pvcController) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *pvcController) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, PVCServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -242,7 +242,7 @@ func (c *pvcController) createClusterRoleBinding(
 }
 
 func (c *pvcController) createDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	targetCPU := defaultPVCControllerCPU
@@ -312,7 +312,7 @@ func (c *pvcController) createDeployment(
 }
 
 func getPVCControllerDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,

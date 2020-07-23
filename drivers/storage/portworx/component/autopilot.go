@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -64,11 +64,11 @@ func (c *autopilot) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *autopilot) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *autopilot) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled
 }
 
-func (c *autopilot) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createConfigMap(cluster, ownerRef); err != nil {
 		return err
@@ -88,7 +88,7 @@ func (c *autopilot) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *autopilot) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteConfigMap(c.k8sClient, AutopilotConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -114,7 +114,7 @@ func (c *autopilot) MarkDeleted() {
 }
 
 func (c *autopilot) createConfigMap(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	config := "providers:"
@@ -220,7 +220,7 @@ func (c *autopilot) createClusterRoleBinding(
 }
 
 func (c *autopilot) createDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	imageName := getDesiredAutopilotImage(cluster)
@@ -321,7 +321,7 @@ func (c *autopilot) createDeployment(
 }
 
 func (c *autopilot) getAutopilotDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
@@ -467,7 +467,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	return deployment
 }
 
-func getDesiredAutopilotImage(cluster *corev1alpha1.StorageCluster) string {
+func getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
 	if cluster.Spec.Autopilot.Image != "" {
 		return cluster.Spec.Autopilot.Image
 	} else if cluster.Status.DesiredImages != nil {

@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -160,55 +160,55 @@ var (
 )
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
-func IsPortworxEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func IsPortworxEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationDisableStorage])
 	return err != nil || !disabled
 }
 
 // IsPKS returns true if the annotation has a PKS annotation and is true value
-func IsPKS(cluster *corev1alpha1.StorageCluster) bool {
+func IsPKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPKS])
 	return err == nil && enabled
 }
 
 // IsGKE returns true if the annotation has a GKE annotation and is true value
-func IsGKE(cluster *corev1alpha1.StorageCluster) bool {
+func IsGKE(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsGKE])
 	return err == nil && enabled
 }
 
 // IsAKS returns true if the annotation has an AKS annotation and is true value
-func IsAKS(cluster *corev1alpha1.StorageCluster) bool {
+func IsAKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsAKS])
 	return err == nil && enabled
 }
 
 // IsEKS returns true if the annotation has an EKS annotation and is true value
-func IsEKS(cluster *corev1alpha1.StorageCluster) bool {
+func IsEKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsEKS])
 	return err == nil && enabled
 }
 
 // IsOpenshift returns true if the annotation has an OpenShift annotation and is true value
-func IsOpenshift(cluster *corev1alpha1.StorageCluster) bool {
+func IsOpenshift(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOpenshift])
 	return err == nil && enabled
 }
 
 // RunOnMaster returns true if the annotation has truth value for running on master
-func RunOnMaster(cluster *corev1alpha1.StorageCluster) bool {
+func RunOnMaster(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationRunOnMaster])
 	return err == nil && enabled
 }
 
 // StorageClassEnabled returns true if default portworx storage classes are disabled
-func StorageClassEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func StorageClassEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableStorageClass])
 	return err != nil || !disabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present
-func ServiceType(cluster *corev1alpha1.StorageCluster) v1.ServiceType {
+func ServiceType(cluster *corev1.StorageCluster) v1.ServiceType {
 	var serviceType v1.ServiceType
 	if val, exists := cluster.Annotations[AnnotationServiceType]; exists {
 		st := v1.ServiceType(val)
@@ -223,7 +223,7 @@ func ServiceType(cluster *corev1alpha1.StorageCluster) v1.ServiceType {
 
 // ImagePullPolicy returns the image pull policy from the cluster spec if present,
 // else returns v1.PullAlways
-func ImagePullPolicy(cluster *corev1alpha1.StorageCluster) v1.PullPolicy {
+func ImagePullPolicy(cluster *corev1.StorageCluster) v1.PullPolicy {
 	imagePullPolicy := v1.PullAlways
 	if cluster.Spec.ImagePullPolicy == v1.PullNever ||
 		cluster.Spec.ImagePullPolicy == v1.PullIfNotPresent {
@@ -234,7 +234,7 @@ func ImagePullPolicy(cluster *corev1alpha1.StorageCluster) v1.PullPolicy {
 
 // StartPort returns the start from the cluster if present,
 // else return the default start port
-func StartPort(cluster *corev1alpha1.StorageCluster) int {
+func StartPort(cluster *corev1.StorageCluster) int {
 	startPort := DefaultStartPort
 	if cluster.Spec.StartPort != nil {
 		startPort = int(*cluster.Spec.StartPort)
@@ -246,7 +246,7 @@ func StartPort(cluster *corev1alpha1.StorageCluster) int {
 
 // UseDeprecatedCSIDriverName returns true if the cluster env variables has
 // an override, else returns false.
-func UseDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {
+func UseDeprecatedCSIDriverName(cluster *corev1.StorageCluster) bool {
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyDeprecatedCSIDriverName {
 			value, err := strconv.ParseBool(env.Value)
@@ -258,7 +258,7 @@ func UseDeprecatedCSIDriverName(cluster *corev1alpha1.StorageCluster) bool {
 
 // DisableCSIAlpha returns true if the cluster env variables has a variable to disable
 // CSI alpha features, else returns false.
-func DisableCSIAlpha(cluster *corev1alpha1.StorageCluster) bool {
+func DisableCSIAlpha(cluster *corev1.StorageCluster) bool {
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyDisableCSIAlpha {
 			value, err := strconv.ParseBool(env.Value)
@@ -272,7 +272,7 @@ func DisableCSIAlpha(cluster *corev1alpha1.StorageCluster) bool {
 // We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
 // env variable. If that is not present or invalid semvar, then we fallback to an
 // annotation portworx.io/px-version; else we return int max as the version.
-func GetPortworxVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
+func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	var (
 		err       error
 		pxVersion *version.Version
@@ -310,7 +310,7 @@ func GetPortworxVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 // GetStorkVersion returns the stork version based on the image provided.
 // We first look at spec.Stork.Image. If that is not present or invalid semvar, then we fallback to an
 // annotation portworx.io/stork-version; else we return int max as the version.
-func GetStorkVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
+func GetStorkVersion(cluster *corev1.StorageCluster) *version.Version {
 	defaultVersion, _ := version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	if cluster.Spec.Stork == nil || !cluster.Spec.Stork.Enabled {
 		logrus.Warnf("could not find stork version from cluster spec")
@@ -368,12 +368,12 @@ func SelectorLabels() map[string]string {
 
 // StorageClusterKind returns the GroupVersionKind for StorageCluster
 func StorageClusterKind() schema.GroupVersionKind {
-	return corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	return corev1.SchemeGroupVersion.WithKind("StorageCluster")
 }
 
 // GetClusterEnvVarValue returns the environment variable value for a cluster.
 // Note: This strictly gets the Value, not ValueFrom
-func GetClusterEnvVarValue(ctx context.Context, cluster *corev1alpha1.StorageCluster, envKey string) string {
+func GetClusterEnvVarValue(ctx context.Context, cluster *corev1.StorageCluster, envKey string) string {
 	for _, envVar := range cluster.Spec.Env {
 		if envVar.Name == envKey {
 			return envVar.Value
@@ -504,7 +504,7 @@ func IsTLSEnabled() bool {
 
 // GenerateToken generates an auth token given a secret key
 func GenerateToken(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	secretkey string,
 	claims *auth.Claims,
 	duration time.Duration,
@@ -526,7 +526,7 @@ func GenerateToken(
 
 // GetSecretKeyValue gets any key value from a k8s secret
 func GetSecretKeyValue(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	secret *v1.Secret,
 	secretKey string,
 ) (string, error) {
@@ -542,7 +542,7 @@ func GetSecretKeyValue(
 // GetSecretValue gets any secret key value from k8s and decodes to a string value
 func GetSecretValue(
 	ctx context.Context,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	k8sClient client.Client,
 	secretName,
 	secretKey string,
@@ -564,12 +564,12 @@ func GetSecretValue(
 }
 
 // SecurityEnabled checks if the security flag is set for a cluster
-func SecurityEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func SecurityEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Security != nil && cluster.Spec.Security.Enabled
 }
 
 // SetupContextWithToken Gets token or from secret for authenticating with the SDK server
-func SetupContextWithToken(ctx context.Context, cluster *corev1alpha1.StorageCluster, k8sClient client.Client) (context.Context, error) {
+func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client) (context.Context, error) {
 	// auth not declared in cluster spec
 	if !SecurityEnabled(cluster) {
 		return ctx, nil

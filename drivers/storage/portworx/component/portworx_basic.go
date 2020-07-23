@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -45,11 +45,11 @@ func (c *portworxBasic) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *portworxBasic) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *portworxBasic) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster)
 }
 
-func (c *portworxBasic) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxBasic) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
@@ -69,7 +69,7 @@ func (c *portworxBasic) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *portworxBasic) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, pxutil.PortworxServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -112,7 +112,7 @@ func (c *portworxBasic) createServiceAccount(
 }
 
 func (c *portworxBasic) prepareForSecrets(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	secretsNamespace := cluster.Namespace
@@ -312,7 +312,7 @@ func (c *portworxBasic) createClusterRoleBinding(
 }
 
 func (c *portworxBasic) createPortworxService(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	service := getPortworxServiceSpec(cluster, ownerRef)
@@ -320,7 +320,7 @@ func (c *portworxBasic) createPortworxService(
 }
 
 func getPortworxServiceSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) *v1.Service {
 	labels := pxutil.SelectorLabels()

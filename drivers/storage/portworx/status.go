@@ -10,7 +10,7 @@ import (
 
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -31,16 +31,16 @@ const (
 )
 
 func (p *portworx) UpdateStorageClusterStatus(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	if cluster.Status.Phase == "" {
 		cluster.Status.ClusterName = cluster.Name
-		cluster.Status.Phase = string(corev1alpha1.ClusterInit)
+		cluster.Status.Phase = string(corev1.ClusterInit)
 		return nil
 	}
 
 	if !pxutil.IsPortworxEnabled(cluster) {
-		cluster.Status.Phase = string(corev1alpha1.ClusterOnline)
+		cluster.Status.Phase = string(corev1.ClusterOnline)
 		return nil
 	}
 
@@ -48,7 +48,7 @@ func (p *portworx) UpdateStorageClusterStatus(
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
 		p.updateRemainingStorageNodesWithoutError(cluster, nil)
-		if cluster.Status.Phase == string(corev1alpha1.ClusterInit) &&
+		if cluster.Status.Phase == string(corev1.ClusterInit) &&
 			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
@@ -77,8 +77,8 @@ func (p *portworx) UpdateStorageClusterStatus(
 	}
 
 	newClusterStatus := mapClusterStatus(pxCluster.Cluster.Status)
-	if cluster.Status.Phase != string(corev1alpha1.ClusterOnline) &&
-		newClusterStatus == corev1alpha1.ClusterOnline {
+	if cluster.Status.Phase != string(corev1.ClusterOnline) &&
+		newClusterStatus == corev1.ClusterOnline {
 		msg := fmt.Sprintf("Storage cluster %v online", cluster.GetName())
 		p.normalEvent(cluster, util.ClusterOnlineReason, msg)
 	}
@@ -91,7 +91,7 @@ func (p *portworx) UpdateStorageClusterStatus(
 }
 
 func (p *portworx) updateStorageNodes(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(p.sdkConn)
 	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
@@ -166,7 +166,7 @@ func (p *portworx) updateStorageNodes(
 }
 
 func (p *portworx) updateRemainingStorageNodesWithoutError(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) {
 	if err := p.updateRemainingStorageNodes(cluster, nil); err != nil {
@@ -175,7 +175,7 @@ func (p *portworx) updateRemainingStorageNodesWithoutError(
 }
 
 func (p *portworx) updateRemainingStorageNodes(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) error {
 	// Find all k8s nodes where Portworx pods are running
@@ -201,7 +201,7 @@ func (p *portworx) updateRemainingStorageNodes(
 		}
 	}
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	if err = p.k8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
 		return fmt.Errorf("failed to get a list of StorageNode: %v", err)
 	}
@@ -224,9 +224,9 @@ func (p *portworx) updateRemainingStorageNodes(
 			// enumerate, then it's either still initializing, failed or removed from cluster.
 			// If it's not initializing or failed, then change the node phase to Unknown.
 			newPhase := getStorageNodePhase(&storageNode.Status)
-			if newPhase != string(corev1alpha1.NodeInitStatus) &&
-				newPhase != string(corev1alpha1.NodeFailedStatus) {
-				newPhase = string(corev1alpha1.NodeUnknownStatus)
+			if newPhase != string(corev1.NodeInitStatus) &&
+				newPhase != string(corev1.NodeFailedStatus) {
+				newPhase = string(corev1.NodeUnknownStatus)
 			}
 			if storageNode.Status.Phase != newPhase {
 				storageNodeCopy := storageNode.DeepCopy()
@@ -246,11 +246,11 @@ func (p *portworx) updateRemainingStorageNodes(
 }
 
 func (p *portworx) createOrUpdateStorageNode(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	node *api.StorageNode,
-) (*corev1alpha1.StorageNode, error) {
+) (*corev1.StorageNode, error) {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	storageNode := &corev1alpha1.StorageNode{}
+	storageNode := &corev1.StorageNode{}
 	getErr := p.k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
@@ -290,18 +290,18 @@ func (p *portworx) createOrUpdateStorageNode(
 }
 
 func (p *portworx) updateStorageNodeStatus(
-	storageNode *corev1alpha1.StorageNode,
+	storageNode *corev1.StorageNode,
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
 ) error {
 	originalStorageNodeStatus := storageNode.Status.DeepCopy()
 	storageNode.Status.NodeUID = node.Id
-	storageNode.Status.Network = corev1alpha1.NetworkStatus{
+	storageNode.Status.Network = corev1.NetworkStatus{
 		DataIP: node.DataIp,
 		MgmtIP: node.MgmtIp,
 	}
-	nodeStateCondition := &corev1alpha1.NodeCondition{
-		Type:   corev1alpha1.NodeStateCondition,
+	nodeStateCondition := &corev1.NodeCondition{
+		Type:   corev1.NodeStateCondition,
 		Status: mapNodeStatus(node.Status),
 	}
 
@@ -313,15 +313,15 @@ func (p *portworx) updateStorageNodeStatus(
 		totalSizeInBytes += int64(pool.TotalSize)
 		usedSizeInBytes += int64(pool.Used)
 	}
-	storageNode.Status.Storage = corev1alpha1.StorageStatus{
+	storageNode.Status.Storage = corev1.StorageStatus{
 		TotalSize: *resource.NewQuantity(totalSizeInBytes, resource.BinarySI),
 		UsedSize:  *resource.NewQuantity(usedSizeInBytes, resource.BinarySI),
 	}
 
 	kvdbEntry, present := kvdbNodeMap[storageNode.Status.NodeUID]
 	if present && kvdbEntry != nil {
-		nodeKVDBCondition := &corev1alpha1.NodeCondition{
-			Type:   corev1alpha1.NodeKVDBCondition,
+		nodeKVDBCondition := &corev1.NodeCondition{
+			Type:   corev1.NodeKVDBCondition,
 			Status: mapKVDBState(kvdbEntry.State),
 			Message: fmt.Sprintf("node is kvdb %s listening on %s",
 				mapKVDBNodeType(kvdbEntry.Type), kvdbEntry.IP),
@@ -332,7 +332,7 @@ func (p *portworx) updateStorageNodeStatus(
 		// remove if present
 		k := 0
 		for _, cond := range storageNode.Status.Conditions {
-			if cond.Type != corev1alpha1.NodeKVDBCondition {
+			if cond.Type != corev1.NodeKVDBCondition {
 				storageNode.Status.Conditions[k] = cond
 				k++
 			}
@@ -353,7 +353,7 @@ func (p *portworx) updateStorageNodeStatus(
 	return nil
 }
 
-func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
+func mapClusterStatus(status api.Status) corev1.ClusterConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -362,12 +362,12 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	case api.Status_STATUS_OFFLINE:
 		fallthrough
 	case api.Status_STATUS_ERROR:
-		return corev1alpha1.ClusterOffline
+		return corev1.ClusterOffline
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.ClusterNotInQuorum
+		return corev1.ClusterNotInQuorum
 
 	case api.Status_STATUS_OK:
 		fallthrough
@@ -382,27 +382,27 @@ func mapClusterStatus(status api.Status) corev1alpha1.ClusterConditionStatus {
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.ClusterOnline
+		return corev1.ClusterOnline
 
 	case api.Status_STATUS_DECOMMISSION:
 		fallthrough
 	default:
-		return corev1alpha1.ClusterUnknown
+		return corev1.ClusterUnknown
 	}
 }
 
-func mapKVDBState(state kvdb_api.NodeState) corev1alpha1.NodeConditionStatus {
+func mapKVDBState(state kvdb_api.NodeState) corev1.NodeConditionStatus {
 	switch state {
 	case kvdb_api.BootstrapNodeStateInProgress:
-		return corev1alpha1.NodeInitStatus
+		return corev1.NodeInitStatus
 	case kvdb_api.BootstrapNodeStateOperational:
-		return corev1alpha1.NodeOnlineStatus
+		return corev1.NodeOnlineStatus
 	case kvdb_api.BootstrapNodeStateSuspectDown:
-		return corev1alpha1.NodeOfflineStatus
+		return corev1.NodeOfflineStatus
 	case kvdb_api.BootstrapNodeStateNone:
 		fallthrough
 	default:
-		return corev1alpha1.NodeUnknownStatus
+		return corev1.NodeUnknownStatus
 	}
 }
 
@@ -419,7 +419,7 @@ func mapKVDBNodeType(nodeType kvdb_api.NodeType) string {
 	}
 }
 
-func mapNodeStatus(status api.Status) corev1alpha1.NodeConditionStatus {
+func mapNodeStatus(status api.Status) corev1.NodeConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -428,42 +428,42 @@ func mapNodeStatus(status api.Status) corev1alpha1.NodeConditionStatus {
 	case api.Status_STATUS_ERROR:
 		fallthrough
 	case api.Status_STATUS_NEEDS_REBOOT:
-		return corev1alpha1.NodeOfflineStatus
+		return corev1.NodeOfflineStatus
 
 	case api.Status_STATUS_INIT:
-		return corev1alpha1.NodeInitStatus
+		return corev1.NodeInitStatus
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1alpha1.NodeNotInQuorumStatus
+		return corev1.NodeNotInQuorumStatus
 
 	case api.Status_STATUS_MAINTENANCE:
-		return corev1alpha1.NodeMaintenanceStatus
+		return corev1.NodeMaintenanceStatus
 
 	case api.Status_STATUS_OK:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DOWN:
-		return corev1alpha1.NodeOnlineStatus
+		return corev1.NodeOnlineStatus
 
 	case api.Status_STATUS_DECOMMISSION:
-		return corev1alpha1.NodeDecommissionedStatus
+		return corev1.NodeDecommissionedStatus
 
 	case api.Status_STATUS_STORAGE_DEGRADED:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1alpha1.NodeDegradedStatus
+		return corev1.NodeDegradedStatus
 
 	default:
-		return corev1alpha1.NodeUnknownStatus
+		return corev1.NodeUnknownStatus
 	}
 }
 
-func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
+func getStorageNodePhase(status *corev1.NodeStatus) string {
 	latestTime := metav1.NewTime(time.Time{})
-	var latestCondition *corev1alpha1.NodeCondition
+	var latestCondition *corev1.NodeCondition
 
 	for _, condition := range status.Conditions {
 		// Find the latest condition. If it is InitCondition, and has
@@ -471,7 +471,7 @@ func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
 		if latestTime.Before(&condition.LastTransitionTime) ||
 			latestTime.IsZero() ||
 			(latestTime.Equal(&condition.LastTransitionTime) &&
-				condition.Type != corev1alpha1.NodeInitCondition) {
+				condition.Type != corev1.NodeInitCondition) {
 			latestCondition = condition.DeepCopy()
 			latestTime = condition.LastTransitionTime
 		}
@@ -481,9 +481,9 @@ func getStorageNodePhase(status *corev1alpha1.NodeStatus) string {
 	// Also if the InitCondition is the latest condition and it has succeeded,
 	// then keep the node phase as Initializing
 	if latestCondition == nil || latestCondition.Status == "" ||
-		(latestCondition.Type == corev1alpha1.NodeInitCondition &&
-			latestCondition.Status == corev1alpha1.NodeSucceededStatus) {
-		return string(corev1alpha1.NodeInitStatus)
+		(latestCondition.Type == corev1.NodeInitCondition &&
+			latestCondition.Status == corev1.NodeSucceededStatus) {
+		return string(corev1.NodeInitStatus)
 	}
 	return string(latestCondition.Status)
 }

@@ -14,7 +14,7 @@ import (
 	osdapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -50,7 +50,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	startPort := uint32(10001)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -58,9 +58,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 				annotationPVCController: "false",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			StartPort: &startPort,
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -216,7 +216,7 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -276,7 +276,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	secretsNamespace := "secrets-namespace"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -284,8 +284,8 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 				annotationPVCController: "false",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			CommonConfig: corev1alpha1.CommonConfig{
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  pxutil.EnvKeyPortworxSecretsNamespace,
@@ -334,7 +334,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -393,12 +393,12 @@ func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	startPort := uint32(10001)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			StartPort: &startPort,
 		},
 	}
@@ -431,7 +431,7 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -466,12 +466,12 @@ func TestDisablePortworx(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	startPort := uint32(10001)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			StartPort: &startPort,
 		},
 	}
@@ -590,13 +590,13 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
 				Enabled: true,
 			},
 		},
@@ -698,13 +698,13 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Stork: &corev1alpha1.StorkSpec{
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
 				Enabled: false,
 			},
 		},
@@ -757,7 +757,7 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -794,7 +794,7 @@ func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -842,7 +842,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -924,7 +924,7 @@ func TestPVCControllerInstall(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -948,7 +948,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -985,7 +985,7 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1024,7 +1024,7 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1082,7 +1082,7 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1107,7 +1107,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1140,7 +1140,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1173,7 +1173,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1206,7 +1206,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -1239,7 +1239,7 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1281,7 +1281,7 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1318,7 +1318,7 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 
 func verifyPVCControllerInstall(
 	t *testing.T,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	k8sClient client.Client,
 ) {
 	// PVC Controller ServiceAccount
@@ -1367,7 +1367,7 @@ func verifyPVCControllerInstall(
 
 func verifyPVCControllerDeployment(
 	t *testing.T,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	k8sClient client.Client,
 	specFileName string,
 ) {
@@ -1396,7 +1396,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1436,7 +1436,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1464,7 +1464,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1509,7 +1509,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1550,7 +1550,7 @@ func TestLighthouseInstall(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1558,8 +1558,8 @@ func TestLighthouseInstall(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:2.1.1",
 			},
@@ -1656,7 +1656,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1664,8 +1664,8 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 				annotationIsAKS: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -1691,7 +1691,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1699,8 +1699,8 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 				annotationIsGKE: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -1726,7 +1726,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1734,8 +1734,8 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 				annotationIsEKS: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -1761,7 +1761,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1772,8 +1772,8 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 				annotationServiceType: "ClusterIP",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -1827,13 +1827,13 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
 		},
@@ -1865,18 +1865,18 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{
 				UserInterface: "portworx/px-lighthouse:status",
 			},
 		},
@@ -1910,13 +1910,13 @@ func TestLighthouseImageChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:v1",
 			},
@@ -1951,13 +1951,13 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:v1",
 			},
@@ -1997,13 +1997,13 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:v1",
 			},
@@ -2043,13 +2043,13 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse",
 			},
@@ -2081,13 +2081,13 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse",
 				Env: []v1.EnvVar{
@@ -2129,7 +2129,7 @@ func TestAutopilotInstall(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -2137,11 +2137,11 @@ func TestAutopilotInstall(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:1.1.1",
-				Providers: []corev1alpha1.DataProviderSpec{
+				Providers: []corev1.DataProviderSpec{
 					{
 						Name: "default",
 						Type: "prometheus",
@@ -2233,13 +2233,13 @@ func TestAutopilotWithoutImage(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 			},
 		},
@@ -2272,13 +2272,13 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 				Env: []v1.EnvVar{
@@ -2320,18 +2320,18 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{
 				Autopilot: "portworx/autopilot:status",
 			},
 		},
@@ -2365,13 +2365,13 @@ func TestAutopilotImageChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 			},
@@ -2406,13 +2406,13 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 				Args: map[string]string{
@@ -2461,13 +2461,13 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 			},
@@ -2513,13 +2513,13 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 				Env: []v1.EnvVar{
@@ -2579,13 +2579,13 @@ func TestAutopilotCPUChange(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 			},
@@ -2625,7 +2625,7 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -2633,8 +2633,8 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 				annotationAutopilotCPU: "invalid-cpu",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:v1",
 			},
@@ -2648,7 +2648,7 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
-func validateTokenLifetime(t *testing.T, cluster *corev1alpha1.StorageCluster, jwtClaims jwt.MapClaims) {
+func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {
 	iat, ok := jwtClaims["iat"]
 	require.True(t, ok, "iat should present in token")
 	iatFloat64, ok := iat.(float64)
@@ -2674,17 +2674,17 @@ func TestSecurityInstall(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Security: &corev1alpha1.SecuritySpec{
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
-				Auth: &corev1alpha1.AuthSpec{
-					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
-					SelfSigned: &corev1alpha1.SelfSignedSpec{
+				Auth: &corev1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
 						// Since we have a token expiration buffer of one minute,
 						// a new token will constantly be fetched.
 						TokenLifetime: stringPtr("1s"),
@@ -2863,17 +2863,17 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Security: &corev1alpha1.SecuritySpec{
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
-				Auth: &corev1alpha1.AuthSpec{
-					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
-					SelfSigned: &corev1alpha1.SelfSignedSpec{
+				Auth: &corev1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
 						TokenLifetime: stringPtr("1h"),
 					},
 				},
@@ -3003,17 +3003,17 @@ func TestGuestAccessSecurity(t *testing.T) {
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Security: &corev1alpha1.SecuritySpec{
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
-				Auth: &corev1alpha1.AuthSpec{
-					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
-					SelfSigned: &corev1alpha1.SelfSignedSpec{
+				Auth: &corev1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
 						// Since we have a token expiration buffer of one minute,
 						// a new token will constantly be fetched.
 						TokenLifetime: stringPtr("1s"),
@@ -3033,7 +3033,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable GuestAccess. Should expect an update to be called.
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleDisabled)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	inspectedRole := component.GuestRoleEnabled
 	inspectedRoleResp := &osdapi.SdkRoleInspectResponse{
 		Role: &inspectedRole,
@@ -3054,7 +3054,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 
 	// Enable guest access, should be updated again
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleEnabled)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleEnabled)
 	inspectedRole = component.GuestRoleDisabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
 		Role: &inspectedRole,
@@ -3099,7 +3099,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	cluster.Spec.Image = "px/image:2.6.0"
 
 	// Invalid guest access type, should be updated again
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestAccessType("invalid"))
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestAccessType("invalid"))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
@@ -3108,7 +3108,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 			util.FailedComponentReason, component.SecurityComponentName))
 
 	// set to managed to avoid more calls without a corresponding mock expect
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// no expected mock calls
@@ -3121,19 +3121,19 @@ func TestDisableSecurity(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Security: &corev1alpha1.SecuritySpec{
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
 			},
 		},
 	}
 	setSecuritySpecDefaults(cluster)
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3177,7 +3177,7 @@ func TestCSIInstall(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -3185,12 +3185,12 @@ func TestCSIInstall(t *testing.T) {
 				annotationPVCController: "false",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -3316,17 +3316,17 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -3429,12 +3429,12 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -3539,17 +3539,17 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 
 	// Install with Portworx version 2.2+ and deprecated CSI driver name
 	// We should use add the resizer sidecar and use the old driver name.
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  "PORTWORX_USEDEPRECATED_CSIDRIVERNAME",
@@ -3602,17 +3602,17 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  "PORTWORX_DISABLE_CSI_ALPHA",
@@ -3620,7 +3620,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 					},
 				},
 			},
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -3755,12 +3755,12 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
@@ -3794,12 +3794,12 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -3903,12 +3903,12 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -3970,12 +3970,12 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -4077,12 +4077,12 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	imagePullSecret := "pull-secret"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -4176,17 +4176,17 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 			Effect:   v1.TaintEffectNoSchedule,
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
 			},
 		},
@@ -4311,17 +4311,17 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 			},
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
 			},
 		},
@@ -4397,7 +4397,7 @@ func TestPrometheusInstall(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4405,9 +4405,9 @@ func TestPrometheusInstall(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -4539,7 +4539,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4547,17 +4547,17 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:           "portworx/image:2.2",
 			ImagePullPolicy: v1.PullIfNotPresent,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -4677,7 +4677,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	startPort := uint32(10001)
 
 	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4685,18 +4685,18 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
 			StartPort:           &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -5117,7 +5117,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5125,7 +5125,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
 			FeatureGates: map[string]string{
@@ -5259,7 +5259,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5267,7 +5267,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
 			FeatureGates: map[string]string{
@@ -5402,7 +5402,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	startPort := uint32(10001)
 
 	customRepo := "test-registry:1111/test-repo"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5410,18 +5410,18 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRepo,
 			StartPort:           &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -5824,7 +5824,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	customRepo := "test-registry:1111/test-repo"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5832,7 +5832,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRepo,
 			FeatureGates: map[string]string{
@@ -5966,7 +5966,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	customRepo := "test-registry:1111/test-repo"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5974,7 +5974,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRepo,
 			FeatureGates: map[string]string{
@@ -6109,7 +6109,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	startPort := uint32(10001)
 
 	imagePullSecret := "pull-secret"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -6117,19 +6117,19 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			ImagePullSecret: &imagePullSecret,
 			StartPort:       &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -6421,7 +6421,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			Effect:   v1.TaintEffectNoSchedule,
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -6429,22 +6429,22 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:     "portworx/image:2.2",
 			StartPort: &startPort,
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
 			},
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -6819,7 +6819,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			},
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -6827,22 +6827,22 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:     "portworx/image:2.2",
 			StartPort: &startPort,
-			Placement: &corev1alpha1.PlacementSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
 			},
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -7098,7 +7098,7 @@ func TestRemovePVCController(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
@@ -7158,7 +7158,7 @@ func TestDisablePVCController(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -7217,13 +7217,13 @@ func TestRemoveLighthouse(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -7287,13 +7287,13 @@ func TestDisableLighthouse(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
@@ -7356,13 +7356,13 @@ func TestRemoveAutopilot(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
@@ -7424,13 +7424,13 @@ func TestDisableAutopilot(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Autopilot: &corev1alpha1.AutopilotSpec{
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
@@ -7498,12 +7498,12 @@ func TestDisableCSI_0_3(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
@@ -7596,12 +7596,12 @@ func TestDisableCSI_1_0(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.5.0",
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
@@ -7712,18 +7712,18 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 		}
 	}()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					ExportMetrics: true,
 				},
 			},
-			Kvdb: &corev1alpha1.KvdbSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Internal: false,
 			},
 		},
@@ -7810,14 +7810,14 @@ func TestDisableMonitoring(t *testing.T) {
 		}
 	}()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					ExportMetrics: true,
 				},
 			},
@@ -7868,14 +7868,14 @@ func TestRemovePrometheus(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -7970,14 +7970,14 @@ func TestDisablePrometheus(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
 			},
@@ -8080,7 +8080,7 @@ func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 }
 
 // updateSharedSecretResourceVersion mocks the behavior of the API server assigning a resource version.
-func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cluster *corev1alpha1.StorageCluster) {
+func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cluster *corev1.StorageCluster) {
 	secret := &v1.Secret{}
 	err := testutil.Get(k8sClient, secret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	if err != nil {

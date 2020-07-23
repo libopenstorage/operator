@@ -17,7 +17,7 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
 	appops "github.com/portworx/sched-ops/k8s/apps"
@@ -57,7 +57,7 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1alpha1.AddToScheme(s)
+	corev1.AddToScheme(s)
 	monitoringv1.AddToScheme(s)
 	cluster_v1alpha1.AddToScheme(s)
 	return fake.NewFakeClientWithScheme(s, initObjects...)
@@ -263,7 +263,7 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 }
 
 // UninstallStorageCluster uninstalls and wipe storagecluster from k8s
-func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster, kubeconfig ...string) error {
+func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...string) error {
 	var err error
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
@@ -273,10 +273,10 @@ func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster, kubeconfig ..
 		return err
 	}
 	if cluster.Spec.DeleteStrategy == nil ||
-		(cluster.Spec.DeleteStrategy.Type != corev1alpha1.UninstallAndWipeStorageClusterStrategyType &&
-			cluster.Spec.DeleteStrategy.Type != corev1alpha1.UninstallStorageClusterStrategyType) {
-		cluster.Spec.DeleteStrategy = &corev1alpha1.StorageClusterDeleteStrategy{
-			Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+		(cluster.Spec.DeleteStrategy.Type != corev1.UninstallAndWipeStorageClusterStrategyType &&
+			cluster.Spec.DeleteStrategy.Type != corev1.UninstallStorageClusterStrategyType) {
+		cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+			Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 		}
 		if _, err = operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
 			return err
@@ -288,7 +288,7 @@ func UninstallStorageCluster(cluster *corev1alpha1.StorageCluster, kubeconfig ..
 
 // ValidateStorageCluster validates a StorageCluster spec
 func ValidateStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	kubeconfig ...string,
 ) error {
@@ -360,7 +360,7 @@ func NewResourceVersion() string {
 	return string(ver[:16])
 }
 
-func getSdkConnection(cluster *corev1alpha1.StorageCluster) (*grpc.ClientConn, error) {
+func getSdkConnection(cluster *corev1.StorageCluster) (*grpc.ClientConn, error) {
 	pxEndpoint, err := coreops.Instance().GetServiceEndpoint("portworx-service", cluster.Namespace)
 	if err != nil {
 		return nil, err
@@ -417,7 +417,7 @@ func getSdkConnection(cluster *corev1alpha1.StorageCluster) (*grpc.ClientConn, e
 // ValidateUninstallStorageCluster validates if storagecluster and its related objects
 // were properly uninstalled and cleaned
 func ValidateUninstallStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	kubeconfig ...string,
 ) error {
@@ -454,7 +454,7 @@ func ValidateUninstallStorageCluster(
 }
 
 func validateStorageClusterPods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	timeout, interval time.Duration,
 ) error {
 	expectedPodCount, err := expectedPods(cluster)
@@ -493,7 +493,7 @@ func validateStorageClusterPods(
 	return nil
 }
 
-func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
+func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
 		return 0, err
@@ -521,7 +521,7 @@ func expectedPods(cluster *corev1alpha1.StorageCluster) (int, error) {
 	return podCount, nil
 }
 
-func validateComponents(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
+func validateComponents(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	k8sVersion, err := getK8SVersion()
 	if err != nil {
 		return err
@@ -691,7 +691,7 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 	return nil
 }
 
-func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval time.Duration) error {
+func validateMonitoring(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	if cluster.Spec.Monitoring != nil &&
 		((cluster.Spec.Monitoring.EnableMetrics != nil && *cluster.Spec.Monitoring.EnableMetrics) ||
 			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
@@ -742,7 +742,7 @@ func validateMonitoring(cluster *corev1alpha1.StorageCluster, timeout, interval 
 	return nil
 }
 
-func isPVCControllerEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/pvc-controller"])
 	if err == nil {
 		return enabled
@@ -763,32 +763,32 @@ func isPVCControllerEnabled(cluster *corev1alpha1.StorageCluster) bool {
 	return false
 }
 
-func isPortworxEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func isPortworxEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations["operator.libopenstorage.org/disable-storage"])
 	return err != nil || !disabled
 }
 
-func isPKS(cluster *corev1alpha1.StorageCluster) bool {
+func isPKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-pks"])
 	return err == nil && enabled
 }
 
-func isGKE(cluster *corev1alpha1.StorageCluster) bool {
+func isGKE(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-gke"])
 	return err == nil && enabled
 }
 
-func isAKS(cluster *corev1alpha1.StorageCluster) bool {
+func isAKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-aks"])
 	return err == nil && enabled
 }
 
-func isEKS(cluster *corev1alpha1.StorageCluster) bool {
+func isEKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-eks"])
 	return err == nil && enabled
 }
 
-func isOpenshift(cluster *corev1alpha1.StorageCluster) bool {
+func isOpenshift(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-openshift"])
 	return err == nil && enabled
 }

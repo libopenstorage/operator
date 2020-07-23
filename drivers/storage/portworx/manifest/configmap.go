@@ -3,7 +3,7 @@ package manifest
 import (
 	"context"
 
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,7 +20,7 @@ type configMap struct {
 
 func newConfigMapManifest(
 	k8sClient client.Client,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) (versionProvider, error) {
 	versionCM := &v1.ConfigMap{}
 	err := k8sClient.Get(

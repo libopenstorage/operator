@@ -4,19 +4,17 @@ import (
 	"context"
 	"testing"
 
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
-
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestSetupContextWithToken(t *testing.T) {
@@ -97,13 +95,13 @@ func TestSetupContextWithToken(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			cluster := &corev1alpha1.StorageCluster{
+			cluster := &corev1.StorageCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "testcluster",
 					Namespace: "ns",
 				},
-				Spec: corev1alpha1.StorageClusterSpec{
-					Security: &corev1alpha1.SecuritySpec{
+				Spec: corev1.StorageClusterSpec{
+					Security: &corev1.SecuritySpec{
 						Enabled: true,
 					},
 				},
@@ -113,7 +111,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			driver := portworx{}
 			driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 			setSecuritySpecDefaults(cluster)
-			cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+			cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 			err := driver.PreInstall(cluster)
 			assert.NoError(t, err)

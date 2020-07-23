@@ -7,7 +7,7 @@ import (
 
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
@@ -74,7 +74,7 @@ type Manifest interface {
 	// Init initialize the manifest
 	Init(client.Client, record.EventRecorder, *version.Version)
 	// GetVersions return the correct release versions for given cluster
-	GetVersions(*corev1alpha1.StorageCluster, bool) *Version
+	GetVersions(*corev1.StorageCluster, bool) *Version
 }
 
 // Instance returns a single instance of Manifest if present, else
@@ -116,7 +116,7 @@ func (m *manifest) Init(
 // The version manifest contains all the images of corresponding components
 // that are to be installed with given cluster version.
 func (m *manifest) GetVersions(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	force bool,
 ) *Version {
 	var provider versionProvider

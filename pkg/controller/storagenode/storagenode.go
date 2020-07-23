@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/libopenstorage/operator/drivers/storage"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -72,7 +72,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 // StartWatch starts the watch on the StorageNode
 func (c *Controller) StartWatch() error {
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &corev1alpha1.StorageNode{}},
+		&source.Kind{Type: &corev1.StorageNode{}},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -88,7 +88,7 @@ func (c *Controller) StartWatch() error {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the StorageNode instance
-	storagenode := &corev1alpha1.StorageNode{}
+	storagenode := &corev1.StorageNode{}
 	err := c.client.Get(context.TODO(), request.NamespacedName, storagenode)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -131,8 +131,8 @@ func (c *Controller) RegisterCRD() error {
 	}
 
 	resource := apiextensionsops.CustomResource{
-		Plural: corev1alpha1.StorageNodeResourcePlural,
-		Group:  corev1alpha1.SchemeGroupVersion.Group,
+		Plural: corev1.StorageNodeResourcePlural,
+		Group:  corev1.SchemeGroupVersion.Group,
 	}
 	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
@@ -142,7 +142,7 @@ func (c *Controller) RegisterCRD() error {
 	// Delete StorageNodeStatus CRD as it is not longer used
 	nodeStatusCRDName := fmt.Sprintf("%s.%s",
 		storageNodeStatusPlural,
-		corev1alpha1.SchemeGroupVersion.Group,
+		corev1.SchemeGroupVersion.Group,
 	)
 	err = apiextensionsops.Instance().DeleteCRD(nodeStatusCRDName)
 	if err != nil && !errors.IsNotFound(err) {
@@ -151,7 +151,7 @@ func (c *Controller) RegisterCRD() error {
 	return nil
 }
 
-func (c *Controller) syncStorageNode(storageNode *corev1alpha1.StorageNode) error {
+func (c *Controller) syncStorageNode(storageNode *corev1.StorageNode) error {
 	c.log(storageNode).Infof("Reconciling StorageNode")
 	owner := metav1.GetControllerOf(storageNode)
 	if owner == nil {
@@ -163,7 +163,7 @@ func (c *Controller) syncStorageNode(storageNode *corev1alpha1.StorageNode) erro
 		return fmt.Errorf("unknown owner kind: %s for storage node: %s", owner.Kind, storageNode.Name)
 	}
 
-	cluster := &corev1alpha1.StorageCluster{}
+	cluster := &corev1.StorageCluster{}
 	err := c.client.Get(context.TODO(), client.ObjectKey{
 		Name:      owner.Name,
 		Namespace: storageNode.Namespace,
@@ -184,8 +184,8 @@ func (c *Controller) syncStorageNode(storageNode *corev1alpha1.StorageNode) erro
 }
 
 func (c *Controller) syncKVDB(
-	cluster *corev1alpha1.StorageCluster,
-	storageNode *corev1alpha1.StorageNode,
+	cluster *corev1.StorageCluster,
+	storageNode *corev1.StorageNode,
 ) error {
 	if cluster.Spec.Kvdb != nil && !cluster.Spec.Kvdb.Internal {
 		return nil
@@ -246,8 +246,8 @@ func (c *Controller) syncKVDB(
 	return nil
 }
 func (c *Controller) syncStorage(
-	cluster *corev1alpha1.StorageCluster,
-	storageNode *corev1alpha1.StorageNode,
+	cluster *corev1.StorageCluster,
+	storageNode *corev1.StorageNode,
 ) error {
 	// sync the storage labels on pods
 	portworxPodList := &v1.PodList{}
@@ -298,8 +298,8 @@ func (c *Controller) syncStorage(
 }
 
 func (c *Controller) createKVDBPod(
-	cluster *corev1alpha1.StorageCluster,
-	storageNode *corev1alpha1.StorageNode,
+	cluster *corev1.StorageCluster,
+	storageNode *corev1.StorageNode,
 ) (*v1.Pod, error) {
 	podSpec, err := c.Driver.GetKVDBPodSpec(cluster, storageNode.Name)
 	if err != nil {
@@ -307,7 +307,7 @@ func (c *Controller) createKVDBPod(
 	}
 
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
-	ownerRef := metav1.NewControllerRef(storageNode, corev1alpha1.SchemeGroupVersion.WithKind("StorageNode"))
+	ownerRef := metav1.NewControllerRef(storageNode, corev1.SchemeGroupVersion.WithKind("StorageNode"))
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName:    fmt.Sprintf("%s-kvdb-", c.Driver.String()),
@@ -320,7 +320,7 @@ func (c *Controller) createKVDBPod(
 	return newPod, nil
 }
 
-func (c *Controller) kvdbPodLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
+func (c *Controller) kvdbPodLabels(cluster *corev1.StorageCluster) map[string]string {
 	return map[string]string{
 		constants.LabelKeyClusterName: cluster.Name,
 		constants.LabelKeyDriverName:  c.Driver.String(),
@@ -328,7 +328,7 @@ func (c *Controller) kvdbPodLabels(cluster *corev1alpha1.StorageCluster) map[str
 	}
 }
 
-func (c *Controller) log(storageNode *corev1alpha1.StorageNode) *logrus.Entry {
+func (c *Controller) log(storageNode *corev1.StorageNode) *logrus.Entry {
 	fields := logrus.Fields{
 		"storagenode": storageNode.Name,
 	}
@@ -340,17 +340,17 @@ func getCRDBasePath() string {
 	return crdBasePath
 }
 
-func canNodeServeStorage(storagenode *corev1alpha1.StorageNode) bool {
+func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
 	if storagenode.Status.Storage.TotalSize.IsZero() {
 		return false
 	}
 
 	// look for node status condition
 	for _, cond := range storagenode.Status.Conditions {
-		if cond.Type == corev1alpha1.NodeStateCondition {
-			if cond.Status == corev1alpha1.NodeOnlineStatus ||
-				cond.Status == corev1alpha1.NodeMaintenanceStatus ||
-				cond.Status == corev1alpha1.NodeDegradedStatus {
+		if cond.Type == corev1.NodeStateCondition {
+			if cond.Status == corev1.NodeOnlineStatus ||
+				cond.Status == corev1.NodeMaintenanceStatus ||
+				cond.Status == corev1.NodeDegradedStatus {
 				return true
 			}
 		}
@@ -358,9 +358,9 @@ func canNodeServeStorage(storagenode *corev1alpha1.StorageNode) bool {
 	return false
 }
 
-func isNodeRunningKVDB(storageNode *corev1alpha1.StorageNode) bool {
+func isNodeRunningKVDB(storageNode *corev1.StorageNode) bool {
 	for _, cond := range storageNode.Status.Conditions {
-		if cond.Type == corev1alpha1.NodeKVDBCondition {
+		if cond.Type == corev1.NodeKVDBCondition {
 			return true
 		}
 	}

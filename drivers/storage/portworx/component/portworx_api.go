@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -42,11 +42,11 @@ func (c *portworxAPI) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *portworxAPI) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *portworxAPI) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster)
 }
 
-func (c *portworxAPI) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxAPI) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createService(cluster, ownerRef); err != nil {
 		return err
@@ -57,7 +57,7 @@ func (c *portworxAPI) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *portworxAPI) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxAPI) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteService(c.k8sClient, PxAPIServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -74,7 +74,7 @@ func (c *portworxAPI) MarkDeleted() {
 }
 
 func (c *portworxAPI) createService(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	labels := getPortworxAPIServiceLabels()
@@ -129,7 +129,7 @@ func (c *portworxAPI) createService(
 }
 
 func (c *portworxAPI) createDaemonSet(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDaemonSet := &appsv1.DaemonSet{}
@@ -168,7 +168,7 @@ func (c *portworxAPI) createDaemonSet(
 }
 
 func getPortworxAPIDaemonSetSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 ) *appsv1.DaemonSet {

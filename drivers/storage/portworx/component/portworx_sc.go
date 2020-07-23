@@ -4,7 +4,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,11 +52,11 @@ func (c *portworxStorageClass) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *portworxStorageClass) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *portworxStorageClass) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster) && pxutil.StorageClassEnabled(cluster)
 }
 
-func (c *portworxStorageClass) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 	docAnnotations := map[string]string{
 		"params/docs":              "https://docs.portworx.com/scheduler/kubernetes/dynamic-provisioning.html",
 		"params/fs":                "Filesystem to be laid out: none|xfs|ext4",
@@ -185,7 +185,7 @@ annotations:
 	return nil
 }
 
-func (c *portworxStorageClass) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxStorageClass) Delete(cluster *corev1.StorageCluster) error {
 	if cluster.DeletionTimestamp != nil &&
 		(cluster.Spec.DeleteStrategy == nil || cluster.Spec.DeleteStrategy.Type == "") {
 		// If the cluster is deleted without any delete strategy do not delete the

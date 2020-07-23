@@ -7,14 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/rest"
-
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
-	"github.com/libopenstorage/operator/pkg/mock"
-
 	"github.com/golang/mock/gomock"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -30,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,8 +74,8 @@ func TestRegisterCRD(t *testing.T) {
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	group := corev1alpha1.SchemeGroupVersion.Group
-	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
+	group := corev1.SchemeGroupVersion.Group
+	storageNodeCRDName := corev1.StorageNodeResourcePlural + "." + group
 
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
@@ -118,17 +116,17 @@ func TestRegisterCRD(t *testing.T) {
 		Get(storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, storageNodeCRDName, crd.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, crd.Spec.Group)
+	require.Equal(t, corev1.SchemeGroupVersion.Group, crd.Spec.Group)
 	require.Len(t, crd.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
+	require.Equal(t, corev1.SchemeGroupVersion.Version, crd.Spec.Versions[0].Name)
 	require.True(t, crd.Spec.Versions[0].Served)
 	require.True(t, crd.Spec.Versions[0].Storage)
 	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, crd.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageNodeResourceName, crd.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, crd.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), crd.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), crd.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, crd.Spec.Names.ShortNames)
+	require.Equal(t, corev1.StorageNodeResourceName, crd.Spec.Names.Singular)
+	require.Equal(t, corev1.StorageNodeResourcePlural, crd.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNode{}).Name(), crd.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNodeList{}).Name(), crd.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1.StorageNodeShortName}, crd.Spec.Names.ShortNames)
 	require.Equal(t, subresource, crd.Spec.Subresources)
 	require.NotEmpty(t, crd.Spec.Validation.OpenAPIV3Schema.Properties)
 
@@ -137,17 +135,17 @@ func TestRegisterCRD(t *testing.T) {
 		Get(storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, storageNodeCRDName, snCRD.Name)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Group, snCRD.Spec.Group)
+	require.Equal(t, corev1.SchemeGroupVersion.Group, snCRD.Spec.Group)
 	require.Len(t, snCRD.Spec.Versions, 1)
-	require.Equal(t, corev1alpha1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
+	require.Equal(t, corev1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
 	require.True(t, snCRD.Spec.Versions[0].Served)
 	require.True(t, snCRD.Spec.Versions[0].Storage)
 	require.Equal(t, apiextensionsv1beta1.NamespaceScoped, snCRD.Spec.Scope)
-	require.Equal(t, corev1alpha1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
-	require.Equal(t, corev1alpha1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
-	require.Equal(t, reflect.TypeOf(corev1alpha1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
-	require.Equal(t, []string{corev1alpha1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
+	require.Equal(t, corev1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
+	require.Equal(t, corev1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
 	require.Equal(t, subresource, snCRD.Spec.Subresources)
 	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
@@ -180,7 +178,7 @@ func TestRegisterCRD(t *testing.T) {
 func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 	nodeStatusCRDName := fmt.Sprintf("%s.%s",
 		storageNodeStatusPlural,
-		corev1alpha1.SchemeGroupVersion.Group,
+		corev1.SchemeGroupVersion.Group,
 	)
 	nodeStatusCRD := &apiextensionsv1beta1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -198,9 +196,9 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 		crdBaseDir = getCRDBasePath
 	}()
 
-	group := corev1alpha1.SchemeGroupVersion.Group
-	storageClusterCRDName := corev1alpha1.StorageClusterResourcePlural + "." + group
-	storageNodeCRDName := corev1alpha1.StorageNodeResourcePlural + "." + group
+	group := corev1.SchemeGroupVersion.Group
+	storageClusterCRDName := corev1.StorageClusterResourcePlural + "." + group
+	storageNodeCRDName := corev1.StorageNodeResourcePlural + "." + group
 
 	// When the CRDs are created, just updated their status so the validation
 	// does not get stuck until timeout.
@@ -234,54 +232,54 @@ func TestReconcile(t *testing.T) {
 	defaultQuantity, _ := resource.ParseQuantity("0")
 	testNS := "test-ns"
 	clusterName := "test-cluster"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: testNS,
 		},
 	}
 
-	controllerKind := corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	testStorageNode := "node1"
 	testStoragelessNode := "node2"
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testStorageNode,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Storage: corev1alpha1.StorageStatus{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Storage: corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
-			Conditions: []corev1alpha1.NodeCondition{
+			Conditions: []corev1.NodeCondition{
 				{
-					Type:   corev1alpha1.NodeStateCondition,
-					Status: corev1alpha1.NodeOnlineStatus,
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
 				},
 			},
 		},
 	}
 
-	storageLessNode := &corev1alpha1.StorageNode{
+	storageLessNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testStoragelessNode,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Storage: corev1alpha1.StorageStatus{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Storage: corev1.StorageStatus{
 				TotalSize: defaultQuantity,
 				UsedSize:  defaultQuantity,
 			},
-			Conditions: []corev1alpha1.NodeCondition{
+			Conditions: []corev1.NodeCondition{
 				{
-					Type:   corev1alpha1.NodeStateCondition,
-					Status: corev1alpha1.NodeOnlineStatus,
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
 				},
 			},
 		},
@@ -369,34 +367,34 @@ func TestReconcileKVDB(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	testNS := "test-ns"
 	clusterName := "test-cluster"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: testNS,
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Internal: true,
 			},
 		},
 	}
 
-	controllerKind := corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	// node1 will not have any kvdb pods. So test will create
 	testKVDBNode1 := "node1"
-	kvdbNode1 := &corev1alpha1.StorageNode{
+	kvdbNode1 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testKVDBNode1,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Conditions: []corev1alpha1.NodeCondition{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Conditions: []corev1.NodeCondition{
 				{
-					Type:   corev1alpha1.NodeKVDBCondition,
-					Status: corev1alpha1.NodeOnlineStatus,
+					Type:   corev1.NodeKVDBCondition,
+					Status: corev1.NodeOnlineStatus,
 				},
 			},
 		},
@@ -413,22 +411,22 @@ func TestReconcileKVDB(t *testing.T) {
 
 	// node2 will have kvdb pods but node is no longer kvdb. So test will check for deleted pods
 	testKVDBNode2 := "node2"
-	kvdbNode2 := &corev1alpha1.StorageNode{
+	kvdbNode2 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testKVDBNode2,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Storage: corev1alpha1.StorageStatus{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Storage: corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
-			Conditions: []corev1alpha1.NodeCondition{
+			Conditions: []corev1.NodeCondition{
 				{
-					Type:   corev1alpha1.NodeStateCondition,
-					Status: corev1alpha1.NodeOnlineStatus,
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
 				},
 			},
 		},
@@ -508,7 +506,7 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	testNS := "test-ns"
 	clusterName := "test-cluster"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: testNS,
@@ -516,21 +514,21 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 	}
 
 	testStorageNode := "node1"
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testStorageNode,
 			Namespace: cluster.Namespace,
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
-			Storage: corev1alpha1.StorageStatus{
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Storage: corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
-			Conditions: []corev1alpha1.NodeCondition{
+			Conditions: []corev1.NodeCondition{
 				{
-					Type:   corev1alpha1.NodeStateCondition,
-					Status: corev1alpha1.NodeOnlineStatus,
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
 				},
 			},
 		},
@@ -551,7 +549,7 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// invalid owner kind
-	controllerKind := corev1alpha1.SchemeGroupVersion.WithKind("InvalidOwner")
+	controllerKind := corev1.SchemeGroupVersion.WithKind("InvalidOwner")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	storageNode.OwnerReferences = []metav1.OwnerReference{*clusterRef}
 	err = controller.syncStorageNode(storageNode)
@@ -559,7 +557,7 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 
 	// invalid owner name
 	cluster.Name = "invalid-owner-name"
-	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind = corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef = metav1.NewControllerRef(cluster, controllerKind)
 	storageNode.OwnerReferences = []metav1.OwnerReference{*clusterRef}
 	err = controller.syncStorageNode(storageNode)
@@ -567,7 +565,7 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 }
 
 func createStoragePod(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	podName, nodeName string,
 	labels map[string]string,
 	clusterRef *metav1.OwnerReference,

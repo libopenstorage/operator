@@ -16,7 +16,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -91,23 +91,23 @@ func TestGetStorkDriverName(t *testing.T) {
 
 func TestGetStorkEnvList(t *testing.T) {
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Security: &corev1alpha1.SecuritySpec{
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
 			},
 		},
 	}
 
 	cluster.Spec.Image = "portworx/image:2.6.0"
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 	}
-	cluster.Status.DesiredImages = &corev1alpha1.ComponentImages{
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
 		Stork: "stork/image:2.5.0",
 	}
 	envVars := driver.GetStorkEnvList(cluster)
@@ -122,7 +122,7 @@ func TestGetStorkEnvList(t *testing.T) {
 	require.Equal(t, "apps.portworx.io", envVars[3].Value)
 
 	cluster.Spec.Image = "portworx/image:2.6.0"
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 		Image:   "stork/image:2.5.0",
 	}
@@ -154,14 +154,14 @@ func TestGetStorkEnvList(t *testing.T) {
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
 	}
 
-	expectedPlacement := &corev1alpha1.PlacementSpec{
+	expectedPlacement := &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -219,12 +219,12 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, "3.0.0", cluster.Status.Version)
 
 	// Empty kvdb spec should still set internal kvdb as default
-	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 
 	// Should not overwrite complete kvdb spec if endpoints are empty
-	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		AuthSecret: "test-secret",
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -232,7 +232,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, "test-secret", cluster.Spec.Kvdb.AuthSecret)
 
 	// If endpoints are set don't set internal kvdb
-	cluster.Spec.Kvdb = &corev1alpha1.KvdbSpec{
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		Endpoints: []string{"endpoint1"},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -255,20 +255,20 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, uint32(10001), *cluster.Spec.StartPort)
 
 	// Do not use default storage config if cloud storage config present
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 	cluster.Spec.Storage = nil
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Nil(t, cluster.Spec.Storage)
 
 	// Add default storage config if cloud storage and storage config are both present
-	cluster.Spec.CloudStorage = &corev1alpha1.CloudStorageSpec{}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{}
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.Storage = &corev1.StorageSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.True(t, *cluster.Spec.Storage.UseAll)
 
 	// Do no use default storage config if devices is not nil
 	devices := make([]string, 0)
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		Devices: &devices,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -279,28 +279,28 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Nil(t, cluster.Spec.Storage.UseAll)
 
 	// Do not set useAll if useAllWithPartitions is true
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAllWithPartitions: boolPtr(true),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Nil(t, cluster.Spec.Storage.UseAll)
 
 	// Should set useAll if useAllWithPartitions is false
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAllWithPartitions: boolPtr(false),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.True(t, *cluster.Spec.Storage.UseAll)
 
 	// Do not change useAll if already has a value
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: boolPtr(false),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.False(t, *cluster.Spec.Storage.UseAll)
 
 	// Add default placement if node placement is nil
-	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{}
+	cluster.Spec.Placement = &corev1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
@@ -309,7 +309,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 
 	// If metrics was enabled previosly, enable it in prometheus spec
 	// and remove the enableMetrics config
-	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		EnableMetrics: boolPtr(true),
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -318,9 +318,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 
 	// If prometheus is enabled but metrics is explicitly disabled,
 	// then do no enable it and remove it from config
-	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		EnableMetrics: boolPtr(false),
-		Prometheus: &corev1alpha1.PrometheusSpec{
+		Prometheus: &corev1.PrometheusSpec{
 			Enabled: true,
 		},
 	}
@@ -332,7 +332,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -347,13 +347,13 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, cluster.Spec)
 
 	// Use default component versions if components are enabled
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 	}
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -368,12 +368,12 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -385,7 +385,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 
 	// Don't use default Lighthouse image if disabled
 	// Also reset lockImage flag if Lighthouse is disabled
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled:   false,
 		LockImage: true,
 	}
@@ -395,7 +395,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 
 	// Use image from release manifest if no image present
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -403,7 +403,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Use given spec image if specified and reset desired image in status
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 		Image:   "custom/lighthouse-image:1.2.3",
 	}
@@ -437,7 +437,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 
 	// Do not overwrite desired lighthouse image even if
 	// some other component has changed
-	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -459,7 +459,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if auto update of components is always enabled
-	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -467,7 +467,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if auto update of components is enabled once
-	updateStrategy = corev1alpha1.OnceAutoUpdate
+	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -475,7 +475,7 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Don't change desired image if auto update of components is never
-	updateStrategy = corev1alpha1.NeverAutoUpdate
+	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -507,12 +507,12 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -524,7 +524,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 
 	// Don't use default Autopilot image if disabled
 	// Also reset lockImage flag if Autopilot is disabled
-	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled:   false,
 		LockImage: true,
 	}
@@ -534,7 +534,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 
 	// Use image from release manifest if no image present
-	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -542,7 +542,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Use given spec image if specified and reset desired image in status
-	cluster.Spec.Autopilot = &corev1alpha1.AutopilotSpec{
+	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 		Image:   "custom/autopilot-image:1.2.3",
 	}
@@ -576,7 +576,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 
 	// Do not overwrite desired autopilot image even if
 	// some other component has changed
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -598,7 +598,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if auto update of components is always enabled
-	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -606,7 +606,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if auto update of components is enabled once
-	updateStrategy = corev1alpha1.OnceAutoUpdate
+	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -614,7 +614,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Don't change desired image if auto update of components is never
-	updateStrategy = corev1alpha1.NeverAutoUpdate
+	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -646,12 +646,12 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 func TestStorageClusterDefaultsForStork(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -662,7 +662,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 
 	// Don't use default Stork image if disabled
 	// Also reset lockImage flag if Stork is disabled
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled:   false,
 		LockImage: true,
 	}
@@ -672,7 +672,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
 
 	// Use image from release manifest if no image present
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -680,7 +680,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Use given spec image if specified and reset desired image in status
-	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 		Image:   "custom/stork-image:1.2.3",
 	}
@@ -714,7 +714,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 
 	// Do not overwrite desired stork image even if
 	// some other component has changed
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -736,7 +736,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Change desired image if auto update of components is always enabled
-	updateStrategy := corev1alpha1.AlwaysAutoUpdate
+	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -744,7 +744,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Change desired image if auto update of components is enabled once
-	updateStrategy = corev1alpha1.OnceAutoUpdate
+	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -752,7 +752,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Don't change desired image if auto update of components is never
-	updateStrategy = corev1alpha1.NeverAutoUpdate
+	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -785,12 +785,12 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -839,7 +839,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 
 	// Do not overwrite desired images even if
 	// some other component has changed
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -876,12 +876,12 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -892,13 +892,13 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if prometheus spec is nil
-	cluster.Spec.Monitoring = &corev1alpha1.MonitoringSpec{}
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if nothing specified in prometheus spec
-	cluster.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
+	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
@@ -929,7 +929,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 
 	// Do not overwrite desired images even if
 	// some other component has changed
-	cluster.Spec.UserInterface = &corev1alpha1.UserInterfaceSpec{
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -964,12 +964,12 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -979,19 +979,19 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Nil(t, cluster.Spec.Nodes)
 
 	// Node specs should be empty if already empty
-	cluster.Spec.Nodes = make([]corev1alpha1.NodeSpec, 0)
+	cluster.Spec.Nodes = make([]corev1.NodeSpec, 0)
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Len(t, cluster.Spec.Nodes, 0)
 
 	// Empty storage spec at node level should copy spec from cluster level
 	// - If cluster level config is empty, we should use the default storage config
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{{}}
+	cluster.Spec.Nodes = []corev1.NodeSpec{{}}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, &corev1alpha1.StorageSpec{UseAll: boolPtr(true)}, cluster.Spec.Nodes[0].Storage)
+	require.Equal(t, &corev1.StorageSpec{UseAll: boolPtr(true)}, cluster.Spec.Nodes[0].Storage)
 
 	// - If cluster level config is not empty, use it as is
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{{}}
-	clusterStorageSpec := &corev1alpha1.StorageSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{{}}
+	clusterStorageSpec := &corev1.StorageSpec{
 		UseAllWithPartitions: boolPtr(true),
 	}
 	cluster.Spec.Storage = clusterStorageSpec.DeepCopy()
@@ -1000,10 +1000,10 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 
 	// Do not set node spec storage fields if not set at the cluster level
 	cluster.Spec.Storage = nil
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1020,7 +1020,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	// If devices is set, then no need to set UseAll and UseAllWithPartitions as it
 	// does not matter.
 	clusterDevices := []string{"dev1", "dev2"}
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll:               boolPtr(false),
 		UseAllWithPartitions: boolPtr(false),
 		Devices:              &clusterDevices,
@@ -1029,10 +1029,10 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 		SystemMdDevice:       stringPtr("metadata"),
 		KvdbDevice:           stringPtr("kvdb"),
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1048,16 +1048,16 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	// If devices is set and empty, even then no need to set UseAll and UseAllWithPartitions,
 	// as devices take precedence over them.
 	clusterDevices = make([]string, 0)
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll:               boolPtr(true),
 		UseAllWithPartitions: boolPtr(true),
 		Devices:              &clusterDevices,
 		ForceUseDisks:        boolPtr(true),
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1070,15 +1070,15 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	// If cluster devices is nil, then set UseAllWithPartitions at node level
 	// if set at cluster level. Do not set UseAll as UseAllWithPartitions takes
 	// precedence over it.
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll:               boolPtr(true),
 		UseAllWithPartitions: boolPtr(true),
 		ForceUseDisks:        boolPtr(true),
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1090,15 +1090,15 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 
 	// If cluster devices is nil and UseAllWithPartitions is false, then set UseAll
 	// at node level if set at cluster level.
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll:               boolPtr(true),
 		UseAllWithPartitions: boolPtr(false),
 		ForceUseDisks:        boolPtr(true),
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1110,14 +1110,14 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 
 	// If cluster devices is nil and UseAllWithPartitions is nil, then set UseAll
 	// at node level if set at cluster level.
-	cluster.Spec.Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll:        boolPtr(true),
 		ForceUseDisks: boolPtr(true),
 	}
-	cluster.Spec.Nodes = []corev1alpha1.NodeSpec{
+	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
-			CommonConfig: corev1alpha1.CommonConfig{
-				Storage: &corev1alpha1.StorageSpec{},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{},
 			},
 		},
 	}
@@ -1129,7 +1129,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 
 	// Should not overwrite storage spec from cluster level, if present at node level
 	nodeDevices := []string{"node-dev1", "node-dev2"}
-	cluster.Spec.Nodes[0].Storage = &corev1alpha1.StorageSpec{
+	cluster.Spec.Nodes[0].Storage = &corev1.StorageSpec{
 		UseAll:               boolPtr(false),
 		UseAllWithPartitions: boolPtr(false),
 		Devices:              &nodeDevices,
@@ -1148,7 +1148,7 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 }
 
-func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluster) {
+func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NotNil(t, cluster.Spec.Security)
 	require.Equal(t, true, cluster.Spec.Security.Enabled)
 	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
@@ -1162,12 +1162,12 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluste
 func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.1.5.1",
 		},
 	}
@@ -1177,47 +1177,47 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	require.Nil(t, cluster.Spec.Security)
 
 	// when security.enabled is false, no security fields should be populated.
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: false,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Nil(t, cluster.Spec.Security.Auth)
 
 	// Check for default values when only enabled=true
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
 	// Check for default values when only enabled=true and fields non-nil but empty
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth:    &corev1alpha1.AuthSpec{},
+		Auth:    &corev1.AuthSpec{},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth:    &corev1alpha1.AuthSpec{},
+		Auth:    &corev1.AuthSpec{},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
-			SelfSigned: &corev1alpha1.SelfSignedSpec{},
+		Auth: &corev1.AuthSpec{
+			SelfSigned: &corev1.SelfSignedSpec{},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
-			SelfSigned: &corev1alpha1.SelfSignedSpec{
+		Auth: &corev1.AuthSpec{
+			SelfSigned: &corev1.SelfSignedSpec{
 				Issuer: stringPtr(""),
 			},
 		},
@@ -1225,16 +1225,16 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	assertDefaultSecuritySpec(t, cluster)
 
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
-			GuestAccess: guestAccessTypePtr(corev1alpha1.GuestAccessType("")),
+		Auth: &corev1.AuthSpec{
+			GuestAccess: guestAccessTypePtr(corev1.GuestAccessType("")),
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	cluster.Spec.Security = &corev1alpha1.SecuritySpec{
+	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
-		Auth: &corev1alpha1.AuthSpec{
+		Auth: &corev1.AuthSpec{
 			GuestAccess: nil,
 		},
 	}
@@ -1264,7 +1264,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1274,7 +1274,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 		},
 	}
 
-	expectedPlacement := &corev1alpha1.PlacementSpec{
+	expectedPlacement := &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -1313,7 +1313,7 @@ func TestValidationsForEssentials(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	cluster := &corev1alpha1.StorageCluster{}
+	cluster := &corev1.StorageCluster{}
 	os.Setenv(pxutil.EnvKeyPortworxEssentials, "True")
 
 	// TestCase: Should fail if px-essential secret not present
@@ -1377,7 +1377,7 @@ func TestValidationsForEssentials(t *testing.T) {
 func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	driver := portworx{}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1395,7 +1395,7 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 	driver := portworx{}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -1461,12 +1461,12 @@ func TestUpdateClusterStatus(t *testing.T) {
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -1691,12 +1691,12 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -1749,12 +1749,12 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
-	nodeStatus := &corev1alpha1.StorageNode{}
+	nodeStatus := &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
@@ -1765,12 +1765,12 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, nodeStatus.OwnerReferences, 1)
@@ -1781,8 +1781,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
-	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
+	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
 
@@ -1801,11 +1801,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeInitStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeInitStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
 	expectedNodeOne.Status = api.Status_STATUS_OFFLINE
@@ -1817,11 +1817,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Error
 	expectedNodeOne.Status = api.Status_STATUS_ERROR
@@ -1833,11 +1833,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorum
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM
@@ -1849,11 +1849,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NotInQuorumNoStorage
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
@@ -1865,11 +1865,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "NotInQuorum", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeNotInQuorumStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status NeedsReboot
 	expectedNodeOne.Status = api.Status_STATUS_NEEDS_REBOOT
@@ -1881,11 +1881,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Decommission
 	expectedNodeOne.Status = api.Status_STATUS_DECOMMISSION
@@ -1897,11 +1897,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Decommissioned", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDecommissionedStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeDecommissionedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Maintenance
 	expectedNodeOne.Status = api.Status_STATUS_MAINTENANCE
@@ -1913,11 +1913,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Maintenance", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeMaintenanceStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Ok
 	expectedNodeOne.Status = api.Status_STATUS_OK
@@ -1929,11 +1929,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDown
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DOWN
@@ -1945,11 +1945,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -1961,11 +1961,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageRebalance
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_REBALANCE
@@ -1977,11 +1977,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDriveReplace
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
@@ -1993,11 +1993,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Invalid
 	expectedNodeOne.Status = api.Status(9999)
@@ -2009,11 +2009,11 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", nodeStatus.Status.Phase)
-	require.Equal(t, corev1alpha1.NodeUnknownStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeUnknownStatus, nodeStatus.Status.Conditions[0].Status)
 }
 
 func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
@@ -2057,15 +2057,15 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image: "test/image:1.2.3.4",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2103,17 +2103,17 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
 
-	nodeStatus := &corev1alpha1.StorageNode{}
+	nodeStatus := &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "5.6.7.8", nodeStatus.Spec.Version)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
@@ -2124,7 +2124,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "1.2.3.4", nodeStatus.Spec.Version)
@@ -2135,7 +2135,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatus = &corev1alpha1.StorageNode{}
+	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatus.Spec.Version)
@@ -2149,12 +2149,12 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2164,7 +2164,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Empty(t, storageNodes.Items)
@@ -2187,19 +2187,19 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Contains(t, err.Error(), "not found")
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Empty(t, storageNodes.Items)
 
 	// TestCase: Portworx pods and storage nodes both exist
-	storageNode1 := &corev1alpha1.StorageNode{
+	storageNode1 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-1",
 			Namespace: cluster.Namespace,
 		},
 	}
-	storageNode2 := &corev1alpha1.StorageNode{
+	storageNode2 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-2",
 			Namespace: cluster.Namespace,
@@ -2212,11 +2212,11 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 
 	// Delete extra nodes that do not have corresponding pods
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
@@ -2235,12 +2235,12 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2250,7 +2250,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get endpoint")
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Empty(t, storageNodes.Items)
@@ -2268,7 +2268,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-1",
 			Namespace: cluster.Namespace,
@@ -2280,11 +2280,11 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Contains(t, err.Error(), "failed to get endpoint")
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
@@ -2302,12 +2302,12 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Maintenance",
 		},
 	}
@@ -2324,7 +2324,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-1",
 			Namespace: cluster.Namespace,
@@ -2337,24 +2337,24 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error connecting to GRPC server")
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If the cluster is initializing then do not return an error on
 	// grpc connection timeout
-	cluster.Status.Phase = string(corev1alpha1.ClusterInit)
+	cluster.Status.Phase = string(corev1.ClusterInit)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
@@ -2396,12 +2396,12 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2418,7 +2418,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-1",
 			Namespace: cluster.Namespace,
@@ -2437,11 +2437,11 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "InspectCurrent error")
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// Nil response from InspectCurrent API
 	mockClusterServer.EXPECT().
@@ -2450,18 +2450,18 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		Times(1)
 
 	// Reset the storage node status
-	storageNode.Status = corev1alpha1.NodeStatus{}
+	storageNode.Status = corev1.NodeStatus{}
 	k8sClient.Status().Update(context.TODO(), storageNode)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to inspect cluster")
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// Nil cluster object in the response of InspectCurrent API
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
@@ -2473,18 +2473,18 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		Times(1)
 
 	// Reset the storage node status
-	storageNode.Status = corev1alpha1.NodeStatus{}
+	storageNode.Status = corev1.NodeStatus{}
 	k8sClient.Status().Update(context.TODO(), storageNode)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty ClusterInspect response")
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
@@ -2528,12 +2528,12 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		k8sClient: k8sClient,
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2550,7 +2550,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "node-1",
 			Namespace: cluster.Namespace,
@@ -2577,11 +2577,11 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "node Enumerate error")
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Nil response from node Enumerate API
 	mockNodeServer.EXPECT().
@@ -2590,18 +2590,18 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Times(1)
 
 	// Reset the storage node status
-	storageNode.Status = corev1alpha1.NodeStatus{}
+	storageNode.Status = corev1.NodeStatus{}
 	k8sClient.Status().Update(context.TODO(), storageNode)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to enumerate nodes")
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Empty list of nodes should create StorageNode objects only for matching pods
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
@@ -2613,17 +2613,17 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Times(1)
 
 	// Reset the storage node status
-	storageNode.Status = corev1alpha1.NodeStatus{}
+	storageNode.Status = corev1.NodeStatus{}
 	k8sClient.Status().Update(context.TODO(), storageNode)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Nil list of nodes should create StorageNode objects only for matching pods
 	expectedNodeEnumerateResp.Nodes = nil
@@ -2633,17 +2633,17 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Times(1)
 
 	// Reset the storage node status
-	storageNode.Status = corev1alpha1.NodeStatus{}
+	storageNode.Status = corev1.NodeStatus{}
 	k8sClient.Status().Update(context.TODO(), storageNode)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Empty list of nodes should not create any StorageNode objects
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -2659,7 +2659,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
@@ -2674,7 +2674,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
@@ -2722,12 +2722,12 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2760,12 +2760,12 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "Offline", cluster.Status.Phase)
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "1.1.1.1", nodeStatusList.Items[0].Status.Network.DataIP)
 
 	// Update status based on the latest object
@@ -2785,12 +2785,12 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "Online", cluster.Status.Phase)
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
-	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.Equal(t, corev1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
 	require.Equal(t, "2.2.2.2", nodeStatusList.Items[0].Status.Network.DataIP)
 }
 
@@ -2835,12 +2835,12 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -2873,11 +2873,11 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes := &corev1alpha1.StorageNodeList{}
+	storageNodes := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Node has another condition which is newer than when the node state
 	// was last transitioned
@@ -2890,9 +2890,9 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	time.Sleep(time.Second)
 	operatorops.Instance().UpdateStorageNodeCondition(
 		&storageNodes.Items[0].Status,
-		&corev1alpha1.NodeCondition{
-			Type:   corev1alpha1.NodeInitCondition,
-			Status: corev1alpha1.NodeFailedStatus,
+		&corev1.NodeCondition{
+			Type:   corev1.NodeInitCondition,
+			Status: corev1.NodeFailedStatus,
 		},
 	)
 	k8sClient.Status().Update(context.TODO(), &storageNodes.Items[0])
@@ -2900,11 +2900,11 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: NodeInit condition happened at the same time as NodeState, then
 	// phase should have use NodeState as that is the latest response from SDK
@@ -2914,7 +2914,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Times(1)
 
 	commonTime := metav1.Now()
-	conditions := make([]corev1alpha1.NodeCondition, len(storageNodes.Items[0].Status.Conditions))
+	conditions := make([]corev1.NodeCondition, len(storageNodes.Items[0].Status.Conditions))
 	for i, c := range storageNodes.Items[0].Status.Conditions {
 		conditions[i] = *c.DeepCopy()
 		conditions[i].LastTransitionTime = commonTime
@@ -2925,11 +2925,11 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeMaintenanceStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: Node state has transitioned
 	expectedNode.Status = api.Status_STATUS_DECOMMISSION
@@ -2942,11 +2942,11 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeDecommissionedStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeDecommissionedStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCases: Portworx node not present in SDK output, but matching pod present
 	// TestCase: If latest node condition is not Init or Failed (here it is Decommissioned)
@@ -2975,17 +2975,17 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeUnknownStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If latest node condition is Failed then phase should be Failed
-	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+	storageNodes.Items[0].Status.Conditions = []corev1.NodeCondition{
 		{
-			Type:   corev1alpha1.NodeStateCondition,
-			Status: corev1alpha1.NodeFailedStatus,
+			Type:   corev1.NodeStateCondition,
+			Status: corev1.NodeFailedStatus,
 		},
 	}
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
@@ -2993,18 +2993,18 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeFailedStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If latest node condition is NodeInit with succeeded status
 	// then phase should be Init
-	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+	storageNodes.Items[0].Status.Conditions = []corev1.NodeCondition{
 		{
-			Type:   corev1alpha1.NodeInitCondition,
-			Status: corev1alpha1.NodeSucceededStatus,
+			Type:   corev1.NodeInitCondition,
+			Status: corev1.NodeSucceededStatus,
 		},
 	}
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
@@ -3012,17 +3012,17 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If latest node condition does not have status, phase should be Init
-	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+	storageNodes.Items[0].Status.Conditions = []corev1.NodeCondition{
 		{
-			Type:   corev1alpha1.NodeInitCondition,
-			Status: corev1alpha1.NodeSucceededStatus,
+			Type:   corev1.NodeInitCondition,
+			Status: corev1.NodeSucceededStatus,
 		},
 	}
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
@@ -3030,24 +3030,24 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If no condition present, phase should be Init
-	storageNodes.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{}
+	storageNodes.Items[0].Status.Conditions = []corev1.NodeCondition{}
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 
 	// TestCase: If conditions are nil, phase should be Init
 	storageNodes.Items[0].Status.Conditions = nil
@@ -3056,11 +3056,11 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodes = &corev1alpha1.StorageNodeList{}
+	storageNodes = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodes)
 	require.NoError(t, err)
 	require.Len(t, storageNodes.Items, 1)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodes.Items[0].Status.Phase)
 }
 
 func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
@@ -3105,12 +3105,12 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		recorder:  record.NewFakeRecorder(0),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -3152,7 +3152,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Empty(t, nodeStatusList.Items)
@@ -3179,7 +3179,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3208,7 +3208,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3237,7 +3237,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3261,7 +3261,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3310,12 +3310,12 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -3350,7 +3350,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
@@ -3372,7 +3372,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3421,12 +3421,12 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -3462,11 +3462,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList := &corev1alpha1.StorageNodeList{}
+	storageNodeList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node got removed from portworx sdk response, but corresponding pod exists
 	nodeEnumerateRespWithOneNode := &api.SdkNodeEnumerateWithFiltersResponse{
@@ -3499,11 +3499,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Initializing state; should remain in Initializing state.
@@ -3519,11 +3519,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Failed state; should remain in Failed state.
@@ -3533,10 +3533,10 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		Times(1)
 
 	// Latest condition is in failed state
-	storageNodeList.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+	storageNodeList.Items[0].Status.Conditions = []corev1.NodeCondition{
 		{
-			Type:   corev1alpha1.NodeInitCondition,
-			Status: corev1alpha1.NodeFailedStatus,
+			Type:   corev1.NodeInitCondition,
+			Status: corev1.NodeFailedStatus,
 		},
 	}
 	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
@@ -3544,11 +3544,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
 	// that of portworx pods
@@ -3563,7 +3563,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -3579,7 +3579,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -3593,7 +3593,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -3609,7 +3609,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -3623,7 +3623,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -3638,7 +3638,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -3652,7 +3652,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -3703,12 +3703,12 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -3743,7 +3743,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList := &corev1alpha1.StorageNodeList{}
+	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 2)
@@ -3768,7 +3768,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3791,7 +3791,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	nodeStatusList = &corev1alpha1.StorageNodeList{}
+	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
 	require.Len(t, nodeStatusList.Items, 1)
@@ -3843,12 +3843,12 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -3884,11 +3884,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err := driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList := &corev1alpha1.StorageNodeList{}
+	storageNodeList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Scheduler node name missing for storage node, but corresponding pod exists
 	nodeEnumerateRespWithNoSchedName := &api.SdkNodeEnumerateWithFiltersResponse{
@@ -3924,11 +3924,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeUnknownStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Initializing state; should remain in Initializing state.
@@ -3944,11 +3944,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Failed state; should remain in Failed state.
@@ -3958,10 +3958,10 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		Times(1)
 
 	// Latest condition is in failed state
-	storageNodeList.Items[0].Status.Conditions = []corev1alpha1.NodeCondition{
+	storageNodeList.Items[0].Status.Conditions = []corev1.NodeCondition{
 		{
-			Type:   corev1alpha1.NodeInitCondition,
-			Status: corev1alpha1.NodeFailedStatus,
+			Type:   corev1.NodeInitCondition,
+			Status: corev1.NodeFailedStatus,
 		},
 	}
 	k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
@@ -3969,11 +3969,11 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 2)
-	require.Equal(t, string(corev1alpha1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
+	require.Equal(t, string(corev1.NodeFailedStatus), storageNodeList.Items[0].Status.Phase)
 
 	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
 	// that of portworx pods
@@ -3988,7 +3988,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -4004,7 +4004,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -4018,7 +4018,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -4034,7 +4034,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -4048,7 +4048,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -4063,7 +4063,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 
 	driver.UpdateStorageClusterStatus(cluster)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	testutil.List(k8sClient, storageNodeList)
 	require.Len(t, storageNodeList.Items, 2)
 
@@ -4077,7 +4077,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	storageNodeList = &corev1alpha1.StorageNodeList{}
+	storageNodeList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, storageNodeList)
 	require.NoError(t, err)
 	require.Len(t, storageNodeList.Items, 1)
@@ -4107,7 +4107,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 		}
 	}()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4115,19 +4115,19 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			Image:     "portworx/image:2.2",
 			StartPort: &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled:       true,
 					ExportMetrics: true,
 				},
@@ -4135,16 +4135,16 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
-			Security: &corev1alpha1.SecuritySpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 	setSecuritySpecDefaults(cluster)
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -4225,8 +4225,8 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// If no delete strategy is provided, condition should be complete
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
 
 	// Verify that all components have been removed
@@ -4320,7 +4320,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 		}
 	}()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4328,23 +4328,23 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+		Spec: corev1.StorageClusterSpec{
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 
 			Image:     "portworx/image:2.2",
 			StartPort: &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled:       true,
 					ExportMetrics: true,
 				},
@@ -4352,16 +4352,16 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
-			Security: &corev1alpha1.SecuritySpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 	setSecuritySpecDefaults(cluster)
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -4442,8 +4442,8 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper service account
@@ -4554,15 +4554,15 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRepo := "test-registry:1111/test-repo"
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			CustomImageRegistry: customRepo,
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4587,15 +4587,15 @@ func TestDeleteClusterWithCustomRegistry(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			CustomImageRegistry: customRegistry,
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4619,15 +4619,15 @@ func TestDeleteClusterWithImagePullPolicy(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			ImagePullPolicy: v1.PullIfNotPresent,
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4652,15 +4652,15 @@ func TestDeleteClusterWithImagePullSecret(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	imagePullSecret := "registry-secret"
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			ImagePullSecret: &imagePullSecret,
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4696,17 +4696,17 @@ func TestDeleteClusterWithTolerations(t *testing.T) {
 			Effect:   v1.TaintEffectNoSchedule,
 		},
 	}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Placement: &corev1alpha1.PlacementSpec{
+		Spec: corev1.StorageClusterSpec{
+			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4731,13 +4731,13 @@ func TestDeleteClusterWithNodeAffinity(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Placement: &corev1alpha1.PlacementSpec{
+		Spec: corev1.StorageClusterSpec{
+			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -4758,8 +4758,8 @@ func TestDeleteClusterWithNodeAffinity(t *testing.T) {
 					},
 				},
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4786,17 +4786,17 @@ func TestDeleteClusterWithCustomNodeWiperImage(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	customRegistry := "test-registry:1111"
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
+		Spec: corev1.StorageClusterSpec{
 			CustomImageRegistry: customRegistry,
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
-			CommonConfig: corev1alpha1.CommonConfig{
+			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
 					{
 						Name:  envKeyNodeWiperImage,
@@ -4826,7 +4826,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4834,9 +4834,9 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 				annotationIsPKS: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+		Spec: corev1.StorageClusterSpec{
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -4845,8 +4845,8 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper service account
@@ -4911,7 +4911,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 		}
 	}()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -4919,23 +4919,23 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 				annotationPVCController: "true",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+		Spec: corev1.StorageClusterSpec{
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 
 			Image:     "portworx/image:2.2",
 			StartPort: &startPort,
-			UserInterface: &corev1alpha1.UserInterfaceSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 				Image:   "portworx/px-lighthouse:test",
 			},
-			Autopilot: &corev1alpha1.AutopilotSpec{
+			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
-			Monitoring: &corev1alpha1.MonitoringSpec{
-				Prometheus: &corev1alpha1.PrometheusSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
 					Enabled:       true,
 					ExportMetrics: true,
 				},
@@ -4943,16 +4943,16 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
-			Security: &corev1alpha1.SecuritySpec{
+			Security: &corev1.SecuritySpec{
 				Enabled: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
-			DesiredImages: &corev1alpha1.ComponentImages{},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 	setSecuritySpecDefaults(cluster)
-	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1alpha1.GuestRoleManaged)
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
 	err := driver.PreInstall(cluster)
@@ -5033,8 +5033,8 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Equal(t, "Started node wiper daemonset", condition.Reason)
 
 	// Check wiper service account
@@ -5141,14 +5141,14 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	coreops.SetInstance(coreops.New(versionClient))
 	reregisterComponents()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallStorageClusterStrategyType,
+		Spec: corev1.StorageClusterSpec{
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5170,8 +5170,8 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
 
@@ -5183,8 +5183,8 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
 
@@ -5209,8 +5209,8 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
 
@@ -5235,8 +5235,8 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
 
 	// Node wiper daemon set should be removed
@@ -5251,8 +5251,8 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
 
 	dsList = &appsv1.DaemonSetList{}
@@ -5266,17 +5266,17 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	coreops.SetInstance(coreops.New(versionClient))
 	reregisterComponents()
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Internal: true,
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5298,8 +5298,8 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
 
@@ -5311,8 +5311,8 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
 
@@ -5337,8 +5337,8 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
 	require.Contains(t, condition.Reason,
 		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
 
@@ -5363,8 +5363,8 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	// Node wiper daemon set should be removed
@@ -5379,8 +5379,8 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	dsList = &appsv1.DaemonSetList{}
@@ -5390,17 +5390,17 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 }
 
 func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Internal: true,
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5450,8 +5450,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	require.NoError(t, err)
 
 	// Check condition
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	// Check config maps are deleted
@@ -5462,20 +5462,20 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 }
 
 func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Endpoints: []string{
 					"etcd://kvdb1.com:2001",
 					"etcd://kvdb2.com:2001",
 				},
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5506,8 +5506,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
@@ -5534,8 +5534,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
@@ -5562,8 +5562,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
@@ -5593,8 +5593,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
@@ -5624,8 +5624,8 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
@@ -5634,17 +5634,17 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 }
 
 func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T) {
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Endpoints: []string{},
 			},
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5665,8 +5665,8 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 
 	// Fail if unknown kvdb type given in url
@@ -5675,8 +5675,8 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 
 	// Fail if unknown kvdb version found
@@ -5688,8 +5688,8 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 
 	// Fail if error getting kvdb version
@@ -5701,8 +5701,8 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 	require.Contains(t, condition.Reason, "kvdb version error")
 
@@ -5718,8 +5718,8 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationFailed, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
 	require.Contains(t, condition.Reason, "Failed to wipe metadata")
 	require.Contains(t, condition.Reason, "kvdb initialize error")
 }
@@ -5727,7 +5727,7 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 	driver := portworx{}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -5735,9 +5735,9 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 				constants.AnnotationDisableStorage: "1",
 			},
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			DeleteStrategy: &corev1alpha1.StorageClusterDeleteStrategy{
-				Type: corev1alpha1.UninstallAndWipeStorageClusterStrategyType,
+		Spec: corev1.StorageClusterSpec{
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 	}
@@ -5745,19 +5745,19 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
 
 	// Uninstall delete strategy
-	cluster.Spec.DeleteStrategy.Type = corev1alpha1.UninstallStorageClusterStrategyType
-	cluster.Status = corev1alpha1.StorageClusterStatus{}
+	cluster.Spec.DeleteStrategy.Type = corev1.UninstallStorageClusterStrategyType
+	cluster.Status = corev1.StorageClusterStatus{}
 
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, corev1alpha1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1alpha1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
 	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
 
 }
@@ -5806,17 +5806,17 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		recorder:  record.NewFakeRecorder(10),
 	}
 
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: clusterNS,
 		},
-		Spec: corev1alpha1.StorageClusterSpec{
-			Kvdb: &corev1alpha1.KvdbSpec{
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
 				Internal: true,
 			},
 		},
-		Status: corev1alpha1.StorageClusterStatus{
+		Status: corev1.StorageClusterStatus{
 			Phase: "Initializing",
 		},
 	}
@@ -5871,7 +5871,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	// check if both storage nodes exist and have the KVDB condition
 	for _, n := range []string{"node-one", "node-two"} {
 		found := false
-		checkStorageNode := &corev1alpha1.StorageNode{}
+		checkStorageNode := &corev1.StorageNode{}
 		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      n,
 			Namespace: clusterNS,
@@ -5879,7 +5879,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, c := range checkStorageNode.Status.Conditions {
-			if c.Type == corev1alpha1.NodeKVDBCondition {
+			if c.Type == corev1.NodeKVDBCondition {
 				found = true
 				break
 			}
@@ -5895,7 +5895,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	// check if both storage nodes exist and DONT have the KVDB condition
 	for _, n := range []string{"node-one", "node-two"} {
 		found := false
-		checkStorageNode := &corev1alpha1.StorageNode{}
+		checkStorageNode := &corev1.StorageNode{}
 		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      n,
 			Namespace: clusterNS,
@@ -5903,7 +5903,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, c := range checkStorageNode.Status.Conditions {
-			if c.Type == corev1alpha1.NodeKVDBCondition {
+			if c.Type == corev1.NodeKVDBCondition {
 				found = true
 				break
 			}
@@ -5915,37 +5915,37 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	kvdbNodeStateTests := []struct {
 		state                   int
 		nodeType                int
-		expectedConditionStatus corev1alpha1.NodeConditionStatus
+		expectedConditionStatus corev1.NodeConditionStatus
 		expectedNodeType        string
 	}{
 		{
 			state:                   0,
 			nodeType:                0,
-			expectedConditionStatus: corev1alpha1.NodeUnknownStatus,
+			expectedConditionStatus: corev1.NodeUnknownStatus,
 			expectedNodeType:        "",
 		},
 		{
 			state:                   1,
 			nodeType:                1,
-			expectedConditionStatus: corev1alpha1.NodeInitStatus,
+			expectedConditionStatus: corev1.NodeInitStatus,
 			expectedNodeType:        "leader",
 		},
 		{
 			state:                   2,
 			nodeType:                1,
-			expectedConditionStatus: corev1alpha1.NodeOnlineStatus,
+			expectedConditionStatus: corev1.NodeOnlineStatus,
 			expectedNodeType:        "leader",
 		},
 		{
 			state:                   3,
 			nodeType:                2,
-			expectedConditionStatus: corev1alpha1.NodeOfflineStatus,
+			expectedConditionStatus: corev1.NodeOfflineStatus,
 			expectedNodeType:        "member",
 		},
 		{
 			state:                   4,
 			nodeType:                2,
-			expectedConditionStatus: corev1alpha1.NodeUnknownStatus,
+			expectedConditionStatus: corev1.NodeUnknownStatus,
 			expectedNodeType:        "member",
 		},
 	}
@@ -5965,17 +5965,17 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 
 		var (
 			found        bool
-			status       corev1alpha1.NodeConditionStatus
+			status       corev1.NodeConditionStatus
 			conditionMsg string
 		)
-		checkStorageNode := &corev1alpha1.StorageNode{}
+		checkStorageNode := &corev1.StorageNode{}
 		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      "node-one",
 			Namespace: clusterNS,
 		}, checkStorageNode)
 		require.NoError(t, err)
 		for _, c := range checkStorageNode.Status.Conditions {
-			if c.Type == corev1alpha1.NodeKVDBCondition {
+			if c.Type == corev1.NodeKVDBCondition {
 				found = true
 				status = c.Status
 				conditionMsg = c.Message
@@ -6019,7 +6019,7 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 
 func TestIsPodUpdatedWithoutArgs(t *testing.T) {
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pxcluster",
 			Namespace: "kube-test",
@@ -6055,7 +6055,7 @@ func TestIsPodUpdatedWithoutArgs(t *testing.T) {
 
 func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pxcluster",
 			Namespace: "kube-test",
@@ -6117,7 +6117,7 @@ func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
 
 func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 	driver := portworx{}
-	cluster := &corev1alpha1.StorageCluster{
+	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pxcluster",
 			Namespace: "kube-test",
@@ -6195,7 +6195,7 @@ type fakeManifest struct{}
 func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, _ *version.Version) {}
 
 func (m *fakeManifest) GetVersions(
-	_ *corev1alpha1.StorageCluster,
+	_ *corev1.StorageCluster,
 	force bool,
 ) *manifest.Version {
 	compVersion := compVersion()

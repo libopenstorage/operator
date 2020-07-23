@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -62,11 +62,11 @@ func (c *csi) Initialize(
 	c.k8sVersion = k8sVersion
 }
 
-func (c *csi) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *csi) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates)
 }
 
-func (c *csi) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *csi) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
@@ -112,7 +112,7 @@ func (c *csi) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *csi) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *csi) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteServiceAccount(c.k8sClient, CSIServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
@@ -168,7 +168,7 @@ func (c *csi) createServiceAccount(
 }
 
 func (c *csi) createClusterRole(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
 	clusterRole := &rbacv1.ClusterRole{
@@ -300,7 +300,7 @@ func (c *csi) createClusterRole(
 }
 
 func (c *csi) createClusterRoleBinding(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
@@ -325,7 +325,7 @@ func (c *csi) createClusterRoleBinding(
 }
 
 func (c *csi) createService(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	return k8sutil.CreateOrUpdateService(
@@ -345,7 +345,7 @@ func (c *csi) createService(
 }
 
 func (c *csi) createDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -416,7 +416,7 @@ func (c *csi) createDeployment(
 }
 
 func getCSIDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 	ownerRef *metav1.OwnerReference,
 	provisionerImage, attacherImage string,
@@ -629,7 +629,7 @@ func getCSIDeploymentSpec(
 }
 
 func (c *csi) createStatefulSet(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -679,7 +679,7 @@ func (c *csi) createStatefulSet(
 }
 
 func getCSIStatefulSetSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 	ownerRef *metav1.OwnerReference,
 	provisionerImage, attacherImage string,
@@ -923,7 +923,7 @@ func createCSINodeInfoCRD() error {
 }
 
 func (c *csi) getCSIConfiguration(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	pxVersion *version.Version,
 ) *pxutil.CSIConfiguration {
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)

@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
@@ -50,13 +50,13 @@ func (c *portworxProxy) Initialize(
 	c.k8sClient = k8sClient
 }
 
-func (c *portworxProxy) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *portworxProxy) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Namespace != api.NamespaceSystem &&
 		pxutil.StartPort(cluster) != pxutil.DefaultStartPort &&
 		pxutil.IsPortworxEnabled(cluster)
 }
 
-func (c *portworxProxy) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxProxy) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createServiceAccount(); err != nil {
 		return NewError(ErrCritical, err)
 	}
@@ -72,7 +72,7 @@ func (c *portworxProxy) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *portworxProxy) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *portworxProxy) Delete(cluster *corev1.StorageCluster) error {
 	if cluster.Namespace == api.NamespaceSystem {
 		// If the cluster namespace is kube-system, then there is nothing to delete.
 		// Also, we do not want to delete portworx-service if running in kube-system
@@ -155,7 +155,7 @@ func (c *portworxProxy) createClusterRoleBinding() error {
 }
 
 func (c *portworxProxy) createPortworxService(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	service := getPortworxServiceSpec(cluster, nil)
 	service.Namespace = api.NamespaceSystem
@@ -186,7 +186,7 @@ func (c *portworxProxy) createPortworxService(
 }
 
 func (c *portworxProxy) createDaemonSet(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	existingDaemonSet := &appsv1.DaemonSet{}
 	getErr := c.k8sClient.Get(
@@ -236,7 +236,7 @@ func (c *portworxProxy) createDaemonSet(
 }
 
 func getPortworxProxyDaemonSetSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	imageName string,
 ) *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromString("100%")

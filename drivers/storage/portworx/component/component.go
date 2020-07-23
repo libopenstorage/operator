@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-version"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -26,11 +26,11 @@ type PortworxComponent interface {
 		recorder record.EventRecorder,
 	)
 	// IsEnabled checks if the components needs to be enabled based on the StorageCluster
-	IsEnabled(cluster *corev1alpha1.StorageCluster) bool
+	IsEnabled(cluster *corev1.StorageCluster) bool
 	// Reconcile reconciles the component to match the current state of the StorageCluster
-	Reconcile(cluster *corev1alpha1.StorageCluster) error
+	Reconcile(cluster *corev1.StorageCluster) error
 	// Delete deletes the component if present
-	Delete(cluster *corev1alpha1.StorageCluster) error
+	Delete(cluster *corev1.StorageCluster) error
 	// MarkDeleted marks the component as deleted for testing purposes
 	MarkDeleted()
 }

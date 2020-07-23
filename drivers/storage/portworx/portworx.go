@@ -11,7 +11,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -97,7 +97,7 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
-func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
+func (p *portworx) GetStorkEnvList(cluster *corev1.StorageCluster) []v1.EnvVar {
 	envList := []v1.EnvVar{
 		{
 			Name:  pxutil.EnvKeyPortworxNamespace,
@@ -148,15 +148,15 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 	return pxutil.SelectorLabels()
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageCluster) {
+func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) {
 	if toUpdate.Status.DesiredImages == nil {
-		toUpdate.Status.DesiredImages = &corev1alpha1.ComponentImages{}
+		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
 	}
 
 	pxEnabled := pxutil.IsPortworxEnabled(toUpdate)
 	if pxEnabled {
 		if toUpdate.Spec.Stork == nil {
-			toUpdate.Spec.Stork = &corev1alpha1.StorkSpec{
+			toUpdate.Spec.Stork = &corev1.StorkSpec{
 				Enabled: true,
 			}
 		}
@@ -173,7 +173,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	if pxVersionChanged || autoUpdateComponents(toUpdate) || hasComponentChanged(toUpdate) {
 		// Force latest versions only if the component update strategy is Once
 		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
-			*toUpdate.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate)
+			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
 		release := manifest.Instance().GetVersions(toUpdate, force)
 
 		if toUpdate.Spec.Version == "" && pxEnabled {
@@ -231,7 +231,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 		// Reset the component update strategy if it is 'Once', so that we don't
 		// upgrade components again during next reconcile loop
 		if toUpdate.Spec.AutoUpdateComponents != nil &&
-			*toUpdate.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate {
+			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate {
 			toUpdate.Spec.AutoUpdateComponents = nil
 		}
 	}
@@ -269,7 +269,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1alpha1.StorageClu
 	setDefaultAutopilotProviders(toUpdate)
 }
 
-func (p *portworx) PreInstall(cluster *corev1alpha1.StorageCluster) error {
+func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 	if err := p.validateEssentials(); err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (p *portworx) validateEssentials() error {
 }
 
 func (p *portworx) IsPodUpdated(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	pod *v1.Pod,
 ) bool {
 	portworxArgs := make([]string, 0)
@@ -364,16 +364,16 @@ func (p *portworx) IsPodUpdated(
 }
 
 func (p *portworx) DeleteStorage(
-	cluster *corev1alpha1.StorageCluster,
-) (*corev1alpha1.ClusterCondition, error) {
+	cluster *corev1.StorageCluster,
+) (*corev1.ClusterCondition, error) {
 	p.deleteComponents(cluster)
 
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
 		// No Delete strategy provided or Portworx not installed through the operator,
 		// then do not wipe Portworx
-		status := &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationCompleted,
+		status := &corev1.ClusterCondition{
+			Type:   corev1.ClusterConditionTypeDelete,
+			Status: corev1.ClusterOperationCompleted,
 			Reason: storageClusterDeleteMsg,
 		}
 		return status, nil
@@ -382,33 +382,33 @@ func (p *portworx) DeleteStorage(
 	// Portworx needs to be removed if DeleteStrategy is specified
 	removeData := false
 	completeMsg := storageClusterUninstallMsg
-	if cluster.Spec.DeleteStrategy.Type == corev1alpha1.UninstallAndWipeStorageClusterStrategyType {
+	if cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType {
 		removeData = true
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	deleteCompleted := string(corev1alpha1.ClusterConditionTypeDelete) +
-		string(corev1alpha1.ClusterOperationCompleted)
+	deleteCompleted := string(corev1.ClusterConditionTypeDelete) +
+		string(corev1.ClusterOperationCompleted)
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		if cluster.Status.Phase == deleteCompleted {
-			return &corev1alpha1.ClusterCondition{
-				Type:   corev1alpha1.ClusterConditionTypeDelete,
-				Status: corev1alpha1.ClusterOperationCompleted,
+			return &corev1.ClusterCondition{
+				Type:   corev1.ClusterConditionTypeDelete,
+				Status: corev1.ClusterOperationCompleted,
 				Reason: completeMsg,
 			}, nil
 		}
 		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
-			return &corev1alpha1.ClusterCondition{
-				Type:   corev1alpha1.ClusterConditionTypeDelete,
-				Status: corev1alpha1.ClusterOperationFailed,
+			return &corev1.ClusterCondition{
+				Type:   corev1.ClusterConditionTypeDelete,
+				Status: corev1.ClusterOperationFailed,
 				Reason: "Failed to run node wiper: " + err.Error(),
 			}, nil
 		}
-		return &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationInProgress,
+		return &corev1.ClusterCondition{
+			Type:   corev1.ClusterConditionTypeDelete,
+			Status: corev1.ClusterOperationInProgress,
 			Reason: "Started node wiper daemonset",
 		}, nil
 	} else if err != nil {
@@ -425,28 +425,28 @@ func (p *portworx) DeleteStorage(
 			logrus.Debugf("Deleting portworx metadata")
 			if err := u.WipeMetadata(); err != nil {
 				logrus.Errorf("Failed to delete portworx metadata: %v", err)
-				return &corev1alpha1.ClusterCondition{
-					Type:   corev1alpha1.ClusterConditionTypeDelete,
-					Status: corev1alpha1.ClusterOperationFailed,
+				return &corev1.ClusterCondition{
+					Type:   corev1.ClusterConditionTypeDelete,
+					Status: corev1.ClusterOperationFailed,
 					Reason: "Failed to wipe metadata: " + err.Error(),
 				}, nil
 			}
 		}
-		return &corev1alpha1.ClusterCondition{
-			Type:   corev1alpha1.ClusterConditionTypeDelete,
-			Status: corev1alpha1.ClusterOperationCompleted,
+		return &corev1.ClusterCondition{
+			Type:   corev1.ClusterConditionTypeDelete,
+			Status: corev1.ClusterOperationCompleted,
 			Reason: completeMsg,
 		}, nil
 	}
 
-	return &corev1alpha1.ClusterCondition{
-		Type:   corev1alpha1.ClusterConditionTypeDelete,
-		Status: corev1alpha1.ClusterOperationInProgress,
+	return &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationInProgress,
 		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
 }
 
-func (p *portworx) deleteComponents(cluster *corev1alpha1.StorageCluster) {
+func (p *portworx) deleteComponents(cluster *corev1.StorageCluster) {
 	for componentName, comp := range component.GetAll() {
 		if err := comp.Delete(cluster); err != nil {
 			msg := fmt.Sprintf("Failed to cleanup %v. %v", componentName, err)
@@ -456,7 +456,7 @@ func (p *portworx) deleteComponents(cluster *corev1alpha1.StorageCluster) {
 }
 
 func (p *portworx) normalEvent(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
 	logrus.Info(message)
@@ -464,14 +464,14 @@ func (p *portworx) normalEvent(
 }
 
 func (p *portworx) warningEvent(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
 	logrus.Warn(message)
 	p.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
 }
 
-func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNode, cluster *corev1alpha1.StorageCluster) *cloudstorage.Config {
+func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cluster *corev1.StorageCluster) *cloudstorage.Config {
 	res := &cloudstorage.Config{
 		CloudStorage:            []cloudstorage.CloudDriveConfig{},
 		StorageInstancesPerZone: cluster.Status.Storage.StorageNodesPerZone,
@@ -493,14 +493,14 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1alpha1.StorageNo
 	return nil
 }
 
-func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
+func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
 	t, err := newTemplate(toUpdate)
 	if err != nil {
 		return
 	}
 
 	if toUpdate.Spec.Kvdb == nil {
-		toUpdate.Spec.Kvdb = &corev1alpha1.KvdbSpec{}
+		toUpdate.Spec.Kvdb = &corev1.KvdbSpec{}
 	}
 	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
 		toUpdate.Spec.Kvdb.Internal = true
@@ -513,7 +513,7 @@ func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
 
 	// If no storage spec is provided, initialize one where Portworx takes all available drives
 	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
-		toUpdate.Spec.Storage = &corev1alpha1.StorageSpec{}
+		toUpdate.Spec.Storage = &corev1.StorageSpec{}
 	}
 	if toUpdate.Spec.Storage != nil {
 		if toUpdate.Spec.Storage.Devices == nil &&
@@ -526,7 +526,7 @@ func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	setNodeSpecDefaults(toUpdate)
 
 	if toUpdate.Spec.Placement == nil {
-		toUpdate.Spec.Placement = &corev1alpha1.PlacementSpec{}
+		toUpdate.Spec.Placement = &corev1.PlacementSpec{}
 	}
 	if toUpdate.Spec.Placement.NodeAffinity == nil {
 		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
@@ -572,12 +572,12 @@ func setPortworxDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	setSecuritySpecDefaults(toUpdate)
 }
 
-func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
+func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 	if len(toUpdate.Spec.Nodes) == 0 {
 		return
 	}
 
-	updatedNodeSpecs := make([]corev1alpha1.NodeSpec, 0)
+	updatedNodeSpecs := make([]corev1.NodeSpec, 0)
 	for _, nodeSpec := range toUpdate.Spec.Nodes {
 		nodeSpecCopy := nodeSpec.DeepCopy()
 		if nodeSpec.Storage == nil {
@@ -622,11 +622,11 @@ func setNodeSpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 	toUpdate.Spec.Nodes = updatedNodeSpecs
 }
 
-func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
+func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	// all default values if one is not provided below.
-	defaultAuthTemplate := &corev1alpha1.AuthSpec{
-		GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleEnabled),
-		SelfSigned: &corev1alpha1.SelfSignedSpec{
+	defaultAuthTemplate := &corev1.AuthSpec{
+		GuestAccess: guestAccessTypePtr(corev1.GuestRoleEnabled),
+		SelfSigned: &corev1.SelfSignedSpec{
 			Issuer:        stringPtr(defaultSelfSignedIssuer),
 			TokenLifetime: stringPtr(defaultTokenLifetime),
 			SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
@@ -635,12 +635,12 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 
 	if toUpdate.Spec.Security != nil {
 		if toUpdate.Spec.Security.Enabled {
-			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1alpha1.AuthSpec{}) {
+			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1.AuthSpec{}) {
 				if toUpdate.Spec.Security.Auth.GuestAccess == nil || (*toUpdate.Spec.Security.Auth.GuestAccess == "") {
 					// if not provided, enabled by default.
 					toUpdate.Spec.Security.Auth.GuestAccess = defaultAuthTemplate.GuestAccess
 				}
-				if toUpdate.Spec.Security.Auth.SelfSigned != nil && (*toUpdate.Spec.Security.Auth.SelfSigned != corev1alpha1.SelfSignedSpec{}) {
+				if toUpdate.Spec.Security.Auth.SelfSigned != nil && (*toUpdate.Spec.Security.Auth.SelfSigned != corev1.SelfSignedSpec{}) {
 					selfSignedIssuerEnvVal := pxutil.GetClusterEnvVarValue(context.TODO(), toUpdate, pxutil.EnvKeyPortworxAuthJwtIssuer)
 					if toUpdate.Spec.Security.Auth.SelfSigned.Issuer != nil && (*toUpdate.Spec.Security.Auth.SelfSigned.Issuer != "") {
 						// leave as is, non-nil and non-empty
@@ -670,11 +670,11 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 }
 
 func setDefaultAutopilotProviders(
-	toUpdate *corev1alpha1.StorageCluster,
+	toUpdate *corev1.StorageCluster,
 ) {
 	if toUpdate.Spec.Autopilot != nil && toUpdate.Spec.Autopilot.Enabled &&
 		len(toUpdate.Spec.Autopilot.Providers) == 0 {
-		toUpdate.Spec.Autopilot.Providers = []corev1alpha1.DataProviderSpec{
+		toUpdate.Spec.Autopilot.Providers = []corev1.DataProviderSpec{
 			{
 				Name: "default",
 				Type: "prometheus",
@@ -687,7 +687,7 @@ func setDefaultAutopilotProviders(
 }
 
 func removeDeprecatedFields(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) {
 	// For new clusters with this version of the operator we don't
 	// want to reset the images if they are present
@@ -726,7 +726,7 @@ func removeDeprecatedFields(
 		cluster.Spec.Monitoring.EnableMetrics != nil {
 		if *cluster.Spec.Monitoring.EnableMetrics {
 			if cluster.Spec.Monitoring.Prometheus == nil {
-				cluster.Spec.Monitoring.Prometheus = &corev1alpha1.PrometheusSpec{}
+				cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
 			}
 			cluster.Spec.Monitoring.Prometheus.ExportMetrics = true
 		}
@@ -734,7 +734,7 @@ func removeDeprecatedFields(
 	}
 }
 
-func hasComponentChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasComponentChanged(cluster *corev1.StorageCluster) bool {
 	return hasStorkChanged(cluster) ||
 		hasAutopilotChanged(cluster) ||
 		hasLighthouseChanged(cluster) ||
@@ -742,52 +742,52 @@ func hasComponentChanged(cluster *corev1alpha1.StorageCluster) bool {
 		hasPrometheusChanged(cluster)
 }
 
-func hasStorkChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasStorkChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateStork(cluster) && cluster.Status.DesiredImages.Stork == ""
 }
 
-func hasAutopilotChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasAutopilotChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateAutopilot(cluster) && cluster.Status.DesiredImages.Autopilot == ""
 }
 
-func hasLighthouseChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasLighthouseChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateLighthouse(cluster) && cluster.Status.DesiredImages.UserInterface == ""
 }
 
-func hasCSIChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) &&
 		cluster.Status.DesiredImages.CSIProvisioner == ""
 }
 
-func hasPrometheusChanged(cluster *corev1alpha1.StorageCluster) bool {
+func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled &&
 		cluster.Status.DesiredImages.PrometheusOperator == ""
 }
 
-func autoUpdateStork(cluster *corev1alpha1.StorageCluster) bool {
+func autoUpdateStork(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Stork != nil &&
 		cluster.Spec.Stork.Enabled &&
 		cluster.Spec.Stork.Image == ""
 }
 
-func autoUpdateAutopilot(cluster *corev1alpha1.StorageCluster) bool {
+func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Autopilot != nil &&
 		cluster.Spec.Autopilot.Enabled &&
 		cluster.Spec.Autopilot.Image == ""
 }
 
-func autoUpdateLighthouse(cluster *corev1alpha1.StorageCluster) bool {
+func autoUpdateLighthouse(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.UserInterface != nil &&
 		cluster.Spec.UserInterface.Enabled &&
 		cluster.Spec.UserInterface.Image == ""
 }
 
-func autoUpdateComponents(cluster *corev1alpha1.StorageCluster) bool {
+func autoUpdateComponents(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.AutoUpdateComponents != nil &&
-		(*cluster.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate ||
-			*cluster.Spec.AutoUpdateComponents == corev1alpha1.AlwaysAutoUpdate)
+		(*cluster.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate ||
+			*cluster.Spec.AutoUpdateComponents == corev1.AlwaysAutoUpdate)
 }
 
 func miscArgsChanged(currentArgs, miscArgs string) bool {

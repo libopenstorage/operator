@@ -28,12 +28,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/constants"
-
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -85,7 +84,7 @@ const (
 var _ reconcile.Reconciler = &Controller{}
 
 var (
-	controllerKind = corev1alpha1.SchemeGroupVersion.WithKind("StorageCluster")
+	controllerKind = corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	crdBaseDir     = getCRDBasePath
 )
 
@@ -145,7 +144,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 // StartWatch starts the watch on the StorageCluster
 func (c *Controller) StartWatch() error {
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &corev1alpha1.StorageCluster{}},
+		&source.Kind{Type: &corev1.StorageCluster{}},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -157,7 +156,7 @@ func (c *Controller) StartWatch() error {
 		&source.Kind{Type: &v1.Pod{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
+			OwnerType:    &corev1.StorageCluster{},
 		},
 	)
 	if err != nil {
@@ -169,7 +168,7 @@ func (c *Controller) StartWatch() error {
 		&source.Kind{Type: &apps.ControllerRevision{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &corev1alpha1.StorageCluster{},
+			OwnerType:    &corev1.StorageCluster{},
 		},
 	)
 	if err != nil {
@@ -192,7 +191,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	log.Infof("Reconciling StorageCluster")
 
 	// Fetch the StorageCluster instance
-	cluster := &corev1alpha1.StorageCluster{}
+	cluster := &corev1.StorageCluster{}
 	err := c.client.Get(context.TODO(), request.NamespacedName, cluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -217,7 +216,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	return reconcile.Result{}, nil
 }
 
-func (c *Controller) validate(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateK8sVersion(); err != nil {
 		return err
 	}
@@ -246,7 +245,7 @@ func (c *Controller) validateK8sVersion() error {
 	return nil
 }
 
-func (c *Controller) validateSingleCluster(current *corev1alpha1.StorageCluster) error {
+func (c *Controller) validateSingleCluster(current *corev1.StorageCluster) error {
 	// If the current cluster has the delete finalizer then it has been already reconciled
 	for _, finalizer := range current.Finalizers {
 		if finalizer == deleteFinalizerName {
@@ -258,7 +257,7 @@ func (c *Controller) validateSingleCluster(current *corev1alpha1.StorageCluster)
 	// StorageClusters have the finalizer. If none of them have it, then current just got
 	// lucky and is the only StorageCluster that will get reconciled; else if a cluster
 	// is found with the finalizer then we cannot process current as we support only 1.
-	clusterList := &corev1alpha1.StorageClusterList{}
+	clusterList := &corev1.StorageClusterList{}
 	err := c.client.List(context.TODO(), clusterList, &client.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to list storage clusters. %v", err)
@@ -300,8 +299,8 @@ func (c *Controller) RegisterCRD() error {
 	}
 
 	resource := apiextensionsops.CustomResource{
-		Plural: corev1alpha1.StorageClusterResourcePlural,
-		Group:  corev1alpha1.SchemeGroupVersion.Group,
+		Plural: corev1.StorageClusterResourcePlural,
+		Group:  corev1.SchemeGroupVersion.Group,
 	}
 	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
@@ -312,7 +311,7 @@ func (c *Controller) RegisterCRD() error {
 }
 
 func (c *Controller) syncStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	if cluster.DeletionTimestamp != nil {
 		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
@@ -347,8 +346,8 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	switch cluster.Spec.UpdateStrategy.Type {
-	case corev1alpha1.OnDeleteStorageClusterStrategyType:
-	case corev1alpha1.RollingUpdateStorageClusterStrategyType:
+	case corev1.OnDeleteStorageClusterStrategyType:
+	case corev1.RollingUpdateStorageClusterStrategyType:
 		if err := c.rollingUpdate(cluster, hash); err != nil {
 			return err
 		}
@@ -365,7 +364,7 @@ func (c *Controller) syncStorageCluster(
 }
 
 func (c *Controller) deleteStorageCluster(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	// get all the storage pods
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
@@ -397,16 +396,16 @@ func (c *Controller) deleteStorageCluster(
 		// Check if there is an existing delete condition and overwrite it
 		foundIndex := -1
 		for i, deleteCondition := range toDelete.Status.Conditions {
-			if deleteCondition.Type == corev1alpha1.ClusterConditionTypeDelete {
+			if deleteCondition.Type == corev1.ClusterConditionTypeDelete {
 				foundIndex = i
 				break
 			}
 		}
 		if foundIndex == -1 {
 			if deleteClusterCondition == nil {
-				deleteClusterCondition = &corev1alpha1.ClusterCondition{
-					Type:   corev1alpha1.ClusterConditionTypeDelete,
-					Status: corev1alpha1.ClusterOperationInProgress,
+				deleteClusterCondition = &corev1.ClusterCondition{
+					Type:   corev1.ClusterConditionTypeDelete,
+					Status: corev1.ClusterOperationInProgress,
 				}
 				if driverErr != nil {
 					deleteClusterCondition.Reason = err.Error()
@@ -419,13 +418,13 @@ func (c *Controller) deleteStorageCluster(
 			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
 
-		toDelete.Status.Phase = string(corev1alpha1.ClusterConditionTypeDelete) + string(toDelete.Status.Conditions[foundIndex].Status)
+		toDelete.Status.Phase = string(corev1.ClusterConditionTypeDelete) + string(toDelete.Status.Conditions[foundIndex].Status)
 		if err := k8s.UpdateStorageClusterStatus(c.client, toDelete); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}
 
-		if toDelete.Status.Conditions[foundIndex].Status == corev1alpha1.ClusterOperationCompleted {
+		if toDelete.Status.Conditions[foundIndex].Status == corev1.ClusterOperationCompleted {
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
 			if err := c.client.Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
@@ -442,7 +441,7 @@ func (c *Controller) deleteStorageCluster(
 }
 
 func (c *Controller) updateStorageClusterStatus(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) error {
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
@@ -452,7 +451,7 @@ func (c *Controller) updateStorageClusterStatus(
 }
 
 func (c *Controller) manage(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	hash string,
 ) error {
 	// Run the pre install hook for the driver to ensure we are ready to create storage pods
@@ -529,7 +528,7 @@ func (c *Controller) manage(
 
 // syncNodes deletes given pods and creates new storage pods on the given nodes
 func (c *Controller) syncNodes(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	podsToDelete, nodesNeedingStoragePods []string,
 	hash string,
 ) error {
@@ -629,7 +628,7 @@ func (c *Controller) syncNodes(
 // podTemplatesForNodes returns a list storage pod templates for given list of
 // nodes where a storage pod needs to be created.
 func (c *Controller) podTemplatesForNodes(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	nodesNeedingStoragePods []string,
 	hash string,
 ) ([]string, []*v1.PodTemplateSpec, error) {
@@ -720,7 +719,7 @@ func (c *Controller) podTemplatesForNodes(
 // It creates a single pod template and makes a deep copy for each node so it is easier
 // during pod creation.
 func (c *Controller) createPodTemplateForNodeGroup(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	nodeGroup []*v1.Node,
 	nodesNeedingStoragePods *[]string,
 	podTemplates *[]*v1.PodTemplateSpec,
@@ -743,7 +742,7 @@ func (c *Controller) createPodTemplateForNodeGroup(
 func (c *Controller) podsShouldBeOnNode(
 	node *v1.Node,
 	nodeToStoragePods map[string][]*v1.Pod,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) (nodesNeedingStoragePods, podsToDelete []string, err error) {
 	wantToRun, shouldSchedule, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
 	if err != nil {
@@ -798,7 +797,7 @@ func (c *Controller) podsShouldBeOnNode(
 // to be scheduled on the node, or to allow running if it is already running.
 func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
 	if !storagePodsEnabled(cluster) {
 		return false, false, false, nil
@@ -904,7 +903,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 }
 
 func (c *Controller) createPodTemplate(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	node *v1.Node,
 	hash string,
 ) (v1.PodTemplateSpec, error) {
@@ -936,7 +935,7 @@ func (c *Controller) createPodTemplate(
 }
 
 func (c *Controller) newSimulationPod(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	nodeName string,
 ) (*v1.Pod, error) {
 	newPod := &v1.Pod{
@@ -971,7 +970,7 @@ func (c *Controller) newSimulationPod(
 func (c *Controller) simulate(
 	newPod *v1.Pod,
 	node *v1.Node,
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) ([]predicates.PredicateFailureReason, *schedulernodeinfo.NodeInfo, error) {
 	podList := &v1.PodList{}
 	fieldSelector := fields.SelectorFromSet(map[string]string{nodeNameIndex: node.Name})
@@ -998,16 +997,16 @@ func (c *Controller) simulate(
 	return reasons, nodeInfo, err
 }
 
-func (c *Controller) setStorageClusterDefaults(cluster *corev1alpha1.StorageCluster) error {
+func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
 
 	updateStrategy := &toUpdate.Spec.UpdateStrategy
 	if updateStrategy.Type == "" {
-		updateStrategy.Type = corev1alpha1.RollingUpdateStorageClusterStrategyType
+		updateStrategy.Type = corev1.RollingUpdateStorageClusterStrategyType
 	}
-	if updateStrategy.Type == corev1alpha1.RollingUpdateStorageClusterStrategyType {
+	if updateStrategy.Type == corev1.RollingUpdateStorageClusterStrategyType {
 		if updateStrategy.RollingUpdate == nil {
-			updateStrategy.RollingUpdate = &corev1alpha1.RollingUpdateStorageCluster{}
+			updateStrategy.RollingUpdate = &corev1.RollingUpdateStorageCluster{}
 		}
 		if updateStrategy.RollingUpdate.MaxUnavailable == nil {
 			// Set default MaxUnavailable as 1 by default.
@@ -1089,7 +1088,7 @@ func checkPredicates(
 }
 
 func (c *Controller) getNodeToStoragePods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) (map[string][]*v1.Pod, error) {
 	claimedPods, err := c.getStoragePods(cluster)
 	if err != nil {
@@ -1111,7 +1110,7 @@ func (c *Controller) getNodeToStoragePods(
 }
 
 func (c *Controller) getStoragePods(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) ([]*v1.Pod, error) {
 	// List all pods to include those that don't match the selector anymore but
 	// have a ControllerRef pointing to this controller.
@@ -1156,19 +1155,19 @@ func (c *Controller) getStoragePods(
 }
 
 func (c *Controller) createStorageNode(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	nodeName string,
 ) {
 	ownerRef := metav1.NewControllerRef(cluster, controllerKind)
-	storageNode := &corev1alpha1.StorageNode{
+	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            nodeName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			Labels:          c.Driver.GetSelectorLabels(),
 		},
-		Status: corev1alpha1.NodeStatus{
-			Phase: string(corev1alpha1.NodeInitStatus),
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
 		},
 	}
 	err := c.client.Create(context.TODO(), storageNode)
@@ -1183,7 +1182,7 @@ func (c *Controller) createStorageNode(
 	}
 }
 
-func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageCluster) map[string]string {
+func (c *Controller) storageClusterSelectorLabels(cluster *corev1.StorageCluster) map[string]string {
 	clusterLabels := c.Driver.GetSelectorLabels()
 	if clusterLabels == nil {
 		clusterLabels = make(map[string]string)
@@ -1193,7 +1192,7 @@ func (c *Controller) storageClusterSelectorLabels(cluster *corev1alpha1.StorageC
 	return clusterLabels
 }
 
-func (c *Controller) log(clus *corev1alpha1.StorageCluster) *logrus.Entry {
+func (c *Controller) log(clus *corev1.StorageCluster) *logrus.Entry {
 	logFields := logrus.Fields{
 		"cluster": clus.Name,
 	}
@@ -1202,7 +1201,7 @@ func (c *Controller) log(clus *corev1alpha1.StorageCluster) *logrus.Entry {
 }
 
 func storagePodsEnabled(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 ) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationDisableStorage])
 	return err != nil || !disabled

@@ -8,7 +8,7 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -69,13 +69,13 @@ func (c *prometheus) Initialize(
 	c.recorder = recorder
 }
 
-func (c *prometheus) IsEnabled(cluster *corev1alpha1.StorageCluster) bool {
+func (c *prometheus) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled
 }
 
-func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
+func (c *prometheus) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createOperatorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -126,7 +126,7 @@ func (c *prometheus) Reconcile(cluster *corev1alpha1.StorageCluster) error {
 	return nil
 }
 
-func (c *prometheus) Delete(cluster *corev1alpha1.StorageCluster) error {
+func (c *prometheus) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	err := k8sutil.DeletePrometheus(c.k8sClient, PrometheusInstanceName, cluster.Namespace, *ownerRef)
 	if err != nil && !metaerrors.IsNoMatchError(err) {
@@ -341,7 +341,7 @@ func (c *prometheus) createPrometheusClusterRoleBinding(
 }
 
 func (c *prometheus) createOperatorDeployment(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	existingDeployment := &appsv1.Deployment{}
@@ -383,7 +383,7 @@ func (c *prometheus) createOperatorDeployment(
 }
 
 func getPrometheusOperatorDeploymentSpec(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	operatorImage string,
 ) *appsv1.Deployment {
@@ -508,7 +508,7 @@ func (c *prometheus) createPrometheusService(
 }
 
 func (c *prometheus) createPrometheusInstance(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	replicas := int32(1)
@@ -592,7 +592,7 @@ func (c *prometheus) createPrometheusInstance(
 }
 
 func (c *prometheus) warningEvent(
-	cluster *corev1alpha1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
 	logrus.Warn(message)
