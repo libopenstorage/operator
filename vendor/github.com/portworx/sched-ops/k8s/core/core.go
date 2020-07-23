@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/record"
 )
 
 const (
@@ -35,7 +36,9 @@ var (
 // Ops is an interface to perform kubernetes related operations on the core resources.
 type Ops interface {
 	ConfigMapOps
+	EndpointsOps
 	EventOps
+	RecorderOps
 	NamespaceOps
 	NodeOps
 	PersistentVolumeClaimOps
@@ -43,6 +46,7 @@ type Ops interface {
 	SecretOps
 	ServiceOps
 	ServiceAccountOps
+	LimitRangeOps
 
 	// SetConfig sets the config and resets the client
 	SetConfig(config *rest.Config)
@@ -101,6 +105,10 @@ func NewInstanceFromConfigFile(config string) (Ops, error) {
 type Client struct {
 	config     *rest.Config
 	kubernetes kubernetes.Interface
+	// eventRecorders is a map of component to event recorders
+	eventRecorders     map[string]record.EventRecorder
+	eventRecordersLock sync.Mutex
+	eventBroadcaster   record.EventBroadcaster
 }
 
 // SetConfig sets the config and resets the client.
