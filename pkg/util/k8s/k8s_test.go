@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -2061,4 +2062,6 @@ func TestWarningEvent(t *testing.T) {
 		},
 	}
 	WarningEvent(recorder, n1, "test reason", "test message")
+	lastEvent := <-recorder.Events
+	require.True(t, strings.Contains(lastEvent, "test reason"))
 }

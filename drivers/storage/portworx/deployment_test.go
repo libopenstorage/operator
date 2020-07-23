@@ -25,7 +25,7 @@ import (
 
 func TestBasicRuncPodSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	expected := getExpectedPodSpec(t, "testspec/runc.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc.yaml")
 	nodeName := "testNode"
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -154,25 +154,11 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	assert.Equal(t, "px-secret", regSecretEnv.Value)
 	assert.Nil(t, regConfigEnv)
 
-	tolerations := []v1.Toleration{
-		{
-			Key:      "must-exist",
-			Operator: v1.TolerationOpExists,
-			Effect:   v1.TaintEffectNoExecute,
-		},
-		{
-			Key:      "foo",
-			Operator: v1.TolerationOpEqual,
-			Value:    "bar",
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
-	cluster.Spec.Placement = &corev1alpha1.PlacementSpec{
-		Tolerations: tolerations,
-	}
-	kvdbPodSpec, err := driver.GetKVDBPodSpec(cluster, nodeName)
+	// kvdb pod spec
+	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
 	require.NoError(t, err)
-	require.NotNil(t, kvdbPodSpec)
+	assert.Len(t, actual.ImagePullSecrets, 1)
+	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
 }
 
 func TestPodSpecWithTolerations(t *testing.T) {
@@ -209,6 +195,11 @@ func TestPodSpecWithTolerations(t *testing.T) {
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.ElementsMatch(t, tolerations, podSpec.Tolerations)
+
+	kvdbPodSpec, err := driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.NotNil(t, kvdbPodSpec)
+	require.ElementsMatch(t, tolerations, kvdbPodSpec.Tolerations)
 }
 
 func TestPodSpecWithEnvOverrides(t *testing.T) {
@@ -237,12 +228,43 @@ func TestPodSpecWithEnvOverrides(t *testing.T) {
 		},
 	}
 
-	expected := getExpectedPodSpec(t, "testspec/portworxPodEnvOverride.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/portworxPodEnvOverride.yaml")
 
 	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
+	assertPodSpecEqual(t, expected, &actual)
+}
+
+func TestGetKVDBPodSpec(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.8",
+	}
+
+	nodeName := "testNode"
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1alpha1.StorageClusterSpec{},
+	}
+
+	expected := getExpectedPodSpec(t, "testspec/kvdbPodDefault.yaml")
+	actual, err := driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assertPodSpecEqual(t, expected, &actual)
+
+	// custom port
+	startPort := uint32(10001)
+	cluster.Spec.StartPort = &startPort
+	expected = getExpectedPodSpec(t, "testspec/kvdbPodCustomPort.yaml")
+	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
 	assertPodSpecEqual(t, expected, &actual)
 }
 
@@ -1258,7 +1280,7 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 	}
 	driver := portworx{}
 
-	expected := getExpectedPodSpec(t, "testspec/portworxPodCustomPort.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/portworxPodCustomPort.yaml")
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -1683,7 +1705,7 @@ func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 
 func TestPKSPodSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	expected := getExpectedPodSpec(t, "testspec/pks.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/pks.yaml")
 
 	nodeName := "testNode"
 
@@ -1739,7 +1761,7 @@ func TestPKSPodSpec(t *testing.T) {
 
 func TestOpenshiftRuncPodSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	expected := getExpectedPodSpec(t, "testspec/openshift_runc.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/openshift_runc.yaml")
 
 	nodeName := "testNode"
 
@@ -1803,7 +1825,7 @@ func TestPodSpecForK3s(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.4+k3s1",
 	}
-	expected := getExpectedPodSpec(t, "testspec/px_k3s.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_k3s.yaml")
 
 	nodeName := "testNode"
 
@@ -1827,7 +1849,7 @@ func TestPodSpecForK3s(t *testing.T) {
 
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	expected := getExpectedPodSpec(t, "testspec/px_master.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_master.yaml")
 
 	nodeName := "testNode"
 
@@ -1859,7 +1881,7 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.8",
 	}
-	expected := getExpectedPodSpec(t, "testspec/px_csi_0.3.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_csi_0.3.yaml")
 
 	nodeName := "testNode"
 
@@ -1905,7 +1927,7 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.2",
 	}
-	expected := getExpectedPodSpec(t, "testspec/px_csi_1.0.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_csi_1.0.yaml")
 
 	nodeName := "testNode"
 
@@ -2142,7 +2164,7 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 	)
 	coreops.SetInstance(coreops.New(fakeClient))
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_certs.yaml")
 
 	nodeName := "testNode"
 
@@ -2185,7 +2207,7 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 	)
 	coreops.SetInstance(coreops.New(fakeClient))
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_ca.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_certs_without_ca.yaml")
 
 	nodeName := "testNode"
 
@@ -2227,7 +2249,7 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 	)
 	coreops.SetInstance(coreops.New(fakeClient))
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_certs_without_key.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_certs_without_key.yaml")
 
 	nodeName := "testNode"
 
@@ -2287,7 +2309,7 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_without_certs.yaml")
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
@@ -2333,7 +2355,7 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_without_certs.yaml")
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
@@ -2350,7 +2372,7 @@ func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 
-	expected := getExpectedPodSpec(t, "testspec/px_kvdb_without_certs.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_without_certs.yaml")
 
 	nodeName := "testNode"
 
@@ -2678,7 +2700,7 @@ func TestSecuritySetEnv(t *testing.T) {
 	assert.True(t, storkSecretSet)
 }
 
-func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {
+func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)
 
@@ -2689,6 +2711,19 @@ func getExpectedPodSpec(t *testing.T, fileName string) *v1.PodSpec {
 	assert.True(t, ok, "Expected daemon set object")
 
 	return &ds.Spec.Template.Spec
+}
+
+func getExpectedPodSpec(t *testing.T, podSpecFileName string) *v1.PodSpec {
+	json, err := ioutil.ReadFile(podSpecFileName)
+	assert.NoError(t, err)
+
+	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
+	assert.NoError(t, err)
+
+	p, ok := obj.(*v1.Pod)
+	assert.True(t, ok, "Expected pod object")
+
+	return &p.Spec
 }
 
 func assertPodSpecEqual(t *testing.T, expected, actual *v1.PodSpec) {

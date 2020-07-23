@@ -18,9 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -49,11 +47,10 @@ type Controller struct {
 	Driver storage.Driver
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client     client.Client
-	scheme     *runtime.Scheme
-	recorder   record.EventRecorder
-	podControl k8scontroller.PodControlInterface
-	ctrl       controller.Controller
+	client   client.Client
+	scheme   *runtime.Scheme
+	recorder record.EventRecorder
+	ctrl     controller.Controller
 }
 
 // Init initialize the storage storagenode controller
@@ -62,16 +59,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 
-	// Create pod control interface object to manage pods under storage cluster
-	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("error getting kubernetes client: %v", err)
-	}
-	c.podControl = k8scontroller.RealPodControl{
-		KubeClient: clientset,
-		Recorder:   c.recorder,
-	}
-
+	var err error
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
 	if err != nil {
@@ -165,13 +153,12 @@ func (c *Controller) RegisterCRD() error {
 
 func (c *Controller) syncStorageNode(storageNode *corev1alpha1.StorageNode) error {
 	c.log(storageNode).Infof("Reconciling StorageNode")
-	ownerRefs := storageNode.GetOwnerReferences()
-	if len(ownerRefs) == 0 {
+	owner := metav1.GetControllerOf(storageNode)
+	if owner == nil {
 		c.log(storageNode).Warnf("owner reference not set")
 		return nil
 	}
 
-	owner := ownerRefs[0]
 	if owner.Kind != "StorageCluster" {
 		return fmt.Errorf("unknown owner kind: %s for storage node: %s", owner.Kind, storageNode.Name)
 	}
@@ -271,6 +258,7 @@ func (c *Controller) syncStorage(
 		&client.ListOptions{
 			Namespace:     storageNode.Namespace,
 			LabelSelector: labels.SelectorFromSet(pxLabels),
+			FieldSelector: fields.SelectorFromSet(map[string]string{"nodeName": storageNode.Name}),
 		},
 	)
 	if err != nil {
@@ -280,8 +268,7 @@ func (c *Controller) syncStorage(
 	for _, pod := range portworxPodList.Items {
 		podCopy := pod.DeepCopy()
 		controllerRef := metav1.GetControllerOf(podCopy)
-		if controllerRef != nil && controllerRef.UID == cluster.UID &&
-			len(pod.Spec.NodeName) != 0 && storageNode.Name == podCopy.Spec.NodeName {
+		if controllerRef != nil && controllerRef.UID == cluster.UID && pod.DeletionTimestamp == nil {
 			updateNeeded := false
 			value, present := podCopy.GetLabels()[constants.LabelKeyStoragePod]
 			if canNodeServeStorage(storageNode) { // node has storage
@@ -320,24 +307,13 @@ func (c *Controller) createKVDBPod(
 	}
 
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
-	podSpec.NodeName = storageNode.Name
-
-	trueVar := true
+	ownerRef := metav1.NewControllerRef(storageNode, corev1alpha1.SchemeGroupVersion.WithKind("StorageNode"))
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("%s-kvdb-", c.Driver.String()),
-			Namespace:    storageNode.Namespace,
-			Labels:       c.kvdbPodLabels(cluster),
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         corev1alpha1.SchemeGroupVersion.String(),
-					Kind:               "StorageNode",
-					Name:               storageNode.Namespace,
-					UID:                storageNode.UID,
-					Controller:         &trueVar,
-					BlockOwnerDeletion: &trueVar,
-				},
-			},
+			GenerateName:    fmt.Sprintf("%s-kvdb-", c.Driver.String()),
+			Namespace:       storageNode.Namespace,
+			Labels:          c.kvdbPodLabels(cluster),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: podSpec,
 	}

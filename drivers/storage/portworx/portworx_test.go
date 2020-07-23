@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1729,6 +1730,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
+	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
 
 	nodeStatus = &corev1alpha1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
@@ -1743,6 +1746,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1alpha1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1alpha1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
+	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
 
 	// Return only one node in enumerate for future tests
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -5726,7 +5731,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	mockCtrl := gomock.NewController(t)
-	//defer mockCtrl.Finish()
+	defer mockCtrl.Finish()
 
 	// Create the mock servers that can be used to mock SDK calls
 	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
@@ -5792,14 +5797,14 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		AnyTimes()
 	// Mock node enumerate response
 	expectedNodeOne := &api.StorageNode{
-		Id:                "node-1",
+		Id:                "node-one",
 		SchedulerNodeName: "node-one",
 		DataIp:            "10.0.1.1",
 		MgmtIp:            "10.0.1.2",
 		Status:            api.Status_STATUS_NONE,
 	}
 	expectedNodeTwo := &api.StorageNode{
-		Id:                "node-2",
+		Id:                "node-two",
 		SchedulerNodeName: "node-two",
 		DataIp:            "10.0.2.1",
 		MgmtIp:            "10.0.2.2",
@@ -5815,7 +5820,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-1","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-2","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
@@ -5847,7 +5852,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	}
 
 	// TEST 2: Remove KVDB condition
-	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-3","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-4","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
+	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
 	driver.k8sClient.Update(context.TODO(), cm)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -5870,7 +5875,84 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		require.False(t, found)
 	}
 
-	// TEST 3: config map not found
+	// TEST 4: Check kvdn node state translations
+	kvdbNodeStateTests := []struct {
+		state                   int
+		nodeType                int
+		expectedConditionStatus corev1alpha1.NodeConditionStatus
+		expectedNodeType        string
+	}{
+		{
+			state:                   0,
+			nodeType:                0,
+			expectedConditionStatus: corev1alpha1.NodeUnknownStatus,
+			expectedNodeType:        "",
+		},
+		{
+			state:                   1,
+			nodeType:                1,
+			expectedConditionStatus: corev1alpha1.NodeInitStatus,
+			expectedNodeType:        "leader",
+		},
+		{
+			state:                   2,
+			nodeType:                1,
+			expectedConditionStatus: corev1alpha1.NodeOnlineStatus,
+			expectedNodeType:        "leader",
+		},
+		{
+			state:                   3,
+			nodeType:                2,
+			expectedConditionStatus: corev1alpha1.NodeOfflineStatus,
+			expectedNodeType:        "member",
+		},
+		{
+			state:                   4,
+			nodeType:                2,
+			expectedConditionStatus: corev1alpha1.NodeUnknownStatus,
+			expectedNodeType:        "member",
+		},
+	}
+
+	for _, kvdbNodeStateTest := range kvdbNodeStateTests {
+		mockNodeServer.EXPECT().
+			EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+			Return(expectedNodeEnumerateResp, nil).
+			Times(1)
+
+		cm.Data[pxEntriesKey] = fmt.Sprintf(
+			`[{"IP":"10.0.1.2","ID":"node-one","State":%d,"Type":%d,"Version":"v2","peerport":"9018","clientport":"9019"}]`,
+			kvdbNodeStateTest.state, kvdbNodeStateTest.nodeType)
+		driver.k8sClient.Update(context.TODO(), cm)
+		err = driver.UpdateStorageClusterStatus(cluster)
+		require.NoError(t, err)
+
+		var (
+			found        bool
+			status       corev1alpha1.NodeConditionStatus
+			conditionMsg string
+		)
+		checkStorageNode := &corev1alpha1.StorageNode{}
+		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+			Name:      "node-one",
+			Namespace: clusterNS,
+		}, checkStorageNode)
+		require.NoError(t, err)
+		for _, c := range checkStorageNode.Status.Conditions {
+			if c.Type == corev1alpha1.NodeKVDBCondition {
+				found = true
+				status = c.Status
+				conditionMsg = c.Message
+				break
+			}
+		}
+		require.True(t, found)
+		require.Equal(t, kvdbNodeStateTest.expectedConditionStatus, status)
+		require.NotEmpty(t, conditionMsg)
+		require.True(t, strings.Contains(conditionMsg, kvdbNodeStateTest.expectedNodeType))
+	}
+
+	// TEST 5: config map not found
 	driver.k8sClient.Delete(context.TODO(), cm)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)

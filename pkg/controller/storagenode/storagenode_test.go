@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -313,18 +312,14 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	_, err := controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 
 	checkStoragePod := &v1.Pod{}
-	err = controller.client.Get(context.TODO(), client.ObjectKey{
-		Name:      podNode1.Name,
-		Namespace: podNode1.Namespace,
-	}, checkStoragePod)
-	require.NoError(t, err)
+	err = testutil.Get(controller.client, checkStoragePod, podNode1.Name, podNode1.Namespace)
 	value, present := checkStoragePod.Labels[constants.LabelKeyStoragePod]
-	require.True(t, present)
+	require.Truef(t, present, "pod: %s/%s should have had the %s label",
+		podNode1.Namespace, podNode1.Name, constants.LabelKeyStoragePod)
 	require.Equal(t, "true", value)
 
 	// now makes this node non-storage and ensure reconcile removes the label
@@ -332,15 +327,11 @@ func TestReconcile(t *testing.T) {
 	err = controller.client.Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 
 	checkStoragePod = &v1.Pod{}
-	err = controller.client.Get(context.TODO(), client.ObjectKey{
-		Name:      podNode1.Name,
-		Namespace: podNode1.Namespace,
-	}, checkStoragePod)
+	err = testutil.Get(controller.client, checkStoragePod, podNode1.Name, podNode1.Namespace)
 	require.NoError(t, err)
 	_, present = checkStoragePod.Labels[constants.LabelKeyStoragePod]
 	require.False(t, present)
@@ -352,9 +343,13 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	result, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
+	checkStorageLessPod := &v1.Pod{}
+	err = testutil.Get(controller.client, checkStorageLessPod, podNode2.Name, podNode2.Namespace)
+	require.NoError(t, err)
+	_, present = checkStoragePod.Labels[constants.LabelKeyStoragePod]
+	require.False(t, present)
 
 	// reconcile non-existing node
 	request = reconcile.Request{
@@ -367,7 +362,7 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestReconcileKVDB focuses on reconcilign a StorageNode which is running KVDB
+// TestReconcileKVDB focuses on reconciling a StorageNode which is running KVDB
 func TestReconcileKVDB(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
@@ -448,7 +443,6 @@ func TestReconcileKVDB(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(kvdbNode1, kvdbNode2, k8sNode1, k8sNode2, cluster)
-	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -456,10 +450,9 @@ func TestReconcileKVDB(t *testing.T) {
 	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	controller := Controller{
-		client:     k8sClient,
-		recorder:   recorder,
-		Driver:     driver,
-		podControl: podControl,
+		client:   k8sClient,
+		recorder: recorder,
+		Driver:   driver,
 	}
 
 	request := reconcile.Request{
@@ -468,9 +461,8 @@ func TestReconcileKVDB(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	_, err := controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 
 	// check if reconcile created kvdb pods
 	podList := &v1.PodList{}
@@ -486,9 +478,8 @@ func TestReconcileKVDB(t *testing.T) {
 	// test reconcile when k8s node has been deleted
 	err = controller.client.Delete(context.TODO(), k8sNode1)
 	require.NoError(t, err)
-	result, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 
 	podNode2 := createStoragePod(cluster, "kvdb-pod-node2", testKVDBNode2, controller.kvdbPodLabels(cluster), clusterRef)
 	k8sClient.Create(context.TODO(), podNode2)
@@ -498,9 +489,8 @@ func TestReconcileKVDB(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	result, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(request)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 
 	checkPod := &v1.Pod{}
 	err = k8sClient.Get(context.TODO(), client.ObjectKey{

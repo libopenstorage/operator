@@ -13,7 +13,6 @@ import (
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	"github.com/libopenstorage/operator/pkg/util"
 	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
-	"github.com/portworx/kvdb/api/bootstrap/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -111,11 +110,13 @@ func (p *portworx) updateStorageNodes(
 	// If cluster is running internal kvdb, get current bootstrap nodes
 	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
 	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
-		cmName := k8s.GetBootstrapConfigMapName(cluster.GetName())
+		strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(cluster.Name, ""))
+		cmName := fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName)
+
 		cm := &v1.ConfigMap{}
 		err = p.k8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      cmName,
-			Namespace: cluster.GetNamespace(),
+			Namespace: bootstrapCloudDriveNamespace,
 		}, cm)
 		if err != nil {
 			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)

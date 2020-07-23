@@ -112,8 +112,9 @@ func run(c *cli.Context) {
 	}
 
 	storageNodeController := storagenode.Controller{Driver: d}
+	err = storageNodeController.RegisterCRD()
 	if err != nil {
-		log.Fatalf("Error registering CRD's for StorageCluster controller: %v", err)
+		log.Fatalf("Error registering CRD's for StorageNode controller: %v", err)
 	}
 
 	// TODO: Don't move createManager above register CRD section. This part will be refactored because of a bug,

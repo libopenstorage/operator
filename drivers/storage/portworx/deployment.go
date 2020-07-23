@@ -278,6 +278,7 @@ func (p *portworx) GetKVDBPodSpec(
 		RestartPolicy:      v1.RestartPolicyAlways,
 		ServiceAccountName: pxutil.PortworxServiceAccountName,
 		Containers:         []v1.Container{containers},
+		NodeName:           nodeName,
 	}
 
 	if t.cluster.Spec.Placement != nil {
@@ -486,6 +487,10 @@ func (t *template) portworxContainer() v1.Container {
 
 func (t *template) kvdbContainer() v1.Container {
 	kvdbProxyImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, pxutil.ImageNamePause)
+	kvdbTargetPort := 9019
+	if t.startPort != pxutil.DefaultStartPort {
+		kvdbTargetPort = t.startPort + 15
+	}
 	return v1.Container{
 		Name:            pxKVDBContainerName,
 		Image:           kvdbProxyImage,
@@ -495,7 +500,7 @@ func (t *template) kvdbContainer() v1.Container {
 			InitialDelaySeconds: 840,
 			Handler: v1.Handler{
 				TCPSocket: &v1.TCPSocketAction{
-					Port: intstr.FromInt(t.startPort + 18),
+					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
 				},
 			},
@@ -504,7 +509,7 @@ func (t *template) kvdbContainer() v1.Container {
 			PeriodSeconds: 10,
 			Handler: v1.Handler{
 				TCPSocket: &v1.TCPSocketAction{
-					Port: intstr.FromInt(t.startPort + 18),
+					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
 				},
 			},
