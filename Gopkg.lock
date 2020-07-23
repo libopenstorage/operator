@@ -407,12 +407,11 @@
 
 [[projects]]
   branch = "release-8.0"
-  digest = "1:3a3e91cee97ffe60232f7f9cc4caa0d67a5200fd21e8e486571c4c1bbd9f632c"
+  digest = "1:eec5351e56e8f2a6e399ce36f775939ce8fde62ad042f6c10a5282446f7fe298"
   name = "github.com/libopenstorage/openstorage"
   packages = [
     "api",
     "pkg/auth",
-    "pkg/dbg",
     "pkg/grpcserver",
     "pkg/util",
     "volume",
@@ -516,7 +515,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "bootstrap-schema-2"
+  branch = "master"
   digest = "1:6147a1552014f7a788f93106825c1d2f7ab35ac723f7deaf2235484b44389397"
   name = "github.com/portworx/kvdb"
   packages = [
@@ -531,7 +530,7 @@
     "mem",
   ]
   pruneopts = "UT"
-  revision = "6145547fb934c9012333ded17d858e4edde62b8a"
+  revision = "2734b7f401940d08c8c82ec4c1cd352f9e219f72"
 
 [[projects]]
   branch = "master"
@@ -1474,7 +1473,6 @@
     "github.com/libopenstorage/cloudops/specs/decisionmatrix",
     "github.com/libopenstorage/openstorage/api",
     "github.com/libopenstorage/openstorage/pkg/auth",
-    "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
     "github.com/operator-framework/operator-sdk/pkg/metrics",
     "github.com/portworx/kvdb",
@@ -1555,14 +1553,17 @@
     "k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals",
     "k8s.io/utils/integer",
     "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1",
+    "sigs.k8s.io/controller-runtime/pkg/cache",
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/fake",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
+    "sigs.k8s.io/controller-runtime/pkg/predicate",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",
     "sigs.k8s.io/controller-runtime/pkg/scheme",
     "sigs.k8s.io/controller-runtime/pkg/source",
+    "sigs.k8s.io/controller-runtime/pkg/webhook",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
