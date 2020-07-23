@@ -1,28 +1,28 @@
 package operator
 
 import (
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // StorageClusterOps is an interface to perfrom k8s StorageCluster operations
 type StorageClusterOps interface {
 	// CreateStorageCluster creates the given StorageCluster
-	CreateStorageCluster(*corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error)
+	CreateStorageCluster(*corev1.StorageCluster) (*corev1.StorageCluster, error)
 	// UpdateStorageCluster updates the given StorageCluster
-	UpdateStorageCluster(*corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error)
+	UpdateStorageCluster(*corev1.StorageCluster) (*corev1.StorageCluster, error)
 	// GetStorageCluster gets the StorageCluster with given name and namespace
-	GetStorageCluster(string, string) (*corev1alpha1.StorageCluster, error)
+	GetStorageCluster(string, string) (*corev1.StorageCluster, error)
 	// ListStorageClusters lists all the StorageClusters
-	ListStorageClusters(string) (*corev1alpha1.StorageClusterList, error)
+	ListStorageClusters(string) (*corev1.StorageClusterList, error)
 	// DeleteStorageCluster deletes the given StorageCluster
 	DeleteStorageCluster(string, string) error
 	// UpdateStorageClusterStatus update the status of given StorageCluster
-	UpdateStorageClusterStatus(*corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error)
+	UpdateStorageClusterStatus(*corev1.StorageCluster) (*corev1.StorageCluster, error)
 }
 
 // CreateStorageCluster creates the given StorageCluster
-func (c *Client) CreateStorageCluster(cluster *corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error) {
+func (c *Client) CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
@@ -32,32 +32,32 @@ func (c *Client) CreateStorageCluster(cluster *corev1alpha1.StorageCluster) (*co
 		ns = metav1.NamespaceDefault
 	}
 
-	return c.ost.CoreV1alpha1().StorageClusters(ns).Create(cluster)
+	return c.ost.CoreV1().StorageClusters(ns).Create(cluster)
 }
 
 // UpdateStorageCluster updates the given StorageCluster
-func (c *Client) UpdateStorageCluster(cluster *corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error) {
+func (c *Client) UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
 
-	return c.ost.CoreV1alpha1().StorageClusters(cluster.Namespace).Update(cluster)
+	return c.ost.CoreV1().StorageClusters(cluster.Namespace).Update(cluster)
 }
 
 // GetStorageCluster gets the StorageCluster with given name and namespace
-func (c *Client) GetStorageCluster(name, namespace string) (*corev1alpha1.StorageCluster, error) {
+func (c *Client) GetStorageCluster(name, namespace string) (*corev1.StorageCluster, error) {
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1alpha1().StorageClusters(namespace).Get(name, metav1.GetOptions{})
+	return c.ost.CoreV1().StorageClusters(namespace).Get(name, metav1.GetOptions{})
 }
 
 // ListStorageClusters lists all the StorageClusters
-func (c *Client) ListStorageClusters(namespace string) (*corev1alpha1.StorageClusterList, error) {
+func (c *Client) ListStorageClusters(namespace string) (*corev1.StorageClusterList, error) {
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1alpha1().StorageClusters(namespace).List(metav1.ListOptions{})
+	return c.ost.CoreV1().StorageClusters(namespace).List(metav1.ListOptions{})
 }
 
 // DeleteStorageCluster deletes the given StorageCluster
@@ -67,13 +67,13 @@ func (c *Client) DeleteStorageCluster(name, namespace string) error {
 	}
 
 	// TODO Temporary removing PropagationPolicy: &deleteForegroundPolicy from metav1.DeleteOptions{}, until we figure out the correct policy to use
-	return c.ost.CoreV1alpha1().StorageClusters(namespace).Delete(name, &metav1.DeleteOptions{})
+	return c.ost.CoreV1().StorageClusters(namespace).Delete(name, &metav1.DeleteOptions{})
 }
 
 // UpdateStorageClusterStatus update the status of given StorageCluster
-func (c *Client) UpdateStorageClusterStatus(cluster *corev1alpha1.StorageCluster) (*corev1alpha1.StorageCluster, error) {
+func (c *Client) UpdateStorageClusterStatus(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1alpha1().StorageClusters(cluster.Namespace).UpdateStatus(cluster)
+	return c.ost.CoreV1().StorageClusters(cluster.Namespace).UpdateStatus(cluster)
 }
