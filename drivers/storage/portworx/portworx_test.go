@@ -5738,7 +5738,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 
 	clusterName := "px-cluster"
-	clusterNS := "kube-test"
+	clusterNS := "kube-system"
 	// Start a sdk server that implements the mock servers
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
@@ -5749,7 +5749,6 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	defer mockSdk.Stop()
 
-	// TODO add k8s objects to the world here
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.PortworxServiceName,
