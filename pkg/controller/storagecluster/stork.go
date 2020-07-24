@@ -10,6 +10,7 @@ import (
 	"time"
 
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
@@ -44,8 +45,8 @@ const (
 
 const (
 	defaultStorkCPU         = "0.1"
-	annotationStorkCPU      = operatorPrefix + "/stork-cpu"
-	annotationStorkSchedCPU = operatorPrefix + "/stork-scheduler-cpu"
+	annotationStorkCPU      = constants.OperatorPrefix + "/stork-cpu"
+	annotationStorkSchedCPU = constants.OperatorPrefix + "/stork-scheduler-cpu"
 )
 
 func (c *Controller) syncStork(
@@ -56,7 +57,7 @@ func (c *Controller) syncStork(
 		if err == nil {
 			if err := c.setupStork(cluster); err != nil {
 				msg := fmt.Sprintf("Failed to setup Stork. %v", err)
-				c.warningEvent(cluster, util.FailedComponentReason, msg)
+				k8sutil.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
 			}
 			return nil
 		}
@@ -64,7 +65,7 @@ func (c *Controller) syncStork(
 	}
 	if err := c.removeStork(cluster); err != nil {
 		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
-		c.warningEvent(cluster, util.FailedComponentReason, msg)
+		k8sutil.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
 	}
 	return nil
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -141,6 +141,8 @@ const (
 
 	// ErrMsgGrpcConnection error message if failed to connect to GRPC server
 	ErrMsgGrpcConnection = "error connecting to GRPC server"
+	// ImageNamePause is the container image to use for the pause container
+	ImageNamePause = "k8s.gcr.io/pause:3.1"
 
 	pxAnnotationPrefix = "portworx.io"
 	labelKeyName       = "name"
@@ -155,7 +157,7 @@ var (
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
 func IsPortworxEnabled(cluster *corev1alpha1.StorageCluster) bool {
-	disabled, err := strconv.ParseBool(cluster.Annotations[storagecluster.AnnotationDisableStorage])
+	disabled, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationDisableStorage])
 	return err != nil || !disabled
 }
 

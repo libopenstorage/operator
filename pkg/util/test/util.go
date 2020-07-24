@@ -43,6 +43,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -58,6 +59,7 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
 	corev1alpha1.AddToScheme(s)
 	monitoringv1.AddToScheme(s)
+	cluster_v1alpha1.AddToScheme(s)
 	return fake.NewFakeClientWithScheme(s, initObjects...)
 }
 

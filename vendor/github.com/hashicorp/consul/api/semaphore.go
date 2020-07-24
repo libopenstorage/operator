@@ -198,13 +198,12 @@ WAIT:
 
 	// Handle the one-shot mode.
 	if s.opts.SemaphoreTryOnce && attempts > 0 {
-		elapsed := time.Since(start)
-		if elapsed > s.opts.SemaphoreWaitTime {
+		elapsed := time.Now().Sub(start)
+		if elapsed > qOpts.WaitTime {
 			return nil, nil
 		}
 
-		// Query wait time should not exceed the semaphore wait time
-		qOpts.WaitTime = s.opts.SemaphoreWaitTime - elapsed
+		qOpts.WaitTime -= elapsed
 	}
 	attempts++
 

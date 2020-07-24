@@ -29,12 +29,10 @@ import (
 const (
 	storkDriverName                   = "pxd"
 	defaultPortworxImage              = "portworx/oci-monitor"
-	defaultSDKPort                    = 9020
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = time.Hour * 24
 	defaultSelfSignedIssuer           = "operator.portworx.io"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
-	envKeyPortworxEnableTLS           = "PX_ENABLE_TLS"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."

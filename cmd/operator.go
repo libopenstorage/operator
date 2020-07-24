@@ -11,6 +11,7 @@ import (
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/controller/storagenode"
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/version"
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -109,6 +111,12 @@ func run(c *cli.Context) {
 		log.Fatalf("Error registering CRD's for StorageCluster controller: %v", err)
 	}
 
+	storageNodeController := storagenode.Controller{Driver: d}
+	err = storageNodeController.RegisterCRD()
+	if err != nil {
+		log.Fatalf("Error registering CRD's for StorageNode controller: %v", err)
+	}
+
 	// TODO: Don't move createManager above register CRD section. This part will be refactored because of a bug,
 	// similar to https://github.com/kubernetes-sigs/controller-runtime/issues/321
 	mgr, err := createManager(c, config)
@@ -123,6 +131,10 @@ func run(c *cli.Context) {
 	}
 	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
+	}
+
+	if err := cluster_v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
@@ -153,9 +165,21 @@ func run(c *cli.Context) {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
-	// Setup storage cluster controller
+	// init and start controllers
 	if err := storageClusterController.Init(mgr); err != nil {
 		log.Fatalf("Error initializing storage cluster controller: %v", err)
+	}
+
+	if err := storageNodeController.Init(mgr); err != nil {
+		log.Fatalf("Error initializing storage node controller: %v", err)
+	}
+
+	if err := storageClusterController.StartWatch(); err != nil {
+		log.Fatalf("Error start watch on storage cluster controller: %v", err)
+	}
+
+	if err := storageNodeController.StartWatch(); err != nil {
+		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {

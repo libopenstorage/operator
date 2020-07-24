@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"path"
 	"reflect"
 	"regexp"
 
@@ -17,6 +18,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1421,4 +1423,21 @@ func DeleteSecret(
 	secret.OwnerReferences = newOwners
 	logrus.Debugf("Disowning %s/%s Secret", namespace, name)
 	return k8sClient.Update(context.TODO(), secret)
+}
+
+// GetCRDFromFile parses a CRD definition filename from crdBaseDir and returns the parsed object
+func GetCRDFromFile(
+	filename string,
+	crdBaseDir string,
+) (*v1beta1.CustomResourceDefinition, error) {
+	filepath := path.Join(crdBaseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	crd := &v1beta1.CustomResourceDefinition{}
+	if err := ParseObjectFromFile(filepath, scheme, crd); err != nil {
+		return nil, err
+	}
+	return crd, nil
 }

@@ -28,6 +28,7 @@ import (
 
 const (
 	pxContainerName            = "portworx"
+	pxKVDBContainerName        = "portworx-kvdb"
 	pxAnnotationPrefix         = "portworx.io"
 	annotationIsPKS            = pxAnnotationPrefix + "/is-pks"
 	annotationIsGKE            = pxAnnotationPrefix + "/is-gke"
@@ -263,6 +264,44 @@ func (p *portworx) generateCloudStorageSpecs(
 	return cloudConfig, nil
 }
 
+func (p *portworx) GetKVDBPodSpec(
+	cluster *corev1alpha1.StorageCluster, nodeName string,
+) (v1.PodSpec, error) {
+	t, err := newTemplate(cluster)
+	if err != nil {
+		return v1.PodSpec{}, err
+	}
+
+	containers := t.kvdbContainer()
+	podSpec := v1.PodSpec{
+		HostNetwork:        true,
+		RestartPolicy:      v1.RestartPolicyAlways,
+		ServiceAccountName: pxutil.PortworxServiceAccountName,
+		Containers:         []v1.Container{containers},
+		NodeName:           nodeName,
+	}
+
+	if t.cluster.Spec.Placement != nil {
+		if len(t.cluster.Spec.Placement.Tolerations) > 0 {
+			podSpec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range t.cluster.Spec.Placement.Tolerations {
+				podSpec.Tolerations = append(podSpec.Tolerations, *(toleration.DeepCopy()))
+			}
+		}
+	}
+
+	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
+		podSpec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *t.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	return podSpec, nil
+}
+
 // TODO [Imp] Validate the cluster spec and return errors in the configuration
 func (p *portworx) GetStoragePodSpec(
 	cluster *corev1alpha1.StorageCluster, nodeName string,
@@ -443,6 +482,38 @@ func (t *template) portworxContainer() v1.Container {
 			Privileged: boolPtr(true),
 		},
 		VolumeMounts: t.getVolumeMounts(),
+	}
+}
+
+func (t *template) kvdbContainer() v1.Container {
+	kvdbProxyImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, pxutil.ImageNamePause)
+	kvdbTargetPort := 9019
+	if t.startPort != pxutil.DefaultStartPort {
+		kvdbTargetPort = t.startPort + 15
+	}
+	return v1.Container{
+		Name:            pxKVDBContainerName,
+		Image:           kvdbProxyImage,
+		ImagePullPolicy: t.imagePullPolicy,
+		LivenessProbe: &v1.Probe{
+			PeriodSeconds:       30,
+			InitialDelaySeconds: 840,
+			Handler: v1.Handler{
+				TCPSocket: &v1.TCPSocketAction{
+					Port: intstr.FromInt(kvdbTargetPort),
+					Host: "127.0.0.1",
+				},
+			},
+		},
+		ReadinessProbe: &v1.Probe{
+			PeriodSeconds: 10,
+			Handler: v1.Handler{
+				TCPSocket: &v1.TCPSocketAction{
+					Port: intstr.FromInt(kvdbTargetPort),
+					Host: "127.0.0.1",
+				},
+			},
+		},
 	}
 }
 

@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -21,6 +22,7 @@ import (
 	kversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -2018,4 +2020,48 @@ func TestServiceChangeSelector(t *testing.T) {
 	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
 	require.NoError(t, err)
 	require.Empty(t, actualService.Spec.Selector)
+}
+
+func TestGetCRDFromFile(t *testing.T) {
+	tests := []struct {
+		dir         string
+		file        string
+		expectedErr string
+	}{
+		{
+			dir:  "../../../deploy/crds",
+			file: "core_v1alpha1_storagecluster_crd.yaml",
+		},
+		{
+			dir:         "../../../deploy/crds",
+			file:        "core_v1alpha1_storagecluster_crd-dont-exist.yaml",
+			expectedErr: "no such file or directory",
+		},
+	}
+
+	for _, test := range tests {
+		crd, err := GetCRDFromFile(test.file, test.dir)
+		if len(test.expectedErr) == 0 {
+			require.NoError(t, err)
+			require.NotNil(t, crd)
+		} else {
+			require.NotNil(t, err)
+			require.Contains(t, err.Error(), test.expectedErr)
+		}
+	}
+}
+
+func TestWarningEvent(t *testing.T) {
+	recorder := record.NewFakeRecorder(10)
+	n1 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "n1",
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+	WarningEvent(recorder, n1, "test reason", "test message")
+	lastEvent := <-recorder.Events
+	require.True(t, strings.Contains(lastEvent, "test reason"))
 }

@@ -307,12 +307,12 @@
   version = "v1.8.5"
 
 [[projects]]
-  digest = "1:9537873f2fc92467f451178506405fae087efc624d8d92644042209a03a2bfa0"
+  digest = "1:4757b468ebb23df6c20e23e5df6d8616222cad3f724f5c4c4986ed720ed561d7"
   name = "github.com/hashicorp/consul"
   packages = ["api"]
   pruneopts = "UT"
-  revision = "ea5210a30e154f4da9a4c8e729b45b8ce7b9b92c"
-  version = "v1.4.4"
+  revision = "51ea240df8476e02215d53fbfad5838bf0d44d21"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:af105c7c5dc0b4ae41991f122cae860b9600f7d226072c2a83127048c991660c"
@@ -407,12 +407,11 @@
 
 [[projects]]
   branch = "release-8.0"
-  digest = "1:3a3e91cee97ffe60232f7f9cc4caa0d67a5200fd21e8e486571c4c1bbd9f632c"
+  digest = "1:eec5351e56e8f2a6e399ce36f775939ce8fde62ad042f6c10a5282446f7fe298"
   name = "github.com/libopenstorage/openstorage"
   packages = [
     "api",
     "pkg/auth",
-    "pkg/dbg",
     "pkg/grpcserver",
     "pkg/util",
     "volume",
@@ -447,14 +446,6 @@
   pruneopts = "UT"
   revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
   version = "v1.1.0"
-
-[[projects]]
-  digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
-  name = "github.com/mitchellh/mapstructure"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
-  version = "v1.1.2"
 
 [[projects]]
   digest = "1:33422d238f147d247752996a26574ac48dcf472976eda7f5134015f06bf16563"
@@ -508,6 +499,14 @@
   version = "v1.2"
 
 [[projects]]
+  digest = "1:9e1d37b58d17113ec3cb5608ac0382313c5b59470b94ed97d0976e69c7022314"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "614d223910a179a466c1767a985424175c39b465"
+  version = "v0.9.1"
+
+[[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
@@ -516,11 +515,13 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "gs-rel-2.0.1"
-  digest = "1:eafb5a4f09a2deedf4c3ff4e3b51efa5751692c9d52111c0af7b670e8b0ed39a"
+  branch = "master"
+  digest = "1:6147a1552014f7a788f93106825c1d2f7ab35ac723f7deaf2235484b44389397"
   name = "github.com/portworx/kvdb"
   packages = [
     ".",
+    "api/bootstrap",
+    "api/bootstrap/k8s",
     "common",
     "consul",
     "etcd/common",
@@ -529,7 +530,7 @@
     "mem",
   ]
   pruneopts = "UT"
-  revision = "d281ecddf165aa0bf45849c8505387bf5662b4c7"
+  revision = "2734b7f401940d08c8c82ec4c1cd352f9e219f72"
 
 [[projects]]
   branch = "master"
@@ -1397,6 +1398,17 @@
   revision = "21c4ce38f2a793ec01e925ddc31216500183b773"
 
 [[projects]]
+  digest = "1:0bab3ee4b00e815e09d19d30c69d04d15d79148d185439f5dd4583af44288c22"
+  name = "sigs.k8s.io/cluster-api"
+  packages = [
+    "errors",
+    "pkg/apis/deprecated/v1alpha1",
+  ]
+  pruneopts = "UT"
+  revision = "2263f4150985e453f4bdd943830dea0b231d61c6"
+  version = "v0.2.11"
+
+[[projects]]
   digest = "1:8e9f3bb68b141efd1a4687e89d44c664ddd85349f19889c4eaaa3e6274785491"
   name = "sigs.k8s.io/controller-runtime"
   packages = [
@@ -1461,10 +1473,11 @@
     "github.com/libopenstorage/cloudops/specs/decisionmatrix",
     "github.com/libopenstorage/openstorage/api",
     "github.com/libopenstorage/openstorage/pkg/auth",
-    "github.com/libopenstorage/openstorage/pkg/dbg",
     "github.com/libopenstorage/openstorage/pkg/grpcserver",
     "github.com/operator-framework/operator-sdk/pkg/metrics",
     "github.com/portworx/kvdb",
+    "github.com/portworx/kvdb/api/bootstrap",
+    "github.com/portworx/kvdb/api/bootstrap/k8s",
     "github.com/portworx/kvdb/consul",
     "github.com/portworx/kvdb/etcd/v2",
     "github.com/portworx/kvdb/etcd/v3",
@@ -1539,14 +1552,18 @@
     "k8s.io/kubernetes/pkg/util/hash",
     "k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals",
     "k8s.io/utils/integer",
+    "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1",
+    "sigs.k8s.io/controller-runtime/pkg/cache",
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/fake",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
+    "sigs.k8s.io/controller-runtime/pkg/predicate",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",
     "sigs.k8s.io/controller-runtime/pkg/scheme",
     "sigs.k8s.io/controller-runtime/pkg/source",
+    "sigs.k8s.io/controller-runtime/pkg/webhook",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

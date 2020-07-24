@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: portworx-kvdb-jhjrc
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  hostPID: false
+  containers:
+    - name: portworx-kvdb
+      image: k8s.gcr.io/pause:3.1
+      imagePullPolicy: Always
+      livenessProbe:
+        periodSeconds: 30
+        initialDelaySeconds: 840
+        tcpSocket:
+          host: 127.0.0.1
+          port: 10016
+      readinessProbe:
+        periodSeconds: 10
+        tcpSocket:
+          host: 127.0.0.1
+          port: 10016
+  restartPolicy: Always
+  serviceAccountName: portworx
