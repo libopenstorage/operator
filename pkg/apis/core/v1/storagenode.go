@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +68,8 @@ type NodeStatus struct {
 	Phase string `json:"phase,omitempty"`
 	// Network details used by the storage driver
 	Network NetworkStatus `json:"network,omitempty"`
+	// Storage details used by the storage driver
+	Storage StorageStatus `json:"storage,omitempty"`
 	// Geo topology information for a node
 	Geo Geography `json:"geography,omitempty"`
 	// Conditions is an array of current node conditions
@@ -79,6 +82,14 @@ type NetworkStatus struct {
 	DataIP string `json:"dataIP,omitempty"`
 	// MgmtIP is the IP address used by storage driver for management traffic
 	MgmtIP string `json:"mgmtIP,omitempty"`
+}
+
+// StorageStatus captures the storage status of the node
+type StorageStatus struct {
+	// TotalSize is the cumulative total size of all storage pools on the node
+	TotalSize resource.Quantity `json:"totalSize,omitempty"`
+	// UsedSize is the cumulative used size of all storage pools on the node
+	UsedSize resource.Quantity `json:"usedSize,omitempty"`
 }
 
 // NodeCondition contains condition information for a storage node
@@ -105,6 +116,8 @@ const (
 	NodeInitCondition NodeConditionType = "NodeInit"
 	// NodeStateCondition is used for overall state of the node
 	NodeStateCondition NodeConditionType = "NodeState"
+	// NodeKVDBCondition is used for the KVDB condition on the node if it is part of an internal KVDB cluster
+	NodeKVDBCondition NodeConditionType = "NodeKVDB"
 )
 
 // NodeConditionStatus is the enum type for node condition statuses
