@@ -22,8 +22,6 @@ import (
 	clientset "github.com/libopenstorage/operator/pkg/client/clientset/versioned"
 	corev1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1"
 	fakecorev1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1/fake"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1alpha1"
-	fakecorev1alpha1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -72,11 +70,6 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 }
 
 var _ clientset.Interface = &Clientset{}
-
-// CoreV1alpha1 retrieves the CoreV1alpha1Client
-func (c *Clientset) CoreV1alpha1() corev1alpha1.CoreV1alpha1Interface {
-	return &fakecorev1alpha1.FakeCoreV1alpha1{Fake: &c.Fake}
-}
 
 // CoreV1 retrieves the CoreV1Client
 func (c *Clientset) CoreV1() corev1.CoreV1Interface {

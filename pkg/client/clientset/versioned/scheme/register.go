@@ -20,7 +20,6 @@ package scheme
 
 import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	corev1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,7 +31,6 @@ var Scheme = runtime.NewScheme()
 var Codecs = serializer.NewCodecFactory(Scheme)
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 var localSchemeBuilder = runtime.SchemeBuilder{
-	corev1alpha1.AddToScheme,
 	corev1.AddToScheme,
 }
 
