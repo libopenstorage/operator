@@ -26,5 +26,5 @@ ${CODEGEN_PKG}/generate-groups.sh \
 	all \
   github.com/libopenstorage/operator/pkg/client \
 	github.com/libopenstorage/operator/pkg/apis \
-  "core:v1alpha1,v1" \
+  "core:v1" \
   --go-header-file ${SCRIPT_ROOT}/hack/custom-boilerplate.go.txt
