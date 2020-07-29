@@ -75,6 +75,8 @@ const (
 	AnnotationServiceType = pxAnnotationPrefix + "/service-type"
 	// AnnotationPXVersion annotation indicating the portworx semantic version
 	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
+	// AnnotationStorkVersion annotation indicating the stork semantic version
+	AnnotationStorkVersion = pxAnnotationPrefix + "/stork-version"
 	// AnnotationDisableStorageClass annotation to disable installing default portworx
 	// storage classes
 	AnnotationDisableStorageClass = pxAnnotationPrefix + "/disable-storage-class"
@@ -301,6 +303,50 @@ func GetPortworxVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
+}
+
+// GetStorkVersion returns the stork version based on the image provided.
+// We first look at spec.Stork.Image. If that is not present or invalid semvar, then we fallback to an
+// annotation portworx.io/stork-version; else we return int max as the version.
+func GetStorkVersion(cluster *corev1alpha1.StorageCluster) *version.Version {
+	defaultVersion, _ := version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
+	if cluster.Spec.Stork == nil || !cluster.Spec.Stork.Enabled {
+		logrus.Warnf("could not find stork version from cluster spec")
+		return defaultVersion
+	}
+
+	// get correct stork image to check
+	var storkImage = cluster.Spec.Stork.Image
+	if storkImage == "" {
+		storkImage = cluster.Status.DesiredImages.Stork
+	}
+
+	// parse storkImage
+	var storkVersion *version.Version
+	var err error
+	parts := strings.Split(storkImage, ":")
+	if len(parts) >= 2 {
+		storkVersionStr := parts[len(parts)-1]
+		storkVersion, err = version.NewSemver(storkVersionStr)
+		if err != nil {
+			logrus.Warnf("Invalid Stork version %s extracted from image name: %v", storkVersionStr, err)
+			if storkVersionStr, exists := cluster.Annotations[AnnotationStorkVersion]; exists {
+				storkVersion, err = version.NewSemver(storkVersionStr)
+				if err != nil {
+					logrus.Warnf("Invalid Stork version %s extracted from annotation: %v", storkVersionStr, err)
+				}
+			}
+		}
+	} else {
+		logrus.Warnf("could not find stork version from cluster spec")
+		return defaultVersion
+	}
+
+	if storkVersion == nil {
+		return defaultVersion
+	}
+
+	return storkVersion
 }
 
 // GetImageTag returns the tag of the image
