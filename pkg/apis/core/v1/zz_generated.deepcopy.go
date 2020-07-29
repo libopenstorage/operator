@@ -547,7 +547,7 @@ func (in *SelfSignedSpec) DeepCopyInto(out *SelfSignedSpec) {
 	}
 	if in.TokenLifetime != nil {
 		in, out := &in.TokenLifetime, &out.TokenLifetime
-		*out = new(metav1.Duration)
+		*out = new(string)
 		**out = **in
 	}
 	if in.SharedSecret != nil {

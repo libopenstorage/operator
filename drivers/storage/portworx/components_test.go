@@ -2660,7 +2660,9 @@ func validateTokenLifetime(t *testing.T, cluster *corev1alpha1.StorageCluster, j
 	iatTime := time.Unix(int64(iatFloat64), 0)
 	expTime := time.Unix(int64(expFloat64), 0)
 	tokenLifetime := expTime.Sub(iatTime)
-	require.Equal(t, tokenLifetime, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
+	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, tokenLifetime, duration)
 }
 
 func TestSecurityInstall(t *testing.T) {
@@ -2668,7 +2670,8 @@ func TestSecurityInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	recorder := record.NewFakeRecorder(100)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	cluster := &corev1alpha1.StorageCluster{
@@ -2682,11 +2685,9 @@ func TestSecurityInstall(t *testing.T) {
 				Auth: &corev1alpha1.AuthSpec{
 					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
 					SelfSigned: &corev1alpha1.SelfSignedSpec{
-						TokenLifetime: &metav1.Duration{
-							// Since we have a token expiration buffer of one minute,
-							// a new token will constantly be fetched.
-							Duration: time.Second * 1,
-						},
+						// Since we have a token expiration buffer of one minute,
+						// a new token will constantly be fetched.
+						TokenLifetime: stringPtr("1s"),
 					},
 				},
 			},
@@ -2779,6 +2780,16 @@ func TestSecurityInstall(t *testing.T) {
 	newUserToken := newUserSecret.Data[pxutil.SecurityAuthTokenKey]
 	require.NotEqual(t, oldUserToken, newUserToken)
 
+	// Invalid token lifetime should raise an event
+	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("3sabc")
+	err = driver.PreInstall(cluster)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
+			util.FailedComponentReason, component.SecurityComponentName))
+	require.NoError(t, err)
+	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1s")
+
 	// User pre-configured values should not be overwritten
 	err = testutil.Delete(k8sClient, sharedSecret)
 	require.NoError(t, err)
@@ -2863,9 +2874,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 				Auth: &corev1alpha1.AuthSpec{
 					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
 					SelfSigned: &corev1alpha1.SelfSignedSpec{
-						TokenLifetime: &metav1.Duration{
-							Duration: time.Hour * 1,
-						},
+						TokenLifetime: stringPtr("1h"),
 					},
 				},
 			},
@@ -3005,11 +3014,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 				Auth: &corev1alpha1.AuthSpec{
 					GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleManaged),
 					SelfSigned: &corev1alpha1.SelfSignedSpec{
-						TokenLifetime: &metav1.Duration{
-							// Since we have a token expiration buffer of one minute,
-							// a new token will constantly be fetched.
-							Duration: time.Second * 1,
-						},
+						// Since we have a token expiration buffer of one minute,
+						// a new token will constantly be fetched.
+						TokenLifetime: stringPtr("1s"),
 					},
 				},
 			},

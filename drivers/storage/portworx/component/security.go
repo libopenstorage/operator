@@ -293,7 +293,11 @@ func (c *security) createToken(
 		Roles:   []string{role},
 		Groups:  groups,
 	}
-	token, err := pxutil.GenerateToken(cluster, authSecret, &claims, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime.Duration)
+	tokenDuration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse token lifetime: %v", err.Error())
+	}
+	token, err := pxutil.GenerateToken(cluster, authSecret, &claims, tokenDuration)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate token: %v", err.Error())
 	}

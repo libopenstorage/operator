@@ -624,3 +624,10 @@ func EssentialsEnabled() bool {
 	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEssentials))
 	return err == nil && enabled
 }
+
+// ParseExtendedDuration returns the duration associated with a string
+// This function supports seconds, minutes, hours, days, and years.
+// i.e. 5s, 5m, 5h, 5d, and 5y
+func ParseExtendedDuration(s string) (time.Duration, error) {
+	return auth.ParseToDuration(s)
+}

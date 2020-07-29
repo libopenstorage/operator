@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -30,7 +29,7 @@ const (
 	storkDriverName                   = "pxd"
 	defaultPortworxImage              = "portworx/oci-monitor"
 	defaultSecretsProvider            = "k8s"
-	defaultTokenLifetime              = time.Hour * 24
+	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
@@ -568,7 +567,7 @@ func setSecuritySpecDefaults(toUpdate *corev1alpha1.StorageCluster) {
 		GuestAccess: guestAccessTypePtr(corev1alpha1.GuestRoleEnabled),
 		SelfSigned: &corev1alpha1.SelfSignedSpec{
 			Issuer:        stringPtr(defaultSelfSignedIssuer),
-			TokenLifetime: metav1DurationPtr(defaultTokenLifetime),
+			TokenLifetime: stringPtr(defaultTokenLifetime),
 			SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
 		},
 	}

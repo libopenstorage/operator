@@ -1127,7 +1127,9 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1alpha1.StorageCluste
 	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
 	require.Equal(t, "operator.portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
 	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
-	require.Equal(t, metav1.Duration{Duration: 24 * time.Hour}, *cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, 24*time.Hour, duration)
 }
 
 func TestStorageClusterDefaultsForSecurity(t *testing.T) {
@@ -1218,10 +1220,18 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	require.Equal(t, "myissuer.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
 
 	// token lifetime, when manually set, is not overwritten.
+	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1h")
 	driver.SetDefaultsOnStorageCluster(cluster)
-	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = metav1DurationPtr(time.Hour * 1)
-	require.Equal(t, metav1.Duration{Duration: 1 * time.Hour}, *cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, 1*time.Hour, duration)
 
+	// support for extended token durations
+	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1y")
+	driver.SetDefaultsOnStorageCluster(cluster)
+	duration, err = pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, time.Hour*24*365, duration)
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
