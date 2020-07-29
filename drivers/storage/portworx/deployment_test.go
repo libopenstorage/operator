@@ -2627,7 +2627,6 @@ func TestSecuritySetEnv(t *testing.T) {
 	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
 	coreops.SetInstance(k8sClient)
 	nodeName := "testNode"
-
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2697,6 +2696,126 @@ func TestSecuritySetEnv(t *testing.T) {
 		}
 	}
 	assert.True(t, storkSecretSet)
+
+	// for stork < 2.5 and px 2.6+, use stork secret env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image:2.3.2",
+		Enabled: true,
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	storkSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthStorkKey {
+			storkSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for stork < 2.5 and px 2.6+ with annotation, use stork secret env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Annotations = make(map[string]string)
+	cluster.Annotations[pxutil.AnnotationStorkVersion] = "2.3.2"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image:abcde2_12313a",
+		Enabled: true,
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	storkSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthStorkKey {
+			storkSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for stork >= 2.5 and px 2.6+, use apps issuer env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image:2.5.0",
+		Enabled: true,
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	appsSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for desired image stork >= 2.5 and px 2.6+, use apps issuer env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Enabled: true,
+	}
+	cluster.Status.DesiredImages = &corev1alpha1.ComponentImages{
+		Stork: "openstorage/image:2.5.0",
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	appsSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image:abcde2_12313a",
+		Enabled: true,
+	}
+	cluster.Annotations[pxutil.AnnotationStorkVersion] = "2.5.0"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	appsSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image:abcde2_12313a",
+		Enabled: true,
+	}
+	cluster.Annotations[pxutil.AnnotationStorkVersion] = "openstorage/image:abcde2_465313a"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	appsSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
+	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Image:   "openstorage/image",
+		Enabled: true,
+	}
+	cluster.Annotations[pxutil.AnnotationStorkVersion] = "openstorage/image"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	appsSecretSet = false
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.True(t, storkSecretSet)
+
 }
 
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {

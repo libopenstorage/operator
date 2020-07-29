@@ -922,12 +922,17 @@ func (t *template) getEnvList() []v1.EnvVar {
 			Value: *t.cluster.Spec.Security.Auth.SelfSigned.Issuer,
 		}
 		pxVersion := pxutil.GetPortworxVersion(t.cluster)
+		storkVersion := pxutil.GetStorkVersion(t.cluster)
 		pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
 		if err != nil {
 			logrus.Errorf("failed to create PX version variable 2.6.0: %s", err.Error())
 		}
+		storkIssuerVersion, err := version.NewVersion("2.5.0")
+		if err != nil {
+			logrus.Errorf("failed to create Stork version variable 2.5.0: %s", err.Error())
+		}
 		// apps issuer was added in PX version 2.6.0
-		if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) {
+		if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) && storkVersion.GreaterThanOrEqual(storkIssuerVersion) {
 			envMap[pxutil.EnvKeyPortworxAuthSystemAppsKey] = &v1.EnvVar{
 				Name: pxutil.EnvKeyPortworxAuthSystemAppsKey,
 				ValueFrom: &v1.EnvVarSource{
