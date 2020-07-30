@@ -112,6 +112,8 @@ const (
 	EnvKeyPortworxAuthSystemAppsKey = "PORTWORX_AUTH_SYSTEM_APPS_KEY"
 	// EnvKeyStorkPXSharedSecret is an environment variable defining the shared secret for Stork
 	EnvKeyStorkPXSharedSecret = "PX_SHARED_SECRET"
+	// EnvKeyStorkPXJwtIssuer is an environment variable defining the jwt issuer for Stork
+	EnvKeyStorkPXJwtIssuer = "PX_JWT_ISSUER"
 	// EnvKeyPortworxAuthStorkKey is an environment variable for the auth secret
 	// that stork and the operator use to communicate with portworx
 	EnvKeyPortworxAuthStorkKey = "PORTWORX_AUTH_STORK_KEY"
