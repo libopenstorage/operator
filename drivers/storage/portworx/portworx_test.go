@@ -104,20 +104,47 @@ func TestGetStorkEnvList(t *testing.T) {
 	}
 
 	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Enabled: true,
+	}
+	cluster.Status.DesiredImages = &corev1alpha1.ComponentImages{
+		Stork: "stork/image:2.5.0",
+	}
 	envVars := driver.GetStorkEnvList(cluster)
-	require.Len(t, envVars, 3)
+	require.Len(t, envVars, 4)
 	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
 	require.Equal(t, cluster.Namespace, envVars[0].Value)
 	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
 	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName, envVars[2].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey, envVars[2].ValueFrom.SecretKeyRef.Key)
+	require.Equal(t, pxutil.EnvKeyStorkPXJwtIssuer, envVars[3].Name)
+	require.Equal(t, "apps.portworx.io", envVars[3].Value)
+
+	cluster.Spec.Image = "portworx/image:2.6.0"
+	cluster.Spec.Stork = &corev1alpha1.StorkSpec{
+		Enabled: true,
+		Image:   "stork/image:2.5.0",
+	}
+	envVars = driver.GetStorkEnvList(cluster)
+	require.Len(t, envVars, 4)
+	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
+	require.Equal(t, cluster.Namespace, envVars[0].Value)
+	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
+	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
+	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName, envVars[2].ValueFrom.SecretKeyRef.Name)
+	require.Equal(t, pxutil.SecurityAppsSecretKey, envVars[2].ValueFrom.SecretKeyRef.Key)
+	require.Equal(t, pxutil.EnvKeyStorkPXJwtIssuer, envVars[3].Name)
+	require.Equal(t, "apps.portworx.io", envVars[3].Value)
 
 	cluster.Spec.Image = "portworx/image:2.5.0"
 	envVars = driver.GetStorkEnvList(cluster)
+	require.Len(t, envVars, 4)
 	require.Equal(t, pxutil.EnvKeyStorkPXSharedSecret, envVars[2].Name)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName, envVars[2].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey, envVars[2].ValueFrom.SecretKeyRef.Key)
+	require.Equal(t, pxutil.EnvKeyStorkPXJwtIssuer, envVars[3].Name)
+	require.Equal(t, "stork.openstorage.io", envVars[3].Value)
 
 	cluster.Spec.Security.Enabled = false
 	envVars = driver.GetStorkEnvList(cluster)

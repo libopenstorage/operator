@@ -119,6 +119,25 @@ func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.En
 					Key: pxutil.SecurityAppsSecretKey,
 				},
 			}})
+
+		pxVersion := pxutil.GetPortworxVersion(cluster)
+		pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
+		if err != nil {
+			logrus.Errorf("failed to create PX version variable 2.6.0: %s", err.Error())
+		}
+
+		// apps issuer was added in PX version 2.6.0
+		if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) {
+			envList = append(envList, v1.EnvVar{
+				Name:  pxutil.EnvKeyStorkPXJwtIssuer,
+				Value: pxutil.SecurityPortworxAppsIssuer,
+			})
+		} else {
+			envList = append(envList, v1.EnvVar{
+				Name:  pxutil.EnvKeyStorkPXJwtIssuer,
+				Value: pxutil.SecurityPortworxStorkIssuer,
+			})
+		}
 	}
 
 	return envList
