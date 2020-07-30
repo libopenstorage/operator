@@ -348,6 +348,16 @@ message ExportSpec {
    string export_options = 2;
 }
 
+// MountOptions defines the mount options with which a volume is mounted.
+message MountOptions {
+  // Options are opaque key value pairs that are passed as mount options when
+  // a volume is mounted.
+  // If an empty value is provided only the key will be passed as an option
+  // If both key and value are provided then 'key=value' will be passed as an
+  // option
+  map<string, string> options = 1;
+}
+
 // fastpath extensions
 enum FastpathStatus {
 	// backward compatible state
@@ -504,6 +514,11 @@ message VolumeSpec {
   Xattr.Value xattr = 36;
   // ScanPolicy specifies the filesystem check policy
   ScanPolicy scan_policy = 37;
+  // MountOptions defines the options that will be used while mounting this volume
+  MountOptions mount_options = 38;
+  // Sharedv4MountOptions defines the options that will be used while mounting a sharedv4 volume
+  // from a node where the volume replica does not exist
+  MountOptions sharedv4_mount_options = 39;
 }
 
 // VolumeSpecUpdate provides a method to set any of the VolumeSpec of an existing volume
@@ -557,6 +572,11 @@ message VolumeSpecUpdate {
   oneof xattr_opt { Xattr.Value xattr = 31; }
   // scan_policy_opt defines the filesystem check policy for the volume
   oneof scan_policy_opt { ScanPolicy scan_policy = 32;}
+  // mount_opt provides the mount time options for a volume
+  oneof mount_opt { MountOptions mount_opt_spec = 33;}
+  // sharedv4_mount_opt provides the client side mount time options for a sharedv4 volume
+  oneof sharedv4_mount_opt { MountOptions sharedv4_mount_opt_spec = 34;}
+
 }
 
 // VolumeSpecPolicy provides a method to set volume storage policy
@@ -628,6 +648,10 @@ message VolumeSpecPolicy {
   oneof export_spec_opt { ExportSpec export_spec = 56; }
   // scan_policy_opt defines the filesystem check policy for the volume
   oneof scan_policy_opt { ScanPolicy scan_policy = 57;}
+  // mount_opt provides the mount time options for a volume
+  oneof mount_opt { MountOptions mount_opt_spec = 58;}
+  // sharedv4_mount_opt provides the client side mount time options for a sharedv4 volume
+  oneof sharedv4_mount_opt { MountOptions sharedv4_mount_opt_spec = 59;}
 }
 
 // ReplicaSet set of machine IDs (nodes) to which part of this volume is erasure
@@ -763,6 +787,11 @@ message Volume {
   google.protobuf.Timestamp last_scan_fix = 27;
   // LastScanStatus is the time when an integrity check fixed errors in filesystem
   FilesystemHealthStatus last_scan_status = 28;
+  // MountOptions are the runtime mount options that will be used while mounting this volume
+  MountOptions mount_options = 29;
+  // Sharedv4MountOptions are the runtime mount options that will be used while mounting a sharedv4 volume
+  // from a node where the volume replica does not exist
+  MountOptions sharedv4_mount_options = 30;
 }
 
 // Stats is a structure that represents last collected stats for a volume
@@ -1351,7 +1380,7 @@ service OpenStorageRole {
 //
 // Once the filesystem trim operation is started, the clients have to poll for
 // the status of the background operation using the
-// `OpenStorageFilesystemTrim.GetStatus()` rpc request
+// `OpenStorageFilesystemTrim.Status()` rpc request
 //
 // A typical workflow involving filesystem trim would be as follows
 // 1. Attach the volume
@@ -1363,7 +1392,7 @@ service OpenStorageRole {
 //    This call returns immediately with a status code indicating if the
 //    operation was successfully started or not.
 // 4. To get the status of the Filesystem Trim operation, issue a grpc call to
-//    `OpenStorageFilesystemTrimClient.GetStatus()`
+//    `OpenStorageFilesystemTrimClient.Status()`
 // 5. To stop the Filesystem Trim operation, issue a grpc call to
 //    `OpenStorageFilesystemTrimClient.Stop()`
 service OpenStorageFilesystemTrim {
@@ -1377,10 +1406,10 @@ service OpenStorageFilesystemTrim {
       };
     }
 
-  // Get Status of a filesystem Trim background operation on a mounted
+  // Status of a filesystem Trim background operation on a mounted
   // volume, if any
-  rpc GetStatus(SdkFilesystemTrimGetStatusRequest)
-    returns (SdkFilesystemTrimGetStatusResponse){
+  rpc Status(SdkFilesystemTrimStatusRequest)
+    returns (SdkFilesystemTrimStatusResponse){
       option(google.api.http) = {
         get: "/v1/filesystem-trim/status"
       };
@@ -4041,18 +4070,18 @@ message SdkFilesystemTrimStartResponse{
   string message = 2;
 }
 
-// SdkFilesystemTrimGetStatusRequest defines a request to get status of a
+// SdkFilesystemTrimStatusRequest defines a request to get status of a
 // background filesystem trim operation
-message SdkFilesystemTrimGetStatusRequest {
+message SdkFilesystemTrimStatusRequest {
   // Id of the volume
   string volume_id = 1;
   // Path where the volume is mounted
   string mount_path = 2;
 }
 
-// SdkFilesystemTrimGetStatusResponse defines the response for a
-// SdkFilesystemTrimGetStatusRequest.
-message SdkFilesystemTrimGetStatusResponse{
+// SdkFilesystemTrimStatusResponse defines the response for a
+// SdkFilesystemTrimStatusRequest.
+message SdkFilesystemTrimStatusResponse{
   // Status code representing the state of the filesystem trim operation
   FilesystemTrim.FilesystemTrimStatus status = 1;
   // Text blob containing ASCII text providing details of the operation
@@ -4229,7 +4258,7 @@ message SdkVersion {
     // SDK version major value of this specification
     Major = 0;
     // SDK version minor value of this specification
-    Minor = 89;
+    Minor = 93;
     // SDK version patch value of this specification
     Patch = 0;
   }
@@ -4789,6 +4818,11 @@ message RestoreVolumeSpec {
   ExportSpec export_spec = 20;
   // fastpath extensions
   RestoreParamBoolType fp_preference = 21;
+  // MountOptions defines the options that should be used while mounting this volume
+  MountOptions mount_options = 22;
+  // Sharedv4MountOptions defines the options that will be used while mounting a sharedv4 volume
+  // from a node where the volume replica does not exist
+  MountOptions sharedv4_mount_options = 23;
 }
 
 // Request message to get the volume catalog
