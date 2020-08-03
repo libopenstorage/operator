@@ -13,30 +13,30 @@ import (
 	source "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// MockController is a mock of Controller interface.
+// MockController is a mock of Controller interface
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
 }
 
-// MockControllerMockRecorder is the mock recorder for MockController.
+// MockControllerMockRecorder is the mock recorder for MockController
 type MockControllerMockRecorder struct {
 	mock *MockController
 }
 
-// NewMockController creates a new mock instance.
+// NewMockController creates a new mock instance
 func NewMockController(ctrl *gomock.Controller) *MockController {
 	mock := &MockController{ctrl: ctrl}
 	mock.recorder = &MockControllerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// Reconcile mocks base method.
+// Reconcile mocks base method
 func (m *MockController) Reconcile(arg0 reconcile.Request) (reconcile.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Reconcile", arg0)
@@ -45,13 +45,13 @@ func (m *MockController) Reconcile(arg0 reconcile.Request) (reconcile.Result, er
 	return ret0, ret1
 }
 
-// Reconcile indicates an expected call of Reconcile.
+// Reconcile indicates an expected call of Reconcile
 func (mr *MockControllerMockRecorder) Reconcile(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reconcile", reflect.TypeOf((*MockController)(nil).Reconcile), arg0)
 }
 
-// Start mocks base method.
+// Start mocks base method
 func (m *MockController) Start(arg0 <-chan struct{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", arg0)
@@ -59,13 +59,13 @@ func (m *MockController) Start(arg0 <-chan struct{}) error {
 	return ret0
 }
 
-// Start indicates an expected call of Start.
+// Start indicates an expected call of Start
 func (mr *MockControllerMockRecorder) Start(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockController)(nil).Start), arg0)
 }
 
-// Watch mocks base method.
+// Watch mocks base method
 func (m *MockController) Watch(arg0 source.Source, arg1 handler.EventHandler, arg2 ...predicate.Predicate) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -77,7 +77,7 @@ func (m *MockController) Watch(arg0 source.Source, arg1 handler.EventHandler, ar
 	return ret0
 }
 
-// Watch indicates an expected call of Watch.
+// Watch indicates an expected call of Watch
 func (mr *MockControllerMockRecorder) Watch(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
