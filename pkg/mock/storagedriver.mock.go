@@ -125,6 +125,20 @@ func (mr *MockDriverMockRecorder) Init(arg0, arg1, arg2 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockDriver)(nil).Init), arg0, arg1, arg2)
 }
 
+// IsPodUpdated mocks base method
+func (m *MockDriver) IsPodUpdated(arg0 *v1alpha1.StorageCluster, arg1 *v1.Pod) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsPodUpdated", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsPodUpdated indicates an expected call of IsPodUpdated
+func (mr *MockDriverMockRecorder) IsPodUpdated(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPodUpdated", reflect.TypeOf((*MockDriver)(nil).IsPodUpdated), arg0, arg1)
+}
+
 // PreInstall mocks base method
 func (m *MockDriver) PreInstall(arg0 *v1alpha1.StorageCluster) error {
 	m.ctrl.T.Helper()

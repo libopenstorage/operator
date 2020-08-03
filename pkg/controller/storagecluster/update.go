@@ -480,6 +480,13 @@ func (c *Controller) isPodUpdated(
 		return false
 	}
 
+	// This only does some driver specific checks to see if the pod is
+	// updated or not. All the other fields in the StorageCluster spec
+	// are compared below with corresponding history revision.
+	if updated := c.Driver.IsPodUpdated(cluster, pod); !updated {
+		return false
+	}
+
 	var oldNodeLabels map[string]string
 	if encodedLabels, exists := pod.Annotations[annotationNodeLabels]; exists {
 		if err := json.Unmarshal([]byte(encodedLabels), &oldNodeLabels); err != nil {
