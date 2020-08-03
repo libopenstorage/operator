@@ -6017,6 +6017,175 @@ func fakeClientWithWiperPod(namespace string) client.Client {
 	return testutil.FakeK8sClient(wiperDS, wiperPod)
 }
 
+func TestIsPodUpdatedWithoutArgs(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pxcluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: For pod without containers, should return false
+	pxPod := &v1.Pod{
+		Spec: v1.PodSpec{},
+	}
+	isUpdated := driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+
+	// TestCase: For pod with nil args, should return false
+	pxPod.Spec.Containers = []v1.Container{
+		{
+			Name: pxContainerName,
+		},
+	}
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+
+	// TestCase: For pod with empty args, should return false
+	pxPod.Spec.Containers = []v1.Container{
+		{
+			Name: pxContainerName,
+			Args: make([]string, 0),
+		},
+	}
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+}
+
+func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pxcluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: No misc args present in the cluster
+	pxPod := &v1.Pod{
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name: pxContainerName,
+					Args: []string{"-c", "pxcluster"},
+				},
+			},
+		},
+	}
+
+	isUpdated := driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	// TestCase: Cluster misc args are present in the pod
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: "-foo bar --alpha beta",
+	}
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"-foo", "bar",
+		"--alpha", "beta",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	// TestCase: Cluster misc args are present in the pod, with extra spaces
+	cluster.Annotations[annotationMiscArgs] = "-foo   bar   --alpha   beta"
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	// TestCase: Cluster misc args are present in the pod, with different order
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"--alpha", "beta",
+		"-foo", "bar",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+
+	// TestCase: Cluster misc args are present in the pod, with changed values
+	cluster.Annotations[annotationMiscArgs] = "--alpha beta -foo bazz"
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+}
+
+func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pxcluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: If essentials is disabled and args don't have essentials arg
+	pxPod := &v1.Pod{
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name: pxContainerName,
+					Args: []string{"-c", "pxcluster"},
+				},
+			},
+		},
+	}
+
+	isUpdated := driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	// TestCase: If essentials is disabled and args have essentials arg
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"--oem", "esse",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+
+	// TestCase: If essentials is disabled and args have essentials arg,
+	// but present in misc args
+	cluster.Annotations = map[string]string{
+		annotationMiscArgs: " --oem    esse  ",
+	}
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"--oem", "esse",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	// TestCase: If essentials is enabled, but args don't have essentials arg
+	os.Setenv(pxutil.EnvKeyPortworxEssentials, "true")
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.False(t, isUpdated)
+
+	// TestCase: If essentials is enabled, and args have essentials arg
+	pxPod.Spec.Containers[0].Args = []string{
+		"-c", "pxcluster",
+		"--oem", "esse",
+		"-b",
+	}
+
+	isUpdated = driver.IsPodUpdated(cluster, pxPod)
+	require.True(t, isUpdated)
+
+	os.Unsetenv(pxutil.EnvKeyPortworxEssentials)
+}
+
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
 }

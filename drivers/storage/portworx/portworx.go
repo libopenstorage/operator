@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/shlex"
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
@@ -319,6 +320,47 @@ func (p *portworx) validateEssentials() error {
 	}
 
 	return nil
+}
+
+func (p *portworx) IsPodUpdated(
+	cluster *corev1alpha1.StorageCluster,
+	pod *v1.Pod,
+) bool {
+	portworxArgs := make([]string, 0)
+	for _, c := range pod.Spec.Containers {
+		if c.Name == pxContainerName {
+			portworxArgs = append(portworxArgs, c.Args...)
+			break
+		}
+	}
+	if len(portworxArgs) == 0 {
+		return false
+	}
+
+	var miscArgsStr string
+	if cluster.Annotations[annotationMiscArgs] != "" {
+		parts, err := shlex.Split(cluster.Annotations[annotationMiscArgs])
+		if err != nil {
+			logrus.Warnf("error parsing misc args: %v", err)
+			return true
+		}
+		miscArgsStr = strings.Join(parts, " ")
+	}
+	currArgsStr := strings.Join(portworxArgs, " ")
+
+	if miscArgsChanged(currArgsStr, miscArgsStr) {
+		return false
+	} else if !pxutil.EssentialsEnabled() {
+		if essentialsArgPresent(currArgsStr) &&
+			!essentialsArgPresent(miscArgsStr) {
+			return false
+		}
+	} else {
+		if !essentialsArgPresent(currArgsStr) {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *portworx) DeleteStorage(
@@ -746,6 +788,14 @@ func autoUpdateComponents(cluster *corev1alpha1.StorageCluster) bool {
 	return cluster.Spec.AutoUpdateComponents != nil &&
 		(*cluster.Spec.AutoUpdateComponents == corev1alpha1.OnceAutoUpdate ||
 			*cluster.Spec.AutoUpdateComponents == corev1alpha1.AlwaysAutoUpdate)
+}
+
+func miscArgsChanged(currentArgs, miscArgs string) bool {
+	return !strings.Contains(currentArgs, miscArgs)
+}
+
+func essentialsArgPresent(args string) bool {
+	return strings.Contains(args, "--oem esse")
 }
 
 func init() {

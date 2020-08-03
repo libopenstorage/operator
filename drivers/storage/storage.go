@@ -55,6 +55,9 @@ type ClusterPluginInterface interface {
 	GetStoragePodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
 	//  GetKVDBPodSpec given the storage cluster spec and node name it returns the pod spec for a kvdb node
 	GetKVDBPodSpec(*corev1alpha1.StorageCluster, string) (v1.PodSpec, error)
+	// IsPodUpdated for given storage cluster and pod spec it returns whether the pod
+	// is updated as per the latest spec
+	IsPodUpdated(*corev1alpha1.StorageCluster, *v1.Pod) bool
 	// GetSelectorLabels returns driver specific labels that are applied on the pods
 	GetSelectorLabels() map[string]string
 	// SetDefaultsOnStorageCluster sets the driver specific defaults on the storage
