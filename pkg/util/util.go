@@ -42,6 +42,11 @@ func GetImageURN(registryAndRepo, image string) string {
 		return ""
 	}
 
+	omitRepo := false
+	if strings.HasSuffix(registryAndRepo, "//") {
+		omitRepo = true
+	}
+
 	registryAndRepo = strings.TrimRight(registryAndRepo, "/")
 	if registryAndRepo == "" {
 		// no registry/repository specifed, return image
@@ -58,7 +63,7 @@ func GetImageURN(registryAndRepo, image string) string {
 
 	// if we have '/' in the registryAndRepo, return <registry/repository/><only-image>
 	// else (registry only) -- return <registry/><image-with-repository>
-	if strings.Contains(registryAndRepo, "/") && len(imgParts) > 1 {
+	if strings.Contains(registryAndRepo, "/") || omitRepo {
 		// advance to the last element, skipping image's repository
 		imgParts = imgParts[len(imgParts)-1:]
 	}
