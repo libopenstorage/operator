@@ -4060,6 +4060,21 @@ func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
 	require.Equal(t, customRepo+"/"+expectedNodeWiperImage,
 		wiperDS.Spec.Template.Spec.Containers[0].Image,
 	)
+
+	// Flat registry should be used for image
+	customRepo = "test-registry:111"
+	cluster.Spec.CustomImageRegistry = customRepo + "//"
+	testutil.Delete(k8sClient, wiperDS)
+
+	_, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	wiperDS = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, wiperDS, pxNodeWiperDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, customRepo+"/px-node-wiper:2.1.4",
+		wiperDS.Spec.Template.Spec.Containers[0].Image,
+	)
 }
 
 func TestDeleteClusterWithCustomRegistry(t *testing.T) {
