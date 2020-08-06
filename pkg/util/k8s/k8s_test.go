@@ -2030,11 +2030,11 @@ func TestGetCRDFromFile(t *testing.T) {
 	}{
 		{
 			dir:  "../../../deploy/crds",
-			file: "core_v1alpha1_storagecluster_crd.yaml",
+			file: "core_v1_storagecluster_crd.yaml",
 		},
 		{
 			dir:         "../../../deploy/crds",
-			file:        "core_v1alpha1_storagecluster_crd-dont-exist.yaml",
+			file:        "core_v1_storagecluster_crd-dont-exist.yaml",
 			expectedErr: "no such file or directory",
 		},
 	}

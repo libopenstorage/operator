@@ -30,7 +30,7 @@ import (
 const (
 	// ControllerName is the name of the controller
 	ControllerName          = "storagenode-controller"
-	storageNodeCRDFile      = "core_v1alpha1_storagenode_crd.yaml"
+	storageNodeCRDFile      = "core_v1_storagenode_crd.yaml"
 	validateCRDInterval     = 5 * time.Second
 	validateCRDTimeout      = 1 * time.Minute
 	crdBasePath             = "/crds"

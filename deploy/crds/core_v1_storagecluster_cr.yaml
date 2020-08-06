@@ -1,4 +1,4 @@
-apiVersion: core.libopenstorage.org/v1alpha1
+apiVersion: core.libopenstorage.org/v1
 kind: StorageCluster
 metadata:
   name: portworx
@@ -6,7 +6,7 @@ metadata:
   annotations:
     portworx.io/is-openshift: "true"
 spec:
-  image: "portworx/oci-monitor:2.1.5"
+  image: "portworx/oci-monitor:2.5.5"
   imagePullPolicy: "Always"
   kvdb:
     internal: true
