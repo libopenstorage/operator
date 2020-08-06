@@ -77,7 +77,7 @@ const (
 	defaultMaxUnavailablePods           = 1
 	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
 	crdBasePath                         = "/crds"
-	storageClusterCRDFile               = "core_v1alpha1_storagecluster_crd.yaml"
+	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
 )
 
