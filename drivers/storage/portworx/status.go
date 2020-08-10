@@ -294,7 +294,12 @@ func (p *portworx) updateStorageNodeStatus(
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
 ) error {
+	originalTotalSize := storageNode.Status.Storage.TotalSize
+	storageNode.Status.Storage.TotalSize = *resource.NewQuantity(0, resource.BinarySI)
+	originalUsedSize := storageNode.Status.Storage.UsedSize
+	storageNode.Status.Storage.UsedSize = *resource.NewQuantity(0, resource.BinarySI)
 	originalStorageNodeStatus := storageNode.Status.DeepCopy()
+
 	storageNode.Status.NodeUID = node.Id
 	storageNode.Status.Network = corev1.NetworkStatus{
 		DataIP: node.DataIp,
@@ -308,15 +313,12 @@ func (p *portworx) updateStorageNodeStatus(
 	var (
 		totalSizeInBytes, usedSizeInBytes int64
 	)
-
 	for _, pool := range node.Pools {
 		totalSizeInBytes += int64(pool.TotalSize)
 		usedSizeInBytes += int64(pool.Used)
 	}
-	storageNode.Status.Storage = corev1.StorageStatus{
-		TotalSize: *resource.NewQuantity(totalSizeInBytes, resource.BinarySI),
-		UsedSize:  *resource.NewQuantity(usedSizeInBytes, resource.BinarySI),
-	}
+	totalSize := resource.NewQuantity(totalSizeInBytes, resource.BinarySI)
+	usedSize := resource.NewQuantity(usedSizeInBytes, resource.BinarySI)
 
 	kvdbEntry, present := kvdbNodeMap[storageNode.Status.NodeUID]
 	if present && kvdbEntry != nil {
@@ -344,7 +346,11 @@ func (p *portworx) updateStorageNodeStatus(
 	operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
 	storageNode.Status.Phase = getStorageNodePhase(&storageNode.Status)
 
-	if !reflect.DeepEqual(originalStorageNodeStatus, &storageNode.Status) {
+	if !reflect.DeepEqual(originalStorageNodeStatus, &storageNode.Status) ||
+		totalSize.Cmp(originalTotalSize) != 0 ||
+		usedSize.Cmp(originalUsedSize) != 0 {
+		storageNode.Status.Storage.TotalSize = *totalSize
+		storageNode.Status.Storage.UsedSize = *usedSize
 		logrus.Debugf("Updating StorageNode %s/%s status",
 			storageNode.Namespace, storageNode.Name)
 		return p.k8sClient.Status().Update(context.TODO(), storageNode)
