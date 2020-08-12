@@ -236,6 +236,11 @@ func (c *portworxBasic) createClusterRole() error {
 				},
 				{
 					APIGroups: []string{""},
+					Resources: []string{"pods/exec"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups: []string{""},
 					Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
 					Verbs:     []string{"get", "list"},
 				},
