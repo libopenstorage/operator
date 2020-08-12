@@ -2391,13 +2391,9 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
-	// podControl := &k8scontroller.FakePodControl{}
-	// recorder := record.NewFakeRecorder(0)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
-		// podControl:        podControl,
-		// recorder:          recorder,
+		client:            k8sClient,
+		Driver:            driver,
 		kubernetesVersion: k8sVersion,
 	}
 
@@ -2405,7 +2401,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("pxd").AnyTimes()
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
