@@ -112,18 +112,18 @@ func (mr *MockDriverMockRecorder) GetStorkDriverName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorkDriverName", reflect.TypeOf((*MockDriver)(nil).GetStorkDriverName))
 }
 
-// GetStorkEnvList mocks base method
-func (m *MockDriver) GetStorkEnvList(arg0 *v1.StorageCluster) []v10.EnvVar {
+// GetStorkEnvMap mocks base method
+func (m *MockDriver) GetStorkEnvMap(arg0 *v1.StorageCluster) map[string]*v10.EnvVar {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStorkEnvList", arg0)
-	ret0, _ := ret[0].([]v10.EnvVar)
+	ret := m.ctrl.Call(m, "GetStorkEnvMap", arg0)
+	ret0, _ := ret[0].(map[string]*v10.EnvVar)
 	return ret0
 }
 
-// GetStorkEnvList indicates an expected call of GetStorkEnvList
-func (mr *MockDriverMockRecorder) GetStorkEnvList(arg0 interface{}) *gomock.Call {
+// GetStorkEnvMap indicates an expected call of GetStorkEnvMap
+func (mr *MockDriverMockRecorder) GetStorkEnvMap(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorkEnvList", reflect.TypeOf((*MockDriver)(nil).GetStorkEnvList), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorkEnvMap", reflect.TypeOf((*MockDriver)(nil).GetStorkEnvMap), arg0)
 }
 
 // Init mocks base method

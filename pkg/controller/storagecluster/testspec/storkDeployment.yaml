@@ -44,6 +44,8 @@ spec:
             secretKeyRef:
               name: secret-name
               key: secret-key
+        - name: STORK-NAMESPACE
+          value: kube-test
         - name: TEST
           value: test-value
         resources:

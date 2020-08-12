@@ -503,10 +503,20 @@ func (c *Controller) createStorkDeployment(
 	imageName = util.GetImageURN(cluster.Spec.CustomImageRegistry, imageName)
 	hostNetwork := cluster.Spec.Stork.HostNetwork != nil && *cluster.Spec.Stork.HostNetwork
 
-	envVars := c.Driver.GetStorkEnvList(cluster)
+	envMap := c.Driver.GetStorkEnvMap(cluster)
+	if envMap == nil {
+		envMap = make(map[string]*v1.EnvVar)
+	}
+	envMap["STORK-NAMESPACE"] = &v1.EnvVar{
+		Name:  "STORK-NAMESPACE",
+		Value: cluster.Namespace,
+	}
 	for _, env := range cluster.Spec.Stork.Env {
-		envCopy := env.DeepCopy()
-		envVars = append(envVars, *envCopy)
+		envMap[env.Name] = env.DeepCopy()
+	}
+	envVars := make([]v1.EnvVar, 0, len(envMap))
+	for _, env := range envMap {
+		envVars = append(envVars, *env)
 	}
 	sort.Sort(envByName(envVars))
 

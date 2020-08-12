@@ -70,9 +70,15 @@ func TestStorkInstallation(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -317,9 +323,15 @@ func TestStorkWithDesiredImage(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -368,9 +380,15 @@ func TestStorkImageChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -422,9 +440,15 @@ func TestStorkArgumentsChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -493,8 +517,13 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
-	driver.EXPECT().GetStorkEnvList(cluster).
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkEnvMap(cluster).
 		Return(driverEnvs).
 		AnyTimes()
 
@@ -502,7 +531,20 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check envs are passed to deployment
-	expectedEnvs := append(driverEnvs, cluster.Spec.Stork.Env...)
+	expectedEnvs := []v1.EnvVar{
+		{
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+		{
+			Name:  "STORK-NAMESPACE",
+			Value: cluster.Namespace,
+		},
+		{
+			Name:  "FOO",
+			Value: "foo",
+		},
+	}
 	storkDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -514,7 +556,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
 
-	expectedEnvs[1].Value = "bar"
+	expectedEnvs[2].Value = "bar"
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, storkDeployment.Spec.Template.Spec.Containers[0].Env, expectedEnvs)
@@ -562,9 +604,15 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	// Case: Custom registry should be applied to the images
@@ -687,9 +735,15 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	// Case: Custom repo-registry should be applied to the images
@@ -812,8 +866,13 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
-	driver.EXPECT().GetStorkEnvList(cluster).
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkEnvMap(cluster).
 		Return(driverEnvs).
 		AnyTimes()
 
@@ -946,8 +1005,13 @@ func TestStorkTolerationsChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
-	driver.EXPECT().GetStorkEnvList(cluster).
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkEnvMap(cluster).
 		Return(driverEnvs).
 		AnyTimes()
 
@@ -1121,8 +1185,13 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driverEnvs := []v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}
-	driver.EXPECT().GetStorkEnvList(cluster).
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkEnvMap(cluster).
 		Return(driverEnvs).
 		AnyTimes()
 
@@ -1240,9 +1309,15 @@ func TestStorkCPUChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1297,9 +1372,15 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1402,9 +1483,15 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	// Should not return error, instead raise an event
@@ -1445,9 +1532,15 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1507,9 +1600,15 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1564,9 +1663,15 @@ func TestStorkInstallWithImagePullPolicy(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1619,9 +1724,15 @@ func TestStorkInstallWithHostNetwork(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	// TestCase: Stork host network is set to true
@@ -1693,9 +1804,15 @@ func TestDisableStork(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)
@@ -1823,9 +1940,15 @@ func TestRemoveStork(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
-	driver.EXPECT().GetStorkEnvList(cluster).
-		Return([]v1.EnvVar{{Name: "PX_NAMESPACE", Value: cluster.Namespace}}).
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
 		AnyTimes()
 
 	err := controller.syncStork(cluster)

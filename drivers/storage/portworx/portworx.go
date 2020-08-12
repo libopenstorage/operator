@@ -97,20 +97,20 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
-func (p *portworx) GetStorkEnvList(cluster *corev1.StorageCluster) []v1.EnvVar {
-	envList := []v1.EnvVar{
-		{
+func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1.EnvVar {
+	envMap := map[string]*v1.EnvVar{
+		pxutil.EnvKeyPortworxNamespace: {
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
 		},
-		{
+		pxutil.EnvKeyPortworxServiceName: {
 			Name:  pxutil.EnvKeyPortworxServiceName,
 			Value: component.PxAPIServiceName,
 		},
 	}
 
 	if pxutil.SecurityEnabled(cluster) {
-		envList = append(envList, v1.EnvVar{
+		envMap[pxutil.EnvKeyStorkPXSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyStorkPXSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
@@ -119,7 +119,8 @@ func (p *portworx) GetStorkEnvList(cluster *corev1.StorageCluster) []v1.EnvVar {
 					},
 					Key: pxutil.SecurityAppsSecretKey,
 				},
-			}})
+			},
+		}
 
 		pxVersion := pxutil.GetPortworxVersion(cluster)
 		pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
@@ -128,20 +129,17 @@ func (p *portworx) GetStorkEnvList(cluster *corev1.StorageCluster) []v1.EnvVar {
 		}
 
 		// apps issuer was added in PX version 2.6.0
+		issuer := pxutil.SecurityPortworxStorkIssuer
 		if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) {
-			envList = append(envList, v1.EnvVar{
-				Name:  pxutil.EnvKeyStorkPXJwtIssuer,
-				Value: pxutil.SecurityPortworxAppsIssuer,
-			})
-		} else {
-			envList = append(envList, v1.EnvVar{
-				Name:  pxutil.EnvKeyStorkPXJwtIssuer,
-				Value: pxutil.SecurityPortworxStorkIssuer,
-			})
+			issuer = pxutil.SecurityPortworxAppsIssuer
+		}
+		envMap[pxutil.EnvKeyStorkPXJwtIssuer] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyStorkPXJwtIssuer,
+			Value: issuer,
 		}
 	}
 
-	return envList
+	return envMap
 }
 
 func (p *portworx) GetSelectorLabels() map[string]string {
