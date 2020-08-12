@@ -88,7 +88,7 @@ func TestGetStorkDriverName(t *testing.T) {
 	require.Equal(t, storkDriverName, actualStorkDriverName)
 }
 
-func TestGetStorkEnvList(t *testing.T) {
+func TestGetStorkEnvMap(t *testing.T) {
 	driver := portworx{}
 	cluster := &corev1alpha1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -97,13 +97,11 @@ func TestGetStorkEnvList(t *testing.T) {
 		},
 	}
 
-	envVars := driver.GetStorkEnvList(cluster)
+	envVars := driver.GetStorkEnvMap(cluster)
 
 	require.Len(t, envVars, 2)
-	require.Equal(t, pxutil.EnvKeyPortworxNamespace, envVars[0].Name)
-	require.Equal(t, cluster.Namespace, envVars[0].Value)
-	require.Equal(t, pxutil.EnvKeyPortworxServiceName, envVars[1].Name)
-	require.Equal(t, component.PxAPIServiceName, envVars[1].Value)
+	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
+	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {

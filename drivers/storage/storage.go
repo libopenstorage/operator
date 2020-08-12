@@ -41,8 +41,8 @@ type Driver interface {
 type StorkInterface interface {
 	// GetStorkDriverName returns the string name of the driver in Stork
 	GetStorkDriverName() (string, error)
-	// GetStorkEnvList returns a list of env vars that need to be passed to Stork
-	GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar
+	// GetStorkEnvMap returns a map of env vars that need to be passed to Stork
+	GetStorkEnvMap(cluster *corev1alpha1.StorageCluster) map[string]*v1.EnvVar
 }
 
 // ClusterPluginInterface interface to manage storage cluster

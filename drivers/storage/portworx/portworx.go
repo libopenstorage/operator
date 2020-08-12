@@ -102,13 +102,13 @@ func (p *portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
-func (p *portworx) GetStorkEnvList(cluster *corev1alpha1.StorageCluster) []v1.EnvVar {
-	return []v1.EnvVar{
-		{
+func (p *portworx) GetStorkEnvMap(cluster *corev1alpha1.StorageCluster) map[string]*v1.EnvVar {
+	return map[string]*v1.EnvVar{
+		pxutil.EnvKeyPortworxNamespace: {
 			Name:  pxutil.EnvKeyPortworxNamespace,
 			Value: cluster.Namespace,
 		},
-		{
+		pxutil.EnvKeyPortworxServiceName: {
 			Name:  pxutil.EnvKeyPortworxServiceName,
 			Value: component.PxAPIServiceName,
 		},
