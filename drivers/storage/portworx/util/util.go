@@ -244,6 +244,14 @@ func StartPort(cluster *corev1.StorageCluster) int {
 	return startPort
 }
 
+// KubeletPath returns the kubelet path
+func KubeletPath(cluster *corev1.StorageCluster) string {
+	if IsPKS(cluster) {
+		return "/var/vcap/data/kubelet"
+	}
+	return "/var/lib/kubelet"
+}
+
 // UseDeprecatedCSIDriverName returns true if the cluster env variables has
 // an override, else returns false.
 func UseDeprecatedCSIDriverName(cluster *corev1.StorageCluster) bool {

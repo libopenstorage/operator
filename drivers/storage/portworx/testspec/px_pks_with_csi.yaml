@@ -1,0 +1,156 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: portworx
+  namespace: kube-system
+spec:
+  minReadySeconds: 0
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: portworx
+    spec:
+      hostNetwork: true
+      hostPID: false
+      containers:
+        - name: portworx
+          image: portworx/oci-monitor:2.5.5
+          imagePullPolicy: Always
+          args:
+            ["-c", "px-cluster",
+             "--keep-px-up",
+             "-x", "kubernetes"]
+          env:
+            - name: "PX_NAMESPACE"
+              value: "kube-system"
+            - name: "PX_SECRETS_NAMESPACE"
+              value: "kube-system"
+            - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
+              value: "1500"
+            - name: "PX_TEMPLATE_VERSION"
+              value: "v4"
+            - name: "PRE-EXEC"
+              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+            - name: CSI_ENDPOINT
+              value: unix:///var/vcap/data/kubelet/csi-plugins/pxd.portworx.com/csi.sock
+          livenessProbe:
+            periodSeconds: 30
+            initialDelaySeconds: 840 # allow image pull in slow networks
+            httpGet:
+              host: 127.0.0.1
+              path: /status
+              port: 9001
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              host: 127.0.0.1
+              path: /health
+              port: 9015
+          terminationMessagePath: "/tmp/px-termination-log"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: diagsdump
+              mountPath: /var/cores
+            - name: dockersock
+              mountPath: /var/run/docker.sock
+            - name: containerdsock
+              mountPath: /run/containerd
+            - name: criosock
+              mountPath: /var/run/crio
+            - name: crioconf
+              mountPath: /etc/crictl.yaml
+            - name: etcpwx
+              mountPath: /etc/pwx
+            - name: optpwx
+              mountPath: /opt/pwx
+            - name: procmount
+              mountPath: /host_proc
+            - name: sysdmount
+              mountPath: /etc/systemd/system
+            - name: journalmount1
+              mountPath: /var/run/log
+              readOnly: true
+            - name: journalmount2
+              mountPath: /var/log
+              readOnly: true
+            - name: dbusmount
+              mountPath: /var/run/dbus
+            - name: pxlogs
+              mountPath: /var/lib/osd/log
+        - name: csi-node-driver-registrar
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=/var/vcap/data/kubelet/csi-plugins/pxd.portworx.com/csi.sock"
+          imagePullPolicy: Always
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: csi-driver-path
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+      restartPolicy: Always
+      serviceAccountName: portworx
+      volumes:
+        - name: diagsdump
+          hostPath:
+            path: /var/vcap/store/cores
+        - name: dockersock
+          hostPath:
+            path: /var/vcap/sys/run/docker/docker.sock
+        - name: criosock
+          hostPath:
+            path: /var/vcap/sys/run/crio
+        - name: crioconf
+          hostPath:
+            path: /var/vcap/store/crictl.yaml
+            type: FileOrCreate
+        - name: containerdsock
+          hostPath:
+            path: /var/vcap/sys/run/containerd
+        - name: etcpwx
+          hostPath:
+            path: /var/vcap/store/etc/pwx
+        - name: optpwx
+          hostPath:
+            path: /var/vcap/store/opt/pwx
+        - name: registration-dir
+          hostPath:
+            path: /var/vcap/data/kubelet/plugins_registry
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/vcap/data/kubelet/csi-plugins/pxd.portworx.com
+            type: DirectoryOrCreate
+        - name: procmount
+          hostPath:
+            path: /proc
+        - name: sysdmount
+          hostPath:
+            path: /etc/systemd/system
+        - name: journalmount1
+          hostPath:
+            path: /var/run/log
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - name: dbusmount
+          hostPath:
+            path: /var/run/dbus
+        - name: pxlogs
+          hostPath:
+            path: /var/vcap/store/lib/osd/log
