@@ -928,8 +928,9 @@ func (c *csi) getCSIConfiguration(
 ) *pxutil.CSIConfiguration {
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	kubeletPath := pxutil.KubeletPath(cluster)
 	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha)
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
 	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
 		return csiGenerator.GetCSIConfiguration()
 	}

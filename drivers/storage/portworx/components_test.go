@@ -2936,6 +2936,72 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCSIInstallWithPKS(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationIsPKS: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/image:2.5.5",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			Placement: &corev1alpha1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentWithPKS.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+}
+
 func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	extensionsClient := fakeextclient.NewSimpleClientset()

@@ -200,8 +200,9 @@ func newTemplate(
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	kubeletPath := pxutil.KubeletPath(cluster)
 	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha)
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
 	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
 		t.csiConfig = csiGenerator.GetCSIConfiguration()
 	} else {
@@ -905,13 +906,14 @@ func (t *template) getVolumes() []v1.Volume {
 }
 
 func (t *template) getCSIVolumeInfoList() []volumeInfo {
+	kubeletPath := pxutil.KubeletPath(t.cluster)
 	registrationVol := volumeInfo{
 		name:         "registration-dir",
-		hostPath:     "/var/lib/kubelet/plugins_registry",
+		hostPath:     kubeletPath + "/plugins_registry",
 		hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 	}
 	if t.csiConfig.UseOlderPluginsDirAsRegistration {
-		registrationVol.hostPath = "/var/lib/kubelet/plugins"
+		registrationVol.hostPath = kubeletPath + "/plugins"
 	}
 
 	volumeInfoList := []volumeInfo{registrationVol}

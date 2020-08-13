@@ -2015,6 +2015,38 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecForPKSWithCSI(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.15.2",
+	}
+	expected := getExpectedPodSpec(t, "testspec/px_pks_with_csi.yaml")
+
+	nodeName := "testNode"
+	cluster := &corev1alpha1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				annotationIsPKS: "true",
+			},
+		},
+		Spec: corev1alpha1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.5.5",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
 func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset(
 		&v1.Secret{

@@ -33,6 +33,8 @@ type CSIConfiguration struct {
 	UseOlderPluginsDirAsRegistration bool
 	// DriverName is decided based on the PX Version unless the deprecated flag is provided.
 	DriverName string
+	// DriverRegistrationBasePath is the base path for CSI driver registration path
+	DriverRegistrationBasePath string
 	// UseDeployment decides whether to use a StatefulSet or Deployment for the CSI side cars.
 	UseDeployment bool
 	// IncludeAttacher dictates whether we include the csi-attacher sidecar or not.
@@ -54,6 +56,7 @@ type CSIGenerator struct {
 	pxVersion               version.Version
 	useDeprecatedDriverName bool
 	disableAlpha            bool
+	kubeletPath             string
 }
 
 // NewCSIGenerator returns a version generator
@@ -62,12 +65,14 @@ func NewCSIGenerator(
 	pxVersion version.Version,
 	useDeprecatedDriverName bool,
 	disableAlpha bool,
+	kubeletPath string,
 ) *CSIGenerator {
 	return &CSIGenerator{
 		kubeVersion:             kubeVersion,
 		pxVersion:               pxVersion,
 		useDeprecatedDriverName: useDeprecatedDriverName,
 		disableAlpha:            disableAlpha,
+		kubeletPath:             kubeletPath,
 	}
 }
 
@@ -148,6 +153,7 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 
 	// Set the CSI driver name
 	cv.DriverName = g.driverName()
+	cv.DriverRegistrationBasePath = g.kubeletPath + "/plugins"
 
 	// If we have k8s version < v1.14, we include the attacher.
 	// This is because the CSIDriver object was alpha until 1.14+
@@ -212,5 +218,5 @@ func (g *CSIGenerator) setSidecarContainerVersionsV0_4() *CSIConfiguration {
 
 // DriverBasePath returns the basepath under which the CSI driver is stored
 func (c *CSIConfiguration) DriverBasePath() string {
-	return path.Join("/var/lib/kubelet/plugins", c.DriverName)
+	return path.Join(c.DriverRegistrationBasePath, c.DriverName)
 }
