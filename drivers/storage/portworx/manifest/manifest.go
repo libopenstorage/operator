@@ -217,8 +217,7 @@ func fillCSIDefaults(
 
 	logrus.Debugf("CSI images not found in manifest, using default")
 	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
-	csiGenerator := pxutil.NewCSIGenerator(
-		*k8sVersion, *pxVersion, false, false)
+	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "")
 	csiImages := csiGenerator.GetCSIImages()
 
 	rel.Components.CSIProvisioner = csiImages.Provisioner

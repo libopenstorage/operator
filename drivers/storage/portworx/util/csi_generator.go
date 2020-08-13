@@ -59,6 +59,7 @@ type CSIGenerator struct {
 	pxVersion               version.Version
 	useDeprecatedDriverName bool
 	disableAlpha            bool
+	kubeletPath             string
 }
 
 // NewCSIGenerator returns a version generator
@@ -67,12 +68,14 @@ func NewCSIGenerator(
 	pxVersion version.Version,
 	useDeprecatedDriverName bool,
 	disableAlpha bool,
+	kubeletPath string,
 ) *CSIGenerator {
 	return &CSIGenerator{
 		kubeVersion:             kubeVersion,
 		pxVersion:               pxVersion,
 		useDeprecatedDriverName: useDeprecatedDriverName,
 		disableAlpha:            disableAlpha,
+		kubeletPath:             kubeletPath,
 	}
 }
 
@@ -149,9 +152,9 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	// k8s 1.16 and earlier, CSI registration path should be csi-plugins.
 	// See https://github.com/kubernetes-csi/node-driver-registrar/pull/59/files#diff-04c6e90faac2675aa89e2176d2eec7d8R41
 	if g.kubeVersion.LessThan(k8sVer1_17) {
-		cv.DriverRegistrationBasePath = "/var/lib/kubelet/csi-plugins"
+		cv.DriverRegistrationBasePath = g.kubeletPath + "/csi-plugins"
 	} else {
-		cv.DriverRegistrationBasePath = "/var/lib/kubelet/plugins"
+		cv.DriverRegistrationBasePath = g.kubeletPath + "/plugins"
 	}
 
 	// If we have k8s version < v1.14, we include the attacher.
