@@ -1,21 +1,21 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v1.4.0
+  name: portworx-operator.v1.3.4
   namespace: placeholder
   annotations:
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: openstorage/openstorage-operator:master
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator@sha256:2250bdf7f21e8ebaa30bac92025771724bcfc2adda70817c65b864b1e87cd58d
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2020-04-01T08:00:00Z
+    createdAt: 2020-08-19T08:00:00Z
     support: Portworx, Inc
     certified: "true"
     alm-examples: |-
       [
         {
-          "apiVersion": "core.libopenstorage.org/v1",
+          "apiVersion": "core.libopenstorage.org/v1alpha1",
           "kind": "StorageCluster",
           "metadata": {
             "name": "portworx",
@@ -25,13 +25,16 @@ metadata:
             }
           },
           "spec": {
+            "userInterface": {
+              "enabled": true
+            },
             "autopilot": {
               "enabled": false
             }
           }
         },
         {
-          "apiVersion": "core.libopenstorage.org/v1",
+          "apiVersion": "core.libopenstorage.org/v1alpha1",
           "kind": "StorageNode",
           "metadata": {
             "name": "example",
@@ -41,10 +44,10 @@ metadata:
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 1.4.0
+  version: 1.3.4
   minKubeVersion: "1.12.0"
   maturity: stable
-  replaces: portworx-operator.v1.3.4
+  replaces: portworx-operator.v1.3.3
   maintainers:
   - name: Portworx
     email: support@portworx.com
@@ -206,7 +209,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: openstorage/openstorage-operator:master
+                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:2250bdf7f21e8ebaa30bac92025771724bcfc2adda70817c65b864b1e87cd58d
                 imagePullPolicy: Always
                 command:
                 - /operator
@@ -226,7 +229,7 @@ spec:
     owned:
     - kind: StorageCluster
       name: storageclusters.core.libopenstorage.org
-      version: v1
+      version: v1alpha1
       displayName: Storage Cluster
       description: Storage Cluster installs Portworx in the cluster.
         It has all the necessary configurations to setup and update a Portworx cluster.
@@ -331,7 +334,7 @@ spec:
         version: v1
     - kind: StorageNode
       name: storagenodes.core.libopenstorage.org
-      version: v1
+      version: v1alpha1
       displayName: Storage Node
       description: DO NOT CREATE Storage Node as it is internally created by the operator.
         It represents the status of a Portworx node.
