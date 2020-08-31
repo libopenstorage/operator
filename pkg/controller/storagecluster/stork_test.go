@@ -1570,6 +1570,123 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	)
 }
 
+func TestStorkSchedulerImageWithNewerK8sVersion(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion("1.18.7")
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(cluster).Return(nil).AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.18 release train
+	k8sVersion, _ = version.NewVersion("1.18.6")
+	controller.kubernetesVersion = k8sVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Newer patches in Kubernetes 1.17 release train
+	k8sVersion, _ = version.NewVersion("1.17.10")
+	controller.kubernetesVersion = k8sVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.17 release train
+	k8sVersion, _ = version.NewVersion("1.17.9")
+	controller.kubernetesVersion = k8sVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Newer patches in Kubernetes 1.16 release train
+	k8sVersion, _ = version.NewVersion("1.16.14")
+	controller.kubernetesVersion = k8sVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.16 release train
+	k8sVersion, _ = version.NewVersion("1.16.13")
+	controller.kubernetesVersion = k8sVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
 func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
