@@ -73,6 +73,20 @@ func GetFullVersion() (*version.Version, string, error) {
 	return ver, "", err
 }
 
+// IsNewKubernetesRegistry returns true if the kubernetes images for the
+// given k8s version are stored in a newer container registry
+func IsNewKubernetesRegistry(k8sVersion *version.Version) bool {
+	ver1_16_13, _ := version.NewVersion("1.16.13")
+	ver1_17, _ := version.NewVersion("1.17")
+	ver1_17_9, _ := version.NewVersion("1.17.9")
+	ver1_18, _ := version.NewVersion("1.18")
+	ver1_18_6, _ := version.NewVersion("1.18.6")
+
+	return k8sVersion.GreaterThan(ver1_18_6) ||
+		(k8sVersion.GreaterThan(ver1_16_13) && k8sVersion.LessThan(ver1_17)) ||
+		(k8sVersion.GreaterThan(ver1_17_9) && k8sVersion.LessThan(ver1_18))
+}
+
 // ParseObjectFromFile reads the given file and loads the object from the file in obj
 func ParseObjectFromFile(
 	filepath string,

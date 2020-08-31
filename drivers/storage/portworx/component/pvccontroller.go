@@ -254,8 +254,14 @@ func (c *pvcController) createDeployment(
 		return err
 	}
 
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-controller-manager-amd64:v"+c.k8sVersion.String())
+	kubeControllerImage := "gcr.io/google_containers/kube-controller-manager-amd64"
+	if k8sutil.IsNewKubernetesRegistry(&c.k8sVersion) {
+		kubeControllerImage = "k8s.gcr.io/kube-controller-manager-amd64"
+	}
+	imageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		kubeControllerImage+":v"+c.k8sVersion.String(),
+	)
 
 	command := []string{
 		"kube-controller-manager",

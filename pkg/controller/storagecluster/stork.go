@@ -693,8 +693,14 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry,
-		"gcr.io/google_containers/kube-scheduler-amd64:v"+c.kubernetesVersion.String())
+	kubeSchedImage := "gcr.io/google_containers/kube-scheduler-amd64"
+	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
+		kubeSchedImage = "k8s.gcr.io/kube-scheduler-amd64"
+	}
+	imageName := util.GetImageURN(
+		cluster.Spec.CustomImageRegistry,
+		kubeSchedImage+":v"+c.kubernetesVersion.String(),
+	)
 
 	command := []string{
 		"/usr/local/bin/kube-scheduler",
