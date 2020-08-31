@@ -1501,6 +1501,129 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	)
 }
 
+func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.7",
+	}
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				annotationPVCController: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-controller-manager-amd64:v1.18.7",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.18 release train
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.6",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.18.6",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Newer patches in Kubernetes 1.17 release train
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.10",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-controller-manager-amd64:v1.17.10",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.17 release train
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.9",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.17.9",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Newer patches in Kubernetes 1.16 release train
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.16.14",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"k8s.gcr.io/kube-controller-manager-amd64:v1.16.14",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
+	// Older patches in Kubernetes 1.16 release train
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.16.13",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.initializeComponents()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.16.13",
+		deployment.Spec.Template.Spec.Containers[0].Image,
+	)
+}
+
 func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
