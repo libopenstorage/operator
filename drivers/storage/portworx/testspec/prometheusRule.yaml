@@ -42,6 +42,30 @@ spec:
         issue: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is predicted to fill within
           2 weeks.
         severity: warning
+    - alert: PortworxVolumeNotInQuorum
+      annotations:
+        description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum. Please check all nodes with that volume replicas are online.
+        summary: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum.
+      expr: px_volume_replication_status == 1
+      labels:
+        issue: Portworx volume out of quorum.
+        severity: warning
+    - alert: PortworxVolumeInResync
+      annotations:
+        description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in resync state.
+        summary: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in resync state.
+      expr: px_volume_replication_status == 2
+      labels:
+        issue: Portworx volume in resync state.
+        severity: warning
+    - alert: PortworxVolumeDegraded
+      annotations:
+        description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in degraded state. Please check all nodes with that volume replicas are online.
+        summary: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in degraded state.
+      expr: px_volume_replication_status == 3
+      labels:
+        issue: Portworx volume in degraded state.
+        severity: warning
     - alert: PortworxStorageUsageCritical
       annotations:
         description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 80% used
@@ -107,3 +131,11 @@ spec:
       labels:
         issue: Portworx cluster member(s) is(are) down.
         severity: critical
+    - alert: PXBackupError
+      annotations:
+        description: Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.
+        summary: Failed to take backup for volume {{$labels.volumename}}.
+      expr: px_backup_stats_status == 2
+      labels:
+        issue: Cloudsnap backup error.
+        severity: warning
