@@ -258,6 +258,12 @@ func (c *prometheus) createOperatorClusterRole() error {
 					Resources: []string{"namespaces"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{"anyuid"},
+					Verbs:         []string{"use"},
+				},
 			},
 		},
 	)

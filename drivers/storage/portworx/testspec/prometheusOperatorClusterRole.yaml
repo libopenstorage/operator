@@ -51,3 +51,8 @@ rules:
     resources:
       - namespaces
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["security.openshift.io"]
+    resources:
+      - securitycontextconstraints
+    resourceNames: ["anyuid"]
+    verbs: ["use"]
