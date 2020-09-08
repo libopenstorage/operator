@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"testing"
-	"time"
 
 	version "github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -550,10 +549,6 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 }
 
 func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
-	defer func() {
-		refreshInterval = manifestRefreshInterval
-	}()
-
 	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
 		PortworxVersion: "2.6.0",
@@ -588,8 +583,11 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 	require.Equal(t, "image/stork:2.6.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if cache has expired
-	refreshInterval = func() time.Duration {
-		return 0 * time.Second
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  envKeyReleaseManifestRefreshInterval,
+			Value: "0",
+		},
 	}
 	rel = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.6.1", rel.Components.Stork)
@@ -607,7 +605,6 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 		os.Remove(path.Join(linkPath, remoteReleaseManifest))
 		os.RemoveAll(manifestDir)
 		setupHTTPFailure()
-		refreshInterval = manifestRefreshInterval
 	}()
 
 	expected := &Version{
@@ -647,9 +644,13 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 	require.Equal(t, "image/stork:2.5.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if cache has expired
-	refreshInterval = func() time.Duration {
-		return 0 * time.Second
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  envKeyReleaseManifestRefreshInterval,
+			Value: "0",
+		},
 	}
+	os.Setenv(envKeyReleaseManifestRefreshInterval, "0")
 	rel = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
 }

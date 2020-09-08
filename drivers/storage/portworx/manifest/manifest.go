@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -18,7 +20,8 @@ import (
 const (
 	// envKeyReleaseManifestURL is an environment variable to override the
 	// default release manifest download URL
-	envKeyReleaseManifestURL = "PX_RELEASE_MANIFEST_URL"
+	envKeyReleaseManifestURL             = "PX_RELEASE_MANIFEST_URL"
+	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
 	DefaultPortworxVersion                = "2.5.2"
@@ -34,9 +37,8 @@ const (
 )
 
 var (
-	instance        Manifest
-	once            sync.Once
-	refreshInterval = manifestRefreshInterval
+	instance Manifest
+	once     sync.Once
 )
 
 // Release is a single release object with images for different components
@@ -137,7 +139,7 @@ func (m *manifest) GetVersions(
 		}
 	}
 
-	cacheExpired := m.lastUpdated.Add(refreshInterval()).Before(time.Now())
+	cacheExpired := m.lastUpdated.Add(refreshInterval(cluster)).Before(time.Now())
 	if _, ok := provider.(*configMap); !ok && !cacheExpired && !force {
 		return m.cachedVersions.DeepCopy()
 	}
@@ -228,7 +230,11 @@ func fillCSIDefaults(
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
 }
 
-func manifestRefreshInterval() time.Duration {
+func refreshInterval(cluster *corev1.StorageCluster) time.Duration {
+	intervalStr := k8sutil.GetValueFromEnv(envKeyReleaseManifestRefreshInterval, cluster.Spec.Env)
+	if interval, err := strconv.Atoi(intervalStr); err == nil {
+		return time.Duration(interval) * time.Minute
+	}
 	return defaultManifestRefreshInterval
 }
 
