@@ -127,11 +127,20 @@ func (c *portworxBasic) prepareForSecrets(
 		if err := c.createNamespace(secretsNamespace); err != nil {
 			return err
 		}
+
+		// create role binding in the cluster namespace also
+		if err := c.createRole(cluster.Namespace, ownerRef); err != nil {
+			return err
+		}
+		if err := c.createRoleBinding(cluster.Namespace, ownerRef); err != nil {
+			return err
+		}
 	}
-	if err := c.createRole(secretsNamespace, ownerRef); err != nil {
+
+	if err := c.createVolumeSecretsRole(secretsNamespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createRoleBinding(secretsNamespace, cluster.Namespace, ownerRef); err != nil {
+	if err := c.createVolumeSecretsRoleBinding(secretsNamespace, cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 	return nil
@@ -160,7 +169,7 @@ func (c *portworxBasic) createNamespace(namespace string) error {
 	return nil
 }
 
-func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerReference) error {
+func (c *portworxBasic) createVolumeSecretsRole(namespace string, ownerRef *metav1.OwnerReference) error {
 	return k8sutil.CreateOrUpdateRole(
 		c.k8sClient,
 		&rbacv1.Role{
@@ -181,7 +190,57 @@ func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerRefer
 	)
 }
 
+func (c *portworxBasic) createRole(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+	return k8sutil.CreateOrUpdateRole(
+		c.k8sClient,
+		&rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            PxRoleName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"get"},
+				},
+			},
+		},
+		ownerRef,
+	)
+}
+
 func (c *portworxBasic) createRoleBinding(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateRoleBinding(
+		c.k8sClient,
+		&rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            PxRoleBindingName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      pxutil.PortworxServiceAccountName,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
+				Name:     PxRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (c *portworxBasic) createVolumeSecretsRoleBinding(
 	bindingNamespace string,
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,

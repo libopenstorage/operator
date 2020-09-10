@@ -114,7 +114,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
 
 	// Portworx Role
-	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
+	expectedRole := testutil.GetExpectedRole(t, "portworxRoleAllPermissions.yaml")
 	actualRole := &rbacv1.Role{}
 	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, cluster.Namespace)
 	require.NoError(t, err)
@@ -305,8 +305,8 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, ns.OwnerReferences, 0)
 
-	// Portworx Secrets Role
-	expectedRole := testutil.GetExpectedRole(t, "portworxRole.yaml")
+	// Portworx Secrets Role in the secrets namespace
+	expectedRole := testutil.GetExpectedRole(t, "portworxRoleAllPermissions.yaml")
 	actualRole := &rbacv1.Role{}
 	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, secretsNamespace)
 	require.NoError(t, err)
@@ -315,10 +315,29 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	require.Equal(t, cluster.Name, actualRole.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
 
+	// Portworx Secrets Role in the cluster namespace
+	expectedRole = testutil.GetExpectedRole(t, "portworxRoleMinimalPermissions.yaml")
+	actualRoleClusterNamespace := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, actualRoleClusterNamespace, component.PxRoleName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRole.Name, actualRoleClusterNamespace.Name)
+	require.Len(t, actualRoleClusterNamespace.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRoleClusterNamespace.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRole.Rules, actualRoleClusterNamespace.Rules)
+
 	// Portworx Secrets RoleBinding
 	expectedRB := testutil.GetExpectedRoleBinding(t, "portworxRoleBinding.yaml")
 	actualRB := &rbacv1.RoleBinding{}
 	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, secretsNamespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRB.Name, actualRB.Name)
+	require.Len(t, actualRB.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
+	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
+	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+
+	actualRB = &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedRB.Name, actualRB.Name)
 	require.Len(t, actualRB.OwnerReferences, 1)
