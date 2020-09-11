@@ -51,16 +51,19 @@ func (c *portworxBasic) IsEnabled(cluster *corev1.StorageCluster) bool {
 
 func (c *portworxBasic) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
-		return NewError(ErrCritical, err)
+	saName := pxutil.PortworxServiceAccountName(cluster)
+	if saName == pxutil.DefaultPortworxServiceAccountName {
+		if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
+			return NewError(ErrCritical, err)
+		}
 	}
 	if err := c.createClusterRole(); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
+	if err := c.createClusterRoleBinding(saName, cluster.Namespace); err != nil {
 		return NewError(ErrCritical, err)
 	}
-	if err := c.prepareForSecrets(cluster, ownerRef); err != nil {
+	if err := c.prepareForSecrets(saName, cluster, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
 	if err := c.createPortworxService(cluster, ownerRef); err != nil {
@@ -71,7 +74,7 @@ func (c *portworxBasic) Reconcile(cluster *corev1.StorageCluster) error {
 
 func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteServiceAccount(c.k8sClient, pxutil.PortworxServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteServiceAccount(c.k8sClient, pxutil.DefaultPortworxServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteClusterRole(c.k8sClient, PxClusterRoleName); err != nil {
@@ -102,7 +105,7 @@ func (c *portworxBasic) createServiceAccount(
 		c.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxutil.PortworxServiceAccountName,
+				Name:            pxutil.DefaultPortworxServiceAccountName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -112,6 +115,7 @@ func (c *portworxBasic) createServiceAccount(
 }
 
 func (c *portworxBasic) prepareForSecrets(
+	saName string,
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -131,7 +135,7 @@ func (c *portworxBasic) prepareForSecrets(
 	if err := c.createRole(secretsNamespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createRoleBinding(secretsNamespace, cluster.Namespace, ownerRef); err != nil {
+	if err := c.createRoleBinding(saName, secretsNamespace, cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 	return nil
@@ -182,6 +186,7 @@ func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerRefer
 }
 
 func (c *portworxBasic) createRoleBinding(
+	saName string,
 	bindingNamespace string,
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
@@ -197,7 +202,7 @@ func (c *portworxBasic) createRoleBinding(
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      pxutil.PortworxServiceAccountName,
+					Name:      saName,
 					Namespace: clusterNamespace,
 				},
 			},
@@ -292,7 +297,7 @@ func (c *portworxBasic) createClusterRole() error {
 }
 
 func (c *portworxBasic) createClusterRoleBinding(
-	clusterNamespace string,
+	saName, clusterNamespace string,
 ) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
@@ -303,7 +308,7 @@ func (c *portworxBasic) createClusterRoleBinding(
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      pxutil.PortworxServiceAccountName,
+					Name:      saName,
 					Namespace: clusterNamespace,
 				},
 			},
