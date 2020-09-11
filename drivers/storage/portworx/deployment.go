@@ -276,7 +276,7 @@ func (p *portworx) GetKVDBPodSpec(
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
-		ServiceAccountName: pxutil.PortworxServiceAccountName,
+		ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),
 		Containers:         []v1.Container{containers},
 		NodeName:           nodeName,
 	}
@@ -302,7 +302,6 @@ func (p *portworx) GetKVDBPodSpec(
 	return podSpec, nil
 }
 
-// TODO [Imp] Validate the cluster spec and return errors in the configuration
 func (p *portworx) GetStoragePodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
@@ -337,7 +336,7 @@ func (p *portworx) GetStoragePodSpec(
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
-		ServiceAccountName: pxutil.PortworxServiceAccountName,
+		ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),
 		Containers:         []v1.Container{containers},
 		Volumes:            t.getVolumes(),
 	}
