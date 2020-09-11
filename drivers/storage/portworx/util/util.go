@@ -36,8 +36,8 @@ const (
 	// PortworxSpecsDir is the directory where all the Portworx specs are stored
 	PortworxSpecsDir = "/configs"
 
-	// PortworxServiceAccountName name of the Portworx service account
-	PortworxServiceAccountName = "portworx"
+	// DefaultPortworxServiceAccountName default name of the Portworx service account
+	DefaultPortworxServiceAccountName = "portworx"
 	// PortworxServiceName name of the Portworx Kubernetes service
 	PortworxServiceName = "portworx-service"
 	// PortworxRESTPortName name of the Portworx API port
@@ -88,6 +88,9 @@ const (
 	// EnvKeyPortworxNamespace key for the env var which tells namespace in which
 	// Portworx is installed
 	EnvKeyPortworxNamespace = "PX_NAMESPACE"
+	// EnvKeyPortworxServiceAccount key for the env var which tells custom Portworx
+	// service account
+	EnvKeyPortworxServiceAccount = "PX_SERVICE_ACCOUNT"
 	// EnvKeyPortworxServiceName key for the env var which tells the name of the
 	// portworx service to be used
 	EnvKeyPortworxServiceName = "PX_SERVICE_NAME"
@@ -250,6 +253,16 @@ func KubeletPath(cluster *corev1.StorageCluster) string {
 		return "/var/vcap/data/kubelet"
 	}
 	return "/var/lib/kubelet"
+}
+
+// PortworxServiceAccountName returns name of the portworx service account
+func PortworxServiceAccountName(cluster *corev1.StorageCluster) string {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == EnvKeyPortworxServiceAccount && len(env.Value) > 0 {
+			return env.Value
+		}
+	}
+	return DefaultPortworxServiceAccountName
 }
 
 // UseDeprecatedCSIDriverName returns true if the cluster env variables has

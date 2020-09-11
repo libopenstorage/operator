@@ -151,8 +151,11 @@ func (c *portworxAPI) createDaemonSet(
 	}
 
 	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, pxutil.ImageNamePause)
+	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
+	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
 	modified := existingImageName != imageName ||
+		existingServiceAccount != serviceAccount ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
@@ -196,7 +199,7 @@ func getPortworxAPIDaemonSetSpec(
 					Labels: getPortworxAPIServiceLabels(),
 				},
 				Spec: v1.PodSpec{
-					ServiceAccountName: pxutil.PortworxServiceAccountName,
+					ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),
 					RestartPolicy:      v1.RestartPolicyAlways,
 					HostNetwork:        true,
 					Containers: []v1.Container{

@@ -268,6 +268,41 @@ func TestGetKVDBPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecWithCustomServiceAccount(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.8",
+	}
+
+	nodeName := "testNode"
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxServiceAccount,
+						Value: "custom-px-sa",
+					},
+				},
+			},
+		},
+	}
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err)
+	require.Equal(t, "custom-px-sa", podSpec.ServiceAccountName)
+
+	kvdbPodSpec, err := driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.Equal(t, "custom-px-sa", kvdbPodSpec.ServiceAccountName)
+}
+
 func TestAutoNodeRecoveryTimeoutEnvForPxVersion2_6(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"

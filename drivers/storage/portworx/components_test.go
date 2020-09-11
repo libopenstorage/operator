@@ -89,7 +89,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// Portworx ServiceAccount
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pxutil.DefaultPortworxServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -458,6 +458,108 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPortworxWithCustomServiceAccount(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxServiceAccount,
+						Value: "custom-px-sa",
+					},
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Default portworx ServiceAccount should not be created
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxutil.DefaultPortworxServiceAccountName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	// Portworx ClusterRoleBinding with custom ServiceAccount
+	crb := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PxClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, "custom-px-sa", crb.Subjects[0].Name)
+
+	// Portworx RoleBinding with custom ServiceAccount
+	rb := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "custom-px-sa", rb.Subjects[0].Name)
+
+	// Portworx API DaemonSet with custom ServiceAccount
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "custom-px-sa", ds.Spec.Template.Spec.ServiceAccountName)
+
+	// Case: Change the custom service account
+	cluster.Spec.Env[0].Value = "new-custom-px-sa"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, pxutil.DefaultPortworxServiceAccountName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	// Portworx ClusterRoleBinding with custom ServiceAccount
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PxClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, "new-custom-px-sa", crb.Subjects[0].Name)
+
+	// Portworx RoleBinding with custom ServiceAccount
+	rb = &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "new-custom-px-sa", rb.Subjects[0].Name)
+
+	// Portworx API DaemonSet with custom ServiceAccount
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "new-custom-px-sa", ds.Spec.Template.Spec.ServiceAccountName)
+
+	// Case: Custom service account should not be deleted
+	customSA := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "new-custom-px-sa",
+			Namespace: cluster.Namespace,
+		},
+	}
+	k8sClient.Create(context.TODO(), customSA)
+	cluster.Annotations = map[string]string{
+		constants.AnnotationDisableStorage: "true",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	sa = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, "new-custom-px-sa", "")
+	require.NoError(t, err)
+
+	crb = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, crb, component.PxClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestDisablePortworx(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -480,7 +582,7 @@ func TestDisablePortworx(t *testing.T) {
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pxutil.DefaultPortworxServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 
 	cr := &rbacv1.ClusterRole{}
@@ -535,7 +637,7 @@ func TestDisablePortworx(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxutil.PortworxServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, pxutil.DefaultPortworxServiceAccountName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
