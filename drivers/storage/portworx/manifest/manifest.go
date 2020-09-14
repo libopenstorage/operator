@@ -24,8 +24,8 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion                = "2.5.2"
-	defaultStorkImage                     = "openstorage/stork:2.4.1"
+	DefaultPortworxVersion                = "2.5.7"
+	defaultStorkImage                     = "openstorage/stork:2.4.4"
 	defaultAutopilotImage                 = "portworx/autopilot:1.2.1"
 	defaultLighthouseImage                = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage                 = "portworx/px-node-wiper:2.5.0"
@@ -125,8 +125,8 @@ func (m *manifest) GetVersions(
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
 	if err == nil {
-		pxVer2_6, _ := version.NewVersion("2.6")
-		if currPxVer.LessThan(pxVer2_6) {
+		pxVer2_5_7, _ := version.NewVersion("2.5.7")
+		if currPxVer.LessThan(pxVer2_5_7) {
 			provider = newDeprecatedManifest(ver)
 		}
 	}
