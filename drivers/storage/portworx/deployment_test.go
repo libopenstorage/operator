@@ -2890,6 +2890,62 @@ func TestSecuritySetEnv(t *testing.T) {
 
 }
 
+func TestIKSEnvVariables(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationIsIKS: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.6.0",
+		},
+	}
+
+	expectedPodIPEnv := v1.EnvVar{
+		Name: "PX_POD_IP",
+		ValueFrom: &v1.EnvVarSource{
+			FieldRef: &v1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "status.podIP",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.Len(t, actual.Containers[0].Env, 4)
+	var podIPEnv *v1.EnvVar
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == "PX_POD_IP" {
+			podIPEnv = env.DeepCopy()
+		}
+	}
+	assert.Equal(t, expectedPodIPEnv, *podIPEnv)
+
+	// TestCase: When IKS is not enabled
+	cluster.Annotations[pxutil.AnnotationIsIKS] = "false"
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.Len(t, actual.Containers[0].Env, 3)
+	podIPEnv = nil
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == "PX_POD_IP" {
+			podIPEnv = env.DeepCopy()
+		}
+	}
+	assert.Nil(t, podIPEnv)
+}
+
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)
