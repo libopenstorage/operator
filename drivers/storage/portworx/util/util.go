@@ -61,6 +61,8 @@ const (
 	AnnotationIsAKS = pxAnnotationPrefix + "/is-aks"
 	// AnnotationIsEKS annotation indicating whether it is an EKS cluster
 	AnnotationIsEKS = pxAnnotationPrefix + "/is-eks"
+	// AnnotationIsIKS annotation indicating whether it is an IKS cluster
+	AnnotationIsIKS = pxAnnotationPrefix + "/is-iks"
 	// AnnotationIsOpenshift annotation indicating whether it is an OpenShift cluster
 	AnnotationIsOpenshift = pxAnnotationPrefix + "/is-openshift"
 	// AnnotationPVCController annotation indicating whether to deploy a PVC controller
@@ -186,6 +188,12 @@ func IsAKS(cluster *corev1.StorageCluster) bool {
 // IsEKS returns true if the annotation has an EKS annotation and is true value
 func IsEKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsEKS])
+	return err == nil && enabled
+}
+
+// IsIKS returns true if the annotation has an IKS annotation and is true value
+func IsIKS(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsIKS])
 	return err == nil && enabled
 }
 

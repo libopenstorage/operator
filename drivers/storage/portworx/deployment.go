@@ -172,6 +172,7 @@ var (
 type template struct {
 	cluster         *corev1.StorageCluster
 	isPKS           bool
+	isIKS           bool
 	isOpenshift     bool
 	isK3s           bool
 	runOnMaster     bool
@@ -216,6 +217,7 @@ func newTemplate(
 	}
 
 	t.isPKS = pxutil.IsPKS(cluster)
+	t.isIKS = pxutil.IsIKS(cluster)
 	t.isOpenshift = pxutil.IsOpenshift(cluster)
 	t.serviceType = pxutil.ServiceType(cluster)
 	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
@@ -842,6 +844,18 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap["AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"] = &v1.EnvVar{
 			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
 			Value: "1500",
+		}
+	}
+
+	if t.isIKS {
+		envMap["PX_POD_IP"] = &v1.EnvVar{
+			Name: "PX_POD_IP",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "status.podIP",
+				},
+			},
 		}
 	}
 
