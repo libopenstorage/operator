@@ -227,7 +227,7 @@ func (c *portworxBasic) createClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
 					APIGroups: []string{""},
