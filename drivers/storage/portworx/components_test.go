@@ -3078,6 +3078,36 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
 	require.Equal(t, appsSecretKey, systemSecret.Data[pxutil.SecurityAppsSecretKey])
+
+	// existing secret should not be erased if the operator starts using it as sharedSecret
+	sharedSecret = &v1.Secret{}
+	existingSharedSecretName := "existingSharedsecret"
+	sharedSecret.Name = existingSharedSecretName
+	sharedSecret.Namespace = cluster.Namespace
+	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
+	sharedSecret.Data = make(map[string][]byte)
+	sharedSecret.StringData = make(map[string]string)
+	sharedSecret.Type = v1.SecretTypeOpaque
+	sharedSecret.Data["key1"] = []byte("s1")
+	sharedSecret.Data["key2"] = []byte("s2")
+	err = k8sClient.Create(context.TODO(), sharedSecret)
+	require.NoError(t, err)
+	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = &existingSharedSecretName
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, sharedSecret, existingSharedSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	s1, ok := sharedSecret.Data["key1"]
+	require.Equal(t, true, ok)
+	require.Equal(t, s1, []byte("s1"))
+	s2, ok := sharedSecret.Data["key2"]
+	require.Equal(t, true, ok)
+	require.Equal(t, s2, []byte("s2"))
+	sharedSecretVal, ok := sharedSecret.Data["shared-secret"]
+	require.Equal(t, true, ok)
+	require.Equal(t, string(sharedSecretKey), string(sharedSecretVal))
 }
 
 func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
