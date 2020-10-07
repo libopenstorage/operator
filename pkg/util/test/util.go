@@ -288,6 +288,7 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 
 // ValidateStorageCluster validates a StorageCluster spec
 func ValidateStorageCluster(
+	pxImageList map[string]string,
 	cluster *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	kubeconfig ...string,
@@ -305,7 +306,7 @@ func ValidateStorageCluster(
 		return err
 	}
 
-	if err = validateComponents(cluster, timeout, interval); err != nil {
+	if err = validateComponents(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -521,7 +522,7 @@ func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 	return podCount, nil
 }
 
-func validateComponents(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	k8sVersion, err := getK8SVersion()
 	if err != nil {
 		return err
@@ -547,7 +548,19 @@ func validateComponents(cluster *corev1.StorageCluster, timeout, interval time.D
 		if err = appops.Instance().ValidateDeployment(storkDp, timeout, interval); err != nil {
 			return err
 		}
-		storkImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.Stork.Image)
+
+		var storkImageName string
+		if cluster.Spec.Stork.Image == "" {
+			if value, ok := pxImageList["stork"]; ok {
+				storkImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for stork")
+			}
+		} else {
+			storkImageName = cluster.Spec.Stork.Image
+		}
+
+		storkImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, storkImageName)
 		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
 		if err != nil {
 			return err
@@ -572,7 +585,19 @@ func validateComponents(cluster *corev1.StorageCluster, timeout, interval time.D
 		if err = appops.Instance().ValidateDeployment(autopilotDp, timeout, interval); err != nil {
 			return err
 		}
-		autopilotImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.Autopilot.Image)
+
+		var autopilotImageName string
+		if cluster.Spec.Autopilot.Image == "" {
+			if value, ok := pxImageList["autopilot"]; ok {
+				autopilotImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for autopilot")
+			}
+		} else {
+			autopilotImageName = cluster.Spec.Autopilot.Image
+		}
+
+		autopilotImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, autopilotImageName)
 		if err = validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": "autopilot"}); err != nil {
 			return err
 		}
@@ -585,7 +610,19 @@ func validateComponents(cluster *corev1.StorageCluster, timeout, interval time.D
 		if err = appops.Instance().ValidateDeployment(lighthouseDp, timeout, interval); err != nil {
 			return err
 		}
-		lhImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, cluster.Spec.UserInterface.Image)
+
+		var lighthouseImageName string
+		if cluster.Spec.UserInterface.Image == "" {
+			if value, ok := pxImageList["lighthouse"]; ok {
+				lighthouseImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for lighthouse")
+			}
+		} else {
+			lighthouseImageName = cluster.Spec.UserInterface.Image
+		}
+
+		lhImage := util.GetImageURN(cluster.Spec.CustomImageRegistry, lighthouseImageName)
 		if err = validateImageOnPods(lhImage, cluster.Namespace, map[string]string{"name": "lighthouse"}); err != nil {
 			return err
 		}
