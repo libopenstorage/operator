@@ -251,12 +251,12 @@ func (c *security) createPrivateKeysSecret(
 		},
 	}
 
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, sharedSecret, nil)
+	err = k8sutil.CreateOrAppendToSecret(c.k8sClient, sharedSecret, nil)
 	if err != nil {
 		return err
 	}
 
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, systemKeysSecret, nil)
+	err = k8sutil.CreateOrAppendToSecret(c.k8sClient, systemKeysSecret, nil)
 	if err != nil {
 		return err
 	}

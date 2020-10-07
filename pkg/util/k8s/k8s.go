@@ -1400,6 +1400,49 @@ func CreateOrUpdateSecret(
 	return nil
 }
 
+// CreateOrAppendToSecret creates a secret if not present, else appends data to it
+func CreateOrAppendToSecret(
+	k8sClient client.Client,
+	secret *v1.Secret,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingSecret := &v1.Secret{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      secret.Name,
+			Namespace: secret.Namespace,
+		},
+		existingSecret,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating %s/%s Secret", secret.Namespace, secret.Name)
+		return k8sClient.Create(context.TODO(), secret)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(secret.Data, existingSecret.Data)
+	if modified {
+		// append all existing data to new secret
+		for k, v := range existingSecret.Data {
+			secret.Data[k] = v
+		}
+	}
+
+	for _, o := range existingSecret.OwnerReferences {
+		if ownerRef != nil && o.UID != ownerRef.UID {
+			secret.OwnerReferences = append(secret.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(secret.OwnerReferences) > len(existingSecret.OwnerReferences) {
+		logrus.Debugf("Updating %s/%s Secret", secret.Namespace, secret.Name)
+		return k8sClient.Update(context.TODO(), secret)
+	}
+	return nil
+}
+
 // DeleteSecret deletes a secret if present and owned
 func DeleteSecret(
 	k8sClient client.Client,
