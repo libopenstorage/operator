@@ -522,17 +522,6 @@ func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 	return podCount, nil
 }
 
-func getImageNameFromMap(pxImageList map[string]string, component string) string {
-	var componentImageName string
-
-	for key, value := range pxImageList {
-		if key == component {
-			componentImageName = value
-		}
-	}
-	return componentImageName
-}
-
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	k8sVersion, err := getK8SVersion()
 	if err != nil {
@@ -562,7 +551,11 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 		var storkImageName string
 		if cluster.Spec.Stork.Image == "" {
-			storkImageName = getImageNameFromMap(pxImageList, "stork")
+			if value, ok := pxImageList["stork"]; ok {
+				storkImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for stork")
+			}
 		} else {
 			storkImageName = cluster.Spec.Stork.Image
 		}
@@ -595,7 +588,11 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 		var autopilotImageName string
 		if cluster.Spec.Autopilot.Image == "" {
-			autopilotImageName = getImageNameFromMap(pxImageList, "autopilot")
+			if value, ok := pxImageList["autopilot"]; ok {
+				autopilotImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for autopilot")
+			}
 		} else {
 			autopilotImageName = cluster.Spec.Autopilot.Image
 		}
@@ -616,7 +613,11 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 		var lighthouseImageName string
 		if cluster.Spec.UserInterface.Image == "" {
-			lighthouseImageName = getImageNameFromMap(pxImageList, "lighthouse")
+			if value, ok := pxImageList["lighthouse"]; ok {
+				lighthouseImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for lighthouse")
+			}
 		} else {
 			lighthouseImageName = cluster.Spec.UserInterface.Image
 		}
