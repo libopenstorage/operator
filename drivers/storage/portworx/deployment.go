@@ -1107,10 +1107,9 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 func (t *template) getK3sVolumeInfoList() []volumeInfo {
 	return []volumeInfo{
 		{
-			name:         "containerd-k3s",
-			hostPath:     "/run/k3s/containerd/containerd.sock",
-			mountPath:    "/run/containerd/containerd.sock",
-			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
+			name:      "containerd-k3s",
+			hostPath:  "/run/k3s/containerd/containerd.sock",
+			mountPath: "/run/containerd/containerd.sock",
 		},
 	}
 }
