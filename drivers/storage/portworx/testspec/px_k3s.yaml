@@ -168,4 +168,3 @@ spec:
         - name: containerd-k3s
           hostPath:
             path: /run/k3s/containerd/containerd.sock
-            type: FileOrCreate
