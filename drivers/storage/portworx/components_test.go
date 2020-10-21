@@ -3289,8 +3289,33 @@ func TestGuestAccessSecurity(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// GuestAccess disabled but should not call update as cluster is not yet up.
+	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
+	mockRoleServer.EXPECT().
+		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
+			Name: component.SecuritySystemGuestRoleName,
+		}).
+		Return(nil, nil).
+		Times(0)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// GuestAccess disabled but hould not call update as cluster is still initializing
+	cluster.Status.Phase = string(corev1.ClusterInit)
+	mockRoleServer.EXPECT().
+		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
+			Name: component.SecuritySystemGuestRoleName,
+		}).
+		Return(nil, nil).
+		Times(0)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
 	// Disable GuestAccess. Should expect an update to be called.
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
+	cluster.Status.Phase = string(corev1.ClusterOnline)
 	inspectedRole := component.GuestRoleEnabled
 	inspectedRoleResp := &osdapi.SdkRoleInspectResponse{
 		Role: &inspectedRole,
