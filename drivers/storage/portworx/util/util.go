@@ -84,6 +84,8 @@ const (
 	AnnotationDisableStorageClass = pxAnnotationPrefix + "/disable-storage-class"
 	// AnnotationRunOnMaster annotation to enable running Portworx on master nodes
 	AnnotationRunOnMaster = pxAnnotationPrefix + "/run-on-master"
+	// AnnotationPodDisruptionBudget annotation indicating whether to create pod disruption budgets
+	AnnotationPodDisruptionBudget = pxAnnotationPrefix + "/pod-disruption-budget"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -216,6 +218,13 @@ func RunOnMaster(cluster *corev1.StorageCluster) bool {
 func StorageClassEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableStorageClass])
 	return err != nil || !disabled
+}
+
+// PodDisruptionBudgetEnabled returns true if the annotation is absent, or does not
+// have a false value. By default we always create PDBs.
+func PodDisruptionBudgetEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodDisruptionBudget])
+	return err != nil || enabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present
