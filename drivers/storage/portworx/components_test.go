@@ -10,7 +10,6 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
-	hversion "github.com/hashicorp/go-version"
 	osdapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -25,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -3255,9 +3255,14 @@ func TestGuestAccessSecurity(t *testing.T) {
 			},
 		},
 	})
+
+	component.DeregisterAllComponents()
+	component.RegisterSecurityComponent()
+
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
 	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3277,13 +3282,10 @@ func TestGuestAccessSecurity(t *testing.T) {
 			},
 		},
 	}
+
 	// Initial run
 	setSecuritySpecDefaults(cluster)
-	securityComponent, ok := component.Get(component.SecurityComponentName)
-	require.True(t, ok)
-	component.DeregisterAllComponents()
-	component.Register(component.SecurityComponentName, securityComponent)
-	securityComponent.Initialize(k8sClient, hversion.Version{}, runtime.NewScheme(), recorder)
+
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -8538,6 +8540,444 @@ func TestDisablePrometheus(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPodDisruptionBudgetEnabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterOnline),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	// TestCase: Do not create KVDB PDB if not using internal KVDB
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
+		Internal: false,
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+
+	// TestCase: Create KVDB PDB when using internal KVDB
+	cluster.Spec.Kvdb.Internal = true
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, 2, pdbList.Items[0].Spec.MinAvailable.IntValue())
+	require.Len(t, pdbList.Items[0].Spec.Selector.MatchLabels, 2)
+	require.Equal(t, cluster.Name, pdbList.Items[0].Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
+	require.Equal(t, constants.LabelValueTrue, pdbList.Items[0].Spec.Selector.MatchLabels[constants.LabelKeyKVDBPod])
+
+	// TestCase: Do not create storage PDB if total nodes with storage is less than 3
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}},
+		{Pools: []*osdapi.StoragePool{}},
+		{},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: Create storage PDB if total nodes with storage is at least 3
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}},
+		{Pools: []*osdapi.StoragePool{}},
+		{},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+	require.Len(t, storagePDB.Spec.Selector.MatchLabels, 2)
+	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
+	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
+
+	// TestCase: Update storage PDB if count of nodes with storage changes
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}},
+		{Pools: []*osdapi.StoragePool{{ID: 4}}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}},
+		{Pools: []*osdapi.StoragePool{}},
+		{},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+}
+
+func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	// TestCase: Do not create PDBs if the cluster status is empty
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+
+	// TestCase: Do not create PDB if the cluster is initializing
+	cluster.Status.Phase = string(corev1.ClusterInit)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+
+	// TestCase: Create PDBs when cluster is done initializing
+	cluster.Status.Phase = string(corev1.ClusterOnline)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 2)
+}
+
+func TestPodDisruptionBudgetWithErrors(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: false,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterOnline),
+		},
+	}
+
+	pxService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	k8sClient := testutil.FakeK8sClient(pxService)
+	recorder := record.NewFakeRecorder(1)
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	// TestCase: Error creating grpc connection
+	// (due to missing endpoint)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup %v. failed to get endpoint", v1.EventTypeWarning,
+			util.FailedComponentReason, component.DisruptionBudgetComponentName))
+
+	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+
+	// TestCase: Error setting up context when using px-security
+	// (system secret not present)
+	pxService.Spec.ClusterIP = sdkServerIP
+	k8sClient.Update(context.TODO(), pxService)
+
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup %v. failed to get portworx apps secret",
+			v1.EventTypeWarning, util.FailedComponentReason, component.DisruptionBudgetComponentName))
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+
+	// TestCase: Error enumerating nodes using SDK
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nil, fmt.Errorf("NodeEnumerate error")).
+		Times(1)
+	cluster.Spec.Security.Enabled = false
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup %v. failed to enumerate nodes",
+			v1.EventTypeWarning, util.FailedComponentReason, component.DisruptionBudgetComponentName))
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, pdbList.Items)
+}
+
+func TestDisablePodDisruptionBudgets(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodDisruptionBudget: "true",
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterOnline),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	kvdbPDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Removing the annotation will not disable pod disruption budgets,
+	// as they are enabled by default
+	cluster.Annotations = map[string]string{}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	kvdbPDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Disable pod disruption budgets
+	cluster.Annotations[pxutil.AnnotationPodDisruptionBudget] = "false"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	kvdbPDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -8575,8 +9015,8 @@ func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cl
 }
 
 func reregisterComponents() {
-	// Not registering PortworxCRDs component to avoid creating CRD
-	// for every test as we do not need to test it's creation every time.
+	// Skipping registering of some components to avoid blocking
+	// other tests. Skipped components: PortworxCRD, DisruptionBudget
 	component.DeregisterAllComponents()
 	component.RegisterPortworxBasicComponent()
 	component.RegisterPortworxAPIComponent()
