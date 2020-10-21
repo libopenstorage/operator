@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -1417,6 +1418,158 @@ func TestDeletePrometheusRule(t *testing.T) {
 
 	prometheusRule = &monitoringv1.PrometheusRule{}
 	err = testutil.Get(k8sClient, prometheusRule, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestPodDisruptionBudgetChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	minAvailable := intstr.FromInt(1)
+	expectedPDB := &policyv1beta1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: policyv1beta1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
+		},
+	}
+
+	err := CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
+	require.NoError(t, err)
+
+	actualPDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, 1, actualPDB.Spec.MinAvailable.IntValue())
+
+	// Change spec
+	minAvailable = intstr.FromInt(2)
+	expectedPDB.Spec.MinAvailable = &minAvailable
+
+	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
+	require.NoError(t, err)
+
+	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, 2, actualPDB.Spec.MinAvailable.IntValue())
+}
+
+func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedPDB := &policyv1beta1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
+	require.NoError(t, err)
+
+	actualPDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPDB.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, &firstOwner)
+	require.NoError(t, err)
+
+	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPDB.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedPDB.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, &secondOwner)
+	require.NoError(t, err)
+
+	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualPDB.OwnerReferences)
+}
+
+func TestDeletePodDisruptionBudget(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &policyv1beta1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(expected)
+
+	// Don't delete or throw error if the PDB is not present
+	err := DeletePodDisruptionBudget(k8sClient, "not-present-pdb", namespace)
+	require.NoError(t, err)
+
+	pdb := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, pdb)
+
+	// Don't delete when there is no owner in the PDB
+	// but trying to delete for specific owners
+	err = DeletePodDisruptionBudget(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	pdb = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, pdb)
+
+	// Delete when there is no owner in the PDB
+	err = DeletePodDisruptionBudget(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	pdb = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the PDB is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	k8sClient.Create(context.TODO(), expected)
+
+	err = DeletePodDisruptionBudget(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	pdb = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, pdb)
+
+	// Don't delete when the PDB is owned by objects
+	// more than what are passed on delete call
+	err = DeletePodDisruptionBudget(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	pdb = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, pdb.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), pdb.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), pdb.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the PDB
+	err = DeletePodDisruptionBudget(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	pdb = &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 

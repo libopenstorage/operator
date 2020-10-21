@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -1285,6 +1286,81 @@ func DeletePrometheus(
 	prometheus.OwnerReferences = newOwners
 	logrus.Debugf("Disowning %s/%s Prometheus", namespace, name)
 	return k8sClient.Update(context.TODO(), prometheus)
+}
+
+// CreateOrUpdatePodDisruptionBudget creates a PodDisruptionBudget object if not present, else updates it
+func CreateOrUpdatePodDisruptionBudget(
+	k8sClient client.Client,
+	pdb *policyv1beta1.PodDisruptionBudget,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingPDB := &policyv1beta1.PodDisruptionBudget{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      pdb.Name,
+			Namespace: pdb.Namespace,
+		},
+		existingPDB,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
+		return k8sClient.Create(context.TODO(), pdb)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(pdb.Spec, existingPDB.Spec)
+
+	for _, o := range existingPDB.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			pdb.OwnerReferences = append(pdb.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(pdb.OwnerReferences) > len(existingPDB.OwnerReferences) {
+		pdb.ResourceVersion = existingPDB.ResourceVersion
+		logrus.Debugf("Updating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
+		return k8sClient.Update(context.TODO(), pdb)
+	}
+	return nil
+}
+
+// DeletePodDisruptionBudget deletes a PodDisruptionBudget instance if present and owned
+func DeletePodDisruptionBudget(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	pdb := &policyv1beta1.PodDisruptionBudget{}
+	err := k8sClient.Get(context.TODO(), resource, pdb)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(pdb.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(pdb.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(pdb.OwnerReferences) > 0 && len(pdb.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete PodDisruptionBudget %s/%s as it is not owned", namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s PodDisruptionBudget", namespace, name)
+		return k8sClient.Delete(context.TODO(), pdb)
+	}
+	pdb.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s PodDisruptionBudget", namespace, name)
+	return k8sClient.Update(context.TODO(), pdb)
 }
 
 // GetDaemonSetPods returns a list of pods for the given daemon set
