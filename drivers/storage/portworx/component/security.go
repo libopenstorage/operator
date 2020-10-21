@@ -476,6 +476,10 @@ func (c *security) closeSdkConn() {
 }
 
 func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
+	if cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit) {
+		return nil
+	}
+
 	if *cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleEnabled &&
 		*cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleDisabled &&
 		*cluster.Spec.Security.Auth.GuestAccess != corev1.GuestRoleManaged {
