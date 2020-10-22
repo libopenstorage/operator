@@ -523,7 +523,6 @@ func (c *Controller) manage(
 	}
 
 	return nil
-	// TODO: Update the status of the pods in the CR (available, running, etc)
 }
 
 // syncNodes deletes given pods and creates new storage pods on the given nodes
@@ -811,6 +810,10 @@ func (c *Controller) nodeShouldRunStoragePod(
 
 	if isBeingDeleted {
 		logrus.Infof("node: %s is in the process of being deleted. Will not create new pods here.", node.Name)
+		return false, false, true, nil
+	}
+
+	if k8s.IsNodeRecentlyCordoned(node, cluster) {
 		return false, false, true, nil
 	}
 
