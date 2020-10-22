@@ -29,6 +29,8 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/scheduler/api"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -213,6 +215,7 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 func TestReconcile(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	defaultQuantity, _ := resource.ParseQuantity("0")
 	testNS := "test-ns"
 	clusterName := "test-cluster"
@@ -349,6 +352,7 @@ func TestReconcile(t *testing.T) {
 func TestReconcileKVDB(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	testNS := "test-ns"
 	clusterName := "test-cluster"
 	cluster := &corev1.StorageCluster{
@@ -482,12 +486,164 @@ func TestReconcileKVDB(t *testing.T) {
 	}, checkPod)
 	require.Error(t, err)
 	require.Empty(t, checkPod.Name)
+}
 
+func TestReconcileKVDBWithNodeChanges(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
+	}
+
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	kvdbNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "kvdb-node",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeKVDBCondition,
+					Status: corev1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	machine := &cluster_v1alpha1.Machine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "machine",
+			Namespace: "default",
+		},
+	}
+
+	k8sNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kvdbNode.Name,
+			Annotations: map[string]string{
+				constants.AnnotationClusterAPIMachine: "machine",
+			},
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster, kvdbNode, k8sNode, machine)
+	driver := testutil.MockDriver(mockCtrl)
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	// TestCase: Do not create kvdb pod if associated machine is being deleted
+	now := metav1.Now()
+	machine.DeletionTimestamp = &now
+	k8sClient.Update(context.TODO(), machine)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      kvdbNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	_, err := controller.Reconcile(request)
+	require.NoError(t, err)
+
+	podList := &v1.PodList{}
+	err = testutil.List(k8sClient, podList)
+	require.NoError(t, err)
+	require.Empty(t, podList.Items)
+
+	// TestCase: Create kvdb pod if associated machine is not being deleted
+	machine.DeletionTimestamp = nil
+	k8sClient.Update(context.TODO(), machine)
+
+	_, err = controller.Reconcile(request)
+	require.NoError(t, err)
+
+	podList = &v1.PodList{}
+	err = testutil.List(k8sClient, podList)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 1)
+	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
+
+	// TestCase: Create kvdb pod if associated machine is not found
+	k8sNode.Annotations[constants.AnnotationClusterAPIMachine] = "not-present"
+	k8sClient.Update(context.TODO(), k8sNode)
+	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
+
+	_, err = controller.Reconcile(request)
+	require.NoError(t, err)
+
+	podList = &v1.PodList{}
+	err = testutil.List(k8sClient, podList)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 1)
+	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
+
+	// TestCase: Do not create kvdb pod if node is recently cordoned
+	k8sNode.Annotations = nil
+	k8sNode.Spec.Unschedulable = true
+	timeAdded := metav1.Now()
+	k8sNode.Spec.Taints = []v1.Taint{
+		{
+			Key:       api.TaintNodeUnschedulable,
+			TimeAdded: &timeAdded,
+		},
+	}
+	k8sClient.Update(context.TODO(), k8sNode)
+	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
+
+	_, err = controller.Reconcile(request)
+	require.NoError(t, err)
+
+	podList = &v1.PodList{}
+	err = testutil.List(k8sClient, podList)
+	require.NoError(t, err)
+	require.Empty(t, podList.Items)
+
+	// TestCase: Create kvdb pod if node was cordoned long time ago
+	timeAdded = metav1.NewTime(
+		metav1.Now().
+			Add(-constants.DefaultCordonedRestartDelay).
+			Add(-time.Second),
+	)
+	k8sClient.Update(context.TODO(), k8sNode)
+
+	_, err = controller.Reconcile(request)
+	require.NoError(t, err)
+
+	podList = &v1.PodList{}
+	err = testutil.List(k8sClient, podList)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 1)
+	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
 }
 
 func TestSyncStorageNodeErrors(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
 	testNS := "test-ns"
 	clusterName := "test-cluster"
 	cluster := &corev1.StorageCluster{

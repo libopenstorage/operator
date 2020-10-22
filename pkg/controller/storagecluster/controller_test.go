@@ -5683,23 +5683,55 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 		recorder:   recorder,
 	}
 
-	// TEST 1: machine for node is being deleted
-	k8sNode1 := createK8sNode("k8s-node-1", 1)
-	k8sNode1.Annotations = map[string]string{
+	// TestCase: machine for node is being deleted
+	k8sNode := createK8sNode("k8s-node-1", 1)
+	k8sNode.Annotations = map[string]string{
 		constants.AnnotationClusterAPIMachine: "m2",
 	}
 
-	wantToRun, shouldSchedule, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode1, cluster)
+	wantToRun, shouldSchedule, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
 	require.False(t, wantToRun)
 	require.False(t, shouldSchedule)
 	require.True(t, shouldContinueRunning)
 
-	// TEST 2: machine for node is not found
-	k8sNode1.Annotations = map[string]string{
+	// TestCase: machine for node is not found
+	k8sNode.Annotations = map[string]string{
 		constants.AnnotationClusterAPIMachine: "m3",
 	}
-	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode1, cluster)
+	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	require.NoError(t, err)
+	require.True(t, wantToRun)
+	require.True(t, shouldSchedule)
+	require.True(t, shouldContinueRunning)
+
+	// TestCase: node is recently cordoned
+	k8sNode.Annotations = nil
+	k8sNode.Spec.Unschedulable = true
+	timeAdded := metav1.Now()
+	k8sNode.Spec.Taints = []v1.Taint{
+		{
+			Key:       schedulerapi.TaintNodeUnschedulable,
+			TimeAdded: &timeAdded,
+		},
+	}
+
+	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	require.NoError(t, err)
+	require.False(t, wantToRun)
+	require.False(t, shouldSchedule)
+	require.True(t, shouldContinueRunning)
+
+	// TestCase: node was cordoned for more than the default wait time ago
+	timeAdded = metav1.NewTime(metav1.Now().Add(-constants.DefaultCordonedRestartDelay))
+	k8sNode.Spec.Taints = []v1.Taint{
+		{
+			Key:       schedulerapi.TaintNodeUnschedulable,
+			TimeAdded: &timeAdded,
+		},
+	}
+
+	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
 	require.True(t, wantToRun)
 	require.True(t, shouldSchedule)
