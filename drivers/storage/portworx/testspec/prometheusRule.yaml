@@ -139,3 +139,63 @@ spec:
       labels:
         issue: Cloudsnap backup error.
         severity: warning
+    - alert: PXKvdbNodeViewUnhealthy
+      annotations:
+        description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is unable to talk to kvdb. Please check the KVDB health and node's connection to KVDB.
+        summary: Portworx node {{$labels.node_id}} is unable to talk to kvdb.
+      expr: px_kvdb_health_state_node_view == 2
+      labels:
+        issue: Portworx node {{$labels.node_id}} is unable to talk to kvdb.
+        severity: critical
+    - alert: PXKvdbClusterViewUnhealthy
+      annotations:
+        description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is reporting that the cluster is unable to talk to kvdb. Please check KVDB health and the node's connection to KVDB and the other nodes in the cluster.
+        summary: Portworx cluster {{$labels.cluster}} is unable to talk to kvdb.
+      expr: px_kvdb_health_state_cluster_view == 2
+      labels:
+        issue: Portworx cluster {{$labels.cluster}} is unable to talk to kvdb.
+        severity: critical
+  - name: Portworx PoolResize Alerts
+    rules:
+    - alert: PoolExpandSuccessful
+      annotations:
+        description: Pool {{$labels.POOL}} from node {{$labels.instance}}, from Portworx cluster {{$labels.clusterid}} successfully expanded.
+        summary: Portworx pool {{$labels.POOL}} successfully expanded.
+      expr: px_alerts_poolexpandsuccessful == 1
+      labels:
+        issue: Portworx pool expand successful.
+        severity: warning
+    - alert: PoolExpandFailure
+      annotations:
+        description: Pool expansion for pool {{$labels.POOL}} from node {{$labels.instance}}, from Portworx cluster {{$labels.clusterid}} failed. Please check Portworx alerts for more details.
+        summary: Pool expansion for pool {{$labels.POOL}} failed.
+      expr: px_alerts_poolexpandfailed == 1
+      labels:
+        issue: Portworx pool expand failure.
+        severity: critical
+  - name: Portworx VolumeResize Alerts
+    rules:
+    - alert: VolumeResizeSuccessful
+      annotations:
+        description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.clusterid}} successfully resized.
+        summary: Portworx volume {{$labels.volumeid}} successfully resized.
+      expr: px_alerts_volumeresizesuccessful == 1
+      labels:
+        issue: Portworx volume resize successful.
+        severity: warning
+    - alert: VolumeResizeDeferred
+      annotations:
+        description: Volume resize for volume {{$labels.volumeid}} from Portworx cluster {{$labels.clusterid}} deferred. Please check Portworx alerts for more details.
+        summary: Volume resize for volume {{$labels.volumeid}} deferred.
+      expr: px_alerts_volumeresizedeferred == 1
+      labels:
+        issue: Portworx volume resize deferred.
+        severity: warning
+    - alert: VolumeResizeFailed
+      annotations:
+        description: Volume resize for volume {{$labels.volumeid}} from Portworx cluster {{$labels.clusterid}} failed. Please check Portworx alerts for more details.
+        summary: Volume resize for volume {{$labels.volumeid}} failed.
+      expr: px_alerts_volumeresizefailed == 1
+      labels:
+        issue: Portworx volume resize failure.
+        severity: critical
