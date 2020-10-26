@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
@@ -27,6 +28,8 @@ const (
 	StoragePodDisruptionBudgetName = "px-storage"
 	// KVDBPodDisruptionBudgetName name of the PodDisruptionBudget for portworx kvdb pods
 	KVDBPodDisruptionBudgetName = "px-kvdb"
+	// DefaultKVDBClusterSize is the default size of internal KVDB cluster
+	DefaultKVDBClusterSize = 3
 )
 
 type disruptionBudget struct {
@@ -149,7 +152,8 @@ func (c *disruptionBudget) createKVDBPodDisruptionBudget(
 		return nil
 	}
 
-	minAvailable := intstr.FromInt(2)
+	clusterSize := kvdbClusterSize(cluster)
+	minAvailable := intstr.FromInt(clusterSize - 1)
 	pdb := &policyv1beta1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            KVDBPodDisruptionBudgetName,
@@ -179,6 +183,40 @@ func (c *disruptionBudget) closeSdkConn() {
 		logrus.Errorf("Failed to close sdk connection: %s", err.Error())
 	}
 	c.sdkConn = nil
+}
+
+func kvdbClusterSize(cluster *corev1.StorageCluster) int {
+	args, err := pxutil.MiscArgs(cluster)
+	if err != nil {
+		logrus.Warnf("error parsing misc args: %v", err)
+		return DefaultKVDBClusterSize
+	}
+
+	if len(args) == 0 {
+		return DefaultKVDBClusterSize
+	}
+
+	argName := "-kvdb_cluster_size"
+	for args[len(args)-1] == argName {
+		args = args[:len(args)-1]
+	}
+
+	var kvdbClusterSizeStr string
+	for i, arg := range args {
+		if arg == argName {
+			kvdbClusterSizeStr = args[i+1]
+			break
+		}
+	}
+
+	if len(kvdbClusterSizeStr) > 0 {
+		size, err := strconv.Atoi(kvdbClusterSizeStr)
+		if err == nil {
+			return size
+		}
+		logrus.Warnf("Invalid value %v for -kvdb_cluster_size in misc args. %v", size, err)
+	}
+	return DefaultKVDBClusterSize
 }
 
 // RegisterDisruptionBudgetComponent registers the Portworx DisruptionBudget component

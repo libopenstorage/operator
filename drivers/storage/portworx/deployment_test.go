@@ -1354,7 +1354,7 @@ func TestPodSpecWithLogAnnotation(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationLogFile: "/tmp/log",
+				pxutil.AnnotationLogFile: "/tmp/log",
 			},
 		},
 	}
@@ -1442,7 +1442,7 @@ func TestPodSpecWithMiscArgs(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationMiscArgs: "-fruit apple -person john",
+				pxutil.AnnotationMiscArgs: "-fruit apple -person john",
 			},
 		},
 	}
@@ -1473,7 +1473,7 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationMiscArgs: "'-unescaped-quote",
+				pxutil.AnnotationMiscArgs: "'-unescaped-quote",
 			},
 		},
 	}
@@ -1508,7 +1508,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationMiscArgs: "--oem custom",
+				pxutil.AnnotationMiscArgs: "--oem custom",
 			},
 		},
 	}
@@ -1526,13 +1526,13 @@ func TestPodSpecWithEssentials(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// TestCase: Do not change anything if oem is already essentials
-	cluster.Annotations[annotationMiscArgs] = "--oem esse"
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "--oem esse"
 
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// TestCase: Add oem flag if misc args are empty
-	cluster.Annotations[annotationMiscArgs] = ""
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = ""
 
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
@@ -1545,7 +1545,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 
 	// TestCase: Add oem flag if misc arg does not have oem flag
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: "-k1 v1",
+		pxutil.AnnotationMiscArgs: "-k1 v1",
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -1559,7 +1559,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 
 	// TestCase: Add oem value even if existing oem arg is invalid
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: "-k1 v1 --oem ",
+		pxutil.AnnotationMiscArgs: "-k1 v1 --oem ",
 	}
 
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
@@ -1567,7 +1567,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 
 	// TestCase: Update oem value even if in the middle
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: "-k1  v1  --oem  custom  -k2  v2",
+		pxutil.AnnotationMiscArgs: "-k1  v1  --oem  custom  -k2  v2",
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -1642,7 +1642,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 	os.Setenv(pxutil.EnvKeyPortworxEssentials, "false")
 	os.Setenv(pxutil.EnvKeyMarketplaceName, "operatorhub")
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: "--oem custom",
+		pxutil.AnnotationMiscArgs: "--oem custom",
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -1749,7 +1749,7 @@ func TestPKSPodSpec(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsPKS: "true",
+				pxutil.AnnotationIsPKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -1805,7 +1805,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsOpenshift: "true",
+				pxutil.AnnotationIsOpenshift: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -2050,7 +2050,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	cluster.Spec.Image = "portworx/oci-monitor:custom_oci_tag"
 	cluster.Spec.Env[0].Value = "portworx/oci-monitor:custom_px_tag"
 	cluster.Annotations = map[string]string{
-		annotationPXVersion: "2.1",
+		pxutil.AnnotationPXVersion: "2.1",
 	}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2063,7 +2063,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	// If valid version is not found from the image or the annotation, then assume latest
 	// Portworx version. Verify this by checking the new CSI driver name in registrar.
 	cluster.Annotations = map[string]string{
-		annotationPXVersion: "portworx/oci-monitor:invalid",
+		pxutil.AnnotationPXVersion: "portworx/oci-monitor:invalid",
 	}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2237,7 +2237,7 @@ func TestPodSpecForPKSWithCSI(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsPKS: "true",
+				pxutil.AnnotationIsPKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
@@ -75,6 +76,12 @@ const (
 	// AnnotationServiceType annotation indicating k8s service type for all services
 	// deployed by the operator
 	AnnotationServiceType = pxAnnotationPrefix + "/service-type"
+	// AnnotationLogFile annotation to specify the log file path where portworx
+	// logs need to be redirected
+	AnnotationLogFile = pxAnnotationPrefix + "/log-file"
+	// AnnotationMiscArgs annotation to specify miscellaneous arguments that will
+	// be passed to portworx container directly without any interpretation
+	AnnotationMiscArgs = pxAnnotationPrefix + "/misc-args"
 	// AnnotationPXVersion annotation indicating the portworx semantic version
 	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
 	// AnnotationStorkVersion annotation indicating the stork semantic version
@@ -239,6 +246,14 @@ func ServiceType(cluster *corev1.StorageCluster) v1.ServiceType {
 		}
 	}
 	return serviceType
+}
+
+// MiscArgs returns the miscellaneous arguments from the cluster's annotations
+func MiscArgs(cluster *corev1.StorageCluster) ([]string, error) {
+	if cluster.Annotations[AnnotationMiscArgs] != "" {
+		return shlex.Split(cluster.Annotations[AnnotationMiscArgs])
+	}
+	return nil, nil
 }
 
 // ImagePullPolicy returns the image pull policy from the cluster spec if present,
