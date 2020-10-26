@@ -10,6 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -1892,6 +1893,111 @@ func TestStorkInstallWithHostNetwork(t *testing.T) {
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.False(t, storkDeployment.Spec.Template.Spec.HostNetwork)
+}
+
+func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// TestCase: Deploy default policy when stork is deployed
+	defaultPolicy := &schedulerv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Policy",
+			APIVersion: "v1",
+		},
+		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+			{
+				URLPrefix:      "http://stork-service.kube-test:8099",
+				FilterVerb:     "filter",
+				PrioritizeVerb: "prioritize",
+				Weight:         5,
+				HTTPTimeout:    5 * time.Minute,
+			},
+		},
+	}
+	defaultPolicyBytes, _ := json.Marshal(defaultPolicy)
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, string(defaultPolicyBytes), storkConfigMap.Data["policy.cfg"])
+
+	// TestCase: Reconcile to original policy if changed by the user
+	modifiedPolicy := defaultPolicy.DeepCopy()
+	modifiedPolicy.ExtenderConfigs[0].PrioritizeVerb = ""
+	modifiedPolicy.ExtenderConfigs[0].Weight = 10
+	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)
+
+	storkConfigMap.Data["policy.cfg"] = string(modifiedPolicyBytes)
+	err = k8sClient.Update(context.TODO(), storkConfigMap)
+	require.NoError(t, err)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkConfigMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, string(defaultPolicyBytes), storkConfigMap.Data["policy.cfg"])
+
+	// TestCase: Do not reconcile to original policy if user has disabled reconciliation
+	storkConfigMap.Annotations = map[string]string{
+		constants.AnnotationReconcileObject: "false",
+	}
+	storkConfigMap.Data["policy.cfg"] = string(modifiedPolicyBytes)
+	err = k8sClient.Update(context.TODO(), storkConfigMap)
+	require.NoError(t, err)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkConfigMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, string(modifiedPolicyBytes), storkConfigMap.Data["policy.cfg"])
 }
 
 func TestDisableStork(t *testing.T) {

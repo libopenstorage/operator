@@ -7,10 +7,12 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+	"strconv"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -471,6 +473,11 @@ func CreateOrUpdateConfigMap(
 		return k8sClient.Create(context.TODO(), configMap)
 	} else if err != nil {
 		return err
+	}
+
+	enabled, err := strconv.ParseBool(existingConfigMap.Annotations[constants.AnnotationReconcileObject])
+	if err == nil && !enabled {
+		return nil
 	}
 
 	modified := !reflect.DeepEqual(configMap.Data, existingConfigMap.Data) ||
