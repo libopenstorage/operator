@@ -15,6 +15,8 @@ const (
 	LabelValueTrue = "true"
 	// AnnotationDisableStorage annotation to disable the storage pods from running (default: false)
 	AnnotationDisableStorage = OperatorPrefix + "/disable-storage"
+	// AnnotationReconcileObject annotation to toggle reconciliation of operator created objects
+	AnnotationReconcileObject = OperatorPrefix + "/reconcile"
 	// AnnotationClusterAPIMachine is the annotation key name for the name of the machine that's backing the k8s node
 	AnnotationClusterAPIMachine = "cluster.k8s.io/machine"
 )
