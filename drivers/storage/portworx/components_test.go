@@ -55,7 +55,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "false",
+				pxutil.AnnotationPVCController: "false",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -281,7 +281,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "false",
+				pxutil.AnnotationPVCController: "false",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -949,10 +949,10 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsAKS:       "true",
-				annotationIsGKE:       "true",
-				annotationIsEKS:       "true",
-				annotationServiceType: "ClusterIP",
+				pxutil.AnnotationIsAKS:       "true",
+				pxutil.AnnotationIsGKE:       "true",
+				pxutil.AnnotationIsEKS:       "true",
+				pxutil.AnnotationServiceType: "ClusterIP",
 			},
 		},
 	}
@@ -971,7 +971,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
 
 	// Load balancer service type
-	cluster.Annotations[annotationServiceType] = "LoadBalancer"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "LoadBalancer"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -987,7 +987,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxAPIService.Spec.Type)
 
 	// Node port service type
-	cluster.Annotations[annotationServiceType] = "NodePort"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "NodePort"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1003,7 +1003,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeNodePort, pxAPIService.Spec.Type)
 
 	// Invalid service type should use default service type
-	cluster.Annotations[annotationServiceType] = "Invalid"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "Invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1031,7 +1031,7 @@ func TestPVCControllerInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -1055,7 +1055,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationPVCController: "invalid",
+				pxutil.AnnotationPVCController: "invalid",
 			},
 		},
 	}
@@ -1092,7 +1092,7 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsOpenshift: "true",
+				pxutil.AnnotationIsOpenshift: "true",
 			},
 		},
 	}
@@ -1154,7 +1154,7 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 
 	// Despite invalid pvc controller annotation, install for non kube-system namespace
 	cluster.Annotations = map[string]string{
-		annotationPVCController: "invalid",
+		pxutil.AnnotationPVCController: "invalid",
 	}
 
 	err = driver.PreInstall(cluster)
@@ -1189,8 +1189,8 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
-				annotationIsOpenshift:   "true",
+				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationIsOpenshift:   "true",
 			},
 		},
 	}
@@ -1214,7 +1214,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsPKS: "true",
+				pxutil.AnnotationIsPKS: "true",
 			},
 		},
 	}
@@ -1226,7 +1226,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for PKS
-	cluster.Annotations[annotationPVCController] = "invalid"
+	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1247,7 +1247,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsEKS: "true",
+				pxutil.AnnotationIsEKS: "true",
 			},
 		},
 	}
@@ -1259,7 +1259,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for EKS
-	cluster.Annotations[annotationPVCController] = "invalid"
+	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1280,7 +1280,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsGKE: "true",
+				pxutil.AnnotationIsGKE: "true",
 			},
 		},
 	}
@@ -1292,7 +1292,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for GKE
-	cluster.Annotations[annotationPVCController] = "invalid"
+	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1313,7 +1313,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationIsAKS: "true",
+				pxutil.AnnotationIsAKS: "true",
 			},
 		},
 	}
@@ -1325,7 +1325,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for AKS
-	cluster.Annotations[annotationPVCController] = "invalid"
+	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1346,12 +1346,12 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "false",
-				annotationIsPKS:         "true",
-				annotationIsEKS:         "true",
-				annotationIsGKE:         "true",
-				annotationIsAKS:         "true",
-				annotationIsOpenshift:   "true",
+				pxutil.AnnotationPVCController: "false",
+				pxutil.AnnotationIsPKS:         "true",
+				pxutil.AnnotationIsEKS:         "true",
+				pxutil.AnnotationIsGKE:         "true",
+				pxutil.AnnotationIsAKS:         "true",
+				pxutil.AnnotationIsOpenshift:   "true",
 			},
 		},
 	}
@@ -1388,11 +1388,11 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsPKS:                    "true",
-				annotationIsEKS:                    "true",
-				annotationIsGKE:                    "true",
-				annotationIsAKS:                    "true",
-				annotationIsOpenshift:              "true",
+				pxutil.AnnotationIsPKS:             "true",
+				pxutil.AnnotationIsEKS:             "true",
+				pxutil.AnnotationIsGKE:             "true",
+				pxutil.AnnotationIsAKS:             "true",
+				pxutil.AnnotationIsOpenshift:       "true",
 				constants.AnnotationDisableStorage: "true",
 			},
 		},
@@ -1503,7 +1503,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -1520,7 +1520,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 
 	// Change the CPU resource required for PVC controller deployment
 	expectedCPU := "300m"
-	cluster.Annotations[annotationPVCControllerCPU] = expectedCPU
+	cluster.Annotations[pxutil.AnnotationPVCControllerCPU] = expectedCPU
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1543,8 +1543,8 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController:    "true",
-				annotationPVCControllerCPU: "invalid-cpu",
+				pxutil.AnnotationPVCController:    "true",
+				pxutil.AnnotationPVCControllerCPU: "invalid-cpu",
 			},
 		},
 	}
@@ -1571,7 +1571,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -1619,7 +1619,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -1739,7 +1739,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -1780,7 +1780,7 @@ func TestLighthouseInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -1886,7 +1886,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsAKS: "true",
+				pxutil.AnnotationIsAKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -1921,7 +1921,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsGKE: "true",
+				pxutil.AnnotationIsGKE: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -1956,7 +1956,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsEKS: "true",
+				pxutil.AnnotationIsEKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -1991,10 +1991,10 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsAKS:       "true",
-				annotationIsGKE:       "true",
-				annotationIsEKS:       "true",
-				annotationServiceType: "ClusterIP",
+				pxutil.AnnotationIsAKS:       "true",
+				pxutil.AnnotationIsGKE:       "true",
+				pxutil.AnnotationIsEKS:       "true",
+				pxutil.AnnotationServiceType: "ClusterIP",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -2014,7 +2014,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeClusterIP, lhService.Spec.Type)
 
 	// Load balancer service type
-	cluster.Annotations[annotationServiceType] = "LoadBalancer"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "LoadBalancer"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -2024,7 +2024,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeLoadBalancer, lhService.Spec.Type)
 
 	// Node port service type
-	cluster.Annotations[annotationServiceType] = "NodePort"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "NodePort"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -2034,7 +2034,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
 
 	// Invalid type should use the default service type
-	cluster.Annotations[annotationServiceType] = "Invalid"
+	cluster.Annotations[pxutil.AnnotationServiceType] = "Invalid"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -2359,7 +2359,7 @@ func TestAutopilotInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -2830,7 +2830,7 @@ func TestAutopilotCPUChange(t *testing.T) {
 
 	// Change the CPU resource required for Autopilot deployment
 	expectedCPU := "0.2"
-	cluster.Annotations = map[string]string{annotationAutopilotCPU: expectedCPU}
+	cluster.Annotations = map[string]string{pxutil.AnnotationAutopilotCPU: expectedCPU}
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2855,7 +2855,7 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationAutopilotCPU: "invalid-cpu",
+				pxutil.AnnotationAutopilotCPU: "invalid-cpu",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -3464,7 +3464,7 @@ func TestCSIInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "false",
+				pxutil.AnnotationPVCController: "false",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -3716,7 +3716,7 @@ func TestCSIInstallWithPKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsPKS: "true",
+				pxutil.AnnotationIsPKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4750,7 +4750,7 @@ func TestPrometheusInstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4892,7 +4892,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -5030,7 +5030,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -5470,7 +5470,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -5612,7 +5612,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -5755,7 +5755,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -6272,7 +6272,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -6442,7 +6442,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -6613,7 +6613,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -6925,7 +6925,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -7323,7 +7323,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -7602,7 +7602,7 @@ func TestRemovePVCController(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -7628,7 +7628,7 @@ func TestRemovePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	// Remove PVC Controller
-	delete(cluster.Annotations, annotationPVCController)
+	delete(cluster.Annotations, pxutil.AnnotationPVCController)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -7662,7 +7662,7 @@ func TestDisablePVCController(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 	}
@@ -7688,7 +7688,7 @@ func TestDisablePVCController(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable PVC Controller
-	cluster.Annotations[annotationPVCController] = "false"
+	cluster.Annotations[pxutil.AnnotationPVCController] = "false"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -8702,6 +8702,129 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+}
+
+func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterOnline),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	// TestCase: Create KVDB PDB without any misc args
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, component.DefaultKVDBClusterSize-1, pdbList.Items[0].Spec.MinAvailable.IntValue())
+
+	// TestCase: Create KVDB PDB with empty misc args
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationMiscArgs: "",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, component.DefaultKVDBClusterSize-1, pdbList.Items[0].Spec.MinAvailable.IntValue())
+
+	// TestCase: Create KVDB PDB with misc args but without kvdb_cluster_size arg
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "-key value"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, component.DefaultKVDBClusterSize-1, pdbList.Items[0].Spec.MinAvailable.IntValue())
+
+	// TestCase: Create KVDB PDB with kvdb_cluster_size arg
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "-kvdb_cluster_size 5"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, 4, pdbList.Items[0].Spec.MinAvailable.IntValue())
+
+	// TestCase: Create KVDB PDB with invalid kvdb_cluster_size arg
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "-kvdb_cluster_size invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 1)
+
+	require.Equal(t, component.KVDBPodDisruptionBudgetName, pdbList.Items[0].Name)
+	require.Equal(t, component.DefaultKVDBClusterSize-1, pdbList.Items[0].Spec.MinAvailable.IntValue())
 }
 
 func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {

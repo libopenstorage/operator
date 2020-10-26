@@ -1268,7 +1268,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsOpenshift: "true",
+				pxutil.AnnotationIsOpenshift: "true",
 			},
 		},
 	}
@@ -4111,7 +4111,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4324,7 +4324,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4845,7 +4845,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationIsPKS: "true",
+				pxutil.AnnotationIsPKS: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4930,7 +4930,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				annotationPVCController: "true",
+				pxutil.AnnotationPVCController: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -6093,7 +6093,7 @@ func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
 
 	// TestCase: Cluster misc args are present in the pod
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: "-foo bar --alpha beta",
+		pxutil.AnnotationMiscArgs: "-foo bar --alpha beta",
 	}
 	pxPod.Spec.Containers[0].Args = []string{
 		"-c", "pxcluster",
@@ -6106,7 +6106,7 @@ func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
 	require.True(t, isUpdated)
 
 	// TestCase: Cluster misc args are present in the pod, with extra spaces
-	cluster.Annotations[annotationMiscArgs] = "-foo   bar   --alpha   beta"
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "-foo   bar   --alpha   beta"
 
 	isUpdated = driver.IsPodUpdated(cluster, pxPod)
 	require.True(t, isUpdated)
@@ -6123,7 +6123,7 @@ func TestIsPodUpdatedWithMiscArgs(t *testing.T) {
 	require.False(t, isUpdated)
 
 	// TestCase: Cluster misc args are present in the pod, with changed values
-	cluster.Annotations[annotationMiscArgs] = "--alpha beta -foo bazz"
+	cluster.Annotations[pxutil.AnnotationMiscArgs] = "--alpha beta -foo bazz"
 
 	isUpdated = driver.IsPodUpdated(cluster, pxPod)
 	require.False(t, isUpdated)
@@ -6166,7 +6166,7 @@ func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 	// TestCase: If essentials is disabled and args have essentials arg,
 	// but present in misc args
 	cluster.Annotations = map[string]string{
-		annotationMiscArgs: " --oem    esse  ",
+		pxutil.AnnotationMiscArgs: " --oem    esse  ",
 	}
 	pxPod.Spec.Containers[0].Args = []string{
 		"-c", "pxcluster",
