@@ -160,7 +160,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 ) error {
 	pwxHostPathRoot := "/"
 
-	enabled, err := strconv.ParseBool(u.cluster.Annotations[annotationIsPKS])
+	enabled, err := strconv.ParseBool(u.cluster.Annotations[pxutil.AnnotationIsPKS])
 	isPKS := err == nil && enabled
 
 	if isPKS {

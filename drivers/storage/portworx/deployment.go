@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -26,29 +25,17 @@ import (
 )
 
 const (
-	pxContainerName            = "portworx"
-	pxKVDBContainerName        = "portworx-kvdb"
-	pxAnnotationPrefix         = "portworx.io"
-	annotationIsPKS            = pxAnnotationPrefix + "/is-pks"
-	annotationIsGKE            = pxAnnotationPrefix + "/is-gke"
-	annotationIsAKS            = pxAnnotationPrefix + "/is-aks"
-	annotationIsEKS            = pxAnnotationPrefix + "/is-eks"
-	annotationIsOpenshift      = pxAnnotationPrefix + "/is-openshift"
-	annotationPVCController    = pxAnnotationPrefix + "/pvc-controller"
-	annotationLogFile          = pxAnnotationPrefix + "/log-file"
-	annotationMiscArgs         = pxAnnotationPrefix + "/misc-args"
-	annotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
-	annotationAutopilotCPU     = pxAnnotationPrefix + "/autopilot-cpu"
-	annotationServiceType      = pxAnnotationPrefix + "/service-type"
-	annotationPXVersion        = pxAnnotationPrefix + "/px-version"
-	templateVersion            = "v4"
-	secretKeyKvdbCA            = "kvdb-ca.crt"
-	secretKeyKvdbCert          = "kvdb.crt"
-	secretKeyKvdbCertKey       = "kvdb.key"
-	secretKeyKvdbUsername      = "username"
-	secretKeyKvdbPassword      = "password"
-	secretKeyKvdbACLToken      = "acl-token"
-	envKeyPXImage              = "PX_IMAGE"
+	pxContainerName       = "portworx"
+	pxKVDBContainerName   = "portworx-kvdb"
+	pxAnnotationPrefix    = "portworx.io"
+	templateVersion       = "v4"
+	secretKeyKvdbCA       = "kvdb-ca.crt"
+	secretKeyKvdbCert     = "kvdb.crt"
+	secretKeyKvdbCertKey  = "kvdb.key"
+	secretKeyKvdbUsername = "username"
+	secretKeyKvdbPassword = "password"
+	secretKeyKvdbACLToken = "acl-token"
+	envKeyPXImage         = "PX_IMAGE"
 )
 
 type volumeInfo struct {
@@ -764,8 +751,8 @@ func (t *template) getArguments() []string {
 		args = append(args, "--keep-px-up")
 	}
 
-	if t.cluster.Annotations[annotationLogFile] != "" {
-		args = append(args, "--log", t.cluster.Annotations[annotationLogFile])
+	if t.cluster.Annotations[pxutil.AnnotationLogFile] != "" {
+		args = append(args, "--log", t.cluster.Annotations[pxutil.AnnotationLogFile])
 	}
 
 	rtOpts := make([]string, 0)
@@ -785,13 +772,10 @@ func (t *template) getArguments() []string {
 		args = append(args, "-rt_opts", strings.Join(rtOpts, ","))
 	}
 
-	if t.cluster.Annotations[annotationMiscArgs] != "" {
-		parts, err := shlex.Split(t.cluster.Annotations[annotationMiscArgs])
-		if err == nil {
-			args = append(args, parts...)
-		} else {
-			logrus.Warnf("error parsing misc args: %v", err)
-		}
+	if parts, err := pxutil.MiscArgs(t.cluster); err == nil {
+		args = append(args, parts...)
+	} else {
+		logrus.Warnf("error parsing misc args: %v", err)
 	}
 
 	if pxutil.EssentialsEnabled() {

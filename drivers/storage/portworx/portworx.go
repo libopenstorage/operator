@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/shlex"
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
@@ -336,14 +335,12 @@ func (p *portworx) IsPodUpdated(
 	}
 
 	var miscArgsStr string
-	if cluster.Annotations[annotationMiscArgs] != "" {
-		parts, err := shlex.Split(cluster.Annotations[annotationMiscArgs])
-		if err != nil {
-			logrus.Warnf("error parsing misc args: %v", err)
-			return true
-		}
-		miscArgsStr = strings.Join(parts, " ")
+	parts, err := pxutil.MiscArgs(cluster)
+	if err != nil {
+		logrus.Warnf("error parsing misc args: %v", err)
+		return true
 	}
+	miscArgsStr = strings.Join(parts, " ")
 	currArgsStr := strings.Join(portworxArgs, " ")
 
 	if miscArgsChanged(currArgsStr, miscArgsStr) {
