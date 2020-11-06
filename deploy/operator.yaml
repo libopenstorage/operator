@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: portworx-operator
-        image: openstorage/openstorage-operator:1.4.1-dev
+        image: openstorage/openstorage-operator:1.4.1
         imagePullPolicy: Always
         command:
         - /operator

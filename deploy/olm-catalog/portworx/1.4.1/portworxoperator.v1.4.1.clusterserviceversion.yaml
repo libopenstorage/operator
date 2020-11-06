@@ -7,9 +7,9 @@ metadata:
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: openstorage/openstorage-operator:1.4.1-dev
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator@sha256:c63027f0e0f18289856f56e14d903b362eeac2a110c47cc0e7deda4e99c13df1
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2020-10-07T08:00:00Z
+    createdAt: 2020-11-06T08:00:00Z
     support: Portworx, Inc
     certified: "true"
     alm-examples: |-
@@ -206,7 +206,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: openstorage/openstorage-operator:1.4.1-dev
+                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:c63027f0e0f18289856f56e14d903b362eeac2a110c47cc0e7deda4e99c13df1
                 imagePullPolicy: Always
                 command:
                 - /operator
