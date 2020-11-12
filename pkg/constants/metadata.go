@@ -23,4 +23,7 @@ const (
 	// AnnotationCordonedRestartDelay is the annotation key name for the duration
 	// (in seconds) to wait before restarting the storage pods
 	AnnotationCordonedRestartDelay = OperatorPrefix + "/cordoned-restart-delay-secs"
+	// AnnotationPodSafeToEvict annotation tells cluster autoscaler whether the
+	// pod is safe to be evicted when scaling down a node
+	AnnotationPodSafeToEvict = "cluster-autoscaler.kubernetes.io/safe-to-evict"
 )
