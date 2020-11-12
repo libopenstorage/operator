@@ -270,9 +270,11 @@ func (c *Controller) syncStorage(
 	for _, pod := range portworxPodList.Items {
 		podCopy := pod.DeepCopy()
 		controllerRef := metav1.GetControllerOf(podCopy)
-		if controllerRef != nil && controllerRef.UID == cluster.UID && pod.DeletionTimestamp == nil {
+		if controllerRef != nil &&
+			controllerRef.UID == cluster.UID && pod.DeletionTimestamp == nil &&
+			storageNode.Name == pod.Spec.NodeName {
 			updateNeeded := false
-			value, present := podCopy.GetLabels()[constants.LabelKeyStoragePod]
+			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
 			if canNodeServeStorage(storageNode) { // node has storage
 				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
@@ -281,11 +283,25 @@ func (c *Controller) syncStorage(
 					podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
 					updateNeeded = true
 				}
-			} else if present {
-				c.log(storageNode).Debugf("removing storage label from pod: %s/%s",
-					podCopy.Namespace, pod.Name)
-				delete(podCopy.Labels, constants.LabelKeyStoragePod)
-				updateNeeded = true
+			} else {
+				if storageLabelPresent {
+					c.log(storageNode).Debugf("Removing storage label from pod: %s/%s",
+						podCopy.Namespace, pod.Name)
+					delete(podCopy.Labels, constants.LabelKeyStoragePod)
+					updateNeeded = true
+				}
+
+				value, present := podCopy.Annotations[constants.AnnotationPodSafeToEvict]
+				if (!present || value != constants.LabelValueTrue) &&
+					!isNodeRunningKVDB(storageNode) {
+					c.log(storageNode).Debugf("Adding %s annotation to pod: %s/%s",
+						constants.AnnotationPodSafeToEvict, pod.Namespace, pod.Name)
+					if podCopy.Annotations == nil {
+						podCopy.Annotations = make(map[string]string)
+					}
+					podCopy.Annotations[constants.AnnotationPodSafeToEvict] = constants.LabelValueTrue
+					updateNeeded = true
+				}
 			}
 
 			if updateNeeded {

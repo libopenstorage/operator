@@ -348,6 +348,146 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	defaultQuantity, _ := resource.ParseQuantity("0")
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+		},
+	}
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Storage: corev1.StorageStatus{
+				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
+				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	storageLessNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node2",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Storage: corev1.StorageStatus{
+				TotalSize: defaultQuantity,
+				UsedSize:  defaultQuantity,
+			},
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(storageNode, storageLessNode, cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	controller := Controller{
+		client:   k8sClient,
+		recorder: recorder,
+		Driver:   driver,
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
+
+	podNode1 := createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
+	k8sClient.Create(context.TODO(), podNode1)
+
+	podNode2 := createStoragePod(cluster, "pod-node2", storageLessNode.Name, nil, clusterRef)
+	k8sClient.Create(context.TODO(), podNode2)
+
+	// TestCase: Reconcile storage node to verify annotation is not added
+	storageNodeRequest := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	_, err := controller.Reconcile(storageNodeRequest)
+	require.NoError(t, err)
+
+	checkStoragePod := &v1.Pod{}
+	err = testutil.Get(controller.client, checkStoragePod, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
+	_, present := checkStoragePod.Annotations[constants.AnnotationPodSafeToEvict]
+	require.False(t, present)
+
+	// TestCase: Reconcile storageless node to verify annotation is added
+	storageLessNodeRequest := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageLessNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	_, err = controller.Reconcile(storageLessNodeRequest)
+	require.NoError(t, err)
+
+	checkStorageLessPod := &v1.Pod{}
+	err = testutil.Get(controller.client, checkStorageLessPod, podNode2.Name, podNode2.Namespace)
+	require.NoError(t, err)
+	value, present := checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict]
+	require.True(t, present)
+	require.Equal(t, value, constants.LabelValueTrue)
+
+	// TestCase: Annotation value should be overwritten if not set to true
+	checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict] = "false"
+	k8sClient.Update(context.TODO(), checkStorageLessPod)
+
+	_, err = controller.Reconcile(storageLessNodeRequest)
+	require.NoError(t, err)
+
+	checkStorageLessPod = &v1.Pod{}
+	err = testutil.Get(controller.client, checkStorageLessPod, podNode2.Name, podNode2.Namespace)
+	require.NoError(t, err)
+	value, present = checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict]
+	require.True(t, present)
+	require.Equal(t, value, constants.LabelValueTrue)
+
+	// TestCase: Annotation should not be added for storageless kvdb nodes
+	checkStorageLessPod.Annotations = nil
+	k8sClient.Update(context.TODO(), checkStorageLessPod)
+	storageLessNode.Status.Conditions = append(
+		storageLessNode.Status.Conditions,
+		corev1.NodeCondition{
+			Type: corev1.NodeKVDBCondition,
+		},
+	)
+	k8sClient.Update(context.TODO(), storageLessNode)
+
+	_, err = controller.Reconcile(storageLessNodeRequest)
+	require.NoError(t, err)
+
+	checkStorageLessPod = &v1.Pod{}
+	err = testutil.Get(controller.client, checkStorageLessPod, podNode2.Name, podNode2.Namespace)
+	require.NoError(t, err)
+	_, present = checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict]
+	require.False(t, present)
+}
+
 // TestReconcileKVDB focuses on reconciling a StorageNode which is running KVDB
 func TestReconcileKVDB(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
