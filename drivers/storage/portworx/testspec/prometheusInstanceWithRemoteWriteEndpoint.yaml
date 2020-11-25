@@ -16,7 +16,7 @@ spec:
       - portworx
       - px-backup
   remoteWrite:
-  - url: "http://test.endpoint:1234/api/prom/push"
+  - url: "test.endpoint:1234/api/prom/push"
   resources:
     requests:
       memory: 400Mi

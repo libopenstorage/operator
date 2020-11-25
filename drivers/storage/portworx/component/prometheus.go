@@ -571,7 +571,7 @@ func (c *prometheus) createPrometheusInstance(
 		cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint != "" {
 		prometheusInst.Spec.RemoteWrite = []monitoringv1.RemoteWriteSpec{
 			{
-				URL: fmt.Sprintf("http://%s/api/prom/push", cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint),
+				URL: fmt.Sprintf("%s/api/prom/push", cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint),
 			},
 		}
 	}
