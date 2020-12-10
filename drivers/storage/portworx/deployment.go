@@ -852,7 +852,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 	if t.isOpenshift {
 		envMap["PRE-EXEC"] = &v1.EnvVar{
 			Name:  "PRE-EXEC",
-			Value: "if [ -d /ostree/deploy/rhcos/deploy ] && [ -f /etc/pwx/.private.json ]; then chattr -i /etc/pwx/.private.json /ostree/deploy/rhcos/deploy/*/etc/pwx/.private.json || /bin/true; fi",
+			Value: "if [ -f /etc/pwx/.private.json ] && [ -d /ostree/deploy/rhcos/deploy ]; then chattr -i /etc/pwx/.private.json /ostree/deploy/rhcos/deploy/*/etc/pwx/.private.json || /bin/true; fi",
 		}
 	}
 
