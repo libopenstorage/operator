@@ -1,4 +1,5 @@
 STORAGE_OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TAG)
+STORAGE_OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_TEST_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG)
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 
@@ -76,6 +77,17 @@ test:
 	sed -i '/mode: atomic/d' coverage.txt
 	sed -i '1d' coverage.txt
 	sed -i '1s/^/mode: atomic\n/' coverage.txt
+
+integration-test:
+	@echo "Building operator integration tests"
+	@cd test/integration_test && go test -tags integrationtest -v -c -o operator.test
+
+integration-test-container:
+	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_TEST_IMG) -f Dockerfile ."
+	@cd test/integration_test && sudo docker build --tag $(STORAGE_OPERATOR_TEST_IMG) -f Dockerfile .
+
+integration-test-deploy:
+	sudo docker push $(STORAGE_OPERATOR_TEST_IMG)
 
 codegen:
 	@echo "Generating CRD"
