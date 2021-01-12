@@ -23,6 +23,6 @@ func testInstallWithEmptySpecWithAllDefaults(t *testing.T) {
 
 	err = testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
-	err = testutil.ValidateUninstallStorageCluster(pxImageList, cluster, 15*time.Minute, 30*time.Second)
+	err = testutil.ValidateUninstallStorageCluster(cluster, 15*time.Minute, 30*time.Second)
 	require.NoError(t, err)
 }
