@@ -80,7 +80,7 @@ test:
 
 integration-test:
 	@echo "Building operator integration tests"
-	@cd test/integration_test && go test -tags integrationtest -v -c -o px-operator.test
+	@cd test/integration_test && go test -tags integrationtest -v -c -o operator.test
 
 integration-test-container:
 	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_TEST_IMG) -f Dockerfile ."
