@@ -6,5 +6,5 @@ RUN apt-get update && \
 
 WORKDIR /
 
-COPY px-operator.test /
+COPY operator.test /
 COPY specs /specs/
