@@ -9,7 +9,7 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/portworx/sched-ops/k8s"
+	"github.com/portworx/sched-ops/k8s/operator"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -35,7 +35,10 @@ func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 }
 
 func createStorageCluster(cluster *corev1.StorageCluster) error {
-	_, err := k8s.Instance().CreateStorageCluster(cluster)
+	// Operator components interface
+	k8sOperator, _ := operator.NewInstanceFromConfigFile("/kubeconfig/file/path")
+
+	_, err := k8sOperator.CreateStorageCluster(cluster)
 	return err
 }
 
