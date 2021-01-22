@@ -3,6 +3,7 @@
 package integrationtest
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,11 @@ func testNodeAffinityLabels(t *testing.T) {
 	// Set affinity Label one of the K8S nodes
 	var nodeNameWithLabel string
 	for _, node := range nodeList.Items {
+		for key, _ := range node.Labels {
+			if strings.Contains(key, "master") { // Skip master node, we don't need to label it
+				continue
+			}
+		}
 		if err := core.Instance().AddLabelOnNode(node.Name, labelKey, labelValue); err != nil {
 			require.NoError(t, err)
 		}
