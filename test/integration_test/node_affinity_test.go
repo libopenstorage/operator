@@ -62,7 +62,7 @@ func testNodeAffinityLabels(t *testing.T) {
 	// Set affinity Label one of the K8S nodes
 	var nodeNameWithLabel string
 	for _, node := range nodeList.Items {
-		for key, _ := range node.Labels {
+		for key := range node.Labels {
 			if strings.Contains(key, "master") { // Skip master node, we don't need to label it
 				continue
 			}
