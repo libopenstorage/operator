@@ -59,10 +59,12 @@ func testNodeAffinityLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set affinity Label one of the K8S nodes
+	var nodeNameWithLabel string
 	for _, node := range nodeList.Items {
 		if err := core.Instance().AddLabelOnNode(node.Name, labelKey, labelValue); err != nil {
 			require.NoError(t, err)
 		}
+		nodeNameWithLabel = node.Name
 		break
 	}
 
@@ -72,6 +74,11 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// TODO: Validate deployment
 
+	// TODO: This will eventually be replaced by ValidateStorageCluster() when its fully implemented
+	// Wait for Storagecluster to be ready
+	err = waitForStorageClusterToBeReady(cluster)
+	require.NoError(t, err)
+
 	// Uninstall cluster
 	err = testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
@@ -79,4 +86,9 @@ func testNodeAffinityLabels(t *testing.T) {
 	// Validate Uninstall
 	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
+
+	// Remove affinity Label from the node
+	if err := core.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKey); err != nil {
+		require.NoError(t, err)
+	}
 }
