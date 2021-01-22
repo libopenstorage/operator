@@ -3,10 +3,11 @@
 package integrationtest
 
 import (
-	"fmt"
 	"testing"
+	"time"
 
 	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -15,13 +16,16 @@ import (
 const (
 	defaultClusterName = "node-affinity-test"
 	defaultPxNamespace = "kube-system"
+
+	defaultValidateUninstallTimeout       = 15 * time.Minute
+	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
-func TestKoka(t *testing.T) {
-	t.Run("simpleTestKoka", testKokaTest)
+func TestNodeAffinity(t *testing.T) {
+	t.Run("testNodeAffinityLabels", testNodeAffinityLabels)
 }
 
-func testKokaTest(t *testing.T) {
+func testNodeAffinityLabels(t *testing.T) {
 	var err error
 	labelKey := "skip/px"
 	labelValue := "true"
@@ -66,5 +70,13 @@ func testKokaTest(t *testing.T) {
 	err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
-	//TODO: Validate cluster deployment
+	// TODO: Validate deployment
+
+	// Uninstall cluster
+	err = testutil.UninstallStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Validate Uninstall
+	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	require.NoError(t, err)
 }
