@@ -63,7 +63,7 @@ func testNodeAffinityLabels(t *testing.T) {
 	var nodeNameWithLabel string
 	for _, node := range nodeList.Items {
 		for key := range node.Labels {
-			if strings.Contains(key, "master") { // Skip master node, we don't need to label it
+			if strings.Contains(key, "node-role.kubernetes.io/master") { // Skip master node, we don't need to label it
 				continue
 			}
 		}
