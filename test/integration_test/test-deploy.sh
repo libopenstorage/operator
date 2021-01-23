@@ -36,8 +36,6 @@ done
 
 apk update
 apk add jq
-apt-get -y update 
-apt-get -y install jq
 
 # Add operator tests to execute
 if [ "$focus_tests" != "" ] ; then
@@ -52,7 +50,7 @@ sed -i 's/'SHORT_FLAG'/'"$short_test"'/g' /testspecs/operator-test-pod.yaml
 sed -i 's/'storage_provisioner'/'"$storage_provisioner"'/g' /testspecs/operator-test-pod.yaml
 sed -i 's/'username'/'"$SSH_USERNAME"'/g' /testspecs/operator-test-pod.yaml
 sed -i 's/'password'/'"$SSH_PASSWORD"'/g' /testspecs/operator-test-pod.yaml
-sed -i 's|'openstorage/operator-test:.*'|'"$test_image_name"'|g'  /testspecs/operator-test-pod.yaml
+sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g'  /testspecs/operator-test-pod.yaml
 
 kubectl delete -f /testspecs/operator-test-pod.yaml
 kubectl create -f /testspecs/operator-test-pod.yaml
