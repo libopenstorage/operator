@@ -52,9 +52,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type HttpRequest struct {
+// HTTPRequest is a struct for http request
+type HTTPRequest struct {
 	Method   string
-	Url      string
+	URL      string
 	Content  string
 	Auth     string
 	Body     io.Reader
@@ -684,7 +685,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 										for _, owner := range pod.OwnerReferences {
 											if owner.UID == cluster.UID {
 												if matchExpression.Operator == v1.NodeSelectorOpNotIn { // TODO: For now only adding check for NotIn, will add more as needed
-													return fmt.Errorf("Found pod %v on node %s with node affinity label %s when should not have", pod.Name, node.Name, label)
+													return fmt.Errorf("found pod %v on node %s with node affinity label %s when should not have", pod.Name, node.Name, label)
 												}
 											}
 										}
@@ -895,18 +896,19 @@ func getK8SVersion() (string, error) {
 	return matches[1], nil
 }
 
-func GetImagesFromVersionUrl(url, endpoint string) (map[string]string, error) {
+// GetImagesFromVersionURL gets images from version URL
+func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
 	imageListMap := make(map[string]string)
 
 	// Construct PX release manifest URL
-	pxReleaseManifestUrl, err := constructPxReleaseManifestUrl(url, endpoint)
+	pxReleaseManifestURL, err := constructPxReleaseManifestURL(url, endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	request := HttpRequest{
+	request := HTTPRequest{
 		Method:   "GET",
-		Url:      pxReleaseManifestUrl,
+		URL:      pxReleaseManifestURL,
 		Content:  "application/json",
 		Auth:     "",
 		Insecure: true,
@@ -914,7 +916,7 @@ func GetImagesFromVersionUrl(url, endpoint string) (map[string]string, error) {
 
 	htmlData, err := DoRequest(request)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to send GET request to %s, Err: %v", pxReleaseManifestUrl, err)
+		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxReleaseManifestURL, err)
 	}
 
 	for _, line := range strings.Split(string(htmlData), "\n") {
@@ -934,25 +936,25 @@ func GetImagesFromVersionUrl(url, endpoint string) (map[string]string, error) {
 	return imageListMap, nil
 }
 
-func constructPxReleaseManifestUrl(specGenUrl, endpoint string) (string, error) {
-	u, err := url.Parse(specGenUrl)
+func constructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) {
+	u, err := url.Parse(specGenURL)
 	if err != nil {
-		return "", fmt.Errorf("Failed to parse URL [%s], Err: %v", specGenUrl, err)
+		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
 	}
 	u.Path = path.Join(u.Path, endpoint, "version")
 	return u.String(), nil
 }
 
 // DoRequest sends HTTP API request
-func DoRequest(request HttpRequest) ([]byte, error) {
+func DoRequest(request HTTPRequest) ([]byte, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: request.Insecure},
 	}
 	client := &http.Client{Transport: tr}
 
-	req, err := http.NewRequest(request.Method, request.Url, request.Body)
+	req, err := http.NewRequest(request.Method, request.URL, request.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to make request: %+v, Err: %v", req, err)
+		return nil, fmt.Errorf("failed to make request: %+v, Err: %v", req, err)
 	}
 
 	if request.Content != "" {
@@ -965,13 +967,13 @@ func DoRequest(request HttpRequest) ([]byte, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to send request, Err: %v %v", resp, err)
+		return nil, fmt.Errorf("failed to send request, Err: %v %v", resp, err)
 	}
 	defer resp.Body.Close()
 
 	htmlData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read response: %+v", resp.Body)
+		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
 	}
 	fmt.Println(string(htmlData))
 
@@ -982,18 +984,18 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 	t := func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
-			return nil, true, fmt.Errorf("Failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
+			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
 		}
 
 		if cluster.Status.Phase != "Online" {
-			return nil, true, fmt.Errorf("Cluster is in State: %s", cluster.Status.Phase)
+			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
 		}
 		return cluster, false, nil
 	}
 
 	out, err := task.DoRetryWithTimeout(t, timeout, interval)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to wait for StorageCluster to be ready, Err: %v", err)
+		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
 	}
 	cluster = out.(*corev1.StorageCluster)
 

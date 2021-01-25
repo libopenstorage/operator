@@ -86,7 +86,7 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// Validate deployment
 	logrus.Infof("Get component images from versions URL")
-	imageListMap, err := testutil.GetImagesFromVersionUrl(defaultPxSpecGenURL, defaultPxSpecGenEndpoint)
+	imageListMap, err := testutil.GetImagesFromVersionURL(defaultPxSpecGenURL, defaultPxSpecGenEndpoint)
 	require.NoError(t, err)
 
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
