@@ -13,7 +13,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -208,6 +208,11 @@ func (c *csi) createClusterRole(
 				Verbs:     []string{"update", "patch"},
 			},
 			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
 				APIGroups: []string{"storage.k8s.io"},
 				Resources: []string{"storageclasses"},
 				Verbs:     []string{"get", "list", "watch"},
@@ -216,6 +221,16 @@ func (c *csi) createClusterRole(
 				APIGroups: []string{"storage.k8s.io"},
 				Resources: []string{"volumeattachments"},
 				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+			},
+			{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"csistoragecapacities"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"replicasets"},
+				Verbs:     []string{"get"},
 			},
 			{
 				APIGroups: []string{""},
