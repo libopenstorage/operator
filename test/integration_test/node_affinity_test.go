@@ -10,6 +10,7 @@ import (
 	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 )
@@ -18,7 +19,10 @@ const (
 	defaultClusterName = "node-affinity-test"
 	defaultPxNamespace = "kube-system"
 
-	defaultValidateUninstallTimeout       = 15 * time.Minute
+	defaultValidateStorageClusterTimeout       = 900 * time.Second
+	defaultValidateStorageClusterRetryInterval = 30 * time.Second
+
+	defaultValidateUninstallTimeout       = 900 * time.Second
 	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
@@ -67,6 +71,7 @@ func testNodeAffinityLabels(t *testing.T) {
 				continue
 			}
 		}
+		logrus.Infof("Label node %s with %s=%s", node.Name, labelKey, labelValue)
 		if err := core.Instance().AddLabelOnNode(node.Name, labelKey, labelValue); err != nil {
 			require.NoError(t, err)
 		}
@@ -75,25 +80,31 @@ func testNodeAffinityLabels(t *testing.T) {
 	}
 
 	// Create cluster
+	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 	err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
-	// TODO: Validate deployment
+	// Validate deployment
+	logrus.Infof("Get component images from versions URL")
+	imageListMap, err := testutil.GetImagesFromVersionUrl(defaultPxSpecGenUrl, defaultPxSpecGenEndpoint)
+	require.NoError(t, err)
 
-	// TODO: This will eventually be replaced by ValidateStorageCluster() when its fully implemented
-	// Wait for Storagecluster to be ready
-	err = waitForStorageClusterToBeReady(cluster)
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateStorageClusterTimeout, defaultValidateStorageClusterRetryInterval, "")
 	require.NoError(t, err)
 
 	// Uninstall cluster
+	logrus.Infof("Delete StorageCluster %s", cluster.Name)
 	err = testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate Uninstall
+	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 
 	// Remove affinity Label from the node
+	logrus.Infof("Remove label %s from node %s", nodeNameWithLabel, labelKey)
 	if err := core.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKey); err != nil {
 		require.NoError(t, err)
 	}

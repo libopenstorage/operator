@@ -3,9 +3,13 @@ package test
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -47,6 +51,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type HttpRequest struct {
+	Method   string
+	Url      string
+	Content  string
+	Auth     string
+	Body     io.Reader
+	Insecure bool
+}
 
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
@@ -297,7 +310,8 @@ func ValidateStorageCluster(
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
-	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+
+	cluster, err = validateStorageClusterIsOnline(cluster, timeout, interval)
 	if err != nil {
 		return err
 	}
@@ -646,6 +660,44 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			if cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+				if len(cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) > 0 {
+					for _, nodeSelectorTerm := range cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+						if len(nodeSelectorTerm.MatchExpressions) > 0 {
+							for _, matchExpression := range nodeSelectorTerm.MatchExpressions {
+								nodeList, err := coreops.Instance().GetNodes()
+								if err != nil {
+									return err
+								}
+								for _, node := range nodeList.Items {
+									if coreops.Instance().IsNodeMaster(node) {
+										continue
+									}
+									label := map[string]string{matchExpression.Key: matchExpression.Values[0]}
+									podList, err := coreops.Instance().GetPodsByNodeAndLabels(node.Name, cluster.Namespace, label)
+									if err != nil {
+										return err
+									}
+									for _, pod := range podList.Items {
+										for _, owner := range pod.OwnerReferences {
+											if owner.UID == cluster.UID {
+												if matchExpression.Operator == v1.NodeSelectorOpNotIn { // TODO: For now only adding check for NotIn, will add more as needed
+													return fmt.Errorf("Found pod %v on node %s with node affinity label %s when should not have", pod.Name, node.Name, label)
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -841,4 +893,109 @@ func getK8SVersion() (string, error) {
 		return "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
 	return matches[1], nil
+}
+
+func GetImagesFromVersionUrl(url, endpoint string) (map[string]string, error) {
+	imageListMap := make(map[string]string)
+
+	// Construct PX release manifest URL
+	pxReleaseManifestUrl, err := constructPxReleaseManifestUrl(url, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	request := HttpRequest{
+		Method:   "GET",
+		Url:      pxReleaseManifestUrl,
+		Content:  "application/json",
+		Auth:     "",
+		Insecure: true,
+	}
+
+	htmlData, err := DoRequest(request)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to send GET request to %s, Err: %v", pxReleaseManifestUrl, err)
+	}
+
+	for _, line := range strings.Split(string(htmlData), "\n") {
+		if strings.Contains(line, "components") || line == "" {
+			continue
+		}
+
+		imageNameSplit := strings.Split(strings.TrimSpace(line), ": ")
+
+		if strings.Contains(line, "version") {
+			imageListMap["version"] = fmt.Sprintf("portworx/oci-monitor:%s", imageNameSplit[1])
+			continue
+		}
+		imageListMap[imageNameSplit[0]] = imageNameSplit[1]
+	}
+
+	return imageListMap, nil
+}
+
+func constructPxReleaseManifestUrl(specGenUrl, endpoint string) (string, error) {
+	u, err := url.Parse(specGenUrl)
+	if err != nil {
+		return "", fmt.Errorf("Failed to parse URL [%s], Err: %v", specGenUrl, err)
+	}
+	u.Path = path.Join(u.Path, endpoint, "version")
+	return u.String(), nil
+}
+
+// DoRequest sends HTTP API request
+func DoRequest(request HttpRequest) ([]byte, error) {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: request.Insecure},
+	}
+	client := &http.Client{Transport: tr}
+
+	req, err := http.NewRequest(request.Method, request.Url, request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to make request: %+v, Err: %v", req, err)
+	}
+
+	if request.Content != "" {
+		req.Header.Set("Content-Type", request.Content)
+	}
+
+	if request.Auth != "" {
+		req.Header.Set("Authorization", request.Auth)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to send request, Err: %v %v", resp, err)
+	}
+	defer resp.Body.Close()
+
+	htmlData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read response: %+v", resp.Body)
+	}
+	fmt.Println(string(htmlData))
+
+	return htmlData, nil
+}
+
+func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
+	t := func() (interface{}, bool, error) {
+		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("Failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
+		}
+
+		if cluster.Status.Phase != "Online" {
+			return nil, true, fmt.Errorf("Cluster is in State: %s", cluster.Status.Phase)
+		}
+		return cluster, false, nil
+	}
+
+	out, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to wait for StorageCluster to be ready, Err: %v", err)
+	}
+	cluster = out.(*corev1.StorageCluster)
+
+	return cluster, nil
 }
