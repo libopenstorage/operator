@@ -16,7 +16,7 @@ import (
 const (
 	specDir = "./specs"
 
-	defaultPxSpecGenUrl      = "http://install.portworx.com"
+	defaultPxSpecGenURL      = "http://install.portworx.com"
 	defaultPxSpecGenEndpoint = ""
 )
 
