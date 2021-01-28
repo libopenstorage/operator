@@ -51,16 +51,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// HTTPRequest is a struct for http request
-type HTTPRequest struct {
-	Method   string
-	URL      string
-	Content  string
-	Auth     string
-	Body     io.Reader
-	Insecure bool
-}
-
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
