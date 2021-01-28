@@ -63,7 +63,7 @@ func testNodeAffinityLabels(t *testing.T) {
 	nodeList, err := core.Instance().GetNodes()
 	require.NoError(t, err)
 
-	// Set affinity Label one of the K8S nodes
+	// Set Node Affinity label one of the K8S nodes
 	var nodeNameWithLabel string
 	for _, node := range nodeList.Items {
 		for key := range node.Labels {
@@ -79,12 +79,12 @@ func testNodeAffinityLabels(t *testing.T) {
 		break
 	}
 
-	// Create cluster
+	// Deploy cluster
 	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 	err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
-	// Validate deployment
+	// Validate cluster deployment
 	logrus.Infof("Get component images from versions URL")
 	imageListMap, err := testutil.GetImagesFromVersionURL(defaultPxSpecGenURL, defaultPxSpecGenEndpoint)
 	require.NoError(t, err)
@@ -93,17 +93,17 @@ func testNodeAffinityLabels(t *testing.T) {
 	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateStorageClusterTimeout, defaultValidateStorageClusterRetryInterval, "")
 	require.NoError(t, err)
 
-	// Uninstall cluster
+	// Delete cluster
 	logrus.Infof("Delete StorageCluster %s", cluster.Name)
 	err = testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
 
-	// Validate Uninstall
+	// Validate cluster deletion
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 
-	// Remove affinity Label from the node
+	// Remove Node Affinity label from the node
 	logrus.Infof("Remove label %s from node %s", nodeNameWithLabel, labelKey)
 	if err := core.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKey); err != nil {
 		require.NoError(t, err)

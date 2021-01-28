@@ -303,7 +303,7 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 // ValidateStorageCluster validates a StorageCluster spec
 func ValidateStorageCluster(
 	pxImageList map[string]string,
-	cluster *corev1.StorageCluster,
+	clusterSpec *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	kubeconfig ...string,
 ) error {
@@ -312,52 +312,33 @@ func ValidateStorageCluster(
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
 
-	cluster, err = validateStorageClusterIsOnline(cluster, timeout, interval)
+	// Validate StorageCluster is initialized
+	liveCluster, err := validateStorageClusterIsOnline(clusterSpec, timeout, interval)
 	if err != nil {
 		return err
 	}
 
-	if err = validateStorageClusterPods(cluster, timeout, interval); err != nil {
-		return err
-	}
-
-	if err = validateComponents(pxImageList, cluster, timeout, interval); err != nil {
-		return err
-	}
-
-	conn, err := getSdkConnection(cluster)
-	if err != nil {
-		return nil
-	}
-
-	nodeClient := api.NewOpenStorageNodeClient(conn)
-	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	// Get expected Portworx pod count
+	expectedPodCount, err := getExpectedPodCount(clusterSpec)
 	if err != nil {
 		return err
 	}
 
-	expectedNodes, err := expectedPods(cluster)
-	if err != nil {
+	// Validate Portworx pods
+	if err = validateStorageClusterPods(clusterSpec, expectedPodCount, timeout, interval); err != nil {
 		return err
 	}
 
-	actualNodes := len(nodeEnumerateResp.GetNodeIds())
-	if actualNodes != expectedNodes {
-		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	// Validate Portworx nodes
+	if err = validatePortworxNodes(liveCluster, expectedPodCount); err != nil {
+		return err
 	}
 
-	// TODO: Validate portworx is started with correct params. Check individual options
-	for _, n := range nodeEnumerateResp.GetNodeIds() {
-		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
-		if err != nil {
-			return err
-		}
-		if nodeResp.Node.Status != api.Status_STATUS_OK {
-			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
-				nodeResp.Node.Status)
-		}
-
+	// TODO: Add validation to check what is expected (clusterSpec) and what actually got deployed (liveSpec)
+	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -470,16 +451,12 @@ func ValidateUninstallStorageCluster(
 }
 
 func validateStorageClusterPods(
-	cluster *corev1.StorageCluster,
+	clusterSpec *corev1.StorageCluster,
+	expectedPodCount int,
 	timeout, interval time.Duration,
 ) error {
-	expectedPodCount, err := expectedPods(cluster)
-	if err != nil {
-		return err
-	}
-
 	t := func() (interface{}, bool, error) {
-		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		cluster, err := operatorops.Instance().GetStorageCluster(clusterSpec.Name, clusterSpec.Namespace)
 		if err != nil {
 			return "", true, err
 		}
@@ -506,10 +483,70 @@ func validateStorageClusterPods(
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func expectedPods(cluster *corev1.StorageCluster) (int, error) {
+// Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
+func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+	cluster.Spec.Placement = &corev1.PlacementSpec{
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return cluster
+}
+
+func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) error {
+	conn, err := getSdkConnection(cluster)
+	if err != nil {
+		return nil
+	}
+
+	nodeClient := api.NewOpenStorageNodeClient(conn)
+	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return err
+	}
+
+	actualNodes := len(nodeEnumerateResp.GetNodeIds())
+	if actualNodes != expectedNodes {
+		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	}
+
+	// TODO: Validate Portworx is started with correct params. Check individual options
+	for _, n := range nodeEnumerateResp.GetNodeIds() {
+		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
+		if err != nil {
+			return err
+		}
+		if nodeResp.Node.Status != api.Status_STATUS_OK {
+			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
+				nodeResp.Node.Status)
+		}
+
+	}
+	return nil
+}
+
+func getExpectedPodCount(cluster *corev1.StorageCluster) (int, error) {
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
 		return 0, err
@@ -519,6 +556,11 @@ func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 	if cluster.Spec.Placement != nil && cluster.Spec.Placement.NodeAffinity != nil {
 		dummyPod.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+		}
+	} else {
+		newCluster := addDefaultNodeAffinityRules(cluster)
+		dummyPod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: newCluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
 	}
 
@@ -659,44 +701,6 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 	if err = validateMonitoring(cluster, timeout, interval); err != nil {
 		return err
-	}
-
-	if cluster.Spec.Placement != nil {
-		if cluster.Spec.Placement.NodeAffinity != nil {
-			if cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-				if len(cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) > 0 {
-					for _, nodeSelectorTerm := range cluster.Spec.Placement.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
-						if len(nodeSelectorTerm.MatchExpressions) > 0 {
-							for _, matchExpression := range nodeSelectorTerm.MatchExpressions {
-								nodeList, err := coreops.Instance().GetNodes()
-								if err != nil {
-									return err
-								}
-								for _, node := range nodeList.Items {
-									if coreops.Instance().IsNodeMaster(node) {
-										continue
-									}
-									label := map[string]string{matchExpression.Key: matchExpression.Values[0]}
-									podList, err := coreops.Instance().GetPodsByNodeAndLabels(node.Name, cluster.Namespace, label)
-									if err != nil {
-										return err
-									}
-									for _, pod := range podList.Items {
-										for _, owner := range pod.OwnerReferences {
-											if owner.UID == cluster.UID {
-												if matchExpression.Operator == v1.NodeSelectorOpNotIn { // TODO: For now only adding check for NotIn, will add more as needed
-													return fmt.Errorf("found pod %v on node %s with node affinity label %s when should not have", pod.Name, node.Name, label)
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
 	}
 
 	return nil

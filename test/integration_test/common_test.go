@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	specDir = "./specs"
+	specDir = "./operator-test"
 
 	defaultPxSpecGenURL      = "http://install.portworx.com"
 	defaultPxSpecGenEndpoint = ""
