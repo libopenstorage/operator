@@ -306,19 +306,19 @@ func ValidateStorageCluster(
 		return err
 	}
 
-	// Get expected Portworx pod count
-	expectedPodCount, err := getExpectedPodCount(clusterSpec)
+	// Get list of expected Portworx node names
+	expectedPxNodeNameList, err := getExpectedPxNodeNameList(clusterSpec)
 	if err != nil {
 		return err
 	}
 
 	// Validate Portworx pods
-	if err = validateStorageClusterPods(clusterSpec, expectedPodCount, timeout, interval); err != nil {
+	if err = validateStorageClusterPods(clusterSpec, expectedPxNodeNameList, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate Portworx nodes
-	if err = validatePortworxNodes(liveCluster, expectedPodCount); err != nil {
+	if err = validatePortworxNodes(liveCluster, len(expectedPxNodeNameList)); err != nil {
 		return err
 	}
 
@@ -440,7 +440,7 @@ func ValidateUninstallStorageCluster(
 
 func validateStorageClusterPods(
 	clusterSpec *corev1.StorageCluster,
-	expectedPodCount int,
+	expectedPxNodeNameList []string,
 	timeout, interval time.Duration,
 ) error {
 	t := func() (interface{}, bool, error) {
@@ -455,7 +455,7 @@ func validateStorageClusterPods(
 				cluster.Namespace, cluster.Name, err)
 		}
 
-		if len(pods) != expectedPodCount {
+		if len(pods) != len(expectedPxNodeNameList) {
 			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", expectedPodCount, len(pods))
 		}
 
@@ -476,7 +476,7 @@ func validateStorageClusterPods(
 }
 
 // Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
-func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *v1.NodeAffinity {
 	cluster.Spec.Placement = &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -499,7 +499,7 @@ func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *corev1.Storage
 		},
 	}
 
-	return cluster
+	return cluster.Spec.Placement.NodeAffinity
 }
 
 func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) error {
@@ -534,7 +534,8 @@ func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) er
 	return nil
 }
 
-func getExpectedPodCount(cluster *corev1.StorageCluster) (int, error) {
+func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error) {
+	var nodeNameListWithPxPods []string
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
 		return 0, err
@@ -546,13 +547,12 @@ func getExpectedPodCount(cluster *corev1.StorageCluster) (int, error) {
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
 	} else {
-		newCluster := addDefaultNodeAffinityRules(cluster)
+		defaultNodeAffinityRules := addDefaultNodeAffinityRules(cluster)
 		dummyPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: newCluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			NodeAffinity: defaultNodeAffinityRules.DeepCopy(),
 		}
 	}
 
-	podCount := 0
 	for _, node := range nodeList.Items {
 		if coreops.Instance().IsNodeMaster(node) {
 			continue
@@ -560,11 +560,12 @@ func getExpectedPodCount(cluster *corev1.StorageCluster) (int, error) {
 		nodeInfo := schedulernodeinfo.NewNodeInfo()
 		nodeInfo.SetNode(&node)
 		if ok, _, _ := predicates.PodMatchNodeSelector(dummyPod, nil, nodeInfo); ok {
-			podCount++
+			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
+	fmt.Printf("KOKADBG: nodeNameListWithPxPods: %d nodes: %+v\n", len(nodeNameListWithPxPods), nodeNameListWithPxPods)
 
-	return podCount, nil
+	return nodeNameListWithPxPods, nil
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
