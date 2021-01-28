@@ -3,7 +3,6 @@ package test
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -910,17 +909,14 @@ func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
 		return nil, err
 	}
 
-	request := HTTPRequest{
-		Method:   "GET",
-		URL:      pxReleaseManifestURL,
-		Content:  "application/json",
-		Auth:     "",
-		Insecure: true,
-	}
-
-	htmlData, err := DoRequest(request)
+	resp, err := http.Get(pxReleaseManifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxReleaseManifestURL, err)
+	}
+
+	htmlData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
 	}
 
 	for _, line := range strings.Split(string(htmlData), "\n") {
@@ -947,41 +943,6 @@ func constructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) 
 	}
 	u.Path = path.Join(u.Path, endpoint, "version")
 	return u.String(), nil
-}
-
-// DoRequest sends HTTP API request
-func DoRequest(request HTTPRequest) ([]byte, error) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: request.Insecure},
-	}
-	client := &http.Client{Transport: tr}
-
-	req, err := http.NewRequest(request.Method, request.URL, request.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %+v, Err: %v", req, err)
-	}
-
-	if request.Content != "" {
-		req.Header.Set("Content-Type", request.Content)
-	}
-
-	if request.Auth != "" {
-		req.Header.Set("Authorization", request.Auth)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request, Err: %v %v", resp, err)
-	}
-	defer resp.Body.Close()
-
-	htmlData, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
-	}
-	fmt.Println(string(htmlData))
-
-	return htmlData, nil
 }
 
 func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
