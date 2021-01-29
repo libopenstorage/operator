@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -289,7 +291,7 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 // ValidateStorageCluster validates a StorageCluster spec
 func ValidateStorageCluster(
 	pxImageList map[string]string,
-	cluster *corev1.StorageCluster,
+	clusterSpec *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	kubeconfig ...string,
 ) error {
@@ -297,52 +299,34 @@ func ValidateStorageCluster(
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
-	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+
+	// Validate StorageCluster is initialized
+	liveCluster, err := validateStorageClusterIsOnline(clusterSpec, timeout, interval)
 	if err != nil {
 		return err
 	}
 
-	if err = validateStorageClusterPods(cluster, timeout, interval); err != nil {
-		return err
-	}
-
-	if err = validateComponents(pxImageList, cluster, timeout, interval); err != nil {
-		return err
-	}
-
-	conn, err := getSdkConnection(cluster)
-	if err != nil {
-		return nil
-	}
-
-	nodeClient := api.NewOpenStorageNodeClient(conn)
-	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	// Get list of expected Portworx node names
+	expectedPxNodeNameList, err := getExpectedPxNodeNameList(clusterSpec)
 	if err != nil {
 		return err
 	}
 
-	expectedNodes, err := expectedPods(cluster)
-	if err != nil {
+	// Validate Portworx pods
+	if err = validateStorageClusterPods(clusterSpec, expectedPxNodeNameList, timeout, interval); err != nil {
 		return err
 	}
 
-	actualNodes := len(nodeEnumerateResp.GetNodeIds())
-	if actualNodes != expectedNodes {
-		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	// Validate Portworx nodes
+	if err = validatePortworxNodes(liveCluster, len(expectedPxNodeNameList)); err != nil {
+		return err
 	}
 
-	// TODO: Validate portworx is started with correct params. Check individual options
-	for _, n := range nodeEnumerateResp.GetNodeIds() {
-		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
-		if err != nil {
-			return err
-		}
-		if nodeResp.Node.Status != api.Status_STATUS_OK {
-			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
-				nodeResp.Node.Status)
-		}
-
+	// TODO: Add validation to check what is expected (clusterSpec) and what actually got deployed (liveSpec)
+	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -455,16 +439,12 @@ func ValidateUninstallStorageCluster(
 }
 
 func validateStorageClusterPods(
-	cluster *corev1.StorageCluster,
+	clusterSpec *corev1.StorageCluster,
+	expectedPxNodeNameList []string,
 	timeout, interval time.Duration,
 ) error {
-	expectedPodCount, err := expectedPods(cluster)
-	if err != nil {
-		return err
-	}
-
 	t := func() (interface{}, bool, error) {
-		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		cluster, err := operatorops.Instance().GetStorageCluster(clusterSpec.Name, clusterSpec.Namespace)
 		if err != nil {
 			return "", true, err
 		}
@@ -475,14 +455,25 @@ func validateStorageClusterPods(
 				cluster.Namespace, cluster.Name, err)
 		}
 
-		if len(pods) != expectedPodCount {
-			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", expectedPodCount, len(pods))
+		if len(pods) != len(expectedPxNodeNameList) {
+			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", len(expectedPxNodeNameList), len(pods))
 		}
 
+		var pxNodeNameList []string
+		var podsNotReady []string
 		for _, pod := range pods {
 			if !coreops.Instance().IsPodReady(pod) {
-				return "", true, fmt.Errorf("pod %v/%v is not yet ready", pod.Namespace, pod.Name)
+				podsNotReady = append(podsNotReady, pod.Name)
 			}
+			pxNodeNameList = append(pxNodeNameList, pod.Spec.NodeName)
+		}
+
+		if len(podsNotReady) > 0 {
+			return "", true, fmt.Errorf("pods are not Ready: %v", podsNotReady)
+		}
+
+		if !assert.ElementsMatch(&testing.T{}, expectedPxNodeNameList, pxNodeNameList) {
+			return "", false, fmt.Errorf("expected Portworx nodes: %+v, got %+v", expectedPxNodeNameList, pxNodeNameList)
 		}
 
 		return "", false, nil
@@ -491,13 +482,72 @@ func validateStorageClusterPods(
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func expectedPods(cluster *corev1.StorageCluster) (int, error) {
+// Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
+func defaultPxNodeAffinityRules() *v1.NodeAffinity {
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      "node-role.kubernetes.io/master",
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return nodeAffinity
+}
+
+func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) error {
+	conn, err := getSdkConnection(cluster)
+	if err != nil {
+		return nil
+	}
+
+	nodeClient := api.NewOpenStorageNodeClient(conn)
+	nodeEnumerateResp, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return err
+	}
+
+	actualNodes := len(nodeEnumerateResp.GetNodeIds())
+	if actualNodes != expectedNodes {
+		return fmt.Errorf("expected nodes: %v. actual nodes: %v", expectedNodes, actualNodes)
+	}
+
+	// TODO: Validate Portworx is started with correct params. Check individual options
+	for _, n := range nodeEnumerateResp.GetNodeIds() {
+		nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: n})
+		if err != nil {
+			return err
+		}
+		if nodeResp.Node.Status != api.Status_STATUS_OK {
+			return fmt.Errorf("node %s is not online. Current: %v", nodeResp.Node.SchedulerNodeName,
+				nodeResp.Node.Status)
+		}
+
+	}
+	return nil
+}
+
+func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error) {
+	var nodeNameListWithPxPods []string
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
-		return 0, err
+		return nodeNameListWithPxPods, err
 	}
 
 	dummyPod := &v1.Pod{}
@@ -505,9 +555,12 @@ func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 		dummyPod.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
+	} else {
+		dummyPod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: defaultPxNodeAffinityRules(),
+		}
 	}
 
-	podCount := 0
 	for _, node := range nodeList.Items {
 		if coreops.Instance().IsNodeMaster(node) {
 			continue
@@ -515,11 +568,11 @@ func expectedPods(cluster *corev1.StorageCluster) (int, error) {
 		nodeInfo := schedulernodeinfo.NewNodeInfo()
 		nodeInfo.SetNode(&node)
 		if ok, _, _ := predicates.PodMatchNodeSelector(dummyPod, nil, nodeInfo); ok {
-			podCount++
+			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
 
-	return podCount, nil
+	return nodeNameListWithPxPods, nil
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -841,4 +894,72 @@ func getK8SVersion() (string, error) {
 		return "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
 	}
 	return matches[1], nil
+}
+
+// GetImagesFromVersionURL gets images from version URL
+func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
+	imageListMap := make(map[string]string)
+
+	// Construct PX release manifest URL
+	pxReleaseManifestURL, err := constructPxReleaseManifestURL(url, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Get(pxReleaseManifestURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxReleaseManifestURL, err)
+	}
+
+	htmlData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
+	}
+
+	for _, line := range strings.Split(string(htmlData), "\n") {
+		if strings.Contains(line, "components") || line == "" {
+			continue
+		}
+
+		imageNameSplit := strings.Split(strings.TrimSpace(line), ": ")
+
+		if strings.Contains(line, "version") {
+			imageListMap["version"] = fmt.Sprintf("portworx/oci-monitor:%s", imageNameSplit[1])
+			continue
+		}
+		imageListMap[imageNameSplit[0]] = imageNameSplit[1]
+	}
+
+	return imageListMap, nil
+}
+
+func constructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) {
+	u, err := url.Parse(specGenURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
+	}
+	u.Path = path.Join(u.Path, endpoint, "version")
+	return u.String(), nil
+}
+
+func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
+	t := func() (interface{}, bool, error) {
+		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
+		}
+
+		if cluster.Status.Phase != "Online" {
+			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
+		}
+		return cluster, false, nil
+	}
+
+	out, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
+	}
+	cluster = out.(*corev1.StorageCluster)
+
+	return cluster, nil
 }
