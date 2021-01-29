@@ -557,7 +557,7 @@ func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 		}
 	} else {
 		dummyPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: defaultPxNodeAffinityRules().DeepCopy(),
+			NodeAffinity: defaultPxNodeAffinityRules(),
 		}
 	}
 
@@ -571,7 +571,6 @@ func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
-	fmt.Printf("KOKADBG: nodeNameListWithPxPods: %d nodes: %+v\n", len(nodeNameListWithPxPods), nodeNameListWithPxPods)
 
 	return nodeNameListWithPxPods, nil
 }
