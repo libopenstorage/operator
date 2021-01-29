@@ -456,13 +456,24 @@ func validateStorageClusterPods(
 		}
 
 		if len(pods) != len(expectedPxNodeNameList) {
-			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", expectedPodCount, len(pods))
+			return "", true, fmt.Errorf("expected pods: %v. actual pods: %v", len(expectedPxNodeNameList), len(pods))
 		}
 
+		var pxNodeNameList []string
+		var podsNotReady []string
 		for _, pod := range pods {
 			if !coreops.Instance().IsPodReady(pod) {
-				return "", true, fmt.Errorf("pod %v/%v is not yet ready", pod.Namespace, pod.Name)
+				podsNotReady = append(podsNotReady, pod.Name)
 			}
+			pxNodeNameList = append(pxNodeNameList, pod.Spec.NodeName)
+		}
+
+		if len(podsNotReady) > 0 {
+			return "", true, fmt.Errorf("pods are not Ready: %v", podsNotReady)
+		}
+
+		if !assert.ElementsMatch(&testing.T{}, expectedPxNodeNameList, pxNodeNameList) {
+			return "", false, fmt.Errorf("expected Portworx nodes: %+v, got %+v", expectedPxNodeNameList, pxNodeNameList)
 		}
 
 		return "", false, nil
@@ -476,22 +487,20 @@ func validateStorageClusterPods(
 }
 
 // Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
-func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *v1.NodeAffinity {
-	cluster.Spec.Placement = &corev1.PlacementSpec{
-		NodeAffinity: &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: []v1.NodeSelectorTerm{
-					{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      "px/enabled",
-								Operator: v1.NodeSelectorOpNotIn,
-								Values:   []string{"false"},
-							},
-							{
-								Key:      "node-role.kubernetes.io/master",
-								Operator: v1.NodeSelectorOpDoesNotExist,
-							},
+func defaultPxNodeAffinityRules() *v1.NodeAffinity {
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      "node-role.kubernetes.io/master",
+							Operator: v1.NodeSelectorOpDoesNotExist,
 						},
 					},
 				},
@@ -499,7 +508,7 @@ func addDefaultNodeAffinityRules(cluster *corev1.StorageCluster) *v1.NodeAffinit
 		},
 	}
 
-	return cluster.Spec.Placement.NodeAffinity
+	return nodeAffinity
 }
 
 func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) error {
@@ -538,7 +547,7 @@ func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	var nodeNameListWithPxPods []string
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
-		return 0, err
+		return nodeNameListWithPxPods, err
 	}
 
 	dummyPod := &v1.Pod{}
@@ -547,9 +556,8 @@ func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
 	} else {
-		defaultNodeAffinityRules := addDefaultNodeAffinityRules(cluster)
 		dummyPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: defaultNodeAffinityRules.DeepCopy(),
+			NodeAffinity: defaultPxNodeAffinityRules().DeepCopy(),
 		}
 	}
 
