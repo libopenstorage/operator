@@ -51,7 +51,9 @@ spec:
     - -t
     - /operator-test/operator.test
     - -test.v
-    - -test.short=true
+    - -test.short=SHORT_FLAG
+    - -portworx-spec-gen-url=PORTWORX_SPEC_GEN_URL
+    - -portworx-endpoint=PORTWORX_ENDPOINT
     FOCUS_TESTS
     imagePullPolicy: Always
     image: openstorage/px-operator-test:latest

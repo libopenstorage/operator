@@ -901,7 +901,7 @@ func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
 	imageListMap := make(map[string]string)
 
 	// Construct PX release manifest URL
-	pxReleaseManifestURL, err := constructPxReleaseManifestURL(url, endpoint)
+	pxReleaseManifestURL, err := ConstructPxReleaseManifestURL(url, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -933,7 +933,8 @@ func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
 	return imageListMap, nil
 }
 
-func constructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) {
+// ConstructPxReleaseManifestURL constructs Portworx install URL
+func ConstructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) {
 	u, err := url.Parse(specGenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)

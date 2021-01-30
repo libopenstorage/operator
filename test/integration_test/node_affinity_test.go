@@ -5,7 +5,6 @@ package integrationtest
 import (
 	"strings"
 	"testing"
-	"time"
 
 	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -13,17 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-)
-
-const (
-	defaultClusterName = "node-affinity-test"
-	defaultPxNamespace = "kube-system"
-
-	defaultValidateStorageClusterTimeout       = 900 * time.Second
-	defaultValidateStorageClusterRetryInterval = 30 * time.Second
-
-	defaultValidateUninstallTimeout       = 900 * time.Second
-	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
 func TestNodeAffinity(t *testing.T) {
@@ -36,9 +24,10 @@ func testNodeAffinityLabels(t *testing.T) {
 	labelValue := "true"
 
 	// Construct Portworx StorageCluster object
-	cluster := &op_corev1.StorageCluster{}
-	cluster.Name = defaultClusterName
-	cluster.Namespace = defaultPxNamespace
+	cluster, err := constructStorageCluster()
+	require.NoError(t, err)
+
+	cluster.Name = "node-affinity-labels"
 
 	// Set Node Affinity
 	cluster.Spec.Placement = &op_corev1.PlacementSpec{
@@ -86,7 +75,7 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// Validate cluster deployment
 	logrus.Infof("Get component images from versions URL")
-	imageListMap, err := testutil.GetImagesFromVersionURL(defaultPxSpecGenURL, defaultPxSpecGenEndpoint)
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
 	require.NoError(t, err)
 
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
