@@ -21,8 +21,11 @@ import (
 const (
 	specDir = "./operator-test"
 
-	defaultPxNamespace              = "kube-system"
-	pxReleaseManifestURLEnvVariable = "PX_RELEASE_MANIFEST_URL"
+	defaultPxNamespace             = "kube-system"
+	defaultPxImageName             = "portworx/oci-monitor"
+	pxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
+	pxRegistryUserEnvVarName       = "REGISTRY_USER"
+	pxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
 
 	defaultValidateStorageClusterTimeout       = 900 * time.Second
 	defaultValidateStorageClusterRetryInterval = 30 * time.Second
@@ -30,10 +33,23 @@ const (
 	defaultValidateUninstallRetryInterval      = 30 * time.Second
 )
 
-var pxSpecGenURL string
-var pxEndpoint string
+var (
+	pxDockerUsername string
+	pxDockerPassword string
+
+	pxSpecGenURL string
+	pxEndpoint   string
+)
 
 func TestMain(m *testing.M) {
+	flag.StringVar(&pxDockerUsername,
+		"portworx-docker-username",
+		"",
+		"Portworx Docker username used for pull")
+	flag.StringVar(&pxDockerPassword,
+		"portworx-docker-password",
+		"",
+		"Portworx Docker password used for pull")
 	flag.StringVar(&pxSpecGenURL,
 		"portworx-spec-gen-url",
 		"",
@@ -48,10 +64,18 @@ func TestMain(m *testing.M) {
 
 // Here we make StorageCluster object and add all the common basic parameters that all StorageCluster should have
 func constructStorageCluster() (*corev1.StorageCluster, error) {
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
 	cluster := &corev1.StorageCluster{}
 
 	// Set Namespace
 	cluster.Namespace = defaultPxNamespace
+
+	// Set Portworx Image
+	cluster.Spec.Image = imageListMap["version"]
 
 	// Set release manifest URL in case of edge-install.portworx.com
 	if strings.Contains(pxSpecGenURL, "edge") {
@@ -63,12 +87,38 @@ func constructStorageCluster() (*corev1.StorageCluster, error) {
 		cluster.Spec.CommonConfig = corev1.CommonConfig{
 			Env: []v1.EnvVar{
 				{
-					Name:  pxReleaseManifestURLEnvVariable,
+					Name:  pxReleaseManifestURLEnvVarName,
 					Value: releaseManifestURL,
 				},
+				/*
+					{
+						Name:  pxRegistryUserEnvVarName,
+						Value: pxDockerUsername,
+					},
+					{
+						Name:  pxRegistryPasswordEnvVarName,
+						Value: pxDockerPassword,
+					},
+				*/
 			},
 		}
+
+		// Add Portwrox Docker Credentials
+		if pxDockerUsername != "" && pxDockerPassword != "" {
+			newEnvVar := []v1.EnvVar{
+				{
+					Name:  pxRegistryUserEnvVarName,
+					Value: pxDockerUsername,
+				},
+				{
+					Name:  pxRegistryPasswordEnvVarName,
+					Value: pxDockerPassword,
+				},
+			}
+			cluster.Spec.CommonConfig.Env = append(cluster.Spec.CommonConfig.Env, newEnvVar...)
+		}
 	}
+
 	return cluster, nil
 }
 

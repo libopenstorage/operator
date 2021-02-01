@@ -6,12 +6,26 @@ portworx_endpoint=""
 storage_provisioner="portworx"
 focus_tests=""
 short_test=false
+portworx_docker_username=""
+portworx_docker_password=""
 for i in "$@"
 do
 case $i in
     --operator-test-image)
         echo "Operator Test Docker image to use for test: $2"
         test_image_name=$2
+        shift
+        shift
+        ;;
+    --portworx-docker-username)
+        echo "Operator Docker username used to pull OCI image for test: $2"
+        portworx_docker_username=$2
+        shift
+        shift
+        ;;
+    --portworx-docker-password)
+        echo "Portworx Docker password used to pull OCI image for test: $2"
+        portworx_docker_password=$2
         shift
         shift
         ;;
@@ -77,10 +91,14 @@ else
 fi
 sed -i 's/'PORTWORX_ENDPOINT'/'"$portworx_endpoint"'/g' /testspecs/operator-test-pod.yaml
 
-# Set ENV vars
-sed -i 's/'storage_provisioner'/'"$storage_provisioner"'/g' /testspecs/operator-test-pod.yaml
-sed -i 's/'username'/'"$SSH_USERNAME"'/g' /testspecs/operator-test-pod.yaml
-sed -i 's/'password'/'"$SSH_PASSWORD"'/g' /testspecs/operator-test-pod.yaml
+# Portworx Docker credentials
+if [ "$portworx_docker_username" != "" ] && [ "$portworx_docker_password" != "" ]; then
+	sed -i 's/'PORTWORX_DOCKER_USERNAME'/'"$portworx_docker_username"'/g' /testspecs/operator-test-pod.yaml
+	sed -i 's/'PORTWORX_DOCKER_PASSWORD'/'"$portworx_docker_password"'/g' /testspecs/operator-test-pod.yaml
+else
+    sed -i 's|'PORTWORX_DOCKER_USERNAME'|''|g' /testspecs/operator-test-pod.yaml
+	sed -i 's|'PORTWORX_DOCKER_PASSWORD'|''|g' /testspecs/operator-test-pod.yaml
+fi
 
 # Set test image
 sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g'  /testspecs/operator-test-pod.yaml
