@@ -90,16 +90,6 @@ func constructStorageCluster() (*corev1.StorageCluster, error) {
 					Name:  pxReleaseManifestURLEnvVarName,
 					Value: releaseManifestURL,
 				},
-				/*
-					{
-						Name:  pxRegistryUserEnvVarName,
-						Value: pxDockerUsername,
-					},
-					{
-						Name:  pxRegistryPasswordEnvVarName,
-						Value: pxDockerPassword,
-					},
-				*/
 			},
 		}
 
