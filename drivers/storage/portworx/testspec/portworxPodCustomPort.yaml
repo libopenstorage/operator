@@ -35,6 +35,11 @@ spec:
               value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"
               value: "kube-system"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks

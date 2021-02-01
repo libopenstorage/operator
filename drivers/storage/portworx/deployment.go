@@ -816,6 +816,15 @@ func (t *template) getEnvList() []v1.EnvVar {
 			Name:  pxutil.EnvKeyPortworxSecretsNamespace,
 			Value: t.cluster.Namespace,
 		},
+		"NODE_NAME": {
+			Name: "NODE_NAME",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "spec.nodeName",
+				},
+			},
+		},
 		"PX_TEMPLATE_VERSION": {
 			Name:  "PX_TEMPLATE_VERSION",
 			Value: templateVersion,
