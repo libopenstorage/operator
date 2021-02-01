@@ -32,6 +32,11 @@ spec:
               value: "kube-test"
             - name: "PX_SECRETS_NAMESPACE"
               value: "kube-test"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
