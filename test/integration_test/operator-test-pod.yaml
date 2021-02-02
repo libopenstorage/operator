@@ -56,6 +56,7 @@ spec:
     - -portworx-endpoint=PORTWORX_ENDPOINT
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
+    - -log-level=LOG_LEVEL
     FOCUS_TESTS
     imagePullPolicy: Always
     image: openstorage/px-operator-test:latest
