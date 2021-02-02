@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -38,6 +40,8 @@ var (
 
 	pxSpecGenURL string
 	pxEndpoint   string
+
+	logLevel string
 )
 
 func TestMain(m *testing.M) {
@@ -57,8 +61,28 @@ func TestMain(m *testing.M) {
 		"portworx-endpoint",
 		"",
 		"Portworx Endpoint that defines the version of Portworx and its components")
+	flag.StringVar(&logLevel,
+		"log-level",
+		"",
+		"Log level")
 	flag.Parse()
+	if err := setup(); err != nil {
+		logrus.Errorf("Setup failed with error: %v", err)
+		os.Exit(1)
+	}
 	os.Exit(m.Run())
+}
+
+func setup() error {
+	// Set log level
+	logrusLevel, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		return err
+	}
+	logrus.SetLevel(logrusLevel)
+	logrus.SetOutput(os.Stdout)
+
+	return nil
 }
 
 // Here we make StorageCluster object and add all the common basic parameters that all StorageCluster should have

@@ -8,6 +8,7 @@ focus_tests=""
 short_test=false
 portworx_docker_username=""
 portworx_docker_password=""
+log_level="debug"
 for i in "$@"
 do
 case $i in
@@ -59,11 +60,20 @@ case $i in
         shift
         shift
         ;;
+    --log-level)
+        echo "Log level for test: $2"
+        log_level=$2
+        shift
+        shift
+        ;;
 esac
 done
 
 apk update
 apk add jq
+
+# Set log level
+sed -i 's/'LOG_LEVEL'/'"$log_level"'/g' /testspecs/operator-test-pod.yaml
 
 # Set Operator tests to execute
 if [ "$focus_tests" != "" ]; then
