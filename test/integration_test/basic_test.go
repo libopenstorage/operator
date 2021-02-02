@@ -12,18 +12,24 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	t.Run("simpleInstall", testInstallWithEmptySpecWithAllDefaults)
+	t.Run("testBasicInstallWithAllDefaults", testBasicInstallWithAllDefaults)
 }
 
-func testInstallWithEmptySpecWithAllDefaults(t *testing.T) {
-	// Deploy cluster from spec
-	logrus.Infof("Create StorageCluster from spec")
-	cluster, err := createStorageClusterFromSpec("empty_spec.yaml")
+func testBasicInstallWithAllDefaults(t *testing.T) {
+	// Construct Portworx StorageCluster object
+	cluster, err := constructStorageCluster()
+	require.NoError(t, err)
+
+	cluster.Name = "simple-install"
+
+	// Deploy cluster
+	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+	err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deployment
 	logrus.Infof("Get component images from versions URL")
-	imageListMap, err := testutil.GetImagesFromVersionURL(defaultPxSpecGenURL, defaultPxSpecGenEndpoint)
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
 	require.NoError(t, err)
 
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
