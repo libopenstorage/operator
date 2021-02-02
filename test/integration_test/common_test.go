@@ -4,7 +4,6 @@ package integrationtest
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"path"
 	"strings"
