@@ -22,7 +22,6 @@ const (
 	specDir = "./operator-test"
 
 	defaultPxNamespace             = "kube-system"
-	defaultPxImageName             = "portworx/oci-monitor"
 	pxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
 	pxRegistryUserEnvVarName       = "REGISTRY_USER"
 	pxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
