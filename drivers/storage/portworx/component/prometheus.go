@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -264,6 +265,12 @@ func (c *prometheus) createOperatorClusterRole() error {
 					ResourceNames: []string{"anyuid"},
 					Verbs:         []string{"use"},
 				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.RestrictedPSPName},
+					Verbs:         []string{"use"},
+				},
 			},
 		},
 	)
@@ -290,6 +297,12 @@ func (c *prometheus) createPrometheusClusterRole() error {
 				{
 					NonResourceURLs: []string{"/metrics", "/federate"},
 					Verbs:           []string{"get"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.RestrictedPSPName},
+					Verbs:         []string{"use"},
 				},
 			},
 		},

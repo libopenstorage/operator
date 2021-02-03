@@ -46,3 +46,7 @@ rules:
   resources: ["securitycontextconstraints"]
   resourceNames: ["privileged"]
   verbs: ["use"]
+- apiGroups: ["policy"]
+  resources: ["podsecuritypolicies"]
+  resourceNames: ["px-restricted"]
+  verbs: ["use"]
