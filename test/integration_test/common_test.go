@@ -27,10 +27,12 @@ const (
 	pxRegistryUserEnvVarName       = "REGISTRY_USER"
 	pxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
 
-	defaultValidateStorageClusterTimeout       = 900 * time.Second
-	defaultValidateStorageClusterRetryInterval = 30 * time.Second
-	defaultValidateUninstallTimeout            = 900 * time.Second
-	defaultValidateUninstallRetryInterval      = 30 * time.Second
+	defaultValidateDeployTimeout          = 900 * time.Second
+	defaultValidateDeployRetryInterval    = 30 * time.Second
+	defaultValidateUpgradeTimeout         = 1400 * time.Second
+	defaultValidateUpgradeRetryInterval   = 60 * time.Second
+	defaultValidateUninstallTimeout       = 900 * time.Second
+	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
 var (
@@ -38,7 +40,9 @@ var (
 	pxDockerPassword string
 
 	pxSpecGenURL string
-	pxEndpoint   string
+	//pxEndpoint   string
+
+	pxUpgradeHopsURLList string
 
 	logLevel string
 )
@@ -55,11 +59,11 @@ func TestMain(m *testing.M) {
 	flag.StringVar(&pxSpecGenURL,
 		"portworx-spec-gen-url",
 		"",
-		"Portworx Spec Generator URL")
-	flag.StringVar(&pxEndpoint,
-		"portworx-endpoint",
+		"Portworx Spec Generator URL, defines what Portworx version will be deployed")
+	flag.StringVar(&pxUpgradeHopsURLList,
+		"upgrade-hops-url-list",
 		"",
-		"Portworx Endpoint that defines the version of Portworx and its components")
+		"List of Portworx Spec Generator URLs separated by commas used for upgrade hops")
 	flag.StringVar(&logLevel,
 		"log-level",
 		"",
@@ -85,12 +89,7 @@ func setup() error {
 }
 
 // Here we make StorageCluster object and add all the common basic parameters that all StorageCluster should have
-func constructStorageCluster() (*corev1.StorageCluster, error) {
-	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
-	if err != nil {
-		return nil, err
-	}
-
+func constructStorageCluster(specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
 	cluster := &corev1.StorageCluster{}
 
 	// Set Namespace
@@ -100,8 +99,8 @@ func constructStorageCluster() (*corev1.StorageCluster, error) {
 	cluster.Spec.Image = imageListMap["version"]
 
 	// Set release manifest URL in case of edge-install.portworx.com
-	if strings.Contains(pxSpecGenURL, "edge") {
-		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(pxSpecGenURL, pxEndpoint)
+	if strings.Contains(specGenURL, "edge") {
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
 		if err != nil {
 			return nil, err
 		}
@@ -141,15 +140,63 @@ func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 	if err := k8sutil.ParseObjectFromFile(filepath, scheme, cluster); err != nil {
 		return nil, err
 	}
-	if err := createStorageCluster(cluster); err != nil {
+	cluster, err := createStorageCluster(cluster)
+	if err != nil {
 		return nil, err
 	}
 	return cluster, nil
 }
 
-func createStorageCluster(cluster *corev1.StorageCluster) error {
-	_, err := operator.Instance().CreateStorageCluster(cluster)
-	return err
+func createStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
+	cluster, err := operator.Instance().CreateStorageCluster(cluster)
+	return cluster, err
+}
+
+func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
+	// Get StorageCluster
+	cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+
+	// Set Portworx Image
+	cluster.Spec.Image = imageListMap["version"]
+
+	// Set release manifest URL in case of edge-install.portworx.com
+	if strings.Contains(specGenURL, "edge") {
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
+		if err != nil {
+			return nil, err
+		}
+
+		cluster.Spec.CommonConfig = corev1.CommonConfig{
+			Env: []v1.EnvVar{
+				{
+					Name:  pxReleaseManifestURLEnvVarName,
+					Value: releaseManifestURL,
+				},
+			},
+		}
+
+		// Add Portwrox Docker Credentials
+		if pxDockerUsername != "" && pxDockerPassword != "" {
+			newEnvVar := []v1.EnvVar{
+				{
+					Name:  pxRegistryUserEnvVarName,
+					Value: pxDockerUsername,
+				},
+				{
+					Name:  pxRegistryPasswordEnvVarName,
+					Value: pxDockerPassword,
+				},
+			}
+			cluster.Spec.CommonConfig.Env = append(cluster.Spec.CommonConfig.Env, newEnvVar...)
+		}
+	}
+
+	cluster, err = operator.Instance().UpdateStorageCluster(cluster)
+	if err != nil {
+		return nil, err
+	}
+
+	return cluster, nil
 }
 
 func validateStorageClusterComponents(cluster *corev1.StorageCluster) error {
