@@ -40,7 +40,6 @@ var (
 	pxDockerPassword string
 
 	pxSpecGenURL string
-	//pxEndpoint   string
 
 	pxUpgradeHopsURLList string
 
