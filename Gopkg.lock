@@ -534,10 +534,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:84f7e6ae4db7bed4bd3595c12e34502a8a7b9ebf8d3048f44c39a1c5a3200991"
+  digest = "1:99a5f1a3cba9644e9605d84605c37ecf425e639e59dd6ce2fce9d840d92a8f74"
   name = "github.com/portworx/sched-ops"
   packages = [
-    "k8s",
     "k8s/apiextensions",
     "k8s/apps",
     "k8s/common",
@@ -548,7 +547,7 @@
     "task",
   ]
   pruneopts = "UT"
-  revision = "e4243938a4553e9fea64256a277f6d6a83a7a426"
+  revision = "5cc043f5501dbffbc49f0ce673e72165061038ee"
 
 [[projects]]
   branch = "master"
@@ -1482,7 +1481,6 @@
     "github.com/portworx/kvdb/etcd/v2",
     "github.com/portworx/kvdb/etcd/v3",
     "github.com/portworx/kvdb/mem",
-    "github.com/portworx/sched-ops/k8s",
     "github.com/portworx/sched-ops/k8s/apiextensions",
     "github.com/portworx/sched-ops/k8s/apps",
     "github.com/portworx/sched-ops/k8s/core",
@@ -1502,6 +1500,7 @@
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
+    "k8s.io/api/policy/v1beta1",
     "k8s.io/api/rbac/v1",
     "k8s.io/api/storage/v1",
     "k8s.io/api/storage/v1beta1",

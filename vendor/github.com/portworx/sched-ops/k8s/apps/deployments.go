@@ -132,7 +132,7 @@ func (c *Client) ValidateDeployment(deployment *appsv1.Deployment, timeout, retr
 			}
 		}
 
-		pods, err := c.GetDeploymentPods(deployment)
+		pods, err := c.GetDeploymentPods(dep)
 		if err != nil || pods == nil {
 			return "", true, &schederrors.ErrAppNotReady{
 				ID:    dep.Name,
@@ -209,7 +209,7 @@ func (c *Client) ValidateTerminatedDeployment(deployment *appsv1.Deployment, tim
 			return "", true, err
 		}
 
-		pods, err := c.GetDeploymentPods(deployment)
+		pods, err := c.GetDeploymentPods(dep)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return "", false, nil

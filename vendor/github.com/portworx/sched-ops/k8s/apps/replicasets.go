@@ -193,9 +193,10 @@ func (c *Client) GetReplicaSetByDeployment(deployment *appsv1.Deployment) (*apps
 		return nil, err
 	}
 
+	revisionAnnotation := "deployment.kubernetes.io/revision"
 	for _, rs := range rsets.Items {
 		for _, ownerReference := range rs.OwnerReferences {
-			if ownerReference.Name == deployment.Name {
+			if ownerReference.Name == deployment.Name && deployment.Annotations[revisionAnnotation] == rs.Annotations[revisionAnnotation] {
 				return &rs, nil
 			}
 		}
