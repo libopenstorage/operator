@@ -52,25 +52,31 @@ import (
 )
 
 const (
-	// Directory with specs
+	// SpecDir is a directory with all the specs
 	SpecDir = "./operator-test"
 
-	// Default namespace where StorageCluster is deployed
+	// DefaultPxNamespace is a default namespace for StorageCluster
 	DefaultPxNamespace = "kube-system"
 
-	// Release Manifest URL Env variable name
+	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
 
-	// Docker credentials Env variable names
-	PxRegistryUserEnvVarName     = "REGISTRY_USER"
+	// PxRegistryUserEnvVarName is a Docker username Env variable name
+	PxRegistryUserEnvVarName = "REGISTRY_USER"
+	// PxRegistryUserEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 
-	// Default timeouts and interval values
-	DefaultValidateDeployTimeout          = 900 * time.Second
-	DefaultValidateDeployRetryInterval    = 30 * time.Second
-	DefaultValidateUpgradeTimeout         = 1400 * time.Second
-	DefaultValidateUpgradeRetryInterval   = 60 * time.Second
-	DefaultValidateUninstallTimeout       = 900 * time.Second
+	// DefaultValidateDeployTimeout is a default timeout for deployment validation
+	DefaultValidateDeployTimeout = 900 * time.Second
+	// DefaultValidateDeployRetryInterval is a default retry interval for deployment validation
+	DefaultValidateDeployRetryInterval = 30 * time.Second
+	// DefaultValidateUpgradeTimeout is a default timeout for upgrade validation
+	DefaultValidateUpgradeTimeout = 1400 * time.Second
+	// DefaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
+	DefaultValidateUpgradeRetryInterval = 60 * time.Second
+	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
+	DefaultValidateUninstallTimeout = 900 * time.Second
+	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
