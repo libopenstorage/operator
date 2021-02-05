@@ -52,13 +52,20 @@ import (
 )
 
 const (
+	// Directory with specs
 	SpecDir = "./operator-test"
 
-	DefaultPxNamespace             = "kube-system"
-	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
-	PxRegistryUserEnvVarName       = "REGISTRY_USER"
-	PxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
+	// Default namespace where StorageCluster is deployed
+	DefaultPxNamespace = "kube-system"
 
+	// Release Manifest URL Env variable name
+	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
+
+	// Docker credentials Env variable names
+	PxRegistryUserEnvVarName     = "REGISTRY_USER"
+	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
+
+	// Default timeouts and interval values
 	DefaultValidateDeployTimeout          = 900 * time.Second
 	DefaultValidateDeployRetryInterval    = 30 * time.Second
 	DefaultValidateUpgradeTimeout         = 1400 * time.Second
