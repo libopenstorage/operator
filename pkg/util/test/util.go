@@ -63,7 +63,7 @@ const (
 
 	// PxRegistryUserEnvVarName is a Docker username Env variable name
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
-	// PxRegistryUserEnvVarName is a Docker password Env variable name
+	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 
 	// DefaultValidateDeployTimeout is a default timeout for deployment validation
