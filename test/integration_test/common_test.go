@@ -8,7 +8,6 @@ import (
 	"path"
 	"strings"
 	"testing"
-	"time"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -17,22 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-)
-
-const (
-	specDir = "./operator-test"
-
-	defaultPxNamespace             = "kube-system"
-	pxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
-	pxRegistryUserEnvVarName       = "REGISTRY_USER"
-	pxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
-
-	defaultValidateDeployTimeout          = 900 * time.Second
-	defaultValidateDeployRetryInterval    = 30 * time.Second
-	defaultValidateUpgradeTimeout         = 1400 * time.Second
-	defaultValidateUpgradeRetryInterval   = 60 * time.Second
-	defaultValidateUninstallTimeout       = 900 * time.Second
-	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
 var (
@@ -92,7 +75,7 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 	cluster := &corev1.StorageCluster{}
 
 	// Set Namespace
-	cluster.Namespace = defaultPxNamespace
+	cluster.Namespace = testutil.DefaultPxNamespace
 
 	// Set Portworx Image
 	cluster.Spec.Image = imageListMap["version"]
@@ -107,7 +90,7 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 		cluster.Spec.CommonConfig = corev1.CommonConfig{
 			Env: []v1.EnvVar{
 				{
-					Name:  pxReleaseManifestURLEnvVarName,
+					Name:  testutil.PxReleaseManifestURLEnvVarName,
 					Value: releaseManifestURL,
 				},
 			},
@@ -117,11 +100,11 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 		if pxDockerUsername != "" && pxDockerPassword != "" {
 			newEnvVar := []v1.EnvVar{
 				{
-					Name:  pxRegistryUserEnvVarName,
+					Name:  testutil.PxRegistryUserEnvVarName,
 					Value: pxDockerUsername,
 				},
 				{
-					Name:  pxRegistryPasswordEnvVarName,
+					Name:  testutil.PxRegistryPasswordEnvVarName,
 					Value: pxDockerPassword,
 				},
 			}
@@ -133,7 +116,7 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 }
 
 func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, error) {
-	filepath := path.Join(specDir, filename)
+	filepath := path.Join(testutil.SpecDir, filename)
 	scheme := runtime.NewScheme()
 	cluster := &corev1.StorageCluster{}
 	if err := k8sutil.ParseObjectFromFile(filepath, scheme, cluster); err != nil {
@@ -168,7 +151,7 @@ func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, ima
 		cluster.Spec.CommonConfig = corev1.CommonConfig{
 			Env: []v1.EnvVar{
 				{
-					Name:  pxReleaseManifestURLEnvVarName,
+					Name:  testutil.PxReleaseManifestURLEnvVarName,
 					Value: releaseManifestURL,
 				},
 			},
@@ -178,11 +161,11 @@ func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, ima
 		if pxDockerUsername != "" && pxDockerPassword != "" {
 			newEnvVar := []v1.EnvVar{
 				{
-					Name:  pxRegistryUserEnvVarName,
+					Name:  testutil.PxRegistryUserEnvVarName,
 					Value: pxDockerUsername,
 				},
 				{
-					Name:  pxRegistryPasswordEnvVarName,
+					Name:  testutil.PxRegistryPasswordEnvVarName,
 					Value: pxDockerPassword,
 				},
 			}

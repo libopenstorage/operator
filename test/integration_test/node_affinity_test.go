@@ -80,7 +80,7 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// Validate cluster deployment
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
-	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, "")
+	err = testutil.ValidateStorageCluster(imageListMap, cluster, testutil.DefaultValidateDeployTimeout, testutil.DefaultValidateDeployRetryInterval, "")
 	require.NoError(t, err)
 
 	// Delete cluster
@@ -90,7 +90,7 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// Validate cluster deletion
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	err = testutil.ValidateUninstallStorageCluster(cluster, testutil.DefaultValidateUninstallTimeout, testutil.DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 
 	// Remove Node Affinity label from the node

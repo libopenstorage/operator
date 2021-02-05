@@ -57,7 +57,7 @@ func testUpgradeStorageCluster(t *testing.T) {
 
 		// Validate cluster deployment
 		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateUpgradeTimeout, defaultValidateUpgradeRetryInterval, "")
+		err = testutil.ValidateStorageCluster(imageListMap, cluster, testutil.DefaultValidateUpgradeTimeout, testutil.DefaultValidateUpgradeRetryInterval, "")
 		require.NoError(t, err)
 	}
 
@@ -68,6 +68,6 @@ func testUpgradeStorageCluster(t *testing.T) {
 
 	// Validate cluster deletion
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	err = testutil.ValidateUninstallStorageCluster(cluster, testutil.DefaultValidateUninstallTimeout, testutil.DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 }

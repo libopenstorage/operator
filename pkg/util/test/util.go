@@ -51,6 +51,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const (
+	SpecDir = "./operator-test"
+
+	DefaultPxNamespace             = "kube-system"
+	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
+	PxRegistryUserEnvVarName       = "REGISTRY_USER"
+	PxRegistryPasswordEnvVarName   = "REGISTRY_PASS"
+
+	DefaultValidateDeployTimeout          = 900 * time.Second
+	DefaultValidateDeployRetryInterval    = 30 * time.Second
+	DefaultValidateUpgradeTimeout         = 1400 * time.Second
+	DefaultValidateUpgradeRetryInterval   = 60 * time.Second
+	DefaultValidateUninstallTimeout       = 900 * time.Second
+	DefaultValidateUninstallRetryInterval = 30 * time.Second
+)
+
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
@@ -338,16 +354,15 @@ func ValidateStorageCluster(
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	var pxVersion string
-	pxReleaseManifestURL := "PX_RELEASE_MANIFEST_URL"
 
 	// Construct PX Version string used to match to deployed expected PX version
 	if strings.Contains(pxImageList["version"], "_") {
 		if len(cluster.Spec.CommonConfig.Env) > 0 {
 			for _, env := range cluster.Spec.CommonConfig.Env {
-				if env.Name == pxReleaseManifestURL {
+				if env.Name == PxReleaseManifestURLEnvVarName {
 					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
 					if pxVersion == "" {
-						return fmt.Errorf("failed to extract version from value of %s", pxReleaseManifestURL)
+						return fmt.Errorf("failed to extract version from value of %s", PxReleaseManifestURLEnvVarName)
 					}
 				}
 			}
