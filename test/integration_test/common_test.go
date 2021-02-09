@@ -160,11 +160,6 @@ func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) e
 	return nil
 }
 
-func addEnvVarToStorageCluster(envVarList []v1.EnvVar, cluster *corev1.StorageCluster) *corev1.StorageCluster {
-	cluster.Spec.CommonConfig.Env = append(cluster.Spec.CommonConfig.Env, envVarList...)
-	return cluster
-}
-
 func validateStorageClusterComponents(cluster *corev1.StorageCluster) error {
 	// TODO: Validate expected components are deployed and running
 	// TODO: Validate the components are running with expected configuration
