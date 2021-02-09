@@ -55,8 +55,8 @@ const (
 	// SpecDir is a directory with all the specs
 	SpecDir = "./operator-test"
 
-	// DefaultPxNamespace is a default namespace for StorageCluster
-	DefaultPxNamespace = "kube-system"
+	// PxNamespace is a default namespace for StorageCluster
+	PxNamespace = "kube-system"
 
 	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
@@ -65,19 +65,6 @@ const (
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
 	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
-
-	// DefaultValidateDeployTimeout is a default timeout for deployment validation
-	DefaultValidateDeployTimeout = 900 * time.Second
-	// DefaultValidateDeployRetryInterval is a default retry interval for deployment validation
-	DefaultValidateDeployRetryInterval = 30 * time.Second
-	// DefaultValidateUpgradeTimeout is a default timeout for upgrade validation
-	DefaultValidateUpgradeTimeout = 1400 * time.Second
-	// DefaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
-	DefaultValidateUpgradeRetryInterval = 60 * time.Second
-	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
-	DefaultValidateUninstallTimeout = 900 * time.Second
-	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
-	DefaultValidateUninstallRetryInterval = 30 * time.Second
 )
 
 // MockDriver creates a mock storage driver
@@ -397,10 +384,8 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		for _, storageNode := range storageNodeList.Items {
 			if storageNode.Status.Phase == expectedStatus && strings.Contains(storageNode.Spec.Version, pxVersion) {
 				readyNodes++
-				logrus.Debugf("storagenode: %s, Expected status: %s Got: %s, Expected PX version: %s Got: %s", storageNode.Name, expectedStatus, storageNode.Status.Phase, pxVersion, storageNode.Spec.Version)
-			} else {
-				logrus.Debugf("storagenode: %s Expected status: %s Got: %s, Expected PX version: %s Got: %s", storageNode.Name, expectedStatus, storageNode.Status.Phase, pxVersion, storageNode.Spec.Version)
 			}
+			logrus.Debugf("storagenode: %s Expected status: %s Got: %s, Expected PX version: %s Got: %s", storageNode.Name, expectedStatus, storageNode.Status.Phase, pxVersion, storageNode.Spec.Version)
 		}
 
 		if readyNodes != len(storageNodeList.Items) {
