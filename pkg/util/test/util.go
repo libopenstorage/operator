@@ -52,12 +52,6 @@ import (
 )
 
 const (
-	// SpecDir is a directory with all the specs
-	SpecDir = "./operator-test"
-
-	// PxNamespace is a default namespace for StorageCluster
-	PxNamespace = "kube-system"
-
 	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
 

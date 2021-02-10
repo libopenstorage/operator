@@ -31,6 +31,12 @@ var (
 )
 
 const (
+	// specDir is a directory with all the specs
+	specDir = "./operator-test"
+
+	// pxNamespace is a default namespace for StorageCluster
+	pxNamespace = "kube-system"
+
 	// defaultValidateDeployTimeout is a default timeout for deployment validation
 	defaultValidateDeployTimeout = 900 * time.Second
 	// defaultValidateDeployRetryInterval is a default retry interval for deployment validation
@@ -94,7 +100,7 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 	cluster.Spec.Image = imageListMap["version"]
 
 	// Set Namespace
-	cluster.Namespace = testutil.PxNamespace
+	cluster.Namespace = pxNamespace
 
 	// Populate default Env Vars
 	if err := populateDefaultEnvVars(cluster, specGenURL); err != nil {
@@ -105,7 +111,7 @@ func constructStorageCluster(specGenURL string, imageListMap map[string]string) 
 }
 
 func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, error) {
-	filepath := path.Join(testutil.SpecDir, filename)
+	filepath := path.Join(specDir, filename)
 	scheme := runtime.NewScheme()
 	cluster := &corev1.StorageCluster{}
 	if err := k8sutil.ParseObjectFromFile(filepath, scheme, cluster); err != nil {
@@ -149,7 +155,7 @@ func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) e
 		// Add release manifest URL to Env Vars
 		envVarList = append(envVarList, []v1.EnvVar{{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL}}...)
 
-		// Add Portwrox Docker credentials to Env Vars
+		// Add Portworx Docker credentials to Env Vars
 		if pxDockerUsername != "" && pxDockerPassword != "" {
 			envVarList = append(envVarList, []v1.EnvVar{{Name: testutil.PxRegistryUserEnvVarName, Value: pxDockerUsername}, {Name: testutil.PxRegistryPasswordEnvVarName, Value: pxDockerPassword}}...)
 		}

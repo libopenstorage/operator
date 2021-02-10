@@ -82,7 +82,6 @@ sed -i 's/'SHORT_FLAG'/'"$short_test"'/g' /testspecs/operator-test-pod.yaml
 if [ "$portworx_spec_gen_url" == "" ]; then
 	portworx_spec_gen_url=$default_portworx_spec_gen_url
 fi
-echo "KOKADBG: SPEC GEN URL: $portworx_spec_gen_url"
 parsed_portworx_spec_gen_url=${portworx_spec_gen_url//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
 sed -i 's/'PORTWORX_SPEC_GEN_URL'/'"$parsed_portworx_spec_gen_url"'/g' /testspecs/operator-test-pod.yaml
 
