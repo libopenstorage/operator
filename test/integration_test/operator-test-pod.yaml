@@ -53,9 +53,9 @@ spec:
     - -test.v
     - -test.short=SHORT_FLAG
     - -portworx-spec-gen-url=PORTWORX_SPEC_GEN_URL
-    - -portworx-endpoint=PORTWORX_ENDPOINT
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
+    - -upgrade-hops-url-list=UPGRADE_HOPS_URL_LIST
     - -log-level=LOG_LEVEL
     FOCUS_TESTS
     imagePullPolicy: Always

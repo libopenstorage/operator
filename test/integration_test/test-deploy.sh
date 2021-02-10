@@ -2,8 +2,7 @@
 
 test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
-portworx_endpoint=""
-storage_provisioner="portworx"
+upgrade_hops_url_list=""
 focus_tests=""
 short_test=false
 portworx_docker_username=""
@@ -36,15 +35,9 @@ case $i in
         shift
         shift
         ;;
-    --portworx-endpoint)
-        echo "Portworx Spec Generator Endpoint to use to for test: $2"
-        portworx_endpoint=$2
-        shift
-        shift
-        ;;
-    --storage-provisioner)
-        echo "Storage provisioner to use for test: $2"
-        storage_provisioner=$2
+    --upgrade-hops-url-list)
+        echo "List of Portworx Spec Generator URLs to use as Upgrade hops for test: $2"
+        upgrade_hops_url_list=$2
         shift
         shift
         ;;
@@ -85,7 +78,6 @@ fi
 
 sed -i 's/'SHORT_FLAG'/'"$short_test"'/g' /testspecs/operator-test-pod.yaml
 
-
 # Set Portworx Spec Generator URL
 if [ "$portworx_spec_gen_url" == "" ]; then
 	portworx_spec_gen_url=$default_portworx_spec_gen_url
@@ -93,13 +85,13 @@ fi
 parsed_portworx_spec_gen_url=${portworx_spec_gen_url//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
 sed -i 's/'PORTWORX_SPEC_GEN_URL'/'"$parsed_portworx_spec_gen_url"'/g' /testspecs/operator-test-pod.yaml
 
-# Set Portworx endpoint
-if [ "$portworx_endpoint" != "" ]; then
-	echo "Portworx endpoint: $portworx_endpoint"
+# Upgrade hops URL list
+if [ "$upgrade_hops_url_list" != "" ]; then
+	parsed_upgrade_hops_url_list=${upgrade_hops_url_list//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
+	sed -i 's/'UPGRADE_HOPS_URL_LIST'/'"$parsed_upgrade_hops_url_list"'/g' /testspecs/operator-test-pod.yaml
 else
-	echo "Portworx endpoint is empty, will use default endpoint for $portworx_spec_gen_url"
+	sed -i 's|'UPGRADE_HOPS_URL_LIST'|''|g' /testspecs/operator-test-pod.yaml
 fi
-sed -i 's/'PORTWORX_ENDPOINT'/'"$portworx_endpoint"'/g' /testspecs/operator-test-pod.yaml
 
 # Portworx Docker credentials
 if [ "$portworx_docker_username" != "" ] && [ "$portworx_docker_password" != "" ]; then

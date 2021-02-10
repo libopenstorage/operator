@@ -4,7 +4,6 @@ package integrationtest
 
 import (
 	"testing"
-	"time"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/sirupsen/logrus"
@@ -16,24 +15,25 @@ func TestBasic(t *testing.T) {
 }
 
 func testBasicInstallWithAllDefaults(t *testing.T) {
+	// Get versions from URL
+	logrus.Infof("Get component images from versions URL")
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
+	require.NoError(t, err)
+
 	// Construct Portworx StorageCluster object
-	cluster, err := constructStorageCluster()
+	cluster, err := constructStorageCluster(pxSpecGenURL, imageListMap)
 	require.NoError(t, err)
 
 	cluster.Name = "simple-install"
 
 	// Deploy cluster
 	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-	err = createStorageCluster(cluster)
+	cluster, err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deployment
-	logrus.Infof("Get component images from versions URL")
-	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
-	require.NoError(t, err)
-
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
-	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateStorageClusterTimeout, defaultValidateStorageClusterRetryInterval, "")
+	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, "")
 	require.NoError(t, err)
 
 	// Delete cluster
@@ -43,6 +43,6 @@ func testBasicInstallWithAllDefaults(t *testing.T) {
 
 	// Validate cluster deletion
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-	err = testutil.ValidateUninstallStorageCluster(cluster, 15*time.Minute, 30*time.Second)
+	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 }

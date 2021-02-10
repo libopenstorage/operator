@@ -23,8 +23,13 @@ func testNodeAffinityLabels(t *testing.T) {
 	labelKey := "skip/px"
 	labelValue := "true"
 
+	// Get versions from URL
+	logrus.Infof("Get component images from versions URL")
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
+	require.NoError(t, err)
+
 	// Construct Portworx StorageCluster object
-	cluster, err := constructStorageCluster()
+	cluster, err := constructStorageCluster(pxSpecGenURL, imageListMap)
 	require.NoError(t, err)
 
 	cluster.Name = "node-affinity-labels"
@@ -70,16 +75,12 @@ func testNodeAffinityLabels(t *testing.T) {
 
 	// Deploy cluster
 	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-	err = createStorageCluster(cluster)
+	cluster, err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deployment
-	logrus.Infof("Get component images from versions URL")
-	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL, pxEndpoint)
-	require.NoError(t, err)
-
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
-	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateStorageClusterTimeout, defaultValidateStorageClusterRetryInterval, "")
+	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, "")
 	require.NoError(t, err)
 
 	// Delete cluster

@@ -28,6 +28,7 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	"github.com/portworx/sched-ops/task"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -48,6 +49,16 @@ import (
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+)
+
+const (
+	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
+	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
+
+	// PxRegistryUserEnvVarName is a Docker username Env variable name
+	PxRegistryUserEnvVarName = "REGISTRY_USER"
+	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
+	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 )
 
 // MockDriver creates a mock storage driver
@@ -295,14 +306,19 @@ func ValidateStorageCluster(
 	timeout, interval time.Duration,
 	kubeconfig ...string,
 ) error {
-	var err error
+	// Set kubeconfig
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
 
-	// Validate StorageCluster is initialized
+	// Validate StorageCluster
 	liveCluster, err := validateStorageClusterIsOnline(clusterSpec, timeout, interval)
 	if err != nil {
+		return err
+	}
+
+	// Validate StorageNodes
+	if err = validateStorageNodes(pxImageList, clusterSpec, timeout, interval); err != nil {
 		return err
 	}
 
@@ -324,6 +340,55 @@ func ValidateStorageCluster(
 
 	// TODO: Add validation to check what is expected (clusterSpec) and what actually got deployed (liveSpec)
 	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	var pxVersion string
+
+	// Construct PX Version string used to match to deployed expected PX version
+	if strings.Contains(pxImageList["version"], "_") {
+		if len(cluster.Spec.CommonConfig.Env) > 0 {
+			for _, env := range cluster.Spec.CommonConfig.Env {
+				if env.Name == PxReleaseManifestURLEnvVarName {
+					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
+					if pxVersion == "" {
+						return fmt.Errorf("failed to extract version from value of %s", PxReleaseManifestURLEnvVarName)
+					}
+				}
+			}
+		}
+	} else {
+		pxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+	}
+
+	t := func() (interface{}, bool, error) {
+		// Get all StorageNodes
+		storageNodeList, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+
+		// Check StorageNodes status and PX version
+		expectedStatus := "Online"
+		var readyNodes int
+		for _, storageNode := range storageNodeList.Items {
+			if storageNode.Status.Phase == expectedStatus && strings.Contains(storageNode.Spec.Version, pxVersion) {
+				readyNodes++
+			}
+			logrus.Debugf("storagenode: %s Expected status: %s Got: %s, Expected PX version: %s Got: %s", storageNode.Name, expectedStatus, storageNode.Status.Phase, pxVersion, storageNode.Spec.Version)
+		}
+
+		if readyNodes != len(storageNodeList.Items) {
+			return nil, true, fmt.Errorf("waiting for all storagenodes to be ready: %d/%d", readyNodes, len(storageNodeList.Items))
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
 
@@ -897,11 +962,11 @@ func getK8SVersion() (string, error) {
 }
 
 // GetImagesFromVersionURL gets images from version URL
-func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
+func GetImagesFromVersionURL(url string) (map[string]string, error) {
 	imageListMap := make(map[string]string)
 
 	// Construct PX release manifest URL
-	pxReleaseManifestURL, err := ConstructPxReleaseManifestURL(url, endpoint)
+	pxReleaseManifestURL, err := ConstructPxReleaseManifestURL(url)
 	if err != nil {
 		return nil, err
 	}
@@ -934,12 +999,12 @@ func GetImagesFromVersionURL(url, endpoint string) (map[string]string, error) {
 }
 
 // ConstructPxReleaseManifestURL constructs Portworx install URL
-func ConstructPxReleaseManifestURL(specGenURL, endpoint string) (string, error) {
+func ConstructPxReleaseManifestURL(specGenURL string) (string, error) {
 	u, err := url.Parse(specGenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
 	}
-	u.Path = path.Join(u.Path, endpoint, "version")
+	u.Path = path.Join(u.Path, "version")
 	return u.String(), nil
 }
 
@@ -951,6 +1016,9 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 		}
 
 		if cluster.Status.Phase != "Online" {
+			if cluster.Status.Phase == "" {
+				return nil, true, fmt.Errorf("failed to get cluster status")
+			}
 			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
 		}
 		return cluster, false, nil
