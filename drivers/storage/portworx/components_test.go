@@ -1558,6 +1558,78 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 			util.FailedComponentReason, component.PVCControllerComponentName))
 }
 
+func TestPVCControllerCustomPorts(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Default PVC controller ports
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port")
+	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
+	require.Equal(t, "10252",
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+
+	// Change the insecure port
+	expectedPort := "10000"
+	cluster.Annotations[pxutil.AnnotationPVCControllerPort] = expectedPort
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port="+expectedPort)
+	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
+	require.Equal(t, expectedPort,
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+
+	// Change the secure port
+	expectedSecurePort := "10001"
+	cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort] = expectedSecurePort
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port="+expectedSecurePort)
+	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port="+expectedPort)
+	require.Equal(t, expectedPort,
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+
+	// Reset the ports to default
+	cluster.Annotations[pxutil.AnnotationPVCControllerPort] = ""
+	cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort] = ""
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
+	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port")
+	require.Equal(t, "10252",
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+}
+
 func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
