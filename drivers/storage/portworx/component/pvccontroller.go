@@ -35,8 +35,9 @@ const (
 	// PVCDeploymentName name of the PVC controller deployment
 	PVCDeploymentName = "portworx-pvc-controller"
 
-	pvcContainerName        = "portworx-pvc-controller-manager"
-	defaultPVCControllerCPU = "200m"
+	pvcContainerName                 = "portworx-pvc-controller-manager"
+	defaultPVCControllerCPU          = "200m"
+	defaultPVCControllerInsecurePort = "10252"
 )
 
 type pvcController struct {
@@ -275,6 +276,12 @@ func (c *pvcController) createDeployment(
 	} else {
 		command = append(command, "--leader-elect-resource-lock=configmaps")
 	}
+	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
+		command = append(command, "--port="+port)
+	}
+	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
+		command = append(command, "--secure-port="+securePort)
+	}
 
 	existingDeployment := &appsv1.Deployment{}
 	err = c.k8sClient.Get(
@@ -327,6 +334,11 @@ func getPVCControllerDeploymentSpec(
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
+
+	healthCheckPort := defaultPVCControllerInsecurePort
+	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
+		healthCheckPort = port
+	}
 
 	labels := map[string]string{
 		"name": PVCDeploymentName,
@@ -381,7 +393,7 @@ func getPVCControllerDeploymentSpec(
 									HTTPGet: &v1.HTTPGetAction{
 										Host:   "127.0.0.1",
 										Path:   "/healthz",
-										Port:   intstr.FromInt(10252),
+										Port:   intstr.Parse(healthCheckPort),
 										Scheme: v1.URISchemeHTTP,
 									},
 								},

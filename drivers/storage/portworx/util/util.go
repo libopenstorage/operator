@@ -71,6 +71,12 @@ const (
 	// AnnotationPVCControllerCPU annotation for overriding the default CPU for PVC
 	// controller deployment
 	AnnotationPVCControllerCPU = pxAnnotationPrefix + "/pvc-controller-cpu"
+	// AnnotationPVCControllerPort annotation for overriding the default port for PVC
+	// controller deployment
+	AnnotationPVCControllerPort = pxAnnotationPrefix + "/pvc-controller-port"
+	// AnnotationPVCControllerSecurePort annotation for overriding the default secure
+	// port for PVC controller deployment
+	AnnotationPVCControllerSecurePort = pxAnnotationPrefix + "/pvc-controller-secure-port"
 	// AnnotationAutopilotCPU annotation for overriding the default CPU for Autopilot
 	AnnotationAutopilotCPU = pxAnnotationPrefix + "/autopilot-cpu"
 	// AnnotationServiceType annotation indicating k8s service type for all services
