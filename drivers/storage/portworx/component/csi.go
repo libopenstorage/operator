@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -177,12 +178,6 @@ func (c *csi) createClusterRole(
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups:     []string{"extensions"},
-				Resources:     []string{"podsecuritypolicies"},
-				ResourceNames: []string{"privileged"},
-				Verbs:         []string{"use"},
-			},
-			{
 				APIGroups: []string{"apiextensions.k8s.io"},
 				Resources: []string{"customresourcedefinitions"},
 				Verbs:     []string{"*"},
@@ -272,6 +267,12 @@ func (c *csi) createClusterRole(
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
 				ResourceNames: []string{"privileged"},
+				Verbs:         []string{"use"},
+			},
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{constants.PrivilegedPSPName},
 				Verbs:         []string{"use"},
 			},
 		},

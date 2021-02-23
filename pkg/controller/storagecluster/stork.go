@@ -266,6 +266,12 @@ func (c *Controller) createStorkClusterRole() error {
 					Resources: []string{"*"},
 					Verbs:     []string{"*"},
 				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.RestrictedPSPName},
+					Verbs:         []string{"use"},
+				},
 			},
 		},
 	)
@@ -354,6 +360,12 @@ func (c *Controller) createStorkSchedClusterRole() error {
 					APIGroups: []string{"coordination.k8s.io"},
 					Resources: []string{"leases"},
 					Verbs:     []string{"get", "list", "watch", "create", "update"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.RestrictedPSPName},
+					Verbs:         []string{"use"},
 				},
 			},
 		},

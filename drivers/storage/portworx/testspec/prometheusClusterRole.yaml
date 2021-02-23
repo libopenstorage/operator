@@ -17,3 +17,7 @@ rules:
     verbs: ["get"]
   - nonResourceURLs: ["/metrics", "/federate"]
     verbs: ["get"]
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    resourceNames: ["px-restricted"]
+    verbs: ["use"]

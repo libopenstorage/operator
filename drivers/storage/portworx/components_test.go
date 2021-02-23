@@ -9336,6 +9336,176 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPodSecurityPolicies(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "autopilotimage",
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "T",
+			},
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// check that podsecuritpolicies have been created
+	expectedPSPs := []policyv1beta1.PodSecurityPolicy{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: constants.PrivilegedPSPName,
+			},
+			Spec: policyv1beta1.PodSecurityPolicySpec{
+				Privileged:             true,
+				HostNetwork:            true,
+				ReadOnlyRootFilesystem: true,
+				Volumes: []policyv1beta1.FSType{
+					policyv1beta1.ConfigMap,
+					policyv1beta1.Secret,
+					policyv1beta1.HostPath,
+					policyv1beta1.EmptyDir,
+				},
+				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
+					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
+				},
+				FSGroup: policyv1beta1.FSGroupStrategyOptions{
+					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
+				},
+				SELinux: policyv1beta1.SELinuxStrategyOptions{
+					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
+				},
+				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
+					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: constants.RestrictedPSPName,
+			},
+			Spec: policyv1beta1.PodSecurityPolicySpec{
+				Privileged:             false,
+				ReadOnlyRootFilesystem: true,
+				Volumes: []policyv1beta1.FSType{
+					policyv1beta1.ConfigMap,
+					policyv1beta1.Secret,
+					policyv1beta1.HostPath,
+					policyv1beta1.EmptyDir,
+				},
+				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
+					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
+				},
+				FSGroup: policyv1beta1.FSGroupStrategyOptions{
+					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
+				},
+				SELinux: policyv1beta1.SELinuxStrategyOptions{
+					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
+				},
+				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
+					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
+				},
+			},
+		},
+	}
+	expectedOwnerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+
+		require.Equalf(t, metav1.GetControllerOf(policy), expectedOwnerRef, "check owner reference for %s podsecuritypolicy", expectedPolicy.Name)
+
+		require.Equalf(t, expectedPolicy.Spec, policy.Spec, "check psp spec for %s", expectedPolicy.Name)
+	}
+
+	// check each px role/clusterrole has a podsecuritypolicy assigned
+	expectedClusterRoles := []struct {
+		clusterRoleName string
+		pspName         string
+	}{
+		{
+			clusterRoleName: component.PxClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
+			clusterRoleName: component.CSIClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
+			clusterRoleName: component.AutopilotClusterRoleName,
+			pspName:         constants.RestrictedPSPName,
+		},
+		{
+			clusterRoleName: component.PrometheusClusterRoleName,
+			pspName:         constants.RestrictedPSPName,
+		},
+		{
+			clusterRoleName: component.PrometheusOperatorClusterRoleName,
+			pspName:         constants.RestrictedPSPName,
+		},
+		{
+			clusterRoleName: component.PVCClusterRoleName,
+			pspName:         constants.RestrictedPSPName,
+		},
+		// stork
+		// stork-scheduler
+	}
+
+	containsPolicyRule := func(rules []rbacv1.PolicyRule, verb, apiGroup, resource, resourceName string) bool {
+		for _, rule := range rules {
+			if contains(rule.Verbs, verb) &&
+				contains(rule.APIGroups, apiGroup) &&
+				contains(rule.Resources, resource) &&
+				contains(rule.ResourceNames, resourceName) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, expected := range expectedClusterRoles {
+		clusterRole := &rbacv1.ClusterRole{}
+		err = testutil.Get(k8sClient, clusterRole, expected.clusterRoleName, "")
+		require.NoError(t, err)
+
+		if !containsPolicyRule(clusterRole.Rules, "use", "policy", "podsecuritypolicies", expected.pspName) {
+			t.Fatalf("check %s cluster role: podsecuritypolicy: exptected=%s, got %v", expected.clusterRoleName, expected.pspName, clusterRole)
+		}
+	}
+}
+
+func contains(slice []string, val string) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}
+
 func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -9414,4 +9584,5 @@ func reregisterComponents() {
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
 	component.RegisterSecurityComponent()
+	component.RegisterPSPComponent()
 }
