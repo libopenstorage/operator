@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -255,12 +256,6 @@ func (c *portworxBasic) createClusterRole() error {
 					Verbs:     []string{"get", "list", "create", "update"},
 				},
 				{
-					APIGroups:     []string{"extensions"},
-					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{"privileged"},
-					Verbs:         []string{"use"},
-				},
-				{
 					APIGroups: []string{"portworx.io"},
 					Resources: []string{"volumeplacementstrategies"},
 					Verbs:     []string{"get", "list"},
@@ -289,6 +284,12 @@ func (c *portworxBasic) createClusterRole() error {
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
 					ResourceNames: []string{"privileged"},
+					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.PrivilegedPSPName},
 					Verbs:         []string{"use"},
 				},
 			},

@@ -27,3 +27,11 @@ const (
 	// pod is safe to be evicted when scaling down a node
 	AnnotationPodSafeToEvict = "cluster-autoscaler.kubernetes.io/safe-to-evict"
 )
+
+const (
+	// PrivilegedPSPName is a pod security policy used for portworx deployments which use privileged security context.
+	PrivilegedPSPName = "px-privileged"
+	// RestrictedPSPName is a pod security policy used by portworx deployments which require no special privileges and
+	// capabilities.
+	RestrictedPSPName = "px-restricted"
+)

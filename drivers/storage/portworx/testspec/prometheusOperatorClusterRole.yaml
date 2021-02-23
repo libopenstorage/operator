@@ -56,3 +56,7 @@ rules:
       - securitycontextconstraints
     resourceNames: ["anyuid"]
     verbs: ["use"]
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    resourceNames: ["px-restricted"]
+    verbs: ["use"]

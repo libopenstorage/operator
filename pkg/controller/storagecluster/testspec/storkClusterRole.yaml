@@ -6,3 +6,7 @@ rules:
   - apiGroups: ["*"]
     resources: ["*"]
     verbs: ["*"]
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    resourceNames: ["px-restricted"]
+    verbs: ["use"]
