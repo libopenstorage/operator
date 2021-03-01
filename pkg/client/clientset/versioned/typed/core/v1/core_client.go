@@ -76,7 +76,9 @@ func setConfigDefaults(config *rest.Config) error {
 	gv := v1.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	// Note: renamed to WithoutConversionCodecFactory in k8s 1.15:
+	// https://github.com/kubernetes/kubernetes/commit/104746f97755b98932020e4887f68094b0b79dec#diff-b5399a7e549dfbdb1c49102000fbce217275afc28d189a7a406f58dd0c83a633R260
+	config.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()

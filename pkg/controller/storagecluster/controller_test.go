@@ -45,7 +45,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
+	schedulerapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -5711,7 +5711,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	timeAdded := metav1.Now()
 	k8sNode.Spec.Taints = []v1.Taint{
 		{
-			Key:       schedulerapi.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: &timeAdded,
 		},
 	}
@@ -5726,7 +5726,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	timeAdded = metav1.NewTime(metav1.Now().Add(-constants.DefaultCordonedRestartDelay))
 	k8sNode.Spec.Taints = []v1.Taint{
 		{
-			Key:       schedulerapi.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: &timeAdded,
 		},
 	}

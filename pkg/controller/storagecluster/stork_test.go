@@ -16,7 +16,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
+	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
 func TestStorkInstallation(t *testing.T) {
@@ -92,13 +92,13 @@ func TestStorkInstallation(t *testing.T) {
 			Kind:       "Policy",
 			APIVersion: "v1",
 		},
-		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+		Extenders: []schedulerv1.Extender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    5 * time.Minute,
+				HTTPTimeout:    metav1.Duration{5 * time.Minute},
 			},
 		},
 	})
@@ -1939,13 +1939,13 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 			Kind:       "Policy",
 			APIVersion: "v1",
 		},
-		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+		Extenders: []schedulerv1.Extender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    5 * time.Minute,
+				HTTPTimeout:    metav1.Duration{5 * time.Minute},
 			},
 		},
 	}
@@ -1963,8 +1963,8 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 
 	// TestCase: Reconcile to original policy if changed by the user
 	modifiedPolicy := defaultPolicy.DeepCopy()
-	modifiedPolicy.ExtenderConfigs[0].PrioritizeVerb = ""
-	modifiedPolicy.ExtenderConfigs[0].Weight = 10
+	modifiedPolicy.Extenders[0].PrioritizeVerb = ""
+	modifiedPolicy.Extenders[0].Weight = 10
 	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)
 
 	storkConfigMap.Data["policy.cfg"] = string(modifiedPolicyBytes)

@@ -29,7 +29,6 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/pkg/scheduler/api"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -106,7 +105,7 @@ func TestRegisterCRD(t *testing.T) {
 
 	crds, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
+		List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 
@@ -115,7 +114,7 @@ func TestRegisterCRD(t *testing.T) {
 	}
 	snCRD, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(storageNodeCRDName, metav1.GetOptions{})
+		Get(context.TODO(), storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, storageNodeCRDName, snCRD.Name)
 	require.Equal(t, corev1.SchemeGroupVersion.Group, snCRD.Spec.Group)
@@ -136,7 +135,7 @@ func TestRegisterCRD(t *testing.T) {
 	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
 	snCRD.ResourceVersion = "1000"
-	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(snCRD)
+	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
 
 	go func() {
 		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
@@ -149,14 +148,14 @@ func TestRegisterCRD(t *testing.T) {
 
 	crds, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
+		List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 	require.Equal(t, storageNodeCRDName, crds.Items[0].Name)
 
 	snCRD, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(storageNodeCRDName, metav1.GetOptions{})
+		Get(context.TODO(), storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "1000", snCRD.ResourceVersion)
 }
@@ -204,7 +203,7 @@ func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
 
 	crds, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
+		List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 	for _, crd := range crds.Items {
@@ -297,7 +296,7 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err := controller.Reconcile(request)
+	_, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	checkStoragePod := &v1.Pod{}
@@ -313,7 +312,7 @@ func TestReconcile(t *testing.T) {
 	err = controller.client.Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	checkStoragePod = &v1.Pod{}
@@ -329,7 +328,7 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	checkStorageLessPod := &v1.Pod{}
 	err = testutil.Get(controller.client, checkStorageLessPod, podNode2.Name, podNode2.Namespace)
@@ -344,7 +343,7 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 }
 
@@ -427,7 +426,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	_, err := controller.Reconcile(storageNodeRequest)
+	_, err := controller.Reconcile(context.TODO(), storageNodeRequest)
 	require.NoError(t, err)
 
 	checkStoragePod := &v1.Pod{}
@@ -443,7 +442,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	_, err = controller.Reconcile(storageLessNodeRequest)
+	_, err = controller.Reconcile(context.TODO(), storageLessNodeRequest)
 	require.NoError(t, err)
 
 	checkStorageLessPod := &v1.Pod{}
@@ -457,7 +456,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict] = "false"
 	k8sClient.Update(context.TODO(), checkStorageLessPod)
 
-	_, err = controller.Reconcile(storageLessNodeRequest)
+	_, err = controller.Reconcile(context.TODO(), storageLessNodeRequest)
 	require.NoError(t, err)
 
 	checkStorageLessPod = &v1.Pod{}
@@ -478,7 +477,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	)
 	k8sClient.Update(context.TODO(), storageLessNode)
 
-	_, err = controller.Reconcile(storageLessNodeRequest)
+	_, err = controller.Reconcile(context.TODO(), storageLessNodeRequest)
 	require.NoError(t, err)
 
 	checkStorageLessPod = &v1.Pod{}
@@ -588,7 +587,7 @@ func TestReconcileKVDB(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err := controller.Reconcile(request)
+	_, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	// check if reconcile created kvdb pods
@@ -605,7 +604,7 @@ func TestReconcileKVDB(t *testing.T) {
 	// test reconcile when k8s node has been deleted
 	err = controller.client.Delete(context.TODO(), k8sNode1)
 	require.NoError(t, err)
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "kvdb-pod-node2", testKVDBNode2, controller.kvdbPodLabels(cluster), clusterRef)
@@ -616,7 +615,7 @@ func TestReconcileKVDB(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	checkPod := &v1.Pod{}
@@ -705,7 +704,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	_, err := controller.Reconcile(request)
+	_, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList := &v1.PodList{}
@@ -717,7 +716,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	machine.DeletionTimestamp = nil
 	k8sClient.Update(context.TODO(), machine)
 
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList = &v1.PodList{}
@@ -731,7 +730,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	k8sClient.Update(context.TODO(), k8sNode)
 	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
 
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList = &v1.PodList{}
@@ -746,14 +745,14 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	timeAdded := metav1.Now()
 	k8sNode.Spec.Taints = []v1.Taint{
 		{
-			Key:       api.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: &timeAdded,
 		},
 	}
 	k8sClient.Update(context.TODO(), k8sNode)
 	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
 
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList = &v1.PodList{}
@@ -769,7 +768,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	)
 	k8sClient.Update(context.TODO(), k8sNode)
 
-	_, err = controller.Reconcile(request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList = &v1.PodList{}
@@ -867,7 +866,7 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
-			Get(crdName, metav1.GetOptions{})
+			Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -876,7 +875,7 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
 			return true, nil
 		}
 		return false, nil

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
 	osdapi "github.com/libopenstorage/openstorage/api"
@@ -21,6 +20,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

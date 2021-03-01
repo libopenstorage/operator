@@ -16,7 +16,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
-	e2 "github.com/portworx/kvdb/etcd/v2"
+	e2 "github.com/portworx/kvdb/etcd/v3"
 	e3 "github.com/portworx/kvdb/etcd/v3"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
