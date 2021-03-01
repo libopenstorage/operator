@@ -35,10 +35,13 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 all: operator pretest
 
 vendor-update:
-	dep ensure -v -update
+	go mod download
 
 vendor:
-	dep ensure -v
+	go mod vendor
+
+vendor-tidy:
+	go mod tidy
 
 lint:
 	go get -u golang.org/x/lint/golint

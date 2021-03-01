@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	prometheusclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
+	prometheusclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"

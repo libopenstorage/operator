@@ -1,7 +1,9 @@
 package prometheus
 
 import (
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"context"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +28,7 @@ func (c *Client) ListPrometheusRules(namespace string) (*monitoringv1.Prometheus
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().PrometheusRules(namespace).List(metav1.ListOptions{})
+	return c.prometheus.MonitoringV1().PrometheusRules(namespace).List(context.TODO(), metav1.ListOptions{})
 }
 
 // GetPrometheusRule gets the prometheus rule that matches the given name
@@ -35,7 +37,7 @@ func (c *Client) GetPrometheusRule(name string, namespace string) (*monitoringv1
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().PrometheusRules(namespace).Get(name, metav1.GetOptions{})
+	return c.prometheus.MonitoringV1().PrometheusRules(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 // CreatePrometheusRule creates the given prometheus rule
@@ -49,7 +51,7 @@ func (c *Client) CreatePrometheusRule(rule *monitoringv1.PrometheusRule) (*monit
 		ns = corev1.NamespaceDefault
 	}
 
-	return c.prometheus.MonitoringV1().PrometheusRules(ns).Create(rule)
+	return c.prometheus.MonitoringV1().PrometheusRules(ns).Create(context.TODO(), rule, metav1.CreateOptions{})
 }
 
 // UpdatePrometheusRule updates the given prometheus rule
@@ -58,7 +60,7 @@ func (c *Client) UpdatePrometheusRule(rule *monitoringv1.PrometheusRule) (*monit
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().PrometheusRules(rule.Namespace).Update(rule)
+	return c.prometheus.MonitoringV1().PrometheusRules(rule.Namespace).Update(context.TODO(), rule, metav1.UpdateOptions{})
 }
 
 // DeletePrometheusRule deletes the given prometheus rule
@@ -67,7 +69,7 @@ func (c *Client) DeletePrometheusRule(name, namespace string) error {
 		return err
 	}
 
-	return c.prometheus.MonitoringV1().PrometheusRules(namespace).Delete(name, &metav1.DeleteOptions{
+	return c.prometheus.MonitoringV1().PrometheusRules(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deleteForegroundPolicy,
 	})
 }

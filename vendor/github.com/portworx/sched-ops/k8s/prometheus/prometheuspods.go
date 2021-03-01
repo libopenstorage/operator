@@ -1,7 +1,9 @@
 package prometheus
 
 import (
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"context"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +28,7 @@ func (c *Client) ListPrometheuses(namespace string) (*monitoringv1.PrometheusLis
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Prometheuses(namespace).List(metav1.ListOptions{})
+	return c.prometheus.MonitoringV1().Prometheuses(namespace).List(context.TODO(), metav1.ListOptions{})
 }
 
 // GetPrometheus gets the prometheus instance that matches the given name
@@ -35,7 +37,7 @@ func (c *Client) GetPrometheus(name string, namespace string) (*monitoringv1.Pro
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Prometheuses(namespace).Get(name, metav1.GetOptions{})
+	return c.prometheus.MonitoringV1().Prometheuses(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 // CreatePrometheus creates the given prometheus
@@ -49,7 +51,7 @@ func (c *Client) CreatePrometheus(prometheus *monitoringv1.Prometheus) (*monitor
 		ns = corev1.NamespaceDefault
 	}
 
-	return c.prometheus.MonitoringV1().Prometheuses(ns).Create(prometheus)
+	return c.prometheus.MonitoringV1().Prometheuses(ns).Create(context.TODO(), prometheus, metav1.CreateOptions{})
 }
 
 // UpdatePrometheus updates the given prometheus
@@ -58,7 +60,7 @@ func (c *Client) UpdatePrometheus(prometheus *monitoringv1.Prometheus) (*monitor
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Prometheuses(prometheus.Namespace).Update(prometheus)
+	return c.prometheus.MonitoringV1().Prometheuses(prometheus.Namespace).Update(context.TODO(), prometheus, metav1.UpdateOptions{})
 }
 
 // DeletePrometheus deletes the given prometheus
@@ -67,7 +69,7 @@ func (c *Client) DeletePrometheus(name, namespace string) error {
 		return err
 	}
 
-	return c.prometheus.MonitoringV1().Prometheuses(namespace).Delete(name, &metav1.DeleteOptions{
+	return c.prometheus.MonitoringV1().Prometheuses(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deleteForegroundPolicy,
 	})
 }
