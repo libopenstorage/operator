@@ -24,15 +24,21 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
 	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
+
+	// CSIDriverV1BetaGVR represents a resource for dynamically interacting with a CSI Driverd
+	CSIDriverV1BetaGVR = schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1beta1", Resource: "CSIDriver"}
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -612,6 +618,89 @@ func CreateOrUpdateCSIDriver(
 		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
 		return k8sClient.Update(context.TODO(), existingDriver)
 	}
+	return nil
+}
+
+// apiVersion: s
+// kind: CSIDriver
+// metadata:
+//   name: pxd.portworx.com
+// spec:
+//   attachRequired: false
+//   podInfoOnMount: true
+//   volumeLifecycleModes:
+//   - Persistent
+//   - Ephemeral
+
+func getUnstructuredCSIDriver(ephemeral bool, anthosCR string) *unstructured.Unstructured {
+	csiDriver := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"kind": "CSIDriver",
+			"metadata": map[string]interface{}{
+				"name": "pxd.portworx.com",
+			},
+			"apiVersion": "storage.k8s.io/v1beta1",
+			"spec": map[string]interface{}{
+				"attachRequired": false,
+			},
+		},
+	}
+	if anthosCR != "" {
+		csiDriver.Object["metadata"] = map[string]interface{}{
+			"name": "pxd.portworx.com",
+			"annotations": map[string]interface{}{
+				"configmanagement.gke.io/cluster-selector": anthosCR,
+			},
+		}
+	}
+	if ephemeral {
+		csiDriver.Object["volumeLifecylceModes"] = []string{
+			"Persistent",
+			"Ephemeral",
+		}
+	}
+
+	return csiDriver
+}
+
+// CreateOrUpdateCSIDriverDynamic creates a CSIDriver if not present,
+// else updates it if it has changed using the dynamic client
+func CreateOrUpdateCSIDriverDynamic(
+	includeEphemeral bool,
+	anthosCR string,
+) error {
+	// create client
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("error getting cluster config: %v", err)
+	}
+	dc, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return fmt.Errorf("error creating dynamic client: %v", err)
+	}
+	client := dc.Resource(CSIDriverV1BetaGVR)
+
+	// Create if does not exist
+	newDriver := getUnstructuredCSIDriver(includeEphemeral, anthosCR)
+	driverName := "pxd.portworx.com"
+	existingDriver, err := client.Get(driverName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := client.Create(newDriver, metav1.CreateOptions{}, []string{}...)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return fmt.Errorf("error creating dynamic client: %v", err)
+	}
+
+	// Update if exists and is not equal
+	if !reflect.DeepEqual(newDriver.Object, existingDriver.Object) {
+		_, err := client.Update(newDriver, metav1.UpdateOptions{}, []string{}...)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

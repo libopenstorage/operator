@@ -41,6 +41,11 @@ type CSIConfiguration struct {
 	// IncludeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
 	// In Kubernetes Kubernetes 1.14+ leader election does not use configmaps.
 	IncludeEndpointsAndConfigMapsForLeases bool
+	// IncludeEphemeralSupport adds the ephemeral volume capability to our CSI driver.
+	// We support the ephemeral CSI driver mode in PX 2.5+
+	IncludeEphemeralSupport bool
+	// Anthos CR for declaring the anthos CR in the CSI Driver object
+	AnthosCR string
 }
 
 // CSIImages holds the images of all the CSI sidecar containers
@@ -169,6 +174,12 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		// in favor of the CSIDriver object.
 		cv.IncludeAttacher = false
 		cv.IncludeCsiDriverInfo = true
+	}
+
+	// Ephemeral support only added in PX 2.5 or greater
+	pxVer2_5, _ := version.NewVersion("2.5")
+	if g.pxVersion.GreaterThanOrEqual(pxVer2_5) {
+		cv.IncludeEphemeralSupport = true
 	}
 
 	return cv

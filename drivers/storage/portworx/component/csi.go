@@ -16,7 +16,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -824,18 +823,8 @@ func getCSIStatefulSetSpec(
 func (c *csi) createCSIDriver(
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
-	return k8sutil.CreateOrUpdateCSIDriver(
-		c.k8sClient,
-		&storagev1beta1.CSIDriver{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: csiConfig.DriverName,
-			},
-			Spec: storagev1beta1.CSIDriverSpec{
-				AttachRequired: boolPtr(false),
-				PodInfoOnMount: boolPtr(false),
-			},
-		},
-	)
+	// TODO populate AnthosCR once operator supports anthos
+	return k8sutil.CreateOrUpdateCSIDriverDynamic(csiConfig.IncludeEphemeralSupport, csiConfig.AnthosCR)
 }
 
 func createCSINodeInfoCRD() error {
