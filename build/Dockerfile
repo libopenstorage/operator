@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/rhel7-atomic:7.7
+FROM registry.access.redhat.com/rhel7-atomic:7.9
 
 LABEL name="OpenStorage Operator" \
       vendor="openstorage.org" \
