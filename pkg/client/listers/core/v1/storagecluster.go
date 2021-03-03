@@ -26,8 +26,10 @@ import (
 )
 
 // StorageClusterLister helps list StorageClusters.
+// All objects returned here must be treated as read-only.
 type StorageClusterLister interface {
 	// List lists all StorageClusters in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.StorageCluster, err error)
 	// StorageClusters returns an object that can list and get StorageClusters.
 	StorageClusters(namespace string) StorageClusterNamespaceLister
@@ -58,10 +60,13 @@ func (s *storageClusterLister) StorageClusters(namespace string) StorageClusterN
 }
 
 // StorageClusterNamespaceLister helps list and get StorageClusters.
+// All objects returned here must be treated as read-only.
 type StorageClusterNamespaceLister interface {
 	// List lists all StorageClusters in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.StorageCluster, err error)
 	// Get retrieves the StorageCluster from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.StorageCluster, error)
 	StorageClusterNamespaceListerExpansion
 }

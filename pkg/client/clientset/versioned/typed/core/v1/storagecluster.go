@@ -20,13 +20,14 @@ package v1
 
 import (
 	"context"
+	"time"
+
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	scheme "github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	rest "k8s.io/client-go/rest"
-	"time"
 )
 
 // StorageClustersGetter has a method to return a StorageClusterInterface.
@@ -37,15 +38,15 @@ type StorageClustersGetter interface {
 
 // StorageClusterInterface has methods to work with StorageCluster resources.
 type StorageClusterInterface interface {
-	Create(*v1.StorageCluster) (*v1.StorageCluster, error)
-	Update(*v1.StorageCluster) (*v1.StorageCluster, error)
-	UpdateStatus(*v1.StorageCluster) (*v1.StorageCluster, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.StorageCluster, error)
-	List(opts metav1.ListOptions) (*v1.StorageClusterList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.StorageCluster, err error)
+	Create(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.CreateOptions) (*v1.StorageCluster, error)
+	Update(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.UpdateOptions) (*v1.StorageCluster, error)
+	UpdateStatus(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.UpdateOptions) (*v1.StorageCluster, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.StorageCluster, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.StorageClusterList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.StorageCluster, err error)
 	StorageClusterExpansion
 }
 
@@ -64,20 +65,20 @@ func newStorageClusters(c *CoreV1Client, namespace string) *storageClusters {
 }
 
 // Get takes name of the storageCluster, and returns the corresponding storageCluster object, and an error if there is any.
-func (c *storageClusters) Get(name string, options metav1.GetOptions) (result *v1.StorageCluster, err error) {
+func (c *storageClusters) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.StorageCluster, err error) {
 	result = &v1.StorageCluster{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("storageclusters").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of StorageClusters that match those selectors.
-func (c *storageClusters) List(opts metav1.ListOptions) (result *v1.StorageClusterList, err error) {
+func (c *storageClusters) List(ctx context.Context, opts metav1.ListOptions) (result *v1.StorageClusterList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -88,13 +89,13 @@ func (c *storageClusters) List(opts metav1.ListOptions) (result *v1.StorageClust
 		Resource("storageclusters").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested storageClusters.
-func (c *storageClusters) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *storageClusters) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -105,87 +106,90 @@ func (c *storageClusters) Watch(opts metav1.ListOptions) (watch.Interface, error
 		Resource("storageclusters").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch(context.TODO())
+		Watch(ctx)
 }
 
 // Create takes the representation of a storageCluster and creates it.  Returns the server's representation of the storageCluster, and an error, if there is any.
-func (c *storageClusters) Create(storageCluster *v1.StorageCluster) (result *v1.StorageCluster, err error) {
+func (c *storageClusters) Create(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.CreateOptions) (result *v1.StorageCluster, err error) {
 	result = &v1.StorageCluster{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("storageclusters").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a storageCluster and updates it. Returns the server's representation of the storageCluster, and an error, if there is any.
-func (c *storageClusters) Update(storageCluster *v1.StorageCluster) (result *v1.StorageCluster, err error) {
+func (c *storageClusters) Update(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.UpdateOptions) (result *v1.StorageCluster, err error) {
 	result = &v1.StorageCluster{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("storageclusters").
 		Name(storageCluster.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-
-func (c *storageClusters) UpdateStatus(storageCluster *v1.StorageCluster) (result *v1.StorageCluster, err error) {
+func (c *storageClusters) UpdateStatus(ctx context.Context, storageCluster *v1.StorageCluster, opts metav1.UpdateOptions) (result *v1.StorageCluster, err error) {
 	result = &v1.StorageCluster{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("storageclusters").
 		Name(storageCluster.Name).
 		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the storageCluster and deletes it. Returns an error if one occurs.
-func (c *storageClusters) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *storageClusters) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("storageclusters").
 		Name(name).
-		Body(options).
-		Do(context.TODO()).
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *storageClusters) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *storageClusters) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("storageclusters").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do(context.TODO()).
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched storageCluster.
-func (c *storageClusters) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.StorageCluster, err error) {
+func (c *storageClusters) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.StorageCluster, err error) {
 	result = &v1.StorageCluster{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("storageclusters").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }

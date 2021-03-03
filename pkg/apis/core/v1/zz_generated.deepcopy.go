@@ -633,7 +633,7 @@ func (in *StorageClusterDeleteStrategy) DeepCopy() *StorageClusterDeleteStrategy
 func (in *StorageClusterList) DeepCopyInto(out *StorageClusterList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]StorageCluster, len(*in))
@@ -895,7 +895,7 @@ func (in *StorageNodeCloudDriveConfigs) DeepCopy() *StorageNodeCloudDriveConfigs
 func (in *StorageNodeList) DeepCopyInto(out *StorageNodeList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]StorageNode, len(*in))
