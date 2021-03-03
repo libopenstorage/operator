@@ -37,6 +37,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.20.4
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/code-generator v0.20.4
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.20.4
 	k8s.io/sample-controller v0.20.4
