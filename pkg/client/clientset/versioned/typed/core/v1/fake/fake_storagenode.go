@@ -19,6 +19,8 @@ limitations under the License.
 package fake
 
 import (
+	"context"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -39,7 +41,7 @@ var storagenodesResource = schema.GroupVersionResource{Group: "core.libopenstora
 var storagenodesKind = schema.GroupVersionKind{Group: "core.libopenstorage.org", Version: "v1", Kind: "StorageNode"}
 
 // Get takes name of the storageNode, and returns the corresponding storageNode object, and an error if there is any.
-func (c *FakeStorageNodes) Get(name string, options v1.GetOptions) (result *corev1.StorageNode, err error) {
+func (c *FakeStorageNodes) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.StorageNode, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewGetAction(storagenodesResource, c.ns, name), &corev1.StorageNode{})
 
@@ -50,7 +52,7 @@ func (c *FakeStorageNodes) Get(name string, options v1.GetOptions) (result *core
 }
 
 // List takes label and field selectors, and returns the list of StorageNodes that match those selectors.
-func (c *FakeStorageNodes) List(opts v1.ListOptions) (result *corev1.StorageNodeList, err error) {
+func (c *FakeStorageNodes) List(ctx context.Context, opts v1.ListOptions) (result *corev1.StorageNodeList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewListAction(storagenodesResource, storagenodesKind, c.ns, opts), &corev1.StorageNodeList{})
 
@@ -72,14 +74,14 @@ func (c *FakeStorageNodes) List(opts v1.ListOptions) (result *corev1.StorageNode
 }
 
 // Watch returns a watch.Interface that watches the requested storageNodes.
-func (c *FakeStorageNodes) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeStorageNodes) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(storagenodesResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a storageNode and creates it.  Returns the server's representation of the storageNode, and an error, if there is any.
-func (c *FakeStorageNodes) Create(storageNode *corev1.StorageNode) (result *corev1.StorageNode, err error) {
+func (c *FakeStorageNodes) Create(ctx context.Context, storageNode *corev1.StorageNode, opts v1.CreateOptions) (result *corev1.StorageNode, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewCreateAction(storagenodesResource, c.ns, storageNode), &corev1.StorageNode{})
 
@@ -90,7 +92,7 @@ func (c *FakeStorageNodes) Create(storageNode *corev1.StorageNode) (result *core
 }
 
 // Update takes the representation of a storageNode and updates it. Returns the server's representation of the storageNode, and an error, if there is any.
-func (c *FakeStorageNodes) Update(storageNode *corev1.StorageNode) (result *corev1.StorageNode, err error) {
+func (c *FakeStorageNodes) Update(ctx context.Context, storageNode *corev1.StorageNode, opts v1.UpdateOptions) (result *corev1.StorageNode, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateAction(storagenodesResource, c.ns, storageNode), &corev1.StorageNode{})
 
@@ -102,7 +104,7 @@ func (c *FakeStorageNodes) Update(storageNode *corev1.StorageNode) (result *core
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeStorageNodes) UpdateStatus(storageNode *corev1.StorageNode) (*corev1.StorageNode, error) {
+func (c *FakeStorageNodes) UpdateStatus(ctx context.Context, storageNode *corev1.StorageNode, opts v1.UpdateOptions) (*corev1.StorageNode, error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateSubresourceAction(storagenodesResource, "status", c.ns, storageNode), &corev1.StorageNode{})
 
@@ -113,7 +115,7 @@ func (c *FakeStorageNodes) UpdateStatus(storageNode *corev1.StorageNode) (*corev
 }
 
 // Delete takes name of the storageNode and deletes it. Returns an error if one occurs.
-func (c *FakeStorageNodes) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakeStorageNodes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewDeleteAction(storagenodesResource, c.ns, name), &corev1.StorageNode{})
 
@@ -121,15 +123,15 @@ func (c *FakeStorageNodes) Delete(name string, options *v1.DeleteOptions) error 
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeStorageNodes) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(storagenodesResource, c.ns, listOptions)
+func (c *FakeStorageNodes) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewDeleteCollectionAction(storagenodesResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &corev1.StorageNodeList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched storageNode.
-func (c *FakeStorageNodes) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *corev1.StorageNode, err error) {
+func (c *FakeStorageNodes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.StorageNode, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewPatchSubresourceAction(storagenodesResource, c.ns, name, pt, data, subresources...), &corev1.StorageNode{})
 

@@ -19,6 +19,8 @@ limitations under the License.
 package fake
 
 import (
+	"context"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -39,7 +41,7 @@ var storageclustersResource = schema.GroupVersionResource{Group: "core.libopenst
 var storageclustersKind = schema.GroupVersionKind{Group: "core.libopenstorage.org", Version: "v1", Kind: "StorageCluster"}
 
 // Get takes name of the storageCluster, and returns the corresponding storageCluster object, and an error if there is any.
-func (c *FakeStorageClusters) Get(name string, options v1.GetOptions) (result *corev1.StorageCluster, err error) {
+func (c *FakeStorageClusters) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.StorageCluster, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewGetAction(storageclustersResource, c.ns, name), &corev1.StorageCluster{})
 
@@ -50,7 +52,7 @@ func (c *FakeStorageClusters) Get(name string, options v1.GetOptions) (result *c
 }
 
 // List takes label and field selectors, and returns the list of StorageClusters that match those selectors.
-func (c *FakeStorageClusters) List(opts v1.ListOptions) (result *corev1.StorageClusterList, err error) {
+func (c *FakeStorageClusters) List(ctx context.Context, opts v1.ListOptions) (result *corev1.StorageClusterList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewListAction(storageclustersResource, storageclustersKind, c.ns, opts), &corev1.StorageClusterList{})
 
@@ -72,14 +74,14 @@ func (c *FakeStorageClusters) List(opts v1.ListOptions) (result *corev1.StorageC
 }
 
 // Watch returns a watch.Interface that watches the requested storageClusters.
-func (c *FakeStorageClusters) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeStorageClusters) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(storageclustersResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a storageCluster and creates it.  Returns the server's representation of the storageCluster, and an error, if there is any.
-func (c *FakeStorageClusters) Create(storageCluster *corev1.StorageCluster) (result *corev1.StorageCluster, err error) {
+func (c *FakeStorageClusters) Create(ctx context.Context, storageCluster *corev1.StorageCluster, opts v1.CreateOptions) (result *corev1.StorageCluster, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewCreateAction(storageclustersResource, c.ns, storageCluster), &corev1.StorageCluster{})
 
@@ -90,7 +92,7 @@ func (c *FakeStorageClusters) Create(storageCluster *corev1.StorageCluster) (res
 }
 
 // Update takes the representation of a storageCluster and updates it. Returns the server's representation of the storageCluster, and an error, if there is any.
-func (c *FakeStorageClusters) Update(storageCluster *corev1.StorageCluster) (result *corev1.StorageCluster, err error) {
+func (c *FakeStorageClusters) Update(ctx context.Context, storageCluster *corev1.StorageCluster, opts v1.UpdateOptions) (result *corev1.StorageCluster, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateAction(storageclustersResource, c.ns, storageCluster), &corev1.StorageCluster{})
 
@@ -102,7 +104,7 @@ func (c *FakeStorageClusters) Update(storageCluster *corev1.StorageCluster) (res
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeStorageClusters) UpdateStatus(storageCluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
+func (c *FakeStorageClusters) UpdateStatus(ctx context.Context, storageCluster *corev1.StorageCluster, opts v1.UpdateOptions) (*corev1.StorageCluster, error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateSubresourceAction(storageclustersResource, "status", c.ns, storageCluster), &corev1.StorageCluster{})
 
@@ -113,7 +115,7 @@ func (c *FakeStorageClusters) UpdateStatus(storageCluster *corev1.StorageCluster
 }
 
 // Delete takes name of the storageCluster and deletes it. Returns an error if one occurs.
-func (c *FakeStorageClusters) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakeStorageClusters) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewDeleteAction(storageclustersResource, c.ns, name), &corev1.StorageCluster{})
 
@@ -121,15 +123,15 @@ func (c *FakeStorageClusters) Delete(name string, options *v1.DeleteOptions) err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeStorageClusters) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(storageclustersResource, c.ns, listOptions)
+func (c *FakeStorageClusters) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewDeleteCollectionAction(storageclustersResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &corev1.StorageClusterList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched storageCluster.
-func (c *FakeStorageClusters) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *corev1.StorageCluster, err error) {
+func (c *FakeStorageClusters) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.StorageCluster, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewPatchSubresourceAction(storageclustersResource, c.ns, name, pt, data, subresources...), &corev1.StorageCluster{})
 

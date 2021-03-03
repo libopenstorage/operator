@@ -26,8 +26,10 @@ import (
 )
 
 // StorageNodeLister helps list StorageNodes.
+// All objects returned here must be treated as read-only.
 type StorageNodeLister interface {
 	// List lists all StorageNodes in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.StorageNode, err error)
 	// StorageNodes returns an object that can list and get StorageNodes.
 	StorageNodes(namespace string) StorageNodeNamespaceLister
@@ -58,10 +60,13 @@ func (s *storageNodeLister) StorageNodes(namespace string) StorageNodeNamespaceL
 }
 
 // StorageNodeNamespaceLister helps list and get StorageNodes.
+// All objects returned here must be treated as read-only.
 type StorageNodeNamespaceLister interface {
 	// List lists all StorageNodes in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.StorageNode, err error)
 	// Get retrieves the StorageNode from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.StorageNode, error)
 	StorageNodeNamespaceListerExpansion
 }
