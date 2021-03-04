@@ -6,4 +6,6 @@ RUN apt-get update && \
 
 WORKDIR /
 
-COPY * /operator-test/
+COPY operator.test /
+COPY specs /specs/
+COPY apps /apps/

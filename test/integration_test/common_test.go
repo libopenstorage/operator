@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -17,6 +18,10 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/portworx/torpedo/drivers/scheduler"
+	_ "github.com/portworx/torpedo/drivers/scheduler/k8s"
+	. "github.com/portworx/torpedo/tests"
 )
 
 var (
@@ -31,8 +36,13 @@ var (
 )
 
 const (
+	// schedulerDriverNam is a name of the schedule driver
+	schedulerDriverName = "k8s"
+
 	// specDir is a directory with all the specs
-	specDir = "./operator-test"
+	specDir = "./specs"
+
+	appsDir = "./apps"
 
 	// pxNamespace is a default namespace for StorageCluster
 	pxNamespace = "kube-system"
@@ -50,6 +60,8 @@ const (
 	// defaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
+
+var schedulerDriver scheduler.Driver
 
 func TestMain(m *testing.M) {
 	flag.StringVar(&pxDockerUsername,
@@ -88,6 +100,34 @@ func setup() error {
 	}
 	logrus.SetLevel(logrusLevel)
 	logrus.SetOutput(os.Stdout)
+
+	if schedulerDriver, err = scheduler.Get(schedulerDriverName); err != nil {
+		return fmt.Errorf("Error getting scheduler driver %v: %v", schedulerDriverName, err)
+	}
+
+	return nil
+}
+
+func setupApp() ([]*scheduler.Context, error) {
+	var contexts []*scheduler.Context
+	scaleFactor := 1
+
+	for i := 0; i < scaleFactor; i++ {
+		contexts = make([]*scheduler.Context, 0)
+		contexts = append(contexts, ScheduleApplications(fmt.Sprintf("setupteardown-%d", i))...)
+	}
+
+	ValidateApplications(contexts)
+	return contexts, nil
+}
+
+func teardownApp(contexts []*scheduler.Context) error {
+	opts := make(map[string]bool)
+	opts[scheduler.OptionsWaitForResourceLeakCleanup] = true
+
+	for _, ctx := range contexts {
+		TearDownContext(ctx, opts)
+	}
 
 	return nil
 }
