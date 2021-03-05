@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -24,7 +24,6 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestGetVersion(t *testing.T) {
@@ -52,12 +51,17 @@ func TestDeleteServiceAccount(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &v1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the service account is not present
 	err := DeleteServiceAccount(k8sClient, "not-present-sa", namespace)
@@ -89,7 +93,9 @@ func TestDeleteServiceAccount(t *testing.T) {
 	// Don't delete when the service account is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteServiceAccount(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -128,12 +134,16 @@ func TestDeleteRole(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Role",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the role is not present
 	err := DeleteRole(k8sClient, "not-present-role", namespace)
@@ -165,7 +175,9 @@ func TestDeleteRole(t *testing.T) {
 	// Don't delete when the role is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteRole(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -204,12 +216,16 @@ func TestDeleteRoleBinding(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "RoleBinding",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the role binding is not present
 	err := DeleteRoleBinding(k8sClient, "not-present-role-binding", namespace)
@@ -241,7 +257,9 @@ func TestDeleteRoleBinding(t *testing.T) {
 	// Don't delete when the role binding is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteRoleBinding(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -279,11 +297,15 @@ func TestDeleteRoleBinding(t *testing.T) {
 func TestDeleteClusterRole(t *testing.T) {
 	name := "test"
 	expected := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ClusterRole",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the cluster role is not present
 	err := DeleteClusterRole(k8sClient, "not-present-cluster-role")
@@ -304,7 +326,9 @@ func TestDeleteClusterRole(t *testing.T) {
 
 	// Don't delete when the cluster role is owned by an object
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteClusterRole(k8sClient, name)
 	require.NoError(t, err)
@@ -318,11 +342,15 @@ func TestDeleteClusterRole(t *testing.T) {
 func TestDeleteClusterRoleBinding(t *testing.T) {
 	name := "test"
 	expected := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ClusterRoleBinding",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the cluster role binding is not present
 	err := DeleteClusterRoleBinding(k8sClient, "not-present-crb")
@@ -343,7 +371,9 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 
 	// Don't delete when the cluster role binding is owned by an object
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteClusterRoleBinding(k8sClient, name)
 	require.NoError(t, err)
@@ -355,7 +385,7 @@ func TestDeleteClusterRoleBinding(t *testing.T) {
 }
 
 func TestCreateStorageClass(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 	expectedStorageClass := &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -386,11 +416,15 @@ func TestCreateStorageClass(t *testing.T) {
 func TestDeleteStorageClass(t *testing.T) {
 	name := "test"
 	expected := &storagev1.StorageClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StorageClass",
+			APIVersion: "storage.k8s.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the storage class is not present
 	err := DeleteStorageClass(k8sClient, "not-present-storage-class")
@@ -411,7 +445,9 @@ func TestDeleteStorageClass(t *testing.T) {
 
 	// Don't delete when the storage class is owned by an object
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteStorageClass(k8sClient, name)
 	require.NoError(t, err)
@@ -426,12 +462,16 @@ func TestDeleteConfigMap(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the config map is not present
 	err := DeleteConfigMap(k8sClient, "not-present-config-map", namespace)
@@ -463,7 +503,9 @@ func TestDeleteConfigMap(t *testing.T) {
 	// Don't delete when the config map is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteConfigMap(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -501,11 +543,15 @@ func TestDeleteConfigMap(t *testing.T) {
 func TestDeleteCSIDriver(t *testing.T) {
 	name := "test"
 	expected := &storagev1beta1.CSIDriver{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CSIDriver",
+			APIVersion: "storage.k8s.io/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the CSI driver is not present
 	err := DeleteCSIDriver(k8sClient, "not-present-csi-driver")
@@ -526,7 +572,9 @@ func TestDeleteCSIDriver(t *testing.T) {
 
 	// Don't delete when the CSI driver is owned by an object
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteCSIDriver(k8sClient, name)
 	require.NoError(t, err)
@@ -541,12 +589,16 @@ func TestDeleteService(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &v1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the service is not present
 	err := DeleteService(k8sClient, "not-present-service", namespace)
@@ -578,7 +630,9 @@ func TestDeleteService(t *testing.T) {
 	// Don't delete when the service is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteService(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -617,12 +671,16 @@ func TestDeleteDeployment(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the deployment is not present
 	err := DeleteDeployment(k8sClient, "not-present-deployment", namespace)
@@ -654,7 +712,9 @@ func TestDeleteDeployment(t *testing.T) {
 	// Don't delete when the deployment is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteDeployment(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -693,12 +753,16 @@ func TestDeleteStatefulSet(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StatefulSet",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the stateful set is not present
 	err := DeleteStatefulSet(k8sClient, "not-present-stateful-set", namespace)
@@ -730,7 +794,9 @@ func TestDeleteStatefulSet(t *testing.T) {
 	// Don't delete when the stateful set is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteStatefulSet(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -769,12 +835,16 @@ func TestDeleteDaemonSet(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DaemonSet",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 	}
-	k8sClient := fake.NewFakeClient(expected)
+	k8sClient := testutil.FakeK8sClient(expected)
 
 	// Don't delete or throw error if the daemonset is not present
 	err := DeleteDaemonSet(k8sClient, "not-present-daemonset", namespace)
@@ -806,7 +876,9 @@ func TestDeleteDaemonSet(t *testing.T) {
 	// Don't delete when the daemonset is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteDaemonSet(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -845,9 +917,8 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test",
-			Namespace:       "test-ns",
-			ResourceVersion: "200",
+			Name:      "test",
+			Namespace: "test-ns",
 		},
 		Status: corev1.StorageClusterStatus{
 			Phase: "Install",
@@ -860,10 +931,10 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
+	require.Equal(t, "1", cluster.ResourceVersion)
 
-	// Should keep the latest resource version on update even if input object is old
+	// Should increment the resource version on update
 	cluster.Status.Phase = "Update"
-	cluster.ResourceVersion = "100"
 	err = UpdateStorageClusterStatus(k8sClient, cluster)
 	require.NoError(t, err)
 
@@ -871,16 +942,15 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 	err = testutil.Get(k8sClient, actualCluster, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, "Update", actualCluster.Status.Phase)
-	require.Equal(t, "200", actualCluster.ResourceVersion)
+	require.Equal(t, "2", actualCluster.ResourceVersion)
 }
 
 func TestStorageNodeChangeSpec(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	expectedNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test",
-			Namespace:       "test-ns",
-			ResourceVersion: "200",
+			Name:      "test",
+			Namespace: "test-ns",
 		},
 		Spec: corev1.StorageNodeSpec{
 			Version: "1.0.0",
@@ -897,10 +967,10 @@ func TestStorageNodeChangeSpec(t *testing.T) {
 	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, "1.0.0", actualNode.Spec.Version)
+	require.Equal(t, "1", actualNode.ResourceVersion)
 
-	// Change spec
+	// TestCase: Change spec
 	expectedNode.Spec.Version = "2.0.0"
-	expectedNode.ResourceVersion = "100"
 
 	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
 	require.NoError(t, err)
@@ -909,9 +979,10 @@ func TestStorageNodeChangeSpec(t *testing.T) {
 	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", actualNode.Spec.Version)
-	require.Equal(t, "200", actualNode.ResourceVersion)
+	// Resource version increments by 2 because of 2 calls to update spec & status
+	require.Equal(t, "3", actualNode.ResourceVersion)
 
-	// Change status
+	// TestCase: Change status
 	expectedNode.Status.Phase = "Failed"
 
 	err = CreateOrUpdateStorageNode(k8sClient, expectedNode, nil)
@@ -921,6 +992,8 @@ func TestStorageNodeChangeSpec(t *testing.T) {
 	err = testutil.Get(k8sClient, actualNode, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, "Failed", actualNode.Status.Phase)
+	// Resource version increments by 2 because of 2 calls to update spec & status
+	require.Equal(t, "5", actualNode.ResourceVersion)
 }
 
 func TestStorageNodeWithOwnerReferences(t *testing.T) {
@@ -1045,6 +1118,10 @@ func TestDeleteServiceMonitor(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceMonitor",
+			APIVersion: "monitoring.coreos.com/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -1082,7 +1159,9 @@ func TestDeleteServiceMonitor(t *testing.T) {
 	// Don't delete when the service monitor is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeleteServiceMonitor(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -1195,6 +1274,10 @@ func TestDeletePrometheus(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &monitoringv1.Prometheus{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Prometheus",
+			APIVersion: "monitoring.coreos.com/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -1232,7 +1315,9 @@ func TestDeletePrometheus(t *testing.T) {
 	// Don't delete when the prometheus is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeletePrometheus(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -1349,6 +1434,10 @@ func TestDeletePrometheusRule(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &monitoringv1.PrometheusRule{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PrometheusRule",
+			APIVersion: "monitoring.coreos.com/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -1386,7 +1475,9 @@ func TestDeletePrometheusRule(t *testing.T) {
 	// Don't delete when the prometheus rule is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeletePrometheusRule(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -1501,6 +1592,10 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
 	expected := &policyv1beta1.PodDisruptionBudget{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PodDisruptionBudget",
+			APIVersion: "policy/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -1538,7 +1633,9 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	// Don't delete when the PDB is owned by an object
 	// and no owner reference passed in delete call
 	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
-	k8sClient.Create(context.TODO(), expected)
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
 
 	err = DeletePodDisruptionBudget(k8sClient, name, namespace)
 	require.NoError(t, err)
@@ -1574,7 +1671,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 }
 
 func TestCSIDriverChangeSpec(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	attachRequired := true
 	expectedDriver := &storagev1beta1.CSIDriver{
@@ -1632,7 +1729,7 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 }
 
 func TestServicePortAddition(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1674,7 +1771,7 @@ func TestServicePortAddition(t *testing.T) {
 }
 
 func TestServicePortRemoval(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1718,7 +1815,7 @@ func TestServicePortRemoval(t *testing.T) {
 }
 
 func TestServiceTargetPortChange(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1758,7 +1855,7 @@ func TestServiceTargetPortChange(t *testing.T) {
 }
 
 func TestServicePortNumberChange(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1797,7 +1894,7 @@ func TestServicePortNumberChange(t *testing.T) {
 }
 
 func TestServiceRemoveNodePortsForClusterIP(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1838,7 +1935,7 @@ func TestServiceRemoveNodePortsForClusterIP(t *testing.T) {
 }
 
 func TestServiceRemoveNodePortsForExternalNameType(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1879,7 +1976,7 @@ func TestServiceRemoveNodePortsForExternalNameType(t *testing.T) {
 }
 
 func TestServicePortProtocolChange(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1918,7 +2015,7 @@ func TestServicePortProtocolChange(t *testing.T) {
 }
 
 func TestServicePortEmptyExistingProtocol(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1958,7 +2055,7 @@ func TestServicePortEmptyExistingProtocol(t *testing.T) {
 }
 
 func TestServicePortEmptyNewProtocol(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1998,7 +2095,7 @@ func TestServicePortEmptyNewProtocol(t *testing.T) {
 }
 
 func TestServiceChangeServiceType(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2031,7 +2128,7 @@ func TestServiceChangeServiceType(t *testing.T) {
 }
 
 func TestServiceChangeLabels(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2083,7 +2180,7 @@ func TestServiceChangeLabels(t *testing.T) {
 }
 
 func TestServiceWithOwnerReferences(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	firstOwner := metav1.OwnerReference{UID: "first-owner"}
 	expectedService := &v1.Service{
@@ -2124,7 +2221,7 @@ func TestServiceWithOwnerReferences(t *testing.T) {
 }
 
 func TestServiceChangeSelector(t *testing.T) {
-	k8sClient := fake.NewFakeClient()
+	k8sClient := testutil.FakeK8sClient()
 
 	expectedService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{

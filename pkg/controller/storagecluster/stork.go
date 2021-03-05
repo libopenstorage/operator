@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
+	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
 const (
@@ -170,7 +170,7 @@ func (c *Controller) createStorkConfigMap(
 			Kind:       "Policy",
 			APIVersion: "v1",
 		},
-		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+		Extenders: []schedulerv1.Extender{
 			{
 				URLPrefix: fmt.Sprintf(
 					"http://%s.%s:%d",
@@ -181,7 +181,7 @@ func (c *Controller) createStorkConfigMap(
 				Weight:           5,
 				EnableHTTPS:      false,
 				NodeCacheCapable: false,
-				HTTPTimeout:      5 * time.Minute,
+				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
 			},
 		},
 	}
