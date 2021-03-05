@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
 	osdapi "github.com/libopenstorage/openstorage/api"
@@ -21,6 +20,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -552,7 +552,7 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, "new-custom-px-sa", "")
+	err = testutil.Get(k8sClient, sa, "new-custom-px-sa", cluster.Namespace)
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
@@ -594,11 +594,11 @@ func TestDisablePortworx(t *testing.T) {
 	require.NoError(t, err)
 
 	role := &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.PxRoleName, "")
+	err = testutil.Get(k8sClient, role, component.PxRoleName, cluster.Namespace)
 	require.NoError(t, err)
 
 	rb := &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, "")
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, cluster.Namespace)
 	require.NoError(t, err)
 
 	pxSvc := &v1.Service{}
@@ -3156,7 +3156,6 @@ func TestSecurityInstall(t *testing.T) {
 	existingSharedSecretName := "existingSharedsecret"
 	sharedSecret.Name = existingSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data = make(map[string][]byte)
 	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
@@ -3213,7 +3212,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	// token should be refreshed if the issuer changes
 	err = driver.PreInstall(cluster) // regenerate token with long lifetime
 	require.NoError(t, err)
-	updateSharedSecretResourceVersion(t, k8sClient, cluster) // initial resource version
 
 	userSecret := &v1.Secret{}
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer_for_newtoken")
@@ -3238,7 +3236,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	sharedSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret")
 	err = testutil.Update(k8sClient, sharedSecret)
 	require.NoError(t, err)
@@ -3262,7 +3259,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	newSharedSecretName := "newsharedsecret"
 	sharedSecret.Name = newSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data = make(map[string][]byte)
 	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
@@ -3874,7 +3870,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	actualCRD, err := extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, expectedCRD.Name, actualCRD.Name)
 	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
@@ -3883,7 +3879,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	// Expect the CRD to be created even for k8s version 1.13.*
 	err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Delete(expectedCRD.Name, nil)
+		Delete(context.TODO(), expectedCRD.Name, metav1.DeleteOptions{})
 	require.NoError(t, err)
 	csiComponent, _ := component.Get(component.CSIComponentName)
 	csiComponent.MarkDeleted()
@@ -3903,7 +3899,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	actualCRD, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, expectedCRD.Name, actualCRD.Name)
 	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
@@ -3912,7 +3908,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	// CRD should not to be created for k8s version 1.11.* or below
 	err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Delete(expectedCRD.Name, nil)
+		Delete(context.TODO(), expectedCRD.Name, metav1.DeleteOptions{})
 	require.NoError(t, err)
 	csiComponent.MarkDeleted()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -3926,7 +3922,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	_, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.True(t, errors.IsNotFound(err))
 
 	// CRD should not to be created for k8s version 1.14+
@@ -3942,7 +3938,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	_, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -9374,34 +9370,13 @@ func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 			Name: crdName,
 		},
 	}
-	_, err := fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+	_, err := fakeClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Create(context.TODO(), crd, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return testutil.ActivateCRDWhenCreated(fakeClient, crdName)
-}
-
-// updateSharedSecretResourceVersion mocks the behavior of the API server assigning a resource version.
-func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cluster *corev1.StorageCluster) {
-	secret := &v1.Secret{}
-	err := testutil.Get(k8sClient, secret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
-	if err != nil {
-		t.Fatalf("failed to get k8s secret to update resource ver: %s", err.Error())
-	}
-
-	// assign resource ver
-	secret.ResourceVersion = testutil.NewResourceVersion()
-
-	// update does not work for this. Need to delete/recreate.
-	err = k8sClient.Delete(context.TODO(), secret)
-	if err != nil {
-		t.Fatalf("failed to delete k8s secret to update resource ver: %s", err.Error())
-	}
-	err = k8sClient.Create(context.TODO(), secret)
-	if err != nil {
-		t.Fatalf("failed to create k8s secret to update resource ver: %s", err.Error())
-	}
-
 }
 
 func reregisterComponents() {

@@ -3,8 +3,17 @@ STORAGE_OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_TEST_
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 
+HAS_GOMODULES := $(shell go help mod why 2> /dev/null)
+
+ifdef HAS_GOMODULES
+export GO111MODULE=on
+export GOFLAGS = -mod=vendor
+else
+$(error operator can only be built with go 1.11+ which supports go modules)
+endif
+
 ifndef PKGS
-PKGS := $(shell go list ./... 2>&1 | grep -v 'github.com/libopenstorage/operator/vendor' | grep -v 'pkg/client/informers/externalversions' | grep -v versioned | grep -v 'pkg/apis/core')
+PKGS := $(shell GOFLAGS=-mod=vendor go list ./... 2>&1 | grep -v 'pkg/client/informers/externalversions' | grep -v versioned | grep -v 'pkg/apis/core')
 endif
 
 GO_FILES := $(shell find . -name '*.go' | grep -v vendor | \
@@ -35,13 +44,16 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 all: operator pretest
 
 vendor-update:
-	dep ensure -v -update
+	go mod download
 
 vendor:
-	dep ensure -v
+	go mod vendor
+
+vendor-tidy:
+	go mod tidy
 
 lint:
-	go get -u golang.org/x/lint/golint
+	(mkdir -p tools && cd tools && GO111MODULE=off && go get -u golang.org/x/lint/golint)
 	for file in $(GO_FILES); do \
 		golint $${file}; \
 		if [ -n "$$(golint $${file})" ]; then \
@@ -56,11 +68,11 @@ check-fmt:
 	bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
 errcheck:
-	go get -v github.com/kisielk/errcheck
+	(mkdir -p tools && cd tools && GO111MODULE=off && go get -v github.com/kisielk/errcheck)
 	errcheck -verbose -blank $(PKGS)
 
 staticcheck:
-	go get -u honnef.co/go/tools/cmd/staticcheck
+	(mkdir -p tools && cd tools && GO111MODULE=off && go get -u honnef.co/go/tools/cmd/staticcheck)
 	staticcheck $(PKGS)
 
 pretest: check-fmt lint vet staticcheck

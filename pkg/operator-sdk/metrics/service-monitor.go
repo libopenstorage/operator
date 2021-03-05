@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// ErrServiceMonitorNotPresent error when ServiceMonitor kind is not registered
 var ErrServiceMonitorNotPresent = fmt.Errorf("no ServiceMonitor registered with the API")
 
 // CreateServiceMonitors creates ServiceMonitors objects based on an array of Service objects.

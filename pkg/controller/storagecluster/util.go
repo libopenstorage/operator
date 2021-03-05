@@ -8,9 +8,9 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // computeHash returns a hash value calculated from StorageClusterSpec and
@@ -30,7 +30,7 @@ func computeHash(clusterSpec *corev1.StorageClusterSpec, collisionCount *int32) 
 	return rand.SafeEncodeString(fmt.Sprint(storageClusterSpecHasher.Sum32()))
 }
 
-func indexByPodNodeName(obj runtime.Object) []string {
+func indexByPodNodeName(obj client.Object) []string {
 	pod, isPod := obj.(*v1.Pod)
 	if !isPod {
 		return []string{}
