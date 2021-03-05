@@ -327,6 +327,12 @@ func DisableCSIAlpha(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+// IncludeCSISnapshotController determines if the end user has indicates
+// whether or not to include the CSI snapshot-controller
+func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.CSI != nil && cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
+}
+
 // GetPortworxVersion returns the Portworx version based on the image provided.
 // We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
 // env variable. If that is not present or invalid semvar, then we fallback to an
@@ -620,6 +626,12 @@ func GetSecretValue(
 	}
 
 	return GetSecretKeyValue(cluster, &secret, secretKey)
+}
+
+// CSIEnabled checks if the security flag is set for a cluster
+func CSIEnabled(cluster *corev1.StorageCluster) bool {
+	return (cluster.Spec.CSI != nil && cluster.Spec.CSI.Enabled) ||
+		FeatureCSI.IsEnabled(cluster.Spec.FeatureGates)
 }
 
 // SecurityEnabled checks if the security flag is set for a cluster

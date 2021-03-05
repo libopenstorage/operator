@@ -16,7 +16,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 )
@@ -396,7 +396,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
-	require.Equal(t, "quay.io/openstorage/csi-provisioner:v1.4.0-1", rel.Components.CSIProvisioner)
+	require.Equal(t, "docker.io/openstorage/csi-provisioner:v1.6.1-1", rel.Components.CSIProvisioner)
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}

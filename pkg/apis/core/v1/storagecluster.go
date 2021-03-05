@@ -97,6 +97,8 @@ type StorageClusterSpec struct {
 	Nodes []NodeSpec `json:"nodes,omitempty"`
 	// Security configurations for setting up an auth enabled or disabled cluster
 	Security *SecuritySpec `json:"security,omitempty"`
+	// CSI configurations for setting up CSI
+	CSI *CSISpec `json:"csi,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -109,6 +111,13 @@ type NodeSpec struct {
 	// CommonConfig contains storage, network and other configuration specific
 	// to the group of nodes. This will override the cluster-level configuration.
 	CommonConfig
+}
+
+// CSISpec is used to define the CSI configurations
+type CSISpec struct {
+	Enabled                   bool  `json:"enabled,omitempty"`
+	InstallSnapshotController *bool `json:"installSnapshotController,omitempty"`
+	InstallSnapshotCRDs       *bool `json:"installSnapshotCRDs,omitempty"`
 }
 
 // SecuritySpec is used to define the security configuration for a cluster.
@@ -462,6 +471,7 @@ type ComponentImages struct {
 	CSIAttacher               string `json:"csiAttacher,omitempty"`
 	CSIResizer                string `json:"csiResizer,omitempty"`
 	CSISnapshotter            string `json:"csiSnapshotter,omitempty"`
+	CSISnapshotController     string `json:"csiSnapshotController,omitempty"`
 	PrometheusOperator        string `json:"prometheusOperator,omitempty"`
 	PrometheusConfigMapReload string `json:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `json:"prometheusConfigReloader,omitempty"`

@@ -3765,6 +3765,98 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCSIInstallWithk8s120(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.20.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+			CSI: &corev1.CSISpec{
+				Enabled:                   true,
+				InstallSnapshotController: boolPtr(true),
+			},
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Empty(t, actualCR.OwnerReferences)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
+	for i := 0; i < len(expectedDeployment.Spec.Template.Spec.Containers); i++ {
+		require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[i], deployment.Spec.Template.Spec.Containers[i])
+	}
+	for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
+		require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[i], deployment.Spec.Template.Spec.Containers[i])
+	}
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers, deployment.Spec.Template.Spec.Containers)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// CSIDriver object should be created for k8s 1.20
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
+	require.False(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	fmt.Println("DESIRED", cluster.Status.DesiredImages)
+}
+
 func TestCSIInstallWithPKS(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -4200,7 +4292,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.20.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
@@ -4220,6 +4312,10 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
+			CSI: &corev1.CSISpec{
+				Enabled:                   true,
+				InstallSnapshotController: boolPtr(true),
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -4230,13 +4326,15 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 4)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
-		deployment.Spec.Template.Spec.Containers[1].Image)
 	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		deployment.Spec.Template.Spec.Containers[1].Image)
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
+	require.Equal(t, "quay.io/k8scsi/snapshot-controller:v1.2.3",
+		deployment.Spec.Template.Spec.Containers[3].Image)
 
 	// Change provisioner image
 	deployment.Spec.Template.Spec.Containers[0].Image = "my-csi-provisioner:test"
@@ -4261,7 +4359,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
+	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[1].Image)
 
 	// Change snapshotter image
@@ -4274,8 +4372,21 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+	require.Equal(t, "quay.io/k8scsi/csi-resizer:v1.2.3",
 		deployment.Spec.Template.Spec.Containers[2].Image)
+
+	// Change snapshot controller image
+	deployment.Spec.Template.Spec.Containers[3].Image = "my-csi-snapshot-controller:test"
+	err = k8sClient.Update(context.TODO(), deployment)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/snapshot-controller:v1.2.3",
+		deployment.Spec.Template.Spec.Containers[3].Image)
 
 	// Enable resizer and the change it's image
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -5131,7 +5242,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5139,7 +5250,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5232,7 +5343,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5240,7 +5351,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5427,7 +5538,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -5435,7 +5546,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8103,6 +8214,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 
 	// Disable CSI
 	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -8206,6 +8318,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 
 	// Disable CSI
 	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/api/core/v1"
 )
@@ -30,6 +31,7 @@ var (
 	commonDockerRegistries = map[string]bool{
 		"docker.io":                   true,
 		"quay.io":                     true,
+		"k8s.gcr.io":                  true,
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
@@ -68,6 +70,32 @@ func GetImageURN(registryAndRepo, image string) string {
 		imgParts = imgParts[len(imgParts)-1:]
 	}
 	return registryAndRepo + "/" + path.Join(imgParts...)
+}
+
+// GetImageMajorVersion returns the major version for a given image.
+// This allows you to make decisions based on the major version.
+func GetImageMajorVersion(image string) int {
+	if image == "" {
+		return -1
+	}
+
+	var tag string
+	parts := strings.Split(image, ":")
+	if len(parts) < 2 {
+		return -1
+	}
+
+	tag = parts[1]
+	if tag == "" {
+		return -1
+	}
+
+	ver, err := version.NewVersion(tag)
+	if err != nil {
+		return -1
+	}
+
+	return ver.Segments()[0]
 }
 
 // HasPullSecretChanged checks if the imagePullSecret in the cluster is the only one

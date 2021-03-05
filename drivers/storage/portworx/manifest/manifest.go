@@ -12,7 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -53,6 +53,7 @@ type Release struct {
 	CSIAttacher               string `yaml:"csiAttacher,omitempty"`
 	CSIResizer                string `yaml:"csiResizer,omitempty"`
 	CSISnapshotter            string `yaml:"csiSnapshotter,omitempty"`
+	CSISnapshotController     string `yaml:"csiSnapshotController,omitempty"`
 	Prometheus                string `yaml:"prometheus,omitempty"`
 	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
 	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
@@ -219,7 +220,7 @@ func fillCSIDefaults(
 
 	logrus.Debugf("CSI images not found in manifest, using default")
 	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
-	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "")
+	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "", true)
 	csiImages := csiGenerator.GetCSIImages()
 
 	rel.Components.CSIProvisioner = csiImages.Provisioner
@@ -228,6 +229,7 @@ func fillCSIDefaults(
 	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
 	rel.Components.CSIResizer = csiImages.Resizer
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
+	rel.Components.CSISnapshotController = csiImages.SnapshotController
 }
 
 func refreshInterval(cluster *corev1.StorageCluster) time.Duration {
