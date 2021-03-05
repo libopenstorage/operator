@@ -1,6 +1,8 @@
 package operator
 
 import (
+	"context"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -35,7 +37,7 @@ func (c *Client) CreateStorageNode(node *corev1.StorageNode) (*corev1.StorageNod
 		ns = metav1.NamespaceDefault
 	}
 
-	return c.ost.CoreV1().StorageNodes(ns).Create(node)
+	return c.ost.CoreV1().StorageNodes(ns).Create(context.TODO(), node, metav1.CreateOptions{})
 }
 
 // UpdateStorageNode updates the given StorageNode
@@ -44,7 +46,7 @@ func (c *Client) UpdateStorageNode(node *corev1.StorageNode) (*corev1.StorageNod
 		return nil, err
 	}
 
-	return c.ost.CoreV1().StorageNodes(node.Namespace).Update(node)
+	return c.ost.CoreV1().StorageNodes(node.Namespace).Update(context.TODO(), node, metav1.UpdateOptions{})
 }
 
 // GetStorageNode gets the StorageNode with given name and namespace
@@ -52,7 +54,7 @@ func (c *Client) GetStorageNode(name, namespace string) (*corev1.StorageNode, er
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1().StorageNodes(namespace).Get(name, metav1.GetOptions{})
+	return c.ost.CoreV1().StorageNodes(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 // ListStorageNodes lists all the StorageNodes
@@ -60,7 +62,7 @@ func (c *Client) ListStorageNodes(namespace string) (*corev1.StorageNodeList, er
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1().StorageNodes(namespace).List(metav1.ListOptions{})
+	return c.ost.CoreV1().StorageNodes(namespace).List(context.TODO(), metav1.ListOptions{})
 }
 
 // DeleteStorageNode deletes the given StorageNode
@@ -70,7 +72,7 @@ func (c *Client) DeleteStorageNode(name, namespace string) error {
 	}
 
 	// TODO Temporary removing PropagationPolicy: &deleteForegroundPolicy from metav1.DeleteOptions{}, until we figure out the correct policy to use
-	return c.ost.CoreV1().StorageNodes(namespace).Delete(name, &metav1.DeleteOptions{})
+	return c.ost.CoreV1().StorageNodes(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 // UpdateStorageNodeStatus update the status of given StorageNode
@@ -78,7 +80,7 @@ func (c *Client) UpdateStorageNodeStatus(node *corev1.StorageNode) (*corev1.Stor
 	if err := c.initClient(); err != nil {
 		return nil, err
 	}
-	return c.ost.CoreV1().StorageNodes(node.Namespace).UpdateStatus(node)
+	return c.ost.CoreV1().StorageNodes(node.Namespace).UpdateStatus(context.TODO(), node, metav1.UpdateOptions{})
 }
 
 // UpdateStorageNodeCondition updates or creates the given condition in node status.
