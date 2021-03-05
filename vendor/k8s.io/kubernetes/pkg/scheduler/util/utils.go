@@ -17,33 +17,22 @@ limitations under the License.
 package util
 
 import (
-	"sort"
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
-	"k8s.io/api/core/v1"
-	"k8s.io/apiserver/pkg/util/feature"
-	"k8s.io/kubernetes/pkg/apis/scheduling"
-	"k8s.io/kubernetes/pkg/features"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	"k8s.io/client-go/kubernetes"
+	corev1helpers "k8s.io/component-helpers/scheduling/corev1"
+	"k8s.io/klog/v2"
+	extenderv1 "k8s.io/kube-scheduler/extender/v1"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
-
-// GetContainerPorts returns the used host ports of Pods: if 'port' was used, a 'port:true' pair
-// will be in the result; but it does not resolve port conflict.
-func GetContainerPorts(pods ...*v1.Pod) []*v1.ContainerPort {
-	var ports []*v1.ContainerPort
-	for _, pod := range pods {
-		for j := range pod.Spec.Containers {
-			container := &pod.Spec.Containers[j]
-			for k := range container.Ports {
-				ports = append(ports, &container.Ports[k])
-			}
-		}
-	}
-	return ports
-}
-
-// PodPriorityEnabled indicates whether pod priority feature is enabled.
-func PodPriorityEnabled() bool {
-	return feature.DefaultFeatureGate.Enabled(features.PodPriority)
-}
 
 // GetPodFullName returns a name that uniquely identifies a pod.
 func GetPodFullName(pod *v1.Pod) string {
@@ -52,48 +41,132 @@ func GetPodFullName(pod *v1.Pod) string {
 	return pod.Name + "_" + pod.Namespace
 }
 
-// GetPodPriority return priority of the given pod.
-func GetPodPriority(pod *v1.Pod) int32 {
-	if pod.Spec.Priority != nil {
-		return *pod.Spec.Priority
+// GetPodStartTime returns start time of the given pod or current timestamp
+// if it hasn't started yet.
+func GetPodStartTime(pod *v1.Pod) *metav1.Time {
+	if pod.Status.StartTime != nil {
+		return pod.Status.StartTime
 	}
-	// When priority of a running pod is nil, it means it was created at a time
-	// that there was no global default priority class and the priority class
-	// name of the pod was empty. So, we resolve to the static default priority.
-	return scheduling.DefaultPriorityWhenNoDefaultClassExists
+	// Assumed pods and bound pods that haven't started don't have a StartTime yet.
+	return &metav1.Time{Time: time.Now()}
 }
 
-// SortableList is a list that implements sort.Interface.
-type SortableList struct {
-	Items    []interface{}
-	CompFunc LessFunc
+// GetEarliestPodStartTime returns the earliest start time of all pods that
+// have the highest priority among all victims.
+func GetEarliestPodStartTime(victims *extenderv1.Victims) *metav1.Time {
+	if len(victims.Pods) == 0 {
+		// should not reach here.
+		klog.Errorf("victims.Pods is empty. Should not reach here.")
+		return nil
+	}
+
+	earliestPodStartTime := GetPodStartTime(victims.Pods[0])
+	maxPriority := corev1helpers.PodPriority(victims.Pods[0])
+
+	for _, pod := range victims.Pods {
+		if corev1helpers.PodPriority(pod) == maxPriority {
+			if GetPodStartTime(pod).Before(earliestPodStartTime) {
+				earliestPodStartTime = GetPodStartTime(pod)
+			}
+		} else if corev1helpers.PodPriority(pod) > maxPriority {
+			maxPriority = corev1helpers.PodPriority(pod)
+			earliestPodStartTime = GetPodStartTime(pod)
+		}
+	}
+
+	return earliestPodStartTime
 }
 
-// LessFunc is a function that receives two items and returns true if the first
-// item should be placed before the second one when the list is sorted.
-type LessFunc func(item1, item2 interface{}) bool
-
-var _ = sort.Interface(&SortableList{})
-
-func (l *SortableList) Len() int { return len(l.Items) }
-
-func (l *SortableList) Less(i, j int) bool {
-	return l.CompFunc(l.Items[i], l.Items[j])
+// MoreImportantPod return true when priority of the first pod is higher than
+// the second one. If two pods' priorities are equal, compare their StartTime.
+// It takes arguments of the type "interface{}" to be used with SortableList,
+// but expects those arguments to be *v1.Pod.
+func MoreImportantPod(pod1, pod2 *v1.Pod) bool {
+	p1 := corev1helpers.PodPriority(pod1)
+	p2 := corev1helpers.PodPriority(pod2)
+	if p1 != p2 {
+		return p1 > p2
+	}
+	return GetPodStartTime(pod1).Before(GetPodStartTime(pod2))
 }
 
-func (l *SortableList) Swap(i, j int) {
-	l.Items[i], l.Items[j] = l.Items[j], l.Items[i]
+// GetPodAffinityTerms gets pod affinity terms by a pod affinity object.
+func GetPodAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
+	if affinity != nil && affinity.PodAffinity != nil {
+		if len(affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
+			terms = affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		}
+		// TODO: Uncomment this block when implement RequiredDuringSchedulingRequiredDuringExecution.
+		//if len(affinity.PodAffinity.RequiredDuringSchedulingRequiredDuringExecution) != 0 {
+		//	terms = append(terms, affinity.PodAffinity.RequiredDuringSchedulingRequiredDuringExecution...)
+		//}
+	}
+	return terms
 }
 
-// Sort sorts the items in the list using the given CompFunc. Item1 is placed
-// before Item2 when CompFunc(Item1, Item2) returns true.
-func (l *SortableList) Sort() {
-	sort.Sort(l)
+// GetPodAntiAffinityTerms gets pod affinity terms by a pod anti-affinity.
+func GetPodAntiAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
+	if affinity != nil && affinity.PodAntiAffinity != nil {
+		if len(affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
+			terms = affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		}
+		// TODO: Uncomment this block when implement RequiredDuringSchedulingRequiredDuringExecution.
+		//if len(affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution) != 0 {
+		//	terms = append(terms, affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution...)
+		//}
+	}
+	return terms
 }
 
-// HigherPriorityPod return true when priority of the first pod is higher than
-// the second one. It takes arguments of the type "interface{}" to be used with
-// SortableList, but expects those arguments to be *v1.Pod.
-func HigherPriorityPod(pod1, pod2 interface{}) bool {
-	return GetPodPriority(pod1.(*v1.Pod)) > GetPodPriority(pod2.(*v1.Pod))
+// PatchPod calculates the delta bytes change from <old> to <new>,
+// and then submit a request to API server to patch the pod changes.
+func PatchPod(cs kubernetes.Interface, old *v1.Pod, new *v1.Pod) error {
+	oldData, err := json.Marshal(old)
+	if err != nil {
+		return err
+	}
+
+	newData, err := json.Marshal(new)
+	if err != nil {
+		return err
+	}
+	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, &v1.Pod{})
+	if err != nil {
+		return fmt.Errorf("failed to create merge patch for pod %q/%q: %v", old.Namespace, old.Name, err)
+	}
+
+	if "{}" == string(patchBytes) {
+		return nil
+	}
+
+	_, err = cs.CoreV1().Pods(old.Namespace).Patch(context.TODO(), old.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
+	return err
+}
+
+// DeletePod deletes the given <pod> from API server
+func DeletePod(cs kubernetes.Interface, pod *v1.Pod) error {
+	return cs.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+}
+
+// ClearNominatedNodeName internally submit a patch request to API server
+// to set each pods[*].Status.NominatedNodeName> to "".
+func ClearNominatedNodeName(cs kubernetes.Interface, pods ...*v1.Pod) utilerrors.Aggregate {
+	var errs []error
+	for _, p := range pods {
+		if len(p.Status.NominatedNodeName) == 0 {
+			continue
+		}
+		podCopy := p.DeepCopy()
+		podCopy.Status.NominatedNodeName = ""
+		if err := PatchPod(cs, p, podCopy); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// IsScalarResourceName validates the resource for Extended, Hugepages, Native and AttachableVolume resources
+func IsScalarResourceName(name v1.ResourceName) bool {
+	return v1helper.IsExtendedResourceName(name) || v1helper.IsHugePageResourceName(name) ||
+		v1helper.IsPrefixedNativeResource(name) || v1helper.IsAttachableVolumeResourceName(name)
 }
