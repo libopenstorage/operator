@@ -249,8 +249,9 @@ func (c *csi) createClusterRole(
 					"volumesnapshotcontents",
 					"volumesnapshotclasses",
 					"volumesnapshots/status",
+					"volumesnapshotcontents/status",
 				},
-				Verbs: []string{"get", "list", "watch", "create", "delete", "update"},
+				Verbs: []string{"get", "list", "watch", "create", "delete", "update", "patch"},
 			},
 			{
 				APIGroups: []string{"csi.storage.k8s.io"},
