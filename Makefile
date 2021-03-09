@@ -7,7 +7,7 @@ HAS_GOMODULES := $(shell go help mod why 2> /dev/null)
 
 ifdef HAS_GOMODULES
 export GO111MODULE=on
-export GOFLAGS = -mod=vendor
+export GOFLAGS=-mod=vendor
 else
 $(error operator can only be built with go 1.11+ which supports go modules)
 endif
@@ -103,7 +103,7 @@ integration-test-deploy:
 
 codegen:
 	@echo "Generating CRD"
-	@hack/update-codegen.sh
+	(GOFLAGS="" hack/update-codegen.sh)
 
 operator:
 	@echo "Building the cluster operator binary"
