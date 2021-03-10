@@ -47,6 +47,7 @@ const (
 	defaultStorkCPU         = "0.1"
 	annotationStorkCPU      = constants.OperatorPrefix + "/stork-cpu"
 	annotationStorkSchedCPU = constants.OperatorPrefix + "/stork-scheduler-cpu"
+	userVolumeNamePrefix    = "user-"
 )
 
 func (c *Controller) syncStork(
@@ -530,27 +531,36 @@ func (c *Controller) createStorkDeployment(
 	for _, env := range envMap {
 		envVars = append(envVars, *env)
 	}
-	sort.Sort(envByName(envVars))
+	sort.Sort(k8sutil.EnvByName(envVars))
+
+	volumes, volumeMounts := getDesiredStorkVolumesAndMounts(cluster)
 
 	var existingImage string
 	var existingCommand []string
 	var existingEnvs []v1.EnvVar
+	var existingMounts []v1.VolumeMount
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
 			existingEnvs = append([]v1.EnvVar{}, c.Env...)
-			sort.Sort(envByName(existingEnvs))
+			sort.Sort(k8sutil.EnvByName(existingEnvs))
+			existingMounts = append([]v1.VolumeMount{}, c.VolumeMounts...)
+			sort.Sort(k8sutil.VolumeMountByName(existingMounts))
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
+	existingVolumes := append([]v1.Volume{}, existingDeployment.Spec.Template.Spec.Volumes...)
+	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
 	// Check if image, envs, cpu or args are modified
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
+		!reflect.DeepEqual(existingVolumes, volumes) ||
+		!reflect.DeepEqual(existingMounts, volumeMounts) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
 		existingDeployment.Spec.Template.Spec.HostNetwork != hostNetwork ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
@@ -559,7 +569,7 @@ func (c *Controller) createStorkDeployment(
 
 	if !c.isStorkDeploymentCreated || modified {
 		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
-			command, envVars, targetCPUQuantity)
+			command, envVars, volumes, volumeMounts, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -574,6 +584,8 @@ func (c *Controller) getStorkDeploymentSpec(
 	imageName string,
 	command []string,
 	envVars []v1.EnvVar,
+	volumes []v1.Volume,
+	volumeMounts []v1.VolumeMount,
 	cpuQuantity resource.Quantity,
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
@@ -687,6 +699,13 @@ func (c *Controller) getStorkDeploymentSpec(
 				)
 			}
 		}
+	}
+
+	if len(volumes) > 0 {
+		deployment.Spec.Template.Spec.Volumes = volumes
+	}
+	if len(volumeMounts) > 0 {
+		deployment.Spec.Template.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
 
 	return deployment
@@ -898,6 +917,22 @@ func getDesiredStorkImage(cluster *corev1.StorageCluster) string {
 	return ""
 }
 
+func getDesiredStorkVolumesAndMounts(
+	cluster *corev1.StorageCluster,
+) ([]v1.Volume, []v1.VolumeMount) {
+	volumeSpecs := make([]corev1.VolumeSpec, 0)
+	for _, v := range cluster.Spec.Stork.Volumes {
+		vCopy := v.DeepCopy()
+		vCopy.Name = userVolumeName(v.Name)
+		volumeSpecs = append(volumeSpecs, *vCopy)
+	}
+
+	volumes, volumeMounts := util.ExtractVolumesAndMounts(volumeSpecs)
+	sort.Sort(k8sutil.VolumeByName(volumes))
+	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
+	return volumes, volumeMounts
+}
+
 func getStorkServiceLabels() map[string]string {
 	return map[string]string{
 		"name": "stork",
@@ -913,10 +948,6 @@ func imagePullPolicy(cluster *corev1.StorageCluster) v1.PullPolicy {
 	return imagePullPolicy
 }
 
-type envByName []v1.EnvVar
-
-func (e envByName) Len() int      { return len(e) }
-func (e envByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
-func (e envByName) Less(i, j int) bool {
-	return e[i].Name < e[j].Name
+func userVolumeName(name string) string {
+	return userVolumeNamePrefix + name
 }

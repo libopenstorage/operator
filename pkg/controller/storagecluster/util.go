@@ -68,22 +68,33 @@ func removeDeleteFinalizer(finalizers []string) []string {
 	return newFinalizers
 }
 
-func isEnvEqual(listA, listB []v1.EnvVar) bool {
-	if len(listA) != len(listB) {
+func elementsMatch(listA, listB interface{}) bool {
+	if isEmpty(listA) && isEmpty(listB) {
+		return true
+	}
+
+	if !isList(listA) || !isList(listB) {
 		return false
 	}
 
-	aLen := len(listA)
-	bLen := len(listB)
-	visited := make([]bool, aLen)
+	aValue := reflect.ValueOf(listA)
+	bValue := reflect.ValueOf(listB)
+	aLen := aValue.Len()
+	bLen := bValue.Len()
 
+	if aLen != bLen {
+		return false
+	}
+
+	visited := make([]bool, bLen)
 	for i := 0; i < aLen; i++ {
+		element := aValue.Index(i).Interface()
 		found := false
 		for j := 0; j < bLen; j++ {
 			if visited[j] {
 				continue
 			}
-			if reflect.DeepEqual(listA[i], listB[j]) {
+			if reflect.DeepEqual(element, bValue.Index(j).Interface()) {
 				visited[j] = true
 				found = true
 				break
@@ -94,4 +105,22 @@ func isEnvEqual(listA, listB []v1.EnvVar) bool {
 		}
 	}
 	return true
+}
+
+func isList(list interface{}) bool {
+	kind := reflect.TypeOf(list).Kind()
+	return kind == reflect.Array || kind == reflect.Slice
+}
+
+func isEmpty(object interface{}) bool {
+	if object == nil {
+		return true
+	}
+
+	objValue := reflect.ValueOf(object)
+	switch objValue.Kind() {
+	case reflect.Array, reflect.Slice:
+		return objValue.Len() == 0
+	}
+	return false
 }
