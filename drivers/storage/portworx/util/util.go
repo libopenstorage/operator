@@ -99,6 +99,9 @@ const (
 	AnnotationRunOnMaster = pxAnnotationPrefix + "/run-on-master"
 	// AnnotationPodDisruptionBudget annotation indicating whether to create pod disruption budgets
 	AnnotationPodDisruptionBudget = pxAnnotationPrefix + "/pod-disruption-budget"
+	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
+	// of pod security policies
+	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -240,6 +243,12 @@ func StorageClassEnabled(cluster *corev1.StorageCluster) bool {
 func PodDisruptionBudgetEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodDisruptionBudget])
 	return err != nil || enabled
+}
+
+// PodSecurityPolicyEnabled returns true if the PSP annotation is present and has true value
+func PodSecurityPolicyEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodSecurityPolicy])
+	return err == nil && enabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present

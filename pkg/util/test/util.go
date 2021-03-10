@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -212,6 +213,14 @@ func GetExpectedPrometheusRule(t *testing.T, fileName string) *monitoringv1.Prom
 	prometheusRule, ok := obj.(*monitoringv1.PrometheusRule)
 	assert.True(t, ok, "Expected PrometheusRule object")
 	return prometheusRule
+}
+
+// GetExpectedPSP returns the PodSecurityPolicy object from given yaml spec file
+func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPolicy {
+	obj := getKubernetesObject(t, fileName)
+	psp, ok := obj.(*policyv1beta1.PodSecurityPolicy)
+	assert.True(t, ok, "Expected PodSecurityPolicy object")
+	return psp
 }
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file

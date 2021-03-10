@@ -3,9 +3,9 @@ package component
 import (
 	"context"
 	"fmt"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 
 	"github.com/hashicorp/go-version"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -39,7 +39,7 @@ func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion ver
 }
 
 func (p *podsecuritypolicies) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return true
+	return pxutil.PodSecurityPolicyEnabled(cluster)
 }
 
 func (p *podsecuritypolicies) Reconcile(cluster *corev1.StorageCluster) error {
