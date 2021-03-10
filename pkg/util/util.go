@@ -108,3 +108,43 @@ func HasNodeAffinityChanged(
 	}
 	return !reflect.DeepEqual(cluster.Spec.Placement.NodeAffinity, existingAffinity.NodeAffinity)
 }
+
+// ExtractVolumesAndMounts returns a list of Kubernetes volumes and volume mounts from the
+// given StorageCluster volume specs
+func ExtractVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1.VolumeMount) {
+	volumes := make([]v1.Volume, 0)
+	volumeMounts := make([]v1.VolumeMount, 0)
+
+	// Set volume defaults. Makes it easier to compare with
+	// actual deployment volumes to see if they have changed.
+	for i := range volumeSpecs {
+		if volumeSpecs[i].ConfigMap != nil {
+			defaultMode := v1.ConfigMapVolumeSourceDefaultMode
+			volumeSpecs[i].ConfigMap.DefaultMode = &defaultMode
+		} else if volumeSpecs[i].Secret != nil {
+			defaultMode := v1.SecretVolumeSourceDefaultMode
+			volumeSpecs[i].Secret.DefaultMode = &defaultMode
+		} else if volumeSpecs[i].Projected != nil {
+			defaultMode := v1.ProjectedVolumeSourceDefaultMode
+			volumeSpecs[i].Projected.DefaultMode = &defaultMode
+		} else if volumeSpecs[i].HostPath != nil {
+			hostPathType := v1.HostPathUnset
+			volumeSpecs[i].HostPath.Type = &hostPathType
+		}
+	}
+
+	for _, volumeSpec := range volumeSpecs {
+		volumes = append(volumes, v1.Volume{
+			Name:         volumeSpec.Name,
+			VolumeSource: volumeSpec.VolumeSource,
+		})
+		volumeMounts = append(volumeMounts, v1.VolumeMount{
+			Name:             volumeSpec.Name,
+			MountPath:        volumeSpec.MountPath,
+			MountPropagation: volumeSpec.MountPropagation,
+			ReadOnly:         volumeSpec.ReadOnly,
+		})
+	}
+
+	return volumes, volumeMounts
+}

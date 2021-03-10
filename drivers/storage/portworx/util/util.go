@@ -168,9 +168,11 @@ const (
 	// ImageNamePause is the container image to use for the pause container
 	ImageNamePause = "k8s.gcr.io/pause:3.1"
 
-	pxAnnotationPrefix = "portworx.io"
-	labelKeyName       = "name"
-	defaultSDKPort     = 9020
+	// userVolumeNamePrefix prefix used for user volume names to avoid name conflicts with existing volumes
+	userVolumeNamePrefix = "user-"
+	pxAnnotationPrefix   = "portworx.io"
+	labelKeyName         = "name"
+	defaultSDKPort       = 9020
 )
 
 var (
@@ -691,4 +693,9 @@ func EssentialsEnabled() bool {
 // i.e. 5s, 5m, 5h, 5d, and 5y
 func ParseExtendedDuration(s string) (time.Duration, error) {
 	return auth.ParseToDuration(s)
+}
+
+// UserVolumeName returns modified volume name for the user given volume name
+func UserVolumeName(name string) string {
+	return userVolumeNamePrefix + name
 }

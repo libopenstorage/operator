@@ -60,3 +60,30 @@ func AddOrUpdateStoragePodTolerations(podSpec *v1.PodSpec) {
 		Effect:   v1.TaintEffectNoSchedule,
 	})
 }
+
+// EnvByName date interface type to sort Kubernetes environment variables by name
+type EnvByName []v1.EnvVar
+
+func (e EnvByName) Len() int      { return len(e) }
+func (e EnvByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e EnvByName) Less(i, j int) bool {
+	return e[i].Name < e[j].Name
+}
+
+// VolumeByName date interface type to sort Kubernetes volumes by name
+type VolumeByName []v1.Volume
+
+func (e VolumeByName) Len() int      { return len(e) }
+func (e VolumeByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e VolumeByName) Less(i, j int) bool {
+	return e[i].Name < e[j].Name
+}
+
+// VolumeMountByName date interface type to sort Kubernetes volume mounts by name
+type VolumeMountByName []v1.VolumeMount
+
+func (e VolumeMountByName) Len() int      { return len(e) }
+func (e VolumeMountByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e VolumeMountByName) Less(i, j int) bool {
+	return e[i].Name < e[j].Name
+}

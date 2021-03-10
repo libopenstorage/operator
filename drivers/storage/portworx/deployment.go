@@ -1003,6 +1003,15 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		})
 	}
 
+	for _, v := range t.cluster.Spec.Volumes {
+		volumeMounts = append(volumeMounts, v1.VolumeMount{
+			Name:             pxutil.UserVolumeName(v.Name),
+			MountPath:        v.MountPath,
+			ReadOnly:         v.ReadOnly,
+			MountPropagation: v.MountPropagation,
+		})
+	}
+
 	return volumeMounts
 }
 
@@ -1070,6 +1079,13 @@ func (t *template) getVolumes() []v1.Volume {
 			)
 		}
 		volumes = append(volumes, kvdbVolume)
+	}
+
+	for _, v := range t.cluster.Spec.Volumes {
+		volumes = append(volumes, v1.Volume{
+			Name:         pxutil.UserVolumeName(v.Name),
+			VolumeSource: v.VolumeSource,
+		})
 	}
 
 	return volumes

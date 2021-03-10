@@ -48,6 +48,25 @@ var (
 	autopilotConfigParams = map[string]bool{
 		"min_poll_interval": true,
 	}
+	autopilotDeploymentVolumes = []corev1.VolumeSpec{
+		{
+			Name:      "config-volume",
+			MountPath: "/etc/config",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: AutopilotConfigMapName,
+					},
+					Items: []v1.KeyToPath{
+						{
+							Key:  "config.yaml",
+							Path: "config.yaml",
+						},
+					},
+				},
+			},
+		},
+	}
 )
 
 type autopilot struct {
@@ -223,7 +242,7 @@ func (c *autopilot) createDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	imageName := getDesiredAutopilotImage(cluster)
+	imageName := c.getDesiredAutopilotImage(cluster)
 	if imageName == "" {
 		return fmt.Errorf("autopilot image cannot be empty")
 	}
@@ -283,27 +302,36 @@ func (c *autopilot) createDeployment(
 		envCopy := env.DeepCopy()
 		envVars = append(envVars, *envCopy)
 	}
-	sort.Sort(envByName(envVars))
+	sort.Sort(k8sutil.EnvByName(envVars))
+
+	volumes, volumeMounts := c.getDesiredVolumesAndMounts(cluster)
 
 	var existingImage string
 	var existingCommand []string
 	var existingEnvs []v1.EnvVar
+	var existingMounts []v1.VolumeMount
 	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == AutopilotContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
 			existingEnvs = append([]v1.EnvVar{}, c.Env...)
-			sort.Sort(envByName(existingEnvs))
+			sort.Sort(k8sutil.EnvByName(existingEnvs))
+			existingMounts = append([]v1.VolumeMount{}, c.VolumeMounts...)
+			sort.Sort(k8sutil.VolumeMountByName(existingMounts))
 			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
+	existingVolumes := append([]v1.Volume{}, existingDeployment.Spec.Template.Spec.Volumes...)
+	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
 	// Check if the deployment has changed
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
+		!reflect.DeepEqual(existingVolumes, volumes) ||
+		!reflect.DeepEqual(existingMounts, volumeMounts) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
@@ -311,7 +339,7 @@ func (c *autopilot) createDeployment(
 
 	if !c.isCreated || modified {
 		deployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,
-			command, envVars, targetCPUQuantity)
+			command, envVars, volumes, volumeMounts, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -326,6 +354,8 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	imageName string,
 	command []string,
 	envVars []v1.EnvVar,
+	volumes []v1.Volume,
+	volumeMounts []v1.VolumeMount,
 	cpuQuantity resource.Quantity,
 ) *appsv1.Deployment {
 	deploymentLabels := map[string]string{
@@ -383,32 +413,10 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 									v1.ResourceCPU: cpuQuantity,
 								},
 							},
-							VolumeMounts: []v1.VolumeMount{
-								{
-									Name:      "config-volume",
-									MountPath: "/etc/config",
-								},
-							},
+							VolumeMounts: volumeMounts,
 						},
 					},
-					Volumes: []v1.Volume{
-						{
-							Name: "config-volume",
-							VolumeSource: v1.VolumeSource{
-								ConfigMap: &v1.ConfigMapVolumeSource{
-									LocalObjectReference: v1.LocalObjectReference{
-										Name: AutopilotConfigMapName,
-									},
-									Items: []v1.KeyToPath{
-										{
-											Key:  "config.yaml",
-											Path: "config.yaml",
-										},
-									},
-								},
-							},
-						},
-					},
+					Volumes: volumes,
 					Affinity: &v1.Affinity{
 						PodAntiAffinity: &v1.PodAntiAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -467,7 +475,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	return deployment
 }
 
-func getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
+func (c *autopilot) getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
 	if cluster.Spec.Autopilot.Image != "" {
 		return cluster.Spec.Autopilot.Image
 	} else if cluster.Status.DesiredImages != nil {
@@ -476,12 +484,24 @@ func getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
 	return ""
 }
 
-type envByName []v1.EnvVar
+func (c *autopilot) getDesiredVolumesAndMounts(
+	cluster *corev1.StorageCluster,
+) ([]v1.Volume, []v1.VolumeMount) {
+	volumeSpecs := make([]corev1.VolumeSpec, 0)
+	for _, v := range autopilotDeploymentVolumes {
+		vCopy := v.DeepCopy()
+		volumeSpecs = append(volumeSpecs, *vCopy)
+	}
+	for _, v := range cluster.Spec.Autopilot.Volumes {
+		vCopy := v.DeepCopy()
+		vCopy.Name = pxutil.UserVolumeName(v.Name)
+		volumeSpecs = append(volumeSpecs, *vCopy)
+	}
 
-func (e envByName) Len() int      { return len(e) }
-func (e envByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
-func (e envByName) Less(i, j int) bool {
-	return e[i].Name < e[j].Name
+	volumes, volumeMounts := util.ExtractVolumesAndMounts(volumeSpecs)
+	sort.Sort(k8sutil.VolumeByName(volumes))
+	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
+	return volumes, volumeMounts
 }
 
 // RegisterAutopilotComponent registers the Autopilot component
