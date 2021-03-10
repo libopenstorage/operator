@@ -9194,7 +9194,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestPodSecurityPolicies(t *testing.T) {
+func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -9203,14 +9203,13 @@ func TestPodSecurityPolicies(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Stork: &corev1.StorkSpec{
-				Enabled: true,
-			},
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
-				Image:   "autopilotimage",
 			},
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
@@ -9226,66 +9225,14 @@ func TestPodSecurityPolicies(t *testing.T) {
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	driver.SetDefaultsOnStorageCluster(cluster)
+
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// check that podsecuritpolicies have been created
-	expectedPSPs := []policyv1beta1.PodSecurityPolicy{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: constants.PrivilegedPSPName,
-			},
-			Spec: policyv1beta1.PodSecurityPolicySpec{
-				Privileged:             true,
-				HostNetwork:            true,
-				ReadOnlyRootFilesystem: true,
-				Volumes: []policyv1beta1.FSType{
-					policyv1beta1.ConfigMap,
-					policyv1beta1.Secret,
-					policyv1beta1.HostPath,
-					policyv1beta1.EmptyDir,
-				},
-				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-				},
-				FSGroup: policyv1beta1.FSGroupStrategyOptions{
-					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-				},
-				SELinux: policyv1beta1.SELinuxStrategyOptions{
-					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-				},
-				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: constants.RestrictedPSPName,
-			},
-			Spec: policyv1beta1.PodSecurityPolicySpec{
-				Privileged:             false,
-				ReadOnlyRootFilesystem: true,
-				Volumes: []policyv1beta1.FSType{
-					policyv1beta1.ConfigMap,
-					policyv1beta1.Secret,
-					policyv1beta1.HostPath,
-					policyv1beta1.EmptyDir,
-				},
-				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-				},
-				FSGroup: policyv1beta1.FSGroupStrategyOptions{
-					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-				},
-				SELinux: policyv1beta1.SELinuxStrategyOptions{
-					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-				},
-				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-				},
-			},
-		},
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
 	}
 	expectedOwnerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
@@ -9294,8 +9241,8 @@ func TestPodSecurityPolicies(t *testing.T) {
 		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
 		require.NoError(t, err)
 
-		require.Equalf(t, metav1.GetControllerOf(policy), expectedOwnerRef, "check owner reference for %s podsecuritypolicy", expectedPolicy.Name)
-
+		require.Equalf(t, metav1.GetControllerOf(policy), expectedOwnerRef,
+			"check owner reference for %s podsecuritypolicy", expectedPolicy.Name)
 		require.Equalf(t, expectedPolicy.Spec, policy.Spec, "check psp spec for %s", expectedPolicy.Name)
 	}
 
@@ -9349,10 +9296,127 @@ func TestPodSecurityPolicies(t *testing.T) {
 		err = testutil.Get(k8sClient, clusterRole, expected.clusterRoleName, "")
 		require.NoError(t, err)
 
-		if !containsPolicyRule(clusterRole.Rules, "use", "policy", "podsecuritypolicies", expected.pspName) {
-			t.Fatalf("check %s cluster role: podsecuritypolicy: exptected=%s, got %v", expected.clusterRoleName, expected.pspName, clusterRole)
-		}
+		require.Truef(t, containsPolicyRule(clusterRole.Rules, "use", "policy", "podsecuritypolicies", expected.pspName),
+			"check %s cluster role: podsecuritypolicy: expected=%s, got %v", expected.clusterRoleName, expected.pspName, clusterRole)
 	}
+}
+
+func TestRemovePodSecurityPolicies(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "T",
+			},
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// check that podsecuritpolicies have been created
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+	}
+
+	// Removing the annotation will disable pod security policies
+	// as they are disabled by default
+	cluster.Annotations = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	policies := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, policies)
+	require.NoError(t, err)
+	require.Empty(t, len(policies.Items))
+}
+
+func TestDisablePodSecurityPolicies(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "T",
+			},
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// check that podsecuritpolicies have been created
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+	}
+
+	// Removing the annotation will disable pod security policies
+	// as they are disabled by default
+	cluster.Annotations[pxutil.AnnotationPodSecurityPolicy] = "false"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	policies := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, policies)
+	require.NoError(t, err)
+	require.Empty(t, len(policies.Items))
 }
 
 func contains(slice []string, val string) bool {
