@@ -5663,14 +5663,13 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(1), revisions.Items[0].Revision)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// Test case: Change cluster spec to add another revision.
 	// Ensure that the older revision gets deleted as it is not used.
 	runningPod1, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[3], cluster, clusterRef)
 	require.NoError(t, err)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	require.Equal(t, latestRevision(revisions).Labels[defaultStorageClusterUniqueLabelKey],
 		runningPod1.Labels[defaultStorageClusterUniqueLabelKey])
 	runningPod1.Name = runningPod1.GenerateName + "1"
 	runningPod1.Namespace = cluster.Namespace
@@ -5693,8 +5692,7 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(3), revisions.Items[0].Revision)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{2, 3}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// Test case: Changing spec again to create another revision.
 	// The history should not get deleted this time although it crosses
@@ -5724,9 +5722,8 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 3)
-	require.Equal(t, int64(4), revisions.Items[0].Revision)
-	require.Equal(t, int64(3), revisions.Items[1].Revision)
-	require.Equal(t, int64(2), revisions.Items[2].Revision)
+	require.ElementsMatch(t, []int64{2, 3, 4},
+		[]int64{revisions.Items[0].Revision, revisions.Items[1].Revision, revisions.Items[2].Revision})
 
 	// Test case: Changing spec again to create another revision.
 	// The unused revisions should be deleted from history. Delete
@@ -5749,8 +5746,7 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(5), revisions.Items[0].Revision)
-	require.Equal(t, int64(3), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{3, 5}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 }
 
 func TestNodeShouldRunStoragePod(t *testing.T) {
