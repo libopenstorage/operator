@@ -3991,6 +3991,216 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageClusterVolumes(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	oldPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), oldPod)
+
+	// TestCase: Add spec.volumes
+	cluster.Spec.Volumes = []corev1.VolumeSpec{
+		{
+			Name:      "testvol",
+			MountPath: "/var/testvol",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/host/test",
+				},
+			},
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated.
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change host path
+	cluster.Spec.Volumes[0].HostPath.Path = "/new/host/path"
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change mount path
+	cluster.Spec.Volumes[0].MountPath = "/new/var/testvol"
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change mount propagation
+	mountPropagation := v1.MountPropagationBidirectional
+	cluster.Spec.Volumes[0].MountPropagation = &mountPropagation
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change readOnly param
+	cluster.Spec.Volumes[0].ReadOnly = true
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add secret type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol2",
+		MountPath: "/var/testvol2",
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: "volume-secret",
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add configMap type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol3",
+		MountPath: "/var/testvol3",
+		VolumeSource: v1.VolumeSource{
+			ConfigMap: &v1.ConfigMapVolumeSource{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "volume-configmap",
+				},
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add projected type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol4",
+		MountPath: "/var/testvol4",
+		VolumeSource: v1.VolumeSource{
+			Projected: &v1.ProjectedVolumeSource{
+				Sources: []v1.VolumeProjection{
+					{
+						Secret: &v1.SecretProjection{
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: "volume-projected-secret",
+							},
+						},
+					},
+					{
+						ConfigMap: &v1.ConfigMapProjection{
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: "volume-projected-configmap",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove volumes
+	cluster.Spec.Volumes = cluster.Spec.Volumes[:1]
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+}
+
 func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

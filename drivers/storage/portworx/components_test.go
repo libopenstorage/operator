@@ -2945,21 +2945,159 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
-func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {
-	iat, ok := jwtClaims["iat"]
-	require.True(t, ok, "iat should present in token")
-	iatFloat64, ok := iat.(float64)
-	require.True(t, ok, "iat should be a number")
-	exp, ok := jwtClaims["exp"]
-	require.True(t, ok, "exp should present in token")
-	expFloat64, ok := exp.(float64)
-	require.True(t, ok, "exp should be a number")
-	iatTime := time.Unix(int64(iatFloat64), 0)
-	expTime := time.Unix(int64(expFloat64), 0)
-	tokenLifetime := expTime.Sub(iatTime)
-	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+func TestAutopilotVolumesChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	volumeSpecs := []corev1.VolumeSpec{
+		{
+			Name:      "testvol",
+			MountPath: "/var/testvol",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/host/test",
+				},
+			},
+		},
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Volumes: volumeSpecs,
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// Case: Volumes should be applied to the deployment
+	volumes, volumeMounts := expectedVolumesAndMounts(volumeSpecs)
+
+	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
-	require.Equal(t, tokenLifetime, duration)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	// Checking after first volume as autopilot deployment already has 1 volume
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Updated volumes should be applied to the deployment
+	propagation := v1.MountPropagationBidirectional
+	pathType := v1.HostPathDirectory
+	volumeSpecs[0].MountPropagation = &propagation
+	volumeSpecs[0].HostPath.Type = &pathType
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: New volumes should be applied to the deployment
+	volumeSpecs = append(volumeSpecs, corev1.VolumeSpec{
+		Name:      "testvol2",
+		MountPath: "/var/testvol2",
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: "volume-secret",
+			},
+		},
+	})
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Removed volumes should be removed from the deployment
+	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: If volumes are empty, should be removed from the deployment
+	cluster.Spec.Autopilot.Volumes = []corev1.VolumeSpec{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Volumes should be added back if not present in deployment
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: If volumes is nil, deployment should not have volumes
+	cluster.Spec.Autopilot.Volumes = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
 }
 
 func TestSecurityInstall(t *testing.T) {
@@ -9232,6 +9370,33 @@ func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cl
 		t.Fatalf("failed to create k8s secret to update resource ver: %s", err.Error())
 	}
 
+}
+
+func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {
+	iat, ok := jwtClaims["iat"]
+	require.True(t, ok, "iat should present in token")
+	iatFloat64, ok := iat.(float64)
+	require.True(t, ok, "iat should be a number")
+	exp, ok := jwtClaims["exp"]
+	require.True(t, ok, "exp should present in token")
+	expFloat64, ok := exp.(float64)
+	require.True(t, ok, "exp should be a number")
+	iatTime := time.Unix(int64(iatFloat64), 0)
+	expTime := time.Unix(int64(expFloat64), 0)
+	tokenLifetime := expTime.Sub(iatTime)
+	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, tokenLifetime, duration)
+}
+
+func expectedVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1.VolumeMount) {
+	expectedVolumeSpecs := make([]corev1.VolumeSpec, len(volumeSpecs))
+	for i, v := range volumeSpecs {
+		vCopy := v.DeepCopy()
+		vCopy.Name = "user-" + v.Name
+		expectedVolumeSpecs[i] = *vCopy
+	}
+	return util.ExtractVolumesAndMounts(expectedVolumeSpecs)
 }
 
 func reregisterComponents() {
