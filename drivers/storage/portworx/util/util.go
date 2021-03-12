@@ -102,6 +102,9 @@ const (
 	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
 	// of pod security policies
 	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
+	// AnnotationTelemetryArcusLocation annotation indicates the location (internal/external) of Arcus
+	// that CCM should use
+	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
