@@ -459,6 +459,112 @@ spec:
                                 type: string
                               optional:
                                 type: boolean
+                volumes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      readOnly:
+                        type: boolean
+                      mountPath:
+                        type: string
+                      mountPropagation:
+                        type: string
+                      hostPath:
+                        type: object
+                        properties:
+                          path:
+                            type: string
+                          type:
+                            type: string
+                      secret:
+                        type: object
+                        properties:
+                          secretName:
+                            type: string
+                          defaultMode:
+                            type: integer
+                          optional:
+                            type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                path:
+                                  type: string
+                                mode:
+                                  type: integer
+                      configMap:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          defaultMode:
+                            type: integer
+                          optional:
+                            type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                path:
+                                  type: string
+                                mode:
+                                  type: integer
+                      projected:
+                        type: object
+                        properties:
+                          defaultMode:
+                            type: integer
+                          sources:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                secret:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    optional:
+                                      type: string
+                                    items:
+                                      type: array
+                                      items:
+                                        type: object
+                                        properties:
+                                          key:
+                                            type: string
+                                          path:
+                                            type: string
+                                          mode:
+                                            type: integer
+                                configMap:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    optional:
+                                      type: string
+                                    items:
+                                      type: array
+                                      items:
+                                        type: object
+                                        properties:
+                                          key:
+                                            type: string
+                                          path:
+                                            type: string
+                                          mode:
+                                            type: integer
             userInterface:
               type: object
               description: Contains spec of a user interface for the storage driver.
@@ -589,6 +695,112 @@ spec:
                                 type: string
                               optional:
                                 type: boolean
+                volumes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      readOnly:
+                        type: boolean
+                      mountPath:
+                        type: string
+                      mountPropagation:
+                        type: string
+                      hostPath:
+                        type: object
+                        properties:
+                          path:
+                            type: string
+                          type:
+                            type: string
+                      secret:
+                        type: object
+                        properties:
+                          secretName:
+                            type: string
+                          defaultMode:
+                            type: integer
+                          optional:
+                            type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                path:
+                                  type: string
+                                mode:
+                                  type: integer
+                      configMap:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          defaultMode:
+                            type: integer
+                          optional:
+                            type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                path:
+                                  type: string
+                                mode:
+                                  type: integer
+                      projected:
+                        type: object
+                        properties:
+                          defaultMode:
+                            type: integer
+                          sources:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                secret:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    optional:
+                                      type: string
+                                    items:
+                                      type: array
+                                      items:
+                                        type: object
+                                        properties:
+                                          key:
+                                            type: string
+                                          path:
+                                            type: string
+                                          mode:
+                                            type: integer
+                                configMap:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    optional:
+                                      type: string
+                                    items:
+                                      type: array
+                                      items:
+                                        type: object
+                                        properties:
+                                          key:
+                                            type: string
+                                          path:
+                                            type: string
+                                          mode:
+                                            type: integer
                 providers:
                   type: array
                   description: List of input data providers to autopilot.
@@ -702,6 +914,112 @@ spec:
                             type: string
                           optional:
                             type: boolean
+            volumes:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  readOnly:
+                    type: boolean
+                  mountPath:
+                    type: string
+                  mountPropagation:
+                    type: string
+                  hostPath:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      type:
+                        type: string
+                  secret:
+                    type: object
+                    properties:
+                      secretName:
+                        type: string
+                      defaultMode:
+                        type: integer
+                      optional:
+                        type: boolean
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key:
+                              type: string
+                            path:
+                              type: string
+                            mode:
+                              type: integer
+                  configMap:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      defaultMode:
+                        type: integer
+                      optional:
+                        type: boolean
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key:
+                              type: string
+                            path:
+                              type: string
+                            mode:
+                              type: integer
+                  projected:
+                    type: object
+                    properties:
+                      defaultMode:
+                        type: integer
+                      sources:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            secret:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                optional:
+                                  type: string
+                                items:
+                                  type: array
+                                  items:
+                                    type: object
+                                    properties:
+                                      key:
+                                        type: string
+                                      path:
+                                        type: string
+                                      mode:
+                                        type: integer
+                            configMap:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                optional:
+                                  type: string
+                                items:
+                                  type: array
+                                  items:
+                                    type: object
+                                    properties:
+                                      key:
+                                        type: string
+                                      path:
+                                        type: string
+                                      mode:
+                                        type: integer
             nodes:
               type: array
               description: Node level configurations that will override the configuration at cluster level.
