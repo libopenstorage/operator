@@ -5,8 +5,8 @@ go:
   - 1.13.x
 script:
   - |
-    if [ "${TRAVIS_BRANCH}" == "px-rel-1.4.4" ]; then
-      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.4.4-dev
+    if [ "${TRAVIS_BRANCH}" == "px-rel-1.4.5" ]; then
+      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.4.5-dev
       export BUILD_VER="${TRAVIS_BUILD_NUMBER}"
     else
       export DOCKER_HUB_STORAGE_OPERATOR_TAG=`git rev-parse --short HEAD`
@@ -15,7 +15,7 @@ script:
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
       docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
       make deploy;
-      if [ "${TRAVIS_BRANCH}" == "px-rel-1.4.4" ]; then
+      if [ "${TRAVIS_BRANCH}" == "px-rel-1.4.5" ]; then
         make deploy-catalog
       fi
     fi
