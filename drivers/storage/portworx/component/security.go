@@ -97,7 +97,7 @@ func (c *security) Initialize(
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
 func (c *security) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.SecurityEnabled(cluster)
+	return pxutil.AuthEnabled(&cluster.Spec) || pxutil.IsTLSEnabledOnCluster(&cluster.Spec)
 }
 
 // Reconcile reconciles the component to match the current state of the StorageCluster

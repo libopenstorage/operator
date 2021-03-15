@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -1157,6 +1159,7 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
 	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, 24*time.Hour, duration)
+	// TODO-ml: verify default TLS settings
 }
 
 func TestStorageClusterDefaultsForSecurity(t *testing.T) {
@@ -1259,6 +1262,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	duration, err = pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, time.Hour*24*365, duration)
+	// TODO-ml: various combinations of TLS settings
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
@@ -6233,6 +6237,111 @@ func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
+}
+
+func TestSetTLSSpecDefaults(t *testing.T) {
+	// all filenames supplied
+	// setup
+	CACertFileName := stringPtr("testCA.crt")
+	serverCertFileName := stringPtr("testServer.crt")
+	serverKeyFileName := stringPtr("testServer.key")
+	// test
+	cluster := createPodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, CACertFileName, serverCertFileName, serverKeyFileName)
+
+	// only one filename supplied
+	// setup
+	cluster = createPodSpecWithTLS(CACertFileName, nil, nil)
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, CACertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// no filename supplied
+	// setup
+	cluster = createPodSpecWithTLS(nil, nil, nil)
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// no tls section, but security is enabled, defaults should be generated
+	// setup
+	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = nil
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// empty tls section, but security is enabled, defaults should be generated
+	// setup
+	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// tls section with no advancedOptions, but security is enabled, defaults should be generated
+	// setup
+	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled: boolPtr(true),
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
+	// setup
+	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled:            boolPtr(true),
+		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	setTLSSpecDefaults(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+}
+
+func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, CACertFileName, serverCertFileName, serverKeyFileName *string) {
+	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under verification = \n, %v", string(s))
+	assert.NotNil(t, cluster.Spec.Security)
+	assert.NotNil(t, cluster.Spec.Security.TLS)
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
+	advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+	// validate Root CA
+	assert.NotNil(t, advancedOptions.APIRootCA)
+	assert.NotNil(t, advancedOptions.APIRootCA.FileName)
+	assert.Equal(t, *CACertFileName, *advancedOptions.APIRootCA.FileName)
+	// validate Server Cert (public key)
+	assert.NotNil(t, advancedOptions.ServerCert)
+	assert.NotNil(t, advancedOptions.ServerCert.FileName)
+	assert.Equal(t, *serverCertFileName, *advancedOptions.ServerCert.FileName)
+	// validate Server (private) key
+	assert.NotNil(t, advancedOptions.ServerKey)
+	assert.NotNil(t, advancedOptions.ServerKey.FileName)
+	assert.Equal(t, *serverKeyFileName, *advancedOptions.ServerKey.FileName)
 }
 
 type fakeManifest struct{}

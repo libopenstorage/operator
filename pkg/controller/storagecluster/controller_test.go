@@ -2534,7 +2534,20 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+	// s, _ := json.MarshalIndent(revisions.Items, "", "\t")
+	// t.Logf(string(s))
+	var revision1, revision2 *appsv1.ControllerRevision = nil, nil
+	// validate revision 1 and revision 2 exist
+	for i, rev := range revisions.Items {
+		if rev.Revision == int64(1) {
+			revision1 = &revisions.Items[i]
+		}
+		if rev.Revision == int64(2) {
+			revision2 = &revisions.Items[i]
+		}
+	}
+	require.NotNil(t, revision1, "Unable to find revision 1")
+	require.NotNil(t, revision2, "Unable to find revision 2")
 
 	// The old pod should be marked for deletion
 	require.Empty(t, podControl.Templates)
@@ -2565,9 +2578,33 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Len(t, podControl.ControllerRefs, 1)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 
-	// New revision's hash should match that of the new pod.
+	s, _ := json.MarshalIndent(revisions.Items, "", "\t")
+	t.Logf(string(s))
+	s, _ = json.MarshalIndent(podControl.Templates, "", "\t")
+	t.Logf(string(s))
 	require.Len(t, podControl.Templates, 1)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	// validate revision 1 and revision 2 exist
+	revision1, revision2 = nil, nil
+	for i, rev := range revisions.Items {
+		if rev.Revision == 1 {
+			revision1 = &revisions.Items[i]
+		}
+		if rev.Revision == 2 {
+			revision2 = &revisions.Items[i]
+		}
+	}
+
+	s, _ = json.MarshalIndent(revision1, "", "\t")
+	t.Logf("revision1 = \n, %v", string(s))
+	s, _ = json.MarshalIndent(revision2, "", "\t")
+	t.Logf("revision2 = \n, %v", string(s))
+
+	require.NotNil(t, revision1, "Unable to find revision 1")
+	require.NotNil(t, revision2, "Unable to find revision 2")
+	require.Equal(t, int64(2), revision2.Revision)
+
+	// New revision's hash should match that of the new pod.
+	require.Equal(t, revision2.Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
 }
 
@@ -5276,7 +5313,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: enabled -> disabled
+	// TestCase: security enabled -> disabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -5291,7 +5328,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: disabled -> enabled
+	// TestCase: security disabled -> enabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -6200,6 +6237,10 @@ func stringSlicePtr(slice []string) *[]string {
 
 func stringPtr(str string) *string {
 	return &str
+}
+
+func boolPtr(val bool) *bool {
+	return &val
 }
 
 func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {

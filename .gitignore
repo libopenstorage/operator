@@ -4,3 +4,6 @@ manifests/
 *.test
 coverage.txt
 profile.out
+
+# IDEs
+.vscode

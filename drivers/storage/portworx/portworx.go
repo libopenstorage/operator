@@ -31,6 +31,9 @@ const (
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"
+	defaultTLSCACertFilename          = "rootCA.crt"
+	defaultTLSServerCertFilename      = "server.crt"
+	defaultTLSServerKeyFilename       = "server.key"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
@@ -108,7 +111,7 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 		},
 	}
 
-	if pxutil.SecurityEnabled(cluster) {
+	if pxutil.AuthEnabled(&cluster.Spec) {
 		envMap[pxutil.EnvKeyStorkPXSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyStorkPXSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
@@ -617,6 +620,64 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 	toUpdate.Spec.Nodes = updatedNodeSpecs
 }
 
+func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
+	defaultTLSTemplate := &corev1.TLSSpec{
+		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+			APIRootCA: &corev1.CertLocation{
+				FileName: stringPtr(defaultTLSCACertFilename),
+			},
+			ServerKey: &corev1.CertLocation{
+				FileName: stringPtr(defaultTLSServerKeyFilename),
+			},
+			ServerCert: &corev1.CertLocation{
+				FileName: stringPtr(defaultTLSServerCertFilename),
+			},
+		},
+	}
+
+	if toUpdate.Spec.Security == nil {
+		logrus.Infof("No security section - tls defaults not needed")
+		return // nothing to do
+	}
+
+	if !pxutil.IsTLSEnabledOnCluster(&toUpdate.Spec) {
+		logrus.Infof("TLS is not enabled - tls defaults not needed")
+		return // nothing to do
+	}
+
+	// We know TLS is enabled, if there are any settings missing, apply defaults
+	if toUpdate.Spec.Security.TLS == nil {
+		// apply default TLS section.
+		logrus.Infof("TLS is enabled, but no TLS settings specified. Default values will be applied")
+		toUpdate.Spec.Security.TLS = defaultTLSTemplate
+		return
+	}
+
+	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions == nil {
+		// apply defaults for all of tls.advancedOptions
+		logrus.Infof("TLS is enabled, but no TLS settings specified. Default values will be applied")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions = defaultTLSTemplate.AdvancedTLSOptions
+		return
+	}
+
+	// set default filenames
+	// defaults for tls.advancedOptions.apirootCA
+	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA == nil {
+		logrus.Infof("apirootCA not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = defaultTLSTemplate.AdvancedTLSOptions.APIRootCA
+	}
+	// defaults for tls.advancedOptions.serverCert
+	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert == nil {
+		logrus.Infof("serverCert not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
+	}
+	// defaults for tls.advancedOptions.serverKey
+	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey == nil {
+		logrus.Infof("serverKey not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
+	}
+}
+
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	// all default values if one is not provided below.
 	defaultAuthTemplate := &corev1.AuthSpec{
@@ -662,6 +723,8 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 			}
 		}
 	}
+
+	setTLSSpecDefaults(toUpdate)
 }
 
 func setDefaultAutopilotProviders(

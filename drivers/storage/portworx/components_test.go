@@ -3548,7 +3548,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// GuestAccess disabled but hould not call update as cluster is still initializing
+	// GuestAccess disabled but should not call update as cluster is still initializing
 	cluster.Status.Phase = string(corev1.ClusterInit)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{

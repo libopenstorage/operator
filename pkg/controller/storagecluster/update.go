@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -607,26 +608,46 @@ func isBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 
 // isSecurityBounceRequired specific security spec fields that require a pod bounce
 func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
-	// security disabled or nil updated to enabled
-	if (oldSpec.Security == nil || !oldSpec.Security.Enabled) && currentSpec.Security != nil && currentSpec.Security.Enabled {
-		return true
-	}
-	// security enabled updated to disabled or nil
-	if (oldSpec.Security != nil && oldSpec.Security.Enabled) && (currentSpec.Security == nil || !currentSpec.Security.Enabled) {
+	// Auth enabled status changed
+	if util.AuthEnabled(oldSpec) != util.AuthEnabled(currentSpec) {
+		logrus.Info("Auth status changed: security bounce required")
 		return true
 	}
 
-	// security enabled and certain field is updated
-	if currentSpec.Security != nil && currentSpec.Security.Enabled {
+	// TLS enabled status changed
+	if util.IsTLSEnabledOnCluster(oldSpec) != util.IsTLSEnabledOnCluster(currentSpec) {
+		logrus.Info("TLS status changed: security bounce required")
+		return true
+	}
+
+	// Auth enabled and certain field is updated
+	if util.AuthEnabled(currentSpec) {
 		// safe to assume currentSpec.Security.Auth.SelfSigned is non-nil as it will always be have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
 		if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.Issuer, oldSpec.Security.Auth.SelfSigned.Issuer) {
+			logrus.Info("Issue changed: security bounce required")
 			return true
 		} else if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.SharedSecret, oldSpec.Security.Auth.SelfSigned.SharedSecret) {
+			logrus.Info("SharedSecret changed: security bounce required")
 			return true
 		}
 	}
 
+	// TLS enabled and certain field is updated
+	if util.IsTLSEnabledOnCluster(currentSpec) {
+		// safe to assume currentSpec.Security.TLS.AdvancedOptions is non-nil as it will always be have defaults.
+		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
+		if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.APIRootCA, oldSpec.Security.TLS.AdvancedTLSOptions.APIRootCA) {
+			logrus.Info("apirootCA changed: security bounce required")
+			return true
+		} else if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.ServerCert, oldSpec.Security.TLS.AdvancedTLSOptions.ServerCert) {
+			logrus.Info("server cert changed: security bounce required")
+			return true
+		} else if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.ServerKey, oldSpec.Security.TLS.AdvancedTLSOptions.ServerKey) {
+			logrus.Info("server key changed: security bounce required")
+			return true
+		}
+	}
 	return false
 }
 

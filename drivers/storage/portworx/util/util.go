@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,8 @@ const (
 	DefaultOpenshiftStartPort = 17001
 	// PortworxSpecsDir is the directory where all the Portworx specs are stored
 	PortworxSpecsDir = "/configs"
+	// PortworxTLSCertsDir is where all tls certs are to be placed
+	PortworxTLSCertsDir = "/etc/pwx/"
 
 	// DefaultPortworxServiceAccountName default name of the Portworx service account
 	DefaultPortworxServiceAccountName = "portworx"
@@ -125,6 +128,8 @@ const (
 	EnvKeyDisableCSIAlpha = "PORTWORX_DISABLE_CSI_ALPHA"
 	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
 	EnvKeyPortworxEnableTLS = "PX_ENABLE_TLS"
+	// EnvKeyPortworxEnforceTLS is a flag for enabling operator TLS with PX. TODO: temporary
+	EnvKeyPortworxEnforceTLS = "PX_ENFORCE_TLS"
 	// EnvKeyPortworxAuthSystemKey is the environment variable name for the PX security secret
 	EnvKeyPortworxAuthSystemKey = "PORTWORX_AUTH_SYSTEM_KEY"
 	// EnvKeyPortworxAuthJwtSharedSecret is an environment variable defining the PX Security JWT secret
@@ -455,6 +460,7 @@ func GetClusterEnvVarValue(ctx context.Context, cluster *corev1.StorageCluster, 
 
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
 func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
+
 	if valueFrom := envVar.ValueFrom; valueFrom != nil {
 		if valueFrom.SecretKeyRef != nil {
 			key := valueFrom.SecretKeyRef.Key
@@ -572,6 +578,49 @@ func IsTLSEnabled() bool {
 	return err == nil && enabled
 }
 
+// IsTLSEnabledOnCluster checks if TLS is enabled on the StorageCluster spec
+func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
+	// tls is enabled if:
+	// spec.security.enabled		spec.security.tls.enabled
+	// true							nil/true
+	// false						true
+	if spec.Security != nil {
+		if spec.Security.TLS != nil && spec.Security.TLS.Enabled != nil {
+			return *spec.Security.TLS.Enabled // override value exists, use override value and ignore parent
+		}
+		return spec.Security.Enabled // parent value is valid
+	}
+	return false
+}
+
+// GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon
+func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
+	// for now, only support file spec
+	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
+		advTLSOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+		if advTLSOptions.APIRootCA == nil || advTLSOptions.APIRootCA.FileName == nil {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.apirootCA.filename is required")
+		}
+		apirootCAfilename := advTLSOptions.APIRootCA.FileName
+		if advTLSOptions.ServerCert == nil || advTLSOptions.ServerCert.FileName == nil {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert.filename is required")
+		}
+		apicertFilename := advTLSOptions.ServerCert.FileName
+		if advTLSOptions.ServerKey == nil || advTLSOptions.ServerKey.FileName == nil {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.ServerKey.filename is required")
+		}
+		apikeyFilename := advTLSOptions.ServerKey.FileName
+		return []string{
+			"-apirootca", path.Join(PortworxTLSCertsDir, *apirootCAfilename),
+			"-apicert", path.Join(PortworxTLSCertsDir + *apicertFilename),
+			"-apikey", path.Join(PortworxTLSCertsDir + *apikeyFilename),
+			"-apidisclientauth",
+		}, nil
+
+	}
+	return nil, fmt.Errorf("spec.security.tls.advancedOptions is required")
+}
+
 // GenerateToken generates an auth token given a secret key
 func GenerateToken(
 	cluster *corev1.StorageCluster,
@@ -633,15 +682,26 @@ func GetSecretValue(
 	return GetSecretKeyValue(cluster, &secret, secretKey)
 }
 
-// SecurityEnabled checks if the security flag is set for a cluster
-func SecurityEnabled(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.Security != nil && cluster.Spec.Security.Enabled
+// AuthEnabled checks if the auth is set for a cluster
+func AuthEnabled(spec *corev1.StorageClusterSpec) bool {
+	// security is enabled if:
+	// spec.security.enabled		spec.security.auth.enabled
+	// true							nil/true
+	// false						true
+	if spec.Security != nil {
+		if spec.Security.Auth != nil && spec.Security.Auth.Enabled != nil {
+			return *spec.Security.Auth.Enabled // override value exists, use override value and ignore parent
+		}
+		logrus.Printf("auth.enabled flag not supplied, using value from security.enabled: %v", spec.Security.Enabled)
+		return spec.Security.Enabled // parent value is valid
+	}
+	return false
 }
 
 // SetupContextWithToken Gets token or from secret for authenticating with the SDK server
 func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client) (context.Context, error) {
 	// auth not declared in cluster spec
-	if !SecurityEnabled(cluster) {
+	if !AuthEnabled(&cluster.Spec) {
 		return ctx, nil
 	}
 
