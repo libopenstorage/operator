@@ -9361,6 +9361,9 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 			FeatureGates: map[string]string{
 				"CSI": "T",
 			},
+			UserInterface: &corev1.UserInterfaceSpec{
+				Enabled: true,
+			},
 		},
 	}
 
@@ -9402,6 +9405,14 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 			pspName:         constants.PrivilegedPSPName,
 		},
 		{
+			clusterRoleName: component.PVCClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
+			clusterRoleName: component.LhClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
 			clusterRoleName: component.AutopilotClusterRoleName,
 			pspName:         constants.RestrictedPSPName,
 		},
@@ -9411,10 +9422,6 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 		},
 		{
 			clusterRoleName: component.PrometheusOperatorClusterRoleName,
-			pspName:         constants.RestrictedPSPName,
-		},
-		{
-			clusterRoleName: component.PVCClusterRoleName,
 			pspName:         constants.RestrictedPSPName,
 		},
 		// stork
