@@ -248,7 +248,7 @@ func (c *portworxBasic) createClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
-					Verbs:     []string{"get", "list"},
+					Verbs:     []string{"get", "list", "create", "delete", "update"},
 				},
 				{
 					APIGroups: []string{""},
@@ -262,8 +262,13 @@ func (c *portworxBasic) createClusterRole() error {
 				},
 				{
 					APIGroups: []string{"storage.k8s.io"},
-					Resources: []string{"storageclasses"},
+					Resources: []string{"storageclasses", "csinodes"},
 					Verbs:     []string{"get", "list"},
+				},
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"volumeattachments"},
+					Verbs:     []string{"get", "list", "create", "delete", "update"},
 				},
 				{
 					APIGroups: []string{"stork.libopenstorage.org"},
