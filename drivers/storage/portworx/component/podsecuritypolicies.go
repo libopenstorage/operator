@@ -56,6 +56,12 @@ func (p *podsecuritypolicies) Reconcile(cluster *corev1.StorageCluster) error {
 }
 
 func (p *podsecuritypolicies) Delete(cluster *corev1.StorageCluster) error {
+	if cluster.DeletionTimestamp != nil &&
+		cluster.Spec.DeleteStrategy != nil &&
+		cluster.Spec.DeleteStrategy.Type != "" {
+		return nil
+	}
+
 	for _, policy := range portworxPodSecurityPolicies() {
 		err := p.k8sClient.Delete(context.TODO(), &policy)
 		if err != nil && !errors.IsNotFound(err) {
