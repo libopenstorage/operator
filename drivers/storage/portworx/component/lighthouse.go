@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -192,6 +193,12 @@ func (c *lighthouse) createClusterRole() error {
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
 					ResourceNames: []string{"privileged", "anyuid"},
+					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.PrivilegedPSPName},
 					Verbs:         []string{"use"},
 				},
 			},

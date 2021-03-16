@@ -216,7 +216,7 @@ func (c *pvcController) createClusterRole() error {
 				{
 					APIGroups:     []string{"policy"},
 					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{constants.RestrictedPSPName},
+					ResourceNames: []string{constants.PrivilegedPSPName},
 					Verbs:         []string{"use"},
 				},
 			},
