@@ -41,6 +41,14 @@ type monitoring struct {
 	recorder  record.EventRecorder
 }
 
+func (c *monitoring) Name() string {
+	return MonitoringComponentName
+}
+
+func (c *monitoring) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *monitoring) Initialize(
 	k8sClient client.Client,
 	_ version.Version,

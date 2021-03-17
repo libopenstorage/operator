@@ -37,6 +37,14 @@ type portworxBasic struct {
 	k8sClient client.Client
 }
 
+func (c *portworxBasic) Name() string {
+	return PortworxBasicComponentName
+}
+
+func (c *portworxBasic) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *portworxBasic) Initialize(
 	k8sClient client.Client,
 	_ version.Version,

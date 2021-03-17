@@ -47,6 +47,14 @@ type pvcController struct {
 	k8sVersion version.Version
 }
 
+func (c *pvcController) Name() string {
+	return PVCControllerComponentName
+}
+
+func (c *pvcController) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *pvcController) Initialize(
 	k8sClient client.Client,
 	k8sVersion version.Version,

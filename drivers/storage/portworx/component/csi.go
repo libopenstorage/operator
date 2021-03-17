@@ -53,6 +53,14 @@ type csi struct {
 	k8sVersion            version.Version
 }
 
+func (c *csi) Name() string {
+	return CSIComponentName
+}
+
+func (c *csi) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *csi) Initialize(
 	k8sClient client.Client,
 	k8sVersion version.Version,

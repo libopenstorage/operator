@@ -23,10 +23,10 @@ import (
 )
 
 const (
-	// PortworxProxyComponent name of the Portworx Proxy component. This component
+	// PortworxProxyComponentName name of the Portworx Proxy component. This component
 	// runs in the kube-system namespace if the cluster is running outside. This
 	// ensures that k8s in-tree driver traffic gets routed to the Portworx nodes.
-	PortworxProxyComponent = "Portworx Proxy"
+	PortworxProxyComponentName = "Portworx Proxy"
 	// PxProxyServiceAccountName name of the Portworx proxy service account
 	PxProxyServiceAccountName = "portworx-proxy"
 	// PxProxyClusterRoleBindingName name of the Portworx proxy cluster role binding
@@ -39,6 +39,14 @@ const (
 type portworxProxy struct {
 	isCreated bool
 	k8sClient client.Client
+}
+
+func (c *portworxProxy) Name() string {
+	return PortworxProxyComponentName
+}
+
+func (c *portworxProxy) Priority() int32 {
+	return DefaultComponentPriority
 }
 
 func (c *portworxProxy) Initialize(
@@ -327,7 +335,7 @@ func getPortworxProxyServiceLabels() map[string]string {
 
 // RegisterPortworxProxyComponent registers the Portworx proxy component
 func RegisterPortworxProxyComponent() {
-	Register(PortworxProxyComponent, &portworxProxy{})
+	Register(PortworxProxyComponentName, &portworxProxy{})
 }
 
 func init() {

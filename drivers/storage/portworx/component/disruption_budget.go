@@ -37,6 +37,14 @@ type disruptionBudget struct {
 	sdkConn   *grpc.ClientConn
 }
 
+func (c *disruptionBudget) Name() string {
+	return DisruptionBudgetComponentName
+}
+
+func (c *disruptionBudget) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *disruptionBudget) Initialize(
 	k8sClient client.Client,
 	_ version.Version,
