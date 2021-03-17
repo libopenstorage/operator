@@ -42,6 +42,47 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func TestOrderOfComponents(t *testing.T) {
+	components := component.GetAll()
+
+	componentNames := make([]string, len(components))
+	for i, comp := range components {
+		componentNames[i] = comp.Name()
+	}
+	require.Len(t, components, 14)
+	// Higher priority components come first
+	require.ElementsMatch(t,
+		[]string{
+			component.PSPComponentName,
+			component.SecurityComponentName,
+		},
+		[]string{componentNames[0], componentNames[1]},
+	)
+	require.ElementsMatch(t,
+		[]string{
+			component.AutopilotComponentName,
+			component.CSIComponentName,
+			component.DisruptionBudgetComponentName,
+			component.LighthouseComponentName,
+			component.MonitoringComponentName,
+			component.PortworxAPIComponentName,
+			component.PortworxBasicComponentName,
+			component.PortworxCRDComponentName,
+			component.PortworxProxyComponentName,
+			component.PortworxStorageClassComponentName,
+			component.PrometheusComponentName,
+			component.PVCControllerComponentName,
+		},
+		componentNames[2:],
+	)
+
+	require.Equal(t, int32(0), components[0].Priority())
+	require.Equal(t, int32(0), components[1].Priority())
+	for _, comp := range components[2:] {
+		require.Equal(t, component.DefaultComponentPriority, comp.Priority())
+	}
+}
+
 func TestBasicComponentsInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()

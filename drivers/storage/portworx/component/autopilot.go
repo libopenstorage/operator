@@ -75,6 +75,14 @@ type autopilot struct {
 	k8sClient client.Client
 }
 
+func (c *autopilot) Name() string {
+	return AutopilotComponentName
+}
+
+func (c *autopilot) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *autopilot) Initialize(
 	k8sClient client.Client,
 	_ version.Version,
