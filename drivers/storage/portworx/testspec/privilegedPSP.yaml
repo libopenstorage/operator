@@ -7,7 +7,7 @@ spec:
     rule: RunAsAny
   hostNetwork: true
   privileged: true
-  readOnlyRootFilesystem: true
+  readOnlyRootFilesystem: false
   runAsUser:
     rule: RunAsAny
   seLinux:
