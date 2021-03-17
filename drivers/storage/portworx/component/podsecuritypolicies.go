@@ -21,17 +21,16 @@ const (
 	PSPComponentName = "PodSecurityPolicies"
 )
 
-// RegisterPSPComponent registers a component for installing podsecuritypolicies.
-func RegisterPSPComponent() {
-	Register(PSPComponentName, &podsecuritypolicies{})
-}
-
-func init() {
-	RegisterPSPComponent()
-}
-
 type podsecuritypolicies struct {
 	k8sClient client.Client
+}
+
+func (p *podsecuritypolicies) Name() string {
+	return PSPComponentName
+}
+
+func (p *podsecuritypolicies) Priority() int32 {
+	return int32(0)
 }
 
 func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion version.Version, scheme *runtime.Scheme, recorder record.EventRecorder) {
@@ -133,4 +132,13 @@ func portworxPodSecurityPolicies() []policyv1beta1.PodSecurityPolicy {
 			},
 		},
 	}
+}
+
+// RegisterPSPComponent registers a component for installing podsecuritypolicies.
+func RegisterPSPComponent() {
+	Register(PSPComponentName, &podsecuritypolicies{})
+}
+
+func init() {
+	RegisterPSPComponent()
 }

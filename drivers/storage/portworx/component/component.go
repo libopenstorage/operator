@@ -1,6 +1,7 @@
 package component
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/hashicorp/go-version"
@@ -9,6 +10,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	// DefaultComponentPriority default priority for Portworx components
+	DefaultComponentPriority = int32(100)
 )
 
 var (
@@ -25,6 +31,11 @@ type PortworxComponent interface {
 		scheme *runtime.Scheme,
 		recorder record.EventRecorder,
 	)
+	// Name returns the name of the component
+	Name() string
+	// Priority returns the priority of the component.
+	// Smaller the number, higher the priority.
+	Priority() int32
 	// IsEnabled checks if the components needs to be enabled based on the StorageCluster
 	IsEnabled(cluster *corev1.StorageCluster) bool
 	// Reconcile reconciles the component to match the current state of the StorageCluster
@@ -54,11 +65,12 @@ func Get(name string) (PortworxComponent, bool) {
 }
 
 // GetAll returns all the Portworx components that are registered
-func GetAll() map[string]PortworxComponent {
-	componentsCopy := make(map[string]PortworxComponent)
-	for name, comp := range components {
-		componentsCopy[name] = comp
+func GetAll() []PortworxComponent {
+	componentsCopy := make([]PortworxComponent, 0)
+	for _, comp := range components {
+		componentsCopy = append(componentsCopy, comp)
 	}
+	sort.Sort(byPriority(componentsCopy))
 	return componentsCopy
 }
 
@@ -68,4 +80,13 @@ func DeregisterAllComponents() {
 	registerLock.Lock()
 	defer registerLock.Unlock()
 	components = make(map[string]PortworxComponent)
+}
+
+// byPriority data interface to sort Portworx components by their priority
+type byPriority []PortworxComponent
+
+func (e byPriority) Len() int      { return len(e) }
+func (e byPriority) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e byPriority) Less(i, j int) bool {
+	return e[i].Priority() < e[j].Priority()
 }

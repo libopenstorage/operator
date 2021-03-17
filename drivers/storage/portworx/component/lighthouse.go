@@ -60,6 +60,14 @@ type lighthouse struct {
 	k8sClient client.Client
 }
 
+func (c *lighthouse) Name() string {
+	return LighthouseComponentName
+}
+
+func (c *lighthouse) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *lighthouse) Initialize(
 	k8sClient client.Client,
 	_ version.Version,

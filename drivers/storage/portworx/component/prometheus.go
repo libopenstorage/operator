@@ -59,6 +59,14 @@ type prometheus struct {
 	isOperatorCreated bool
 }
 
+func (c *prometheus) Name() string {
+	return PrometheusComponentName
+}
+
+func (c *prometheus) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *prometheus) Initialize(
 	k8sClient client.Client,
 	_ version.Version,
