@@ -83,7 +83,7 @@ func portworxPodSecurityPolicies() []policyv1beta1.PodSecurityPolicy {
 			Spec: policyv1beta1.PodSecurityPolicySpec{
 				Privileged:             true,
 				HostNetwork:            true,
-				ReadOnlyRootFilesystem: true,
+				ReadOnlyRootFilesystem: false,
 				Volumes: []policyv1beta1.FSType{
 					policyv1beta1.ConfigMap,
 					policyv1beta1.Secret,
