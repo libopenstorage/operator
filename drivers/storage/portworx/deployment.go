@@ -803,6 +803,10 @@ func (t *template) getArguments() []string {
 		}
 	}
 
+	if pxutil.FeatureBottleRocketAMI.IsEnabled(t.cluster.Spec.FeatureGates) {
+		args = append(args, "-disable-log-proxy")
+	}
+
 	return args
 }
 
@@ -985,6 +989,9 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	if t.isK3s {
 		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 	}
+	if pxutil.FeatureBottleRocketAMI.IsEnabled(t.cluster.Spec.FeatureGates) {
+		volumeInfoList = append(volumeInfoList, t.getBottleRocketVolumeInfoList()...)
+	}
 
 	volumeMounts := make([]v1.VolumeMount, 0, len(volumeInfoList))
 	for _, v := range volumeInfoList {
@@ -1030,6 +1037,9 @@ func (t *template) getVolumes() []v1.Volume {
 	}
 	if t.isK3s {
 		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	}
+	if pxutil.FeatureBottleRocketAMI.IsEnabled(t.cluster.Spec.FeatureGates) {
+		volumeInfoList = append(volumeInfoList, t.getBottleRocketVolumeInfoList()...)
 	}
 
 	volumes := make([]v1.Volume, 0, len(volumeInfoList))
@@ -1125,6 +1135,16 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 		{
 			name:      "containerd-k3s",
 			hostPath:  "/run/k3s/containerd/containerd.sock",
+			mountPath: "/run/containerd/containerd.sock",
+		},
+	}
+}
+
+func (t *template) getBottleRocketVolumeInfoList() []volumeInfo {
+	return []volumeInfo{
+		{
+			name:      "containerd-br",
+			hostPath:  "/run/dockershim.sock",
 			mountPath: "/run/containerd/containerd.sock",
 		},
 	}

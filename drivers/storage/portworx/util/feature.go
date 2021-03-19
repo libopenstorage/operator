@@ -10,6 +10,8 @@ type Feature string
 const (
 	// FeatureCSI is used to indicate CSI feature
 	FeatureCSI Feature = "CSI"
+	// FeatureBottleRocketAMI is used to activate BottleRocket AMI tweaks
+	FeatureBottleRocketAMI Feature = "BottleRocketAMI"
 )
 
 // IsEnabled checks if the feature is enabled in the given feature map

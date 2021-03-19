@@ -1882,6 +1882,54 @@ func TestPodSpecForK3s(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecForBottleRocketAMI(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.2",
+	}
+
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.7.1",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureBottleRocketAMI): "true",
+			},
+		},
+	}
+	driver := portworx{}
+
+	// Pass the image pull policy in the pod args
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-disable-log-proxy",
+	}
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Len(t, actual.Containers, 1)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+	assert.Contains(t, actual.Volumes, v1.Volume{
+		Name: "containerd-br",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: "/run/dockershim.sock",
+			},
+		},
+	})
+	assert.Contains(t, actual.Containers[0].VolumeMounts, v1.VolumeMount{
+		Name:      "containerd-br",
+		MountPath: "/run/containerd/containerd.sock",
+	})
+}
+
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_master.yaml")
