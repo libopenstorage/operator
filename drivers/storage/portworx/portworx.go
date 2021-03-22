@@ -666,13 +666,25 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 		logrus.Infof("apirootCA not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = defaultTLSTemplate.AdvancedTLSOptions.APIRootCA
 	}
+	if util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA.FileName) {
+		logrus.Infof("apirootCA not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = defaultTLSTemplate.AdvancedTLSOptions.APIRootCA
+	}
 	// defaults for tls.advancedOptions.serverCert
 	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert == nil {
 		logrus.Infof("serverCert not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
 	}
+	if util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName) {
+		logrus.Infof("serverCert not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
+	}
 	// defaults for tls.advancedOptions.serverKey
 	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey == nil {
+		logrus.Infof("serverKey not specified - applying defaults")
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
+	}
+	if util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName) {
 		logrus.Infof("serverKey not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
 	}

@@ -148,3 +148,11 @@ func ExtractVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1
 
 	return volumes, volumeMounts
 }
+
+// IsEmptyOrNilStringPtr is a helper function that checks whether a string pointer is pointing to a non-empty string
+func IsEmptyOrNilStringPtr(sptr *string) bool {
+	if sptr == nil || *sptr == "" {
+		return true
+	}
+	return false
+}
