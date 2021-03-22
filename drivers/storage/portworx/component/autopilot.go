@@ -13,8 +13,9 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -385,6 +386,64 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
+
+	// If tls enabled, add env for autopilot and all apps using openstorage client:
+	// (see vendor/github.com/libopenstorage/openstorage/volume/drivers/pwx/connection.go)
+	// CaCertSecretEnv:             "PX_CA_CERT_SECRET",
+	// CaCertSecretKeyEnv:          "PX_CA_CERT_SECRET_KEY",
+	// assumption: user has already uploaded CA cert to the specified k8s secret
+	// Also set
+
+	if pxutil.IsTLSEnabledOnCluster(&cluster.Spec) {
+		// Set:
+		//	  env:
+		//    - name: PX_CA_CERT_SECRET
+		//      value: <default>
+		//    - name: PX_CA_CERT_SECRET_KEY
+		//      value: <default>
+		//    - name: PX_ENABLE_TLS
+		//	    value: "true"
+		CASecretNameValue := ""
+		CASecretKeyValue := ""
+		EnableTLSValue := ""
+		if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Env != nil {
+			CASecretNameValue = k8sutil.GetValueFromEnv(pxutil.EnvKeyAutopilotCASecretName, cluster.Spec.Autopilot.Env)
+			CASecretKeyValue = k8sutil.GetValueFromEnv(pxutil.EnvKeyAutopilotCASecretKey, cluster.Spec.Autopilot.Env)
+			EnableTLSValue = k8sutil.GetValueFromEnv(pxutil.EnvKeyPortworxEnableTLS, cluster.Spec.Autopilot.Env)
+		}
+		if CASecretNameValue == "" {
+			// if not specified by the user under cluster.spec.autopilot.env , add the default value
+			CASecretNameValue = pxutil.DefaultCASecretName
+			logrus.Infof("User did not supply a value for secret name containing CA cert. Default to %v", CASecretNameValue)
+			envVars = append(envVars,
+				v1.EnvVar{
+					Name:  pxutil.EnvKeyAutopilotCASecretName,
+					Value: CASecretNameValue,
+				},
+			)
+		}
+		if CASecretKeyValue == "" {
+			// if not specified by the user under cluster.spec.autopilot.env , add the default value
+			CASecretKeyValue = pxutil.DefaultCASecretKey
+			logrus.Infof("User did not supply a value for secret key containing CA cert. Default to %v", CASecretKeyValue)
+			envVars = append(envVars,
+				v1.EnvVar{
+					Name:  pxutil.EnvKeyAutopilotCASecretKey,
+					Value: CASecretKeyValue,
+				},
+			)
+		}
+		if EnableTLSValue == "" {
+			// if not specified by the user under cluster.spec.autopilot.env , add the default value
+			EnableTLSValue = "true"
+			envVars = append(envVars,
+				v1.EnvVar{
+					Name:  pxutil.EnvKeyPortworxEnableTLS,
+					Value: EnableTLSValue,
+				},
+			)
+		}
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

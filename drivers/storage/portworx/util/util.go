@@ -150,6 +150,15 @@ const (
 	// EnvKeyMarketplaceName env var for the name of the source marketplace
 	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
 
+	// EnvKeyAutopilotCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyAutopilotCASecretName = "PX_CA_CERT_SECRET"
+	// EnvKeyAutopilotCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyAutopilotCASecretKey = "PX_CA_CERT_SECRET_KEY"
+	// DefaultCASecretName is the default value for EnvKeyAutopilotCASecretName
+	DefaultCASecretName = "portworx-api-root-ca"
+	// DefaultCASecretKey is the default value for EnvKeyAutopilotCASecretKey
+	DefaultCASecretKey = "root-ca"
+
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
 	// SecurityPXSharedSecretSecretName is the secret name for the PX Security shared secret
