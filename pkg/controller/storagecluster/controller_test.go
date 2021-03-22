@@ -6239,10 +6239,6 @@ func stringPtr(str string) *string {
 	return &str
 }
 
-func boolPtr(val bool) *bool {
-	return &val
-}
-
 func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
 }
