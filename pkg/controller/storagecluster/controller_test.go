@@ -5416,6 +5416,112 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: tls enabled -> disabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled: testutil.BoolPtr(false),
+		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+			APIRootCA: &corev1.CertLocation{
+				FileName: stringPtr("defaultCA.crt"),
+			},
+			ServerCert: &corev1.CertLocation{
+				FileName: stringPtr("default.crt"),
+			},
+			ServerKey: &corev1.CertLocation{
+				FileName: stringPtr("default.key"),
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: tls disabled -> enabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS.Enabled = testutil.BoolPtr(true)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: spec changed, but effective tls value is the same. no pod to delete
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS.Enabled = nil // missing security.tls.enabled will cause tls to take parent security.enabled
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string(nil), podControl.DeletePodName)
+
+	// TestCase: update apiRootCA
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA.FileName = stringPtr("newca.crt")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update serverCert
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName = stringPtr("newcert.crt")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update serverKey
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName = stringPtr("new.key")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
 func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {

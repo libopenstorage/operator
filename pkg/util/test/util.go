@@ -1077,10 +1077,10 @@ func CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName 
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{
-					Enabled: boolPtr(false),
+					Enabled: BoolPtr(false),
 				},
 				TLS: &corev1.TLSSpec{
-					Enabled:            boolPtr(true),
+					Enabled:            BoolPtr(true),
 					AdvancedTLSOptions: advancedOptions,
 				},
 			},
@@ -1089,6 +1089,7 @@ func CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName 
 	return cluster
 }
 
-func boolPtr(val bool) *bool {
+// BoolPtr returns a pointer to provided bool value
+func BoolPtr(val bool) *bool {
 	return &val
 }
