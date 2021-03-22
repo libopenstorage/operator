@@ -1040,3 +1040,55 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 
 	return cluster, nil
 }
+
+// CreatePodSpecWithTLS is a helper method
+func CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName *string) *corev1.StorageCluster {
+	var apicert *corev1.CertLocation = nil
+	if CACertFileName != nil {
+		apicert = &corev1.CertLocation{
+			FileName: CACertFileName,
+		}
+	}
+	var serverCert *corev1.CertLocation = nil
+	if serverCertFileName != nil {
+		serverCert = &corev1.CertLocation{
+			FileName: serverCertFileName,
+		}
+	}
+	var serverkey *corev1.CertLocation = nil
+	if serverKeyFileName != nil {
+		serverkey = &corev1.CertLocation{
+			FileName: serverKeyFileName,
+		}
+	}
+	var advancedOptions *corev1.AdvancedTLSOptions = nil
+	advancedOptions = &corev1.AdvancedTLSOptions{
+		APIRootCA:  apicert,
+		ServerCert: serverCert,
+		ServerKey:  serverkey,
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled:            boolPtr(true),
+					AdvancedTLSOptions: advancedOptions,
+				},
+			},
+		},
+	}
+	return cluster
+}
+
+func boolPtr(val bool) *bool {
+	return &val
+}

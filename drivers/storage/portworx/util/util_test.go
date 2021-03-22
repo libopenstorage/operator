@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -21,7 +22,7 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 		"-apikey", certRootPath + *serverKeyFileName,
 		"-apidisclientauth",
 	}
-	cluster := createPodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
 	// test
 	args, err := GetOciMonArgumentsForTLS(cluster)
 	// validate
@@ -31,15 +32,15 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// error scenarios
 	// GetOciMonArgumentsForTLS expects that defaults have already been applied
 	// setup
-	cluster = createPodSpecWithTLS(CACertFileName, nil, serverKeyFileName)
+	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, nil, serverKeyFileName)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 
-	cluster = createPodSpecWithTLS(nil, serverCertFileName, serverKeyFileName)
+	cluster = testutil.CreatePodSpecWithTLS(nil, serverCertFileName, serverKeyFileName)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 
-	cluster = createPodSpecWithTLS(CACertFileName, serverCertFileName, nil)
+	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, nil)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 }
@@ -114,7 +115,7 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	// security.enabled		security.tls.enabled		TLS enabled?
 	// =============================================================
 	// security = nil									false
-	cluster := createPodSpecWithTLS(nil, nil, nil)
+	cluster := testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security = nil
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
@@ -124,7 +125,7 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	// security.enabled		security.tls.enabled		TLS enabled?
 	// =============================================================
 	// true					security.tls = nil			true
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.Enabled = true
 	cluster.Spec.Security.TLS = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -135,7 +136,7 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	// security.enabled		security.tls.enabled		TLS enabled?
 	// =============================================================
 	// false				security.tls = nil			false
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.Enabled = false
 	cluster.Spec.Security.TLS = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -146,7 +147,7 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 
 // testIsTLSEnabledOnCluster is a helper method
 func testIsTLSEnabledOnCluster(t *testing.T, securityEnabled bool, tlsEnabled *bool, expectedResult bool) {
-	cluster := createPodSpecWithTLS(nil, nil, nil)
+	cluster := testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.Enabled = securityEnabled
 	cluster.Spec.Security.TLS.Enabled = tlsEnabled
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -164,55 +165,6 @@ func testAuthEnabled(t *testing.T, securityEnabled bool, authEnabled *bool, expe
 	t.Logf("Security spec under test = \n, %v", string(s))
 	actual := AuthEnabled(&cluster.Spec)
 	assert.Equal(t, actual, expectedResult)
-}
-
-// TODO: duplicated in deployment_test.go
-// CreatePodSpecWithTLS is a helper method
-func createPodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName *string) *corev1.StorageCluster {
-	var apicert *corev1.CertLocation = nil
-	if CACertFileName != nil {
-		apicert = &corev1.CertLocation{
-			FileName: CACertFileName,
-		}
-	}
-	var serverCert *corev1.CertLocation = nil
-	if serverCertFileName != nil {
-		serverCert = &corev1.CertLocation{
-			FileName: serverCertFileName,
-		}
-	}
-	var serverkey *corev1.CertLocation = nil
-	if serverKeyFileName != nil {
-		serverkey = &corev1.CertLocation{
-			FileName: serverKeyFileName,
-		}
-	}
-	var advancedOptions *corev1.AdvancedTLSOptions = nil
-	advancedOptions = &corev1.AdvancedTLSOptions{
-		APIRootCA:  apicert,
-		ServerCert: serverCert,
-		ServerKey:  serverkey,
-	}
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Security: &corev1.SecuritySpec{
-				Enabled: true,
-				Auth: &corev1.AuthSpec{
-					Enabled: boolPtr(false),
-				},
-				TLS: &corev1.TLSSpec{
-					Enabled:            boolPtr(true),
-					AdvancedTLSOptions: advancedOptions,
-				},
-			},
-		},
-	}
-	return cluster
 }
 
 func createPodSpecWithAuth() *corev1.StorageCluster {

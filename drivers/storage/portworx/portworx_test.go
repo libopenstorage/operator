@@ -6246,7 +6246,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 	serverCertFileName := stringPtr("testServer.crt")
 	serverKeyFileName := stringPtr("testServer.key")
 	// test
-	cluster := createPodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
@@ -6255,7 +6255,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// only one filename supplied
 	// setup
-	cluster = createPodSpecWithTLS(CACertFileName, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, nil, nil)
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
@@ -6265,7 +6265,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// no filename supplied
 	// setup
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
@@ -6275,7 +6275,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// no tls section, but security is enabled, defaults should be generated
 	// setup
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = nil
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -6286,7 +6286,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// empty tls section, but security is enabled, defaults should be generated
 	// setup
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -6297,7 +6297,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// tls section with no advancedOptions, but security is enabled, defaults should be generated
 	// setup
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: boolPtr(true),
 	}
@@ -6310,7 +6310,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
 	// setup
-	cluster = createPodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled:            boolPtr(true),
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
