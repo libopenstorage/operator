@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/scheduler/api"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 )
 
@@ -91,7 +90,7 @@ func TestIsNodeCordoned(t *testing.T) {
 
 	// TestCase: Marked as unschedulable but Unschedulable taint without timeAdded
 	taint := v1.Taint{
-		Key: api.TaintNodeUnschedulable,
+		Key: v1.TaintNodeUnschedulable,
 	}
 	node.Spec.Taints = append(node.Spec.Taints, taint)
 
@@ -130,7 +129,7 @@ func TestIsNodeRecentlyCordoned(t *testing.T) {
 	// TestCase: Node cordoned, but time of cordon is zero
 	node.Spec.Taints = []v1.Taint{
 		{
-			Key:       api.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: nil,
 		},
 	}

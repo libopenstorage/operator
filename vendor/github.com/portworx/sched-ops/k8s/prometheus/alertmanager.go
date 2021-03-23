@@ -1,7 +1,9 @@
 package prometheus
 
 import (
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"context"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +28,7 @@ func (c *Client) ListAlertManagers(namespace string) (*monitoringv1.Alertmanager
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Alertmanagers(namespace).List(metav1.ListOptions{})
+	return c.prometheus.MonitoringV1().Alertmanagers(namespace).List(context.TODO(), metav1.ListOptions{})
 }
 
 // GetAlertManager gets the alert manager that matches the given name
@@ -35,7 +37,7 @@ func (c *Client) GetAlertManager(name string, namespace string) (*monitoringv1.A
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Alertmanagers(namespace).Get(name, metav1.GetOptions{})
+	return c.prometheus.MonitoringV1().Alertmanagers(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 // CreateAlertManager creates the given alert manager
@@ -49,7 +51,7 @@ func (c *Client) CreateAlertManager(alertmanager *monitoringv1.Alertmanager) (*m
 		ns = corev1.NamespaceDefault
 	}
 
-	return c.prometheus.MonitoringV1().Alertmanagers(ns).Create(alertmanager)
+	return c.prometheus.MonitoringV1().Alertmanagers(ns).Create(context.TODO(), alertmanager, metav1.CreateOptions{})
 }
 
 // UpdateAlertManager updates the given alert manager
@@ -58,7 +60,7 @@ func (c *Client) UpdateAlertManager(alertmanager *monitoringv1.Alertmanager) (*m
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().Alertmanagers(alertmanager.Namespace).Update(alertmanager)
+	return c.prometheus.MonitoringV1().Alertmanagers(alertmanager.Namespace).Update(context.TODO(), alertmanager, metav1.UpdateOptions{})
 }
 
 // DeleteAlertManager deletes the given alert manager
@@ -67,7 +69,7 @@ func (c *Client) DeleteAlertManager(name, namespace string) error {
 		return err
 	}
 
-	return c.prometheus.MonitoringV1().Alertmanagers(namespace).Delete(name, &metav1.DeleteOptions{
+	return c.prometheus.MonitoringV1().Alertmanagers(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deleteForegroundPolicy,
 	})
 }

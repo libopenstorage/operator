@@ -9,11 +9,11 @@ import (
 	"regexp"
 	"strconv"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -197,7 +197,7 @@ func CreateOrUpdateRole(
 		existingRole,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s role", role.Name)
+		logrus.Debugf("Creating %s Role", role.Name)
 		return k8sClient.Create(context.TODO(), role)
 	} else if err != nil {
 		return err
@@ -212,7 +212,7 @@ func CreateOrUpdateRole(
 	}
 
 	if modified || len(role.OwnerReferences) > len(existingRole.OwnerReferences) {
-		logrus.Debugf("Updating %s role", role.Name)
+		logrus.Debugf("Updating %s Role", role.Name)
 		return k8sClient.Update(context.TODO(), role)
 	}
 	return nil
@@ -274,7 +274,7 @@ func CreateOrUpdateRoleBinding(
 		existingRB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s role binding", rb.Name)
+		logrus.Debugf("Creating %s RoleBinding", rb.Name)
 		return k8sClient.Create(context.TODO(), rb)
 	} else if err != nil {
 		return err
@@ -290,7 +290,8 @@ func CreateOrUpdateRoleBinding(
 	}
 
 	if modified || len(rb.OwnerReferences) > len(existingRB.OwnerReferences) {
-		logrus.Debugf("Updating %s role binding", rb.Name)
+		rb.ResourceVersion = existingRB.ResourceVersion
+		logrus.Debugf("Updating %s RoleBinding", rb.Name)
 		return k8sClient.Update(context.TODO(), rb)
 	}
 	return nil
@@ -469,7 +470,7 @@ func CreateOrUpdateConfigMap(
 		existingConfigMap,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %v config map", configMap.Name)
+		logrus.Debugf("Creating %v ConfigMap", configMap.Name)
 		return k8sClient.Create(context.TODO(), configMap)
 	} else if err != nil {
 		return err
@@ -490,7 +491,7 @@ func CreateOrUpdateConfigMap(
 	}
 
 	if modified || len(configMap.OwnerReferences) > len(existingConfigMap.OwnerReferences) {
-		logrus.Debugf("Updating %v config map", configMap.Name)
+		logrus.Debugf("Updating %v ConfigMap", configMap.Name)
 		return k8sClient.Update(context.TODO(), configMap)
 	}
 	return nil

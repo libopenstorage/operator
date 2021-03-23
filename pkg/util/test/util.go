@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -28,11 +27,13 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	"github.com/portworx/sched-ops/task"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -44,8 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
-	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -73,16 +73,16 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	corev1.AddToScheme(s)
 	monitoringv1.AddToScheme(s)
 	cluster_v1alpha1.AddToScheme(s)
-	return fake.NewFakeClientWithScheme(s, initObjects...)
+	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }
 
 // List returns a list of objects using the given Kubernetes client
-func List(k8sClient client.Client, obj runtime.Object) error {
+func List(k8sClient client.Client, obj client.ObjectList) error {
 	return k8sClient.List(context.TODO(), obj, &client.ListOptions{})
 }
 
 // Get returns an object using the given Kubernetes client
-func Get(k8sClient client.Client, obj runtime.Object, name, namespace string) error {
+func Get(k8sClient client.Client, obj client.Object, name, namespace string) error {
 	return k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
@@ -94,12 +94,12 @@ func Get(k8sClient client.Client, obj runtime.Object, name, namespace string) er
 }
 
 // Delete deletes an object using the given Kubernetes client
-func Delete(k8sClient client.Client, obj runtime.Object) error {
+func Delete(k8sClient client.Client, obj client.Object) error {
 	return k8sClient.Delete(context.TODO(), obj)
 }
 
 // Update changes an object using the given Kubernetes client and updates the resource version
-func Update(k8sClient client.Client, obj runtime.Object) error {
+func Update(k8sClient client.Client, obj client.Object) error {
 	return k8sClient.Update(
 		context.TODO(),
 		obj,
@@ -227,6 +227,14 @@ func GetExpectedPrometheusRule(t *testing.T, fileName string) *monitoringv1.Prom
 	return prometheusRule
 }
 
+// GetExpectedPSP returns the PodSecurityPolicy object from given yaml spec file
+func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPolicy {
+	obj := getKubernetesObject(t, fileName)
+	psp, ok := obj.(*policyv1beta1.PodSecurityPolicy)
+	assert.True(t, ok, "Expected PodSecurityPolicy object")
+	return psp
+}
+
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
@@ -260,13 +268,15 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
-			Get(crdName, metav1.GetOptions{})
+			Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err == nil {
 			crd.Status.Conditions = []apiextensionsv1beta1.CustomResourceDefinitionCondition{{
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			fakeClient.ApiextensionsV1beta1().
+				CustomResourceDefinitions().
+				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
 			return true, nil
 		} else if !errors.IsNotFound(err) {
 			return false, err
@@ -630,9 +640,7 @@ func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 		if coreops.Instance().IsNodeMaster(node) {
 			continue
 		}
-		nodeInfo := schedulernodeinfo.NewNodeInfo()
-		nodeInfo.SetNode(&node)
-		if ok, _, _ := predicates.PodMatchNodeSelector(dummyPod, nil, nodeInfo); ok {
+		if pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(dummyPod, &node) {
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}

@@ -43,6 +43,14 @@ type portworxStorageClass struct {
 	k8sClient client.Client
 }
 
+func (c *portworxStorageClass) Name() string {
+	return PortworxStorageClassComponentName
+}
+
+func (c *portworxStorageClass) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *portworxStorageClass) Initialize(
 	k8sClient client.Client,
 	_ version.Version,

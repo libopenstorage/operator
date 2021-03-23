@@ -1,7 +1,9 @@
 package prometheus
 
 import (
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"context"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +28,7 @@ func (c *Client) ListServiceMonitors(namespace string) (*monitoringv1.ServiceMon
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).List(metav1.ListOptions{})
+	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).List(context.TODO(), metav1.ListOptions{})
 }
 
 // GetServiceMonitor gets the service monitor instance that matches the given name
@@ -35,7 +37,7 @@ func (c *Client) GetServiceMonitor(name string, namespace string) (*monitoringv1
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).Get(name, metav1.GetOptions{})
+	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 // CreateServiceMonitor creates the given service monitor
@@ -49,7 +51,7 @@ func (c *Client) CreateServiceMonitor(serviceMonitor *monitoringv1.ServiceMonito
 		ns = corev1.NamespaceDefault
 	}
 
-	return c.prometheus.MonitoringV1().ServiceMonitors(ns).Create(serviceMonitor)
+	return c.prometheus.MonitoringV1().ServiceMonitors(ns).Create(context.TODO(), serviceMonitor, metav1.CreateOptions{})
 }
 
 // UpdateServiceMonitor updates the given service monitor
@@ -58,7 +60,7 @@ func (c *Client) UpdateServiceMonitor(serviceMonitor *monitoringv1.ServiceMonito
 		return nil, err
 	}
 
-	return c.prometheus.MonitoringV1().ServiceMonitors(serviceMonitor.Namespace).Update(serviceMonitor)
+	return c.prometheus.MonitoringV1().ServiceMonitors(serviceMonitor.Namespace).Update(context.TODO(), serviceMonitor, metav1.UpdateOptions{})
 }
 
 // DeleteServiceMonitor deletes the given service monitor
@@ -67,7 +69,7 @@ func (c *Client) DeleteServiceMonitor(name, namespace string) error {
 		return err
 	}
 
-	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).Delete(name, &metav1.DeleteOptions{
+	return c.prometheus.MonitoringV1().ServiceMonitors(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deleteForegroundPolicy,
 	})
 }

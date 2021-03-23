@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/api/v1"
+	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
 func TestStorkInstallation(t *testing.T) {
@@ -92,13 +92,13 @@ func TestStorkInstallation(t *testing.T) {
 			Kind:       "Policy",
 			APIVersion: "v1",
 		},
-		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+		Extenders: []schedulerv1.Extender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    5 * time.Minute,
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
 			},
 		},
 	})
@@ -1283,6 +1283,170 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 	require.Nil(t, storkSchedDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 }
 
+func TestStorkVolumesChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	volumeSpecs := []corev1.VolumeSpec{
+		{
+			Name:      "testvol",
+			MountPath: "/var/testvol",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/host/test",
+				},
+			},
+		},
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:v1",
+				Volumes: volumeSpecs,
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// Case: Volumes should be applied to the deployment
+	volumes, volumeMounts := expectedVolumesAndMounts(volumeSpecs)
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, storkDeployment.Spec.Template.Spec.Volumes)
+	require.ElementsMatch(t, volumeMounts,
+		storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: Updated volumes should be applied to the deployment
+	propagation := v1.MountPropagationBidirectional
+	pathType := v1.HostPathDirectory
+	volumeSpecs[0].MountPropagation = &propagation
+	volumeSpecs[0].HostPath.Type = &pathType
+	cluster.Spec.Stork.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, storkDeployment.Spec.Template.Spec.Volumes)
+	require.ElementsMatch(t, volumeMounts,
+		storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: New volumes should be applied to the deployment
+	volumeSpecs = append(volumeSpecs, corev1.VolumeSpec{
+		Name:      "testvol2",
+		MountPath: "/var/testvol2",
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: "volume-secret",
+			},
+		},
+	})
+	cluster.Spec.Stork.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, storkDeployment.Spec.Template.Spec.Volumes)
+	require.ElementsMatch(t, volumeMounts,
+		storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: Removed volumes should be removed from the deployment
+	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
+	cluster.Spec.Stork.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, storkDeployment.Spec.Template.Spec.Volumes)
+	require.ElementsMatch(t, volumeMounts,
+		storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: If volumes are empty, should be removed from the deployment
+	cluster.Spec.Stork.Volumes = []corev1.VolumeSpec{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Volumes)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: Volumes should be added back if not present in deployment
+	cluster.Spec.Stork.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, storkDeployment.Spec.Template.Spec.Volumes)
+	require.ElementsMatch(t, volumeMounts,
+		storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Case: If volumes is nil, deployment should not have volumes
+	cluster.Spec.Stork.Volumes = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Volumes)
+	require.Nil(t, storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+}
+
 func TestStorkCPUChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -1939,13 +2103,13 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 			Kind:       "Policy",
 			APIVersion: "v1",
 		},
-		ExtenderConfigs: []schedulerv1.ExtenderConfig{
+		Extenders: []schedulerv1.Extender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    5 * time.Minute,
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
 			},
 		},
 	}
@@ -1963,8 +2127,8 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 
 	// TestCase: Reconcile to original policy if changed by the user
 	modifiedPolicy := defaultPolicy.DeepCopy()
-	modifiedPolicy.ExtenderConfigs[0].PrioritizeVerb = ""
-	modifiedPolicy.ExtenderConfigs[0].Weight = 10
+	modifiedPolicy.Extenders[0].PrioritizeVerb = ""
+	modifiedPolicy.Extenders[0].Weight = 10
 	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)
 
 	storkConfigMap.Data["policy.cfg"] = string(modifiedPolicyBytes)
@@ -2348,4 +2512,14 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 	storkSC := &storagev1.StorageClass{}
 	err = testutil.Get(k8sClient, storkSC, storkSnapshotStorageClassName, "")
 	require.True(t, errors.IsNotFound(err))
+}
+
+func expectedVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1.VolumeMount) {
+	expectedVolumeSpecs := make([]corev1.VolumeSpec, len(volumeSpecs))
+	for i, v := range volumeSpecs {
+		vCopy := v.DeepCopy()
+		vCopy.Name = "user-" + v.Name
+		expectedVolumeSpecs[i] = *vCopy
+	}
+	return util.ExtractVolumesAndMounts(expectedVolumeSpecs)
 }

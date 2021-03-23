@@ -99,6 +99,9 @@ const (
 	AnnotationRunOnMaster = pxAnnotationPrefix + "/run-on-master"
 	// AnnotationPodDisruptionBudget annotation indicating whether to create pod disruption budgets
 	AnnotationPodDisruptionBudget = pxAnnotationPrefix + "/pod-disruption-budget"
+	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
+	// of pod security policies
+	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -168,9 +171,11 @@ const (
 	// ImageNamePause is the container image to use for the pause container
 	ImageNamePause = "k8s.gcr.io/pause:3.1"
 
-	pxAnnotationPrefix = "portworx.io"
-	labelKeyName       = "name"
-	defaultSDKPort     = 9020
+	// userVolumeNamePrefix prefix used for user volume names to avoid name conflicts with existing volumes
+	userVolumeNamePrefix = "user-"
+	pxAnnotationPrefix   = "portworx.io"
+	labelKeyName         = "name"
+	defaultSDKPort       = 9020
 )
 
 var (
@@ -238,6 +243,12 @@ func StorageClassEnabled(cluster *corev1.StorageCluster) bool {
 func PodDisruptionBudgetEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodDisruptionBudget])
 	return err != nil || enabled
+}
+
+// PodSecurityPolicyEnabled returns true if the PSP annotation is present and has true value
+func PodSecurityPolicyEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodSecurityPolicy])
+	return err == nil && enabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present
@@ -691,4 +702,9 @@ func EssentialsEnabled() bool {
 // i.e. 5s, 5m, 5h, 5d, and 5y
 func ParseExtendedDuration(s string) (time.Duration, error) {
 	return auth.ParseToDuration(s)
+}
+
+// UserVolumeName returns modified volume name for the user given volume name
+func UserVolumeName(name string) string {
+	return userVolumeNamePrefix + name
 }

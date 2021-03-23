@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/mock"
-
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -18,6 +16,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -44,10 +43,11 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -62,7 +62,10 @@ func TestInit(t *testing.T) {
 
 	mgr := mock.NewMockManager(mockCtrl)
 	mockCache := mock.NewMockCache(mockCtrl)
-	mockCache.EXPECT().IndexField(gomock.Any(), nodeNameIndex, gomock.Any()).Return(nil).AnyTimes()
+	mockCache.EXPECT().
+		IndexField(gomock.Any(), gomock.Any(), nodeNameIndex, gomock.Any()).
+		Return(nil).
+		AnyTimes()
 	mgr.EXPECT().GetClient().Return(k8sClient).AnyTimes()
 	mgr.EXPECT().GetScheme().Return(scheme.Scheme).AnyTimes()
 	mgr.EXPECT().GetEventRecorderFor(gomock.Any()).Return(recorder).AnyTimes()
@@ -73,6 +76,7 @@ func TestInit(t *testing.T) {
 	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetCache().Return(mockCache).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
 
 	controller := Controller{
 		client:   k8sClient,
@@ -122,13 +126,13 @@ func TestRegisterCRD(t *testing.T) {
 
 	crds, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
+		List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 
 	scCRD, err := fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(storageClusterCRDName, metav1.GetOptions{})
+		Get(context.TODO(), storageClusterCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, storageClusterCRDName, scCRD.Name)
 	require.Equal(t, corev1.SchemeGroupVersion.Group, scCRD.Spec.Group)
@@ -153,7 +157,9 @@ func TestRegisterCRD(t *testing.T) {
 
 	// If CRDs are already present, then should update it
 	scCRD.ResourceVersion = "1000"
-	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(scCRD)
+	fakeExtClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Update(context.TODO(), scCRD, metav1.UpdateOptions{})
 
 	// The fake client overwrites the status in Update call which real client
 	// does not. This will keep the CRD activated so validation does not get stuck.
@@ -168,14 +174,14 @@ func TestRegisterCRD(t *testing.T) {
 
 	crds, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		List(metav1.ListOptions{})
+		List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, crds.Items, 1)
 	require.Equal(t, storageClusterCRDName, crds.Items[0].Name)
 
 	scCRD, err = fakeExtClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(storageClusterCRDName, metav1.GetOptions{})
+		Get(context.TODO(), storageClusterCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "1000", scCRD.ResourceVersion)
 }
@@ -207,7 +213,7 @@ func TestKubernetesVersionValidation(t *testing.T) {
 			Namespace: "test-ns",
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Contains(t, err.Error(), "minimum supported kubernetes version")
 
@@ -222,7 +228,7 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	}
 	controller.kubernetesVersion = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Contains(t, err.Error(), "invalid kubernetes version received")
 
@@ -262,7 +268,7 @@ func TestSingleClusterValidation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Contains(t, err.Error(), fmt.Sprintf("only one StorageCluster is allowed in a Kubernetes cluster. "+
 		"StorageCluster %s/%s already exists", existingCluster.Namespace, existingCluster.Name))
@@ -505,7 +511,7 @@ func TestReconcileForNonExistingCluster(t *testing.T) {
 			Namespace: "test-ns",
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	require.Empty(t, result)
@@ -552,7 +558,7 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -593,7 +599,7 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Contains(t, err.Error(), "preinstall error")
 	require.Empty(t, result)
 
@@ -644,7 +650,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -722,7 +728,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -786,7 +792,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -798,6 +804,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 			Labels:          storageLabels,
+			ResourceVersion: "2",
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
@@ -827,7 +834,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	storageNodes.Items[0].Status.Phase = string(corev1.NodeOnlineStatus)
 	k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -847,7 +854,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	k8sClient.Delete(context.TODO(), &storageNodes.Items[0])
 	k8sClient.Delete(context.TODO(), &storageNodes.Items[1])
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -1137,7 +1144,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1231,7 +1238,7 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1253,6 +1260,12 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	maxUnavailable := intstr.FromInt(0)
+	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
+		RollingUpdate: &corev1.RollingUpdateStorageCluster{
+			MaxUnavailable: &maxUnavailable,
+		},
+	}
 	storageLabels := map[string]string{
 		constants.LabelKeyClusterName: cluster.Name,
 		constants.LabelKeyDriverName:  driverName,
@@ -1296,7 +1309,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 					{
 						MatchFields: []v1.NodeSelectorRequirement{
 							{
-								Key:      schedulerapi.NodeFieldSelectorKeyNodeName,
+								Key:      api.ObjectNameField,
 								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{k8sNode.Name},
 							},
@@ -1310,22 +1323,31 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 	// If multiple pods are running on a single node, only one with earliest
 	// timestamp and which is scheduled should be retained. If spec.NodeName
 	// is set, it is assumed that the pod is scheduled.
+	readyCondition := v1.PodCondition{
+		Type:   v1.PodReady,
+		Status: v1.ConditionTrue,
+	}
 	unscheduledPod1 := createStoragePod(cluster, "unscheduled-pod-1", "", storageLabels)
 	unscheduledPod1.CreationTimestamp = metav1.Now()
 	unscheduledPod1.Spec.Affinity = affinity
+	unscheduledPod1.Status.Conditions = []v1.PodCondition{readyCondition}
 
 	creationTimestamp := metav1.NewTime(time.Now().Add(1 * time.Minute))
 	runningPod1 := createStoragePod(cluster, "running-pod-1", k8sNode.Name, storageLabels)
 	runningPod1.CreationTimestamp = creationTimestamp
+	runningPod1.Status.Conditions = []v1.PodCondition{readyCondition}
 	runningPod2 := createStoragePod(cluster, "running-pod-2", k8sNode.Name, storageLabels)
 	runningPod2.CreationTimestamp = creationTimestamp
+	runningPod2.Status.Conditions = []v1.PodCondition{readyCondition}
 
 	unscheduledPod2 := createStoragePod(cluster, "unscheduled-pod-2", "", storageLabels)
 	unscheduledPod2.CreationTimestamp = metav1.NewTime(time.Now().Add(2 * time.Minute))
 	unscheduledPod2.Spec.Affinity = affinity
+	unscheduledPod2.Status.Conditions = []v1.PodCondition{readyCondition}
 
 	extraRunningPod := createStoragePod(cluster, "extra-running-pod", k8sNode.Name, storageLabels)
 	extraRunningPod.CreationTimestamp = metav1.NewTime(time.Now().Add(3 * time.Minute))
+	extraRunningPod.Status.Conditions = []v1.PodCondition{readyCondition}
 
 	k8sClient.Create(context.TODO(), k8sNode)
 	k8sClient.Create(context.TODO(), unscheduledPod1)
@@ -1340,7 +1362,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1409,7 +1431,7 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1418,86 +1440,6 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 
 	require.Empty(t, podControl.Templates)
 	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
-}
-
-func TestStoragePodFailureDueToInsufficientResources(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	driverName := "mock-driver"
-	cluster := createStorageCluster()
-	storageLabels := map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  driverName,
-	}
-
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	podControl := &k8scontroller.FakePodControl{}
-	recorder := record.NewFakeRecorder(10)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
-	}
-
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
-	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
-	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
-	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
-
-	// This will create a revision which we will map to our pre-created pods
-	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
-	require.NoError(t, err)
-
-	// Kubernetes nodes without enough resources to create a pod
-	k8sNode1 := createK8sNode("k8s-node-1", 0)
-	k8sNode2 := createK8sNode("k8s-node-2", 0)
-
-	// Pods that are already running on the k8s nodes with same hash
-	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
-	runningPod := createStoragePod(cluster, "running-pod", k8sNode2.Name, storageLabels)
-
-	k8sClient.Create(context.TODO(), k8sNode1)
-	k8sClient.Create(context.TODO(), k8sNode2)
-	k8sClient.Create(context.TODO(), runningPod)
-
-	request := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-	}
-	result, err := controller.Reconcile(request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-
-	// Verify event is raised if failed to place pod
-	// Two events per pod are raised as we simulate every pod on the node twice
-	require.Len(t, recorder.Events, 4)
-	expectedEvent := fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedPlacementReason)
-	require.Contains(t, <-recorder.Events, expectedEvent)
-	require.Contains(t, <-recorder.Events, expectedEvent)
-	require.Contains(t, <-recorder.Events, expectedEvent)
-	require.Contains(t, <-recorder.Events, expectedEvent)
-
-	// Verify there is one revision for the new StorageCluster object
-	revisions := &appsv1.ControllerRevisionList{}
-	err = testutil.List(k8sClient, revisions)
-	require.NoError(t, err)
-	require.Len(t, revisions.Items, 1)
-
-	// Verify no pod is created due to insufficient resources.
-	// Existing pods are not removed from nodes without resources.
-	require.Empty(t, podControl.Templates)
-	require.Empty(t, podControl.DeletePodName)
 }
 
 func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
@@ -1513,7 +1455,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 					{
 						MatchFields: []v1.NodeSelectorRequirement{
 							{
-								Key:      schedulerapi.NodeFieldSelectorKeyNodeName,
+								Key:      api.ObjectNameField,
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"k8s-node-1", "k8s-node-2"},
 							},
@@ -1580,7 +1522,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1687,7 +1629,7 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1698,10 +1640,13 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 
 	// Case: Remove tolerations and the pods on nodes with NoExecute should be removed.
 	// Pods on nodes with NoSchedule should NOT be removed
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1714,7 +1659,7 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 	k8sClient.Delete(context.TODO(), runningPod1)
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1774,7 +1719,7 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod template error for k8s-node-1")
 	require.Empty(t, result)
@@ -1797,7 +1742,7 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 		Times(1)
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod template error for k8s-node-2")
 	require.Empty(t, result)
@@ -1870,7 +1815,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod control error")
 	require.Empty(t, result)
@@ -1925,7 +1870,7 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -1971,7 +1916,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2021,7 +1966,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2064,7 +2009,7 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pre-install error")
 	require.Empty(t, result)
@@ -2123,7 +2068,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2138,7 +2083,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	driver.EXPECT().UpdateDriver(expectedDriverInfo).Return(nil)
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2146,7 +2091,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	// Should not fail reconcile even if there is an error on UpdateDriver
 	driver.EXPECT().UpdateDriver(expectedDriverInfo).Return(fmt.Errorf("update error"))
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2214,7 +2159,7 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2271,7 +2216,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2290,7 +2235,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	// If storage driver returns error, then controller should not return error but raise an event
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, fmt.Errorf("delete error"))
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2321,7 +2266,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2340,7 +2285,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2359,7 +2304,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -2413,7 +2358,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2454,11 +2399,20 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 
 	// On deleting the storage cluster, stork specs should
 	// also get removed
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	deletionTimeStamp := metav1.Now()
 	cluster.DeletionTimestamp = &deletionTimeStamp
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	condition := &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationCompleted,
+	}
+	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
+
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2529,7 +2483,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2550,8 +2504,11 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	// Test case: Changing the cluster spec -
 	// A new revision should be created for the new cluster spec
 	// Also the pod should be changed with the updated spec
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "new/image"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
 	require.NoError(t, err)
 	oldPod.Name = oldPod.GenerateName + "1"
@@ -2568,7 +2525,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	podControl.ControllerRefs = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2593,7 +2550,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	podControl.ControllerRefs = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -2702,7 +2659,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Len(t, podControl.DeletePodName, 2)
@@ -2726,7 +2683,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -2747,7 +2704,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -2756,13 +2713,16 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	// If another update happens to storage cluster, we should account for non-running
 	// and non-ready pods in max unavailable pods. Also we should delete an old not ready
 	// pod before a running one.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v3"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{replacedPod1.Name}, podControl.DeletePodName)
@@ -2770,7 +2730,8 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 
 	// Once the new pods are up and in ready state, we should delete remaining
 	// pods with older versions.
-	k8sClient.Delete(context.TODO(), replacedPod1)
+	err = k8sClient.Delete(context.TODO(), replacedPod1)
+	require.NoError(t, err)
 
 	replacedPod2, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
 	require.NoError(t, err)
@@ -2783,17 +2744,20 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 			Status: v1.ConditionTrue,
 		},
 	}
-	k8sClient.Create(context.TODO(), replacedPod2)
+	err = k8sClient.Create(context.TODO(), replacedPod2)
+	require.NoError(t, err)
 
 	replacedPod3 := replacedPod2.DeepCopy()
 	replacedPod3.Name = replacedPod2.GenerateName + "replaced-3"
 	replacedPod3.Spec.NodeName = deletedPods[1].Spec.NodeName
-	k8sClient.Create(context.TODO(), replacedPod3)
+	replacedPod3.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), replacedPod3)
+	require.NoError(t, err)
 
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Len(t, podControl.DeletePodName, 2)
@@ -2873,6 +2837,8 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	k8sClient.Create(context.TODO(), oldPod4)
 
 	// Should delete pods only up to maxUnavailable value. In this case - 75%
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	maxUnavailable := intstr.FromString("75%")
 	cluster.Spec.UpdateStrategy = corev1.StorageClusterUpdateStrategy{
 		Type: corev1.RollingUpdateStorageClusterStrategyType,
@@ -2881,7 +2847,8 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 		},
 	}
 	cluster.Spec.Image = "test/image:v2"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -2889,7 +2856,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.Templates)
@@ -2908,7 +2875,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -2926,22 +2893,27 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 			Status: v1.ConditionTrue,
 		},
 	}
-	k8sClient.Create(context.TODO(), replacedPod1)
+	err = k8sClient.Create(context.TODO(), replacedPod1)
+	require.NoError(t, err)
 
 	replacedPod2 := replacedPod1.DeepCopy()
 	replacedPod2.Name = replacedPod1.GenerateName + "replaced-2"
 	replacedPod2.Spec.NodeName = deletedPods[1].Spec.NodeName
-	k8sClient.Create(context.TODO(), replacedPod2)
+	replacedPod2.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), replacedPod2)
+	require.NoError(t, err)
 
 	replacedPod3 := replacedPod2.DeepCopy()
 	replacedPod3.Name = replacedPod2.GenerateName + "replaced-3"
 	replacedPod3.Spec.NodeName = deletedPods[2].Spec.NodeName
-	k8sClient.Create(context.TODO(), replacedPod3)
+	replacedPod3.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), replacedPod3)
+	require.NoError(t, err)
 
 	podControl.Templates = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Len(t, podControl.DeletePodName, 1)
@@ -2991,7 +2963,7 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid value for MaxUnavailable")
@@ -3058,7 +3030,7 @@ func TestUpdateStorageClusterWhenDriverReportsPodNotUpdated(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
@@ -3115,7 +3087,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{runningPod.Name}, podControl.DeletePodName)
@@ -3173,8 +3145,11 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 	k8sClient.Create(context.TODO(), storagePod)
 
 	// TestCase: Add imagePullSecret
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.ImagePullSecret = stringPtr("pull-secret")
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -3182,7 +3157,7 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3195,10 +3170,13 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
 
 	// Change the image pull secret
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.ImagePullSecret = stringPtr("new-pull-secret")
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
@@ -3207,10 +3185,13 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 	// Replace old pod with new configuration so that it has the new image pull secret
 	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.ImagePullSecret = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
@@ -3277,7 +3258,7 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3290,10 +3271,13 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
 
 	// Change the custom image registry
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.CustomImageRegistry = "registry.second"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
@@ -3302,10 +3286,13 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 	// Replace old pod with new configuration so that it has the new custom image registry
 	storagePod = replaceOldPod(storagePod, cluster, controller, podControl)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.CustomImageRegistry = ""
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{storagePod.Name}, podControl.DeletePodName)
@@ -3374,7 +3361,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3388,7 +3375,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3399,7 +3386,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3410,7 +3397,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3480,7 +3467,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3494,7 +3481,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3505,7 +3492,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3519,7 +3506,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3531,7 +3518,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3543,7 +3530,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3555,7 +3542,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3567,7 +3554,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3578,7 +3565,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3648,7 +3635,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3662,7 +3649,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3674,7 +3661,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3686,7 +3673,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3698,7 +3685,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3710,7 +3697,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3721,7 +3708,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3732,7 +3719,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3802,7 +3789,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3816,7 +3803,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3888,7 +3875,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3902,7 +3889,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -3971,7 +3958,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -3985,7 +3972,228 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+}
+
+func TestUpdateStorageClusterVolumes(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	oldPod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), oldPod)
+
+	// TestCase: Add spec.volumes
+	cluster.Spec.Volumes = []corev1.VolumeSpec{
+		{
+			Name:      "testvol",
+			MountPath: "/var/testvol",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/host/test",
+				},
+			},
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated.
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change host path
+	cluster.Spec.Volumes[0].HostPath.Path = "/new/host/path"
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change mount path
+	cluster.Spec.Volumes[0].MountPath = "/new/var/testvol"
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change mount propagation
+	mountPropagation := v1.MountPropagationBidirectional
+	cluster.Spec.Volumes[0].MountPropagation = &mountPropagation
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change readOnly param
+	cluster.Spec.Volumes[0].ReadOnly = true
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add secret type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol2",
+		MountPath: "/var/testvol2",
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: "volume-secret",
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add configMap type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol3",
+		MountPath: "/var/testvol3",
+		VolumeSource: v1.VolumeSource{
+			ConfigMap: &v1.ConfigMapVolumeSource{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "volume-configmap",
+				},
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add projected type volume
+	cluster.Spec.Volumes = append(cluster.Spec.Volumes, corev1.VolumeSpec{
+		Name:      "testvol4",
+		MountPath: "/var/testvol4",
+		VolumeSource: v1.VolumeSource{
+			Projected: &v1.ProjectedVolumeSource{
+				Sources: []v1.VolumeProjection{
+					{
+						Secret: &v1.SecretProjection{
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: "volume-projected-secret",
+							},
+						},
+					},
+					{
+						ConfigMap: &v1.ConfigMapProjection{
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: "volume-projected-configmap",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove volumes
+	cluster.Spec.Volumes = cluster.Spec.Volumes[:1]
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove all volumes
+	cluster.Spec.Volumes = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4053,7 +4261,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4067,7 +4275,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4135,7 +4343,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4149,7 +4357,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4218,7 +4426,7 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4232,7 +4440,7 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4306,6 +4514,8 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// TestCase: Add node specific storage configuration.
 	// Should start with that instead of cluster level configuration.
 	devices := []string{"dev1", "dev2"}
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
 			Selector: corev1.NodeSelector{
@@ -4384,7 +4594,8 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 			},
 		},
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -4392,7 +4603,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4401,91 +4612,114 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change node specific storage configuration.
-	devices = append(devices, "spec3")
-	k8sClient.Update(context.TODO(), cluster)
+	newDevices := []string{"dev1", "dev2", "dev3"}
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Nodes[0].Storage.Devices = &newDevices
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs := &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change node specific network configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].Network.DataInterface = stringPtr("new_data_interface")
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change existing runtime option in node specific configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].RuntimeOpts["node_rt_1"] = "changed_value"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Add runtime option in node specific configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].RuntimeOpts["new_rt_option"] = "new_value"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change env var value in node specific configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].Env[0].Value = "changed_value"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Add env var in node specific configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].Env = append(cluster.Spec.Nodes[0].Env, v1.EnvVar{
 		Name:  "ADD_ENV",
 		Value: "newly_added_env",
@@ -4495,49 +4729,58 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change env var value in cluster configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Env[0].Value = "changed_cluster_value"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Add env var in cluster configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  "ADD_CLUSTER_ENV",
 		Value: "newly_added_cluster_env",
 	})
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4545,67 +4788,82 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// TestCase: Change env var value in cluster configuration which is already
 	// overridden in node level configuration. As nothing will be changed in the final
 	// spec, pod should not restart.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
 		Name:  "COMMON_ENV",
 		Value: "cluster_value",
 	})
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change selector in node block such tha it still matches the same node.
 	// Should not restart the pod as the node level configuration is unchanged.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["extra"] = "label"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Change selector in node block so it the block does not match
 	// the node. Start using configuration from another spec block that matches.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["test"] = "bar"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Remove node specific configuration.
 	// Should start using cluster level configuration.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Nodes = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs = &appsv1.ControllerRevisionList{}
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
-	k8sClient.Update(context.TODO(), oldPod)
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4696,7 +4954,7 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4709,7 +4967,7 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4783,7 +5041,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -4798,7 +5056,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4810,7 +5068,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4821,7 +5079,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4832,7 +5090,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4843,7 +5101,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4854,7 +5112,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
@@ -4920,7 +5178,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4932,7 +5190,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -4994,15 +5252,18 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
 	// TestCase: Change security to enabled
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	request = reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -5010,25 +5271,30 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: enabled -> disabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security.Enabled = false
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: disabled -> enabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth: &corev1.AuthSpec{
@@ -5038,36 +5304,42 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 			},
 		},
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: update issuer
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer")
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: update shared secret
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = stringPtr("newsecret")
-
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -5077,7 +5349,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string(nil), podControl.DeletePodName)
@@ -5088,20 +5360,22 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string(nil), podControl.DeletePodName)
 
 	// TestCase: remove shared secret, set to nil
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = nil
-
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
@@ -5146,7 +5420,7 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5164,13 +5438,17 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	dupHistory1.Name = historyName(cluster.Name, "00001")
 	dupHistory1.Labels[defaultStorageClusterUniqueLabelKey] = "00001"
 	dupHistory1.Revision = firstRevision.Revision + 1
-	k8sClient.Create(context.TODO(), dupHistory1)
+	dupHistory1.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), dupHistory1)
+	require.NoError(t, err)
 
 	dupHistory2 := firstRevision.DeepCopy()
 	dupHistory2.Name = historyName(cluster.Name, "00002")
 	dupHistory2.Labels[defaultStorageClusterUniqueLabelKey] = "00002"
 	dupHistory2.Revision = firstRevision.Revision + 2
-	k8sClient.Create(context.TODO(), dupHistory2)
+	dupHistory2.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), dupHistory2)
+	require.NoError(t, err)
 
 	// The created pod should have the hash of first revision
 	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
@@ -5180,12 +5458,16 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	oldPod.Name = oldPod.GenerateName + "1"
 	oldPod.Namespace = cluster.Namespace
 	oldPod.Spec.NodeName = k8sNode.Name
-	k8sClient.Create(context.TODO(), oldPod)
+	err = k8sClient.Create(context.TODO(), oldPod)
+	require.NoError(t, err)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v2"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5195,22 +5477,33 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 4)
-	require.Equal(t, int64(4), revisions.Items[3].Revision)
+	require.ElementsMatch(t,
+		[]int64{1, 2, 3, 4},
+		[]int64{
+			revisions.Items[0].Revision,
+			revisions.Items[1].Revision,
+			revisions.Items[2].Revision,
+			revisions.Items[3].Revision,
+		},
+	)
 
 	// Test case: Changing the cluster spec back to the first version -
 	// The revision number in the existing controller revision should be
 	// updated to the latest number. The hash is going to remain the same.
 	// Hence, new revision does not need to be created. Older duplicate
 	// revisions should be removed and pod's hash should be updated to latest.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v1"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Reset the fake pod controller
 	podControl.Templates = nil
 	podControl.ControllerRefs = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5220,8 +5513,7 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
 	require.Equal(t, dupHistory2.Name, revisions.Items[0].Name)
-	require.Equal(t, int64(5), revisions.Items[0].Revision)
-	require.Equal(t, int64(4), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{4, 5}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// No pod should be marked for deletion as the pod already has same spec
 	// as the current spec. Check only if the pod's hash has been updated to
@@ -5283,7 +5575,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), fmt.Sprintf("\"%s\" not found", cluster.Name))
@@ -5303,10 +5595,12 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	// TestCase: Hash collision with two revisions should result in an error, but the
 	// CollisionCount should be increased so it does not conflict on next reconcile.
-	_, err = fakeClient.CoreV1().StorageClusters(cluster.Namespace).Create(cluster)
+	_, err = fakeClient.CoreV1().
+		StorageClusters(cluster.Namespace).
+		Create(context.TODO(), cluster, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "already exists")
@@ -5334,7 +5628,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	k8sClient.Create(context.TODO(), collidingRevision)
 	cluster.Spec.Image = "image/v1"
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "found a stale collision count")
@@ -5353,10 +5647,12 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	// TestCase: Hash collision with two revisions should result in an error, but the
 	// CollisionCount should be increased to avoid conflict on next reconcile.
-	_, err = fakeClient.CoreV1().StorageClusters(cluster.Namespace).Update(currCluster)
+	_, err = fakeClient.CoreV1().
+		StorageClusters(cluster.Namespace).
+		Update(context.TODO(), currCluster, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "already exists")
@@ -5376,7 +5672,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	// TestCase: As hash collision has be handed in previous reconcile but increasing
 	// the CollisionCount, we should not get error now during reconcile and a new
 	// revision should be created.
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
@@ -5425,7 +5721,7 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5443,7 +5739,9 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	dupHistory1.Name = historyName(cluster.Name, "00001")
 	dupHistory1.Labels[defaultStorageClusterUniqueLabelKey] = "00001"
 	dupHistory1.Revision = firstRevision.Revision + 1
-	k8sClient.Create(context.TODO(), dupHistory1)
+	dupHistory1.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), dupHistory1)
+	require.NoError(t, err)
 
 	// The created pod should have the hash of first revision
 	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
@@ -5453,12 +5751,16 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	oldPod.Name = oldPod.GenerateName + "1"
 	oldPod.Namespace = cluster.Namespace
 	oldPod.Spec.NodeName = k8sNode.Name
-	k8sClient.Create(context.TODO(), oldPod)
+	err = k8sClient.Create(context.TODO(), oldPod)
+	require.NoError(t, err)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v2"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5468,7 +5770,9 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 3)
-	require.Equal(t, int64(3), revisions.Items[2].Revision)
+	require.ElementsMatch(t, []int64{1, 2, 3},
+		[]int64{revisions.Items[0].Revision, revisions.Items[1].Revision, revisions.Items[2].Revision},
+	)
 
 	// Test case: Changing the cluster spec back to the first version -
 	// The revision number in the existing controller revision should be
@@ -5479,30 +5783,34 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	dupHistory2.Name = historyName(cluster.Name, "00002")
 	dupHistory2.Labels[defaultStorageClusterUniqueLabelKey] = "00002"
 	dupHistory2.Revision = revisions.Items[2].Revision + 1
-	k8sClient.Create(context.TODO(), dupHistory2)
+	dupHistory2.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), dupHistory2)
+	require.NoError(t, err)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v1"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Reset the fake pod controller
 	podControl.Templates = nil
 	podControl.ControllerRefs = nil
 	podControl.DeletePodName = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
 	// New revision should not be created as the cluster spec is unchanged.
-	// The latest revision should be unchanged, but previous one need should
-	// be deleted.
+	// The latest revision should be unchanged, but previous one should be
+	// deleted.
 	revisions = &appsv1.ControllerRevisionList{}
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, dupHistory2.Name, revisions.Items[1].Name)
-	require.Equal(t, int64(4), revisions.Items[1].Revision)
-	require.Equal(t, int64(3), revisions.Items[0].Revision)
+	require.Equal(t, dupHistory2.Name, revisions.Items[0].Name)
+	require.ElementsMatch(t, []int64{3, 4}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// No pod should be marked for deletion as the pod already has same spec
 	// as the current spec. Check only if the pod's hash has been updated to
@@ -5558,14 +5866,17 @@ func TestHistoryCleanup(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	result, err := controller.Reconcile(request)
+	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v2"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5573,26 +5884,28 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(1), revisions.Items[0].Revision)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// Test case: Change cluster spec to add another revision.
 	// Ensure that the older revision gets deleted as it is not used.
 	runningPod1, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[3], cluster, clusterRef)
 	require.NoError(t, err)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	require.Equal(t, latestRevision(revisions).Labels[defaultStorageClusterUniqueLabelKey],
 		runningPod1.Labels[defaultStorageClusterUniqueLabelKey])
 	runningPod1.Name = runningPod1.GenerateName + "1"
 	runningPod1.Namespace = cluster.Namespace
 	runningPod1.Spec.NodeName = k8sNode1.Name
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v3"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Reset the fake pod controller
 	podControl.Templates = nil
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5600,8 +5913,7 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(2), revisions.Items[0].Revision)
-	require.Equal(t, int64(3), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{2, 3}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// Test case: Changing spec again to create another revision.
 	// The history should not get deleted this time although it crosses
@@ -5610,17 +5922,20 @@ func TestHistoryCleanup(t *testing.T) {
 
 	runningPod2, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
 	require.NoError(t, err)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	require.Equal(t, revisions.Items[0].Labels[defaultStorageClusterUniqueLabelKey],
 		runningPod2.Labels[defaultStorageClusterUniqueLabelKey])
 	runningPod2.Name = runningPod2.GenerateName + "2"
 	runningPod2.Namespace = cluster.Namespace
 	runningPod2.Spec.NodeName = k8sNode2.Name
 	k8sClient.Create(context.TODO(), runningPod2)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v4"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5628,9 +5943,8 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 3)
-	require.Equal(t, int64(2), revisions.Items[0].Revision)
-	require.Equal(t, int64(3), revisions.Items[1].Revision)
-	require.Equal(t, int64(4), revisions.Items[2].Revision)
+	require.ElementsMatch(t, []int64{2, 3, 4},
+		[]int64{revisions.Items[0].Revision, revisions.Items[1].Revision, revisions.Items[2].Revision})
 
 	// Test case: Changing spec again to create another revision.
 	// The unused revisions should be deleted from history. Delete
@@ -5639,10 +5953,13 @@ func TestHistoryCleanup(t *testing.T) {
 	err = k8sClient.Delete(context.TODO(), runningPod1)
 	require.NoError(t, err)
 
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.Image = "test/image:v5"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	result, err = controller.Reconcile(request)
+	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
 
@@ -5650,8 +5967,7 @@ func TestHistoryCleanup(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(3), revisions.Items[0].Revision)
-	require.Equal(t, int64(5), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{3, 5}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 }
 
 func TestNodeShouldRunStoragePod(t *testing.T) {
@@ -5689,20 +6005,18 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 		constants.AnnotationClusterAPIMachine: "m2",
 	}
 
-	wantToRun, shouldSchedule, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	shouldRun, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
-	require.False(t, wantToRun)
-	require.False(t, shouldSchedule)
+	require.False(t, shouldRun)
 	require.True(t, shouldContinueRunning)
 
 	// TestCase: machine for node is not found
 	k8sNode.Annotations = map[string]string{
 		constants.AnnotationClusterAPIMachine: "m3",
 	}
-	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	shouldRun, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
-	require.True(t, wantToRun)
-	require.True(t, shouldSchedule)
+	require.True(t, shouldRun)
 	require.True(t, shouldContinueRunning)
 
 	// TestCase: node is recently cordoned
@@ -5711,30 +6025,28 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	timeAdded := metav1.Now()
 	k8sNode.Spec.Taints = []v1.Taint{
 		{
-			Key:       schedulerapi.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: &timeAdded,
 		},
 	}
 
-	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	shouldRun, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
-	require.False(t, wantToRun)
-	require.False(t, shouldSchedule)
+	require.False(t, shouldRun)
 	require.True(t, shouldContinueRunning)
 
 	// TestCase: node was cordoned for more than the default wait time ago
 	timeAdded = metav1.NewTime(metav1.Now().Add(-constants.DefaultCordonedRestartDelay))
 	k8sNode.Spec.Taints = []v1.Taint{
 		{
-			Key:       schedulerapi.TaintNodeUnschedulable,
+			Key:       v1.TaintNodeUnschedulable,
 			TimeAdded: &timeAdded,
 		},
 	}
 
-	wantToRun, shouldSchedule, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
+	shouldRun, shouldContinueRunning, err = controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
-	require.True(t, wantToRun)
-	require.True(t, shouldSchedule)
+	require.True(t, shouldRun)
 	require.True(t, shouldContinueRunning)
 }
 
@@ -5757,7 +6069,7 @@ func replaceOldPod(
 			Namespace: cluster.Namespace,
 		},
 	}
-	controller.Reconcile(request)
+	controller.Reconcile(context.TODO(), request)
 
 	// Create the new pod from the template that fake pod controller received
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
@@ -5898,7 +6210,7 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
-			Get(crdName, metav1.GetOptions{})
+			Get(context.TODO(), crdName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -5907,7 +6219,9 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(crd)
+			fakeClient.ApiextensionsV1beta1().
+				CustomResourceDefinitions().
+				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
 			return true, nil
 		}
 		return false, nil
@@ -5933,4 +6247,18 @@ func TestIndexByPodNodeName(t *testing.T) {
 
 	retVal = indexByPodNodeName(&v1.Node{})
 	require.Empty(t, retVal)
+}
+
+func latestRevision(revs *appsv1.ControllerRevisionList) *appsv1.ControllerRevision {
+	if revs == nil || len(revs.Items) == 0 {
+		return nil
+	}
+
+	latestRev := revs.Items[0].DeepCopy()
+	for _, rev := range revs.Items {
+		if rev.Revision > latestRev.Revision {
+			latestRev = rev.DeepCopy()
+		}
+	}
+	return latestRev
 }

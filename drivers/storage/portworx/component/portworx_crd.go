@@ -26,6 +26,14 @@ type portworxCRD struct {
 	isVolumePlacementStrategyCRDCreated bool
 }
 
+func (c *portworxCRD) Name() string {
+	return PortworxCRDComponentName
+}
+
+func (c *portworxCRD) Priority() int32 {
+	return DefaultComponentPriority
+}
+
 func (c *portworxCRD) Initialize(
 	_ client.Client,
 	_ version.Version,

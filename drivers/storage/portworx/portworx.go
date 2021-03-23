@@ -271,19 +271,19 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	for componentName, comp := range component.GetAll() {
+	for _, comp := range component.GetAll() {
 		if comp.IsEnabled(cluster) {
 			err := comp.Reconcile(cluster)
 			if ce, ok := err.(*component.Error); ok &&
 				ce.Code() == component.ErrCritical {
 				return err
 			} else if err != nil {
-				msg := fmt.Sprintf("Failed to setup %s. %v", componentName, err)
+				msg := fmt.Sprintf("Failed to setup %s. %v", comp.Name(), err)
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			}
 		} else {
 			if err := comp.Delete(cluster); err != nil {
-				msg := fmt.Sprintf("Failed to cleanup %v. %v", componentName, err)
+				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			}
 		}
@@ -442,9 +442,9 @@ func (p *portworx) DeleteStorage(
 }
 
 func (p *portworx) deleteComponents(cluster *corev1.StorageCluster) {
-	for componentName, comp := range component.GetAll() {
+	for _, comp := range component.GetAll() {
 		if err := comp.Delete(cluster); err != nil {
-			msg := fmt.Sprintf("Failed to cleanup %v. %v", componentName, err)
+			msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 			p.warningEvent(cluster, util.FailedComponentReason, msg)
 		}
 	}

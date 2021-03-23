@@ -92,11 +92,34 @@ type StorageClusterSpec struct {
 	Autopilot *AutopilotSpec `json:"autopilot,omitempty"`
 	// Monitoring contains monitoring configuration for the storage cluster.
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
+	// Security configurations for setting up an auth enabled or disabled cluster
+	Security *SecuritySpec `json:"security,omitempty"`
+	// Volumes extra list of volumes for the storage driver pod
+	Volumes []VolumeSpec `json:"volumes,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
-	// Security configurations for setting up an auth enabled or disabled cluster
-	Security *SecuritySpec `json:"security,omitempty"`
+}
+
+// VolumeSpec describes a volume that needs to be mounted inside a container
+type VolumeSpec struct {
+	// Volume's name. Must be a DNS_LABEL and unique within the pod.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+	Name string `json:"name,omitempty"`
+	// VolumeSource represents the location and type of the mounted volume.
+	// If not specified, the Volume is implied to be an EmptyDir.
+	// This implied behavior is deprecated and will be removed in a future version.
+	v1.VolumeSource `json:",inline"`
+	// Mounted read-only if true, read-write otherwise (false or unspecified).
+	// Defaults to false.
+	ReadOnly bool `json:"readOnly,omitempty"`
+	// Path within the container at which the volume should be mounted. Must
+	// not contain ':'.
+	MountPath string `json:"mountPath,omitempty"`
+	// MountPropagation determines how mounts are propagated from the host
+	// to container and the other way around.
+	// When not set, MountPropagationNone is used.
+	MountPropagation *v1.MountPropagationMode `json:"mountPropagation,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -375,6 +398,8 @@ type StorkSpec struct {
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by stork
 	Env []v1.EnvVar `json:"env,omitempty"`
+	// Volumes is a list of extra volumes to used by stork
+	Volumes []VolumeSpec `json:"volumes,omitempty"`
 	// HostNetwork if set, will use host's network for stork pods
 	HostNetwork *bool `json:"hostNetwork,omitempty"`
 }
@@ -397,6 +422,8 @@ type AutopilotSpec struct {
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by autopilot
 	Env []v1.EnvVar `json:"env,omitempty"`
+	// Volumes is a list of extra volumes to used by autopilot
+	Volumes []VolumeSpec `json:"volumes,omitempty"`
 }
 
 // DataProviderSpec contains the details for data providers for components like autopilot

@@ -10,7 +10,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/kubernetes/pkg/scheduler/api"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -65,7 +64,7 @@ func IsNodeRecentlyCordoned(
 func IsNodeCordoned(node *v1.Node) (bool, time.Time) {
 	if node.Spec.Unschedulable {
 		for _, taint := range node.Spec.Taints {
-			if taint.Key == api.TaintNodeUnschedulable {
+			if taint.Key == v1.TaintNodeUnschedulable {
 				if taint.TimeAdded != nil {
 					return true, taint.TimeAdded.Time
 				}

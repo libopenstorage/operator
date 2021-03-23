@@ -91,7 +91,6 @@ func (c *Controller) constructHistory(
 ) (cur *apps.ControllerRevision, old []*apps.ControllerRevision, err error) {
 	var histories []*apps.ControllerRevision
 	var currentHistories []*apps.ControllerRevision
-
 	histories, err = c.controlledHistories(cluster)
 	if err != nil {
 		return nil, nil, err
@@ -364,7 +363,7 @@ func (c *Controller) getUnavailableNumbers(
 
 	var numUnavailable, desiredNumberScheduled int
 	for _, node := range nodeList.Items {
-		wantToRun, _, _, err := c.nodeShouldRunStoragePod(&node, cluster)
+		wantToRun, _, err := c.nodeShouldRunStoragePod(&node, cluster)
 		if err != nil {
 			return -1, -1, err
 		}
@@ -591,7 +590,9 @@ func matchSelectedFields(
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.RuntimeOpts, currentSpec.RuntimeOpts) {
 		return false, nil
-	} else if !isEnvEqual(oldSpec.Env, currentSpec.Env) {
+	} else if !elementsMatch(oldSpec.Env, currentSpec.Env) {
+		return false, nil
+	} else if !elementsMatch(oldSpec.Volumes, currentSpec.Volumes) {
 		return false, nil
 	} else if isBounceRequired(oldSpec, currentSpec) {
 		return false, nil

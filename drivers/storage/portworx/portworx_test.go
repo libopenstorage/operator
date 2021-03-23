@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
@@ -29,10 +28,12 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -4111,7 +4112,8 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationPVCController:     "true",
+				pxutil.AnnotationPodSecurityPolicy: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4219,6 +4221,11 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, secretList.Items, 4)
 
+	pspList := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Len(t, pspList.Items, 2)
+
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
@@ -4293,6 +4300,10 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, secret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
+
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Empty(t, pspList.Items)
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
@@ -4324,7 +4335,8 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationPVCController:     "true",
+				pxutil.AnnotationPodSecurityPolicy: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -4436,6 +4448,11 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, secretList.Items, 4)
 
+	pspList := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Len(t, pspList.Items, 2)
+
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
@@ -4542,6 +4559,10 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, secretList)
 	require.NoError(t, err)
 	require.Empty(t, secretList.Items)
+
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Len(t, pspList.Items, 2)
 }
 
 func TestDeleteClusterWithCustomRepoRegistry(t *testing.T) {
@@ -4930,7 +4951,8 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 			Annotations: map[string]string{
-				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationPVCController:     "true",
+				pxutil.AnnotationPodSecurityPolicy: "true",
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -5042,6 +5064,11 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, secretList.Items, 4)
 
+	pspList := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Len(t, pspList.Items, 2)
+
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
@@ -5148,6 +5175,10 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, secretList)
 	require.NoError(t, err)
 	require.Empty(t, secretList.Items)
+
+	err = testutil.List(k8sClient, pspList)
+	require.NoError(t, err)
+	require.Len(t, pspList.Items, 2)
 }
 
 func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {

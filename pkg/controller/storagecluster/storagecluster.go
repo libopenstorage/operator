@@ -42,18 +42,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	daemonutil "k8s.io/kubernetes/pkg/controller/daemon/util"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
-	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"k8s.io/utils/integer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -133,7 +131,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	}
 
 	// Add nodeName field index to the cache indexer
-	err = mgr.GetCache().IndexField(&v1.Pod{}, nodeNameIndex, indexByPodNodeName)
+	err = mgr.GetCache().IndexField(context.TODO(), &v1.Pod{}, nodeNameIndex, indexByPodNodeName)
 	if err != nil {
 		return fmt.Errorf("error setting node name index on pod cache: %v", err)
 	}
@@ -183,7 +181,7 @@ func (c *Controller) StartWatch() error {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := logrus.WithFields(map[string]interface{}{
 		"Request.Namespace": request.Namespace,
 		"Request.Name":      request.Name,
@@ -368,7 +366,6 @@ func (c *Controller) deleteStorageCluster(
 ) error {
 	// get all the storage pods
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
-
 	if err != nil {
 		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
 			cluster.Name, err)
@@ -743,7 +740,7 @@ func (c *Controller) podsShouldBeOnNode(
 	nodeToStoragePods map[string][]*v1.Pod,
 	cluster *corev1.StorageCluster,
 ) (nodesNeedingStoragePods, podsToDelete []string, err error) {
-	wantToRun, shouldSchedule, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
+	shouldRun, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
 	if err != nil {
 		return
 	}
@@ -751,10 +748,7 @@ func (c *Controller) podsShouldBeOnNode(
 	storagePods, exists := nodeToStoragePods[node.Name]
 
 	switch {
-	case wantToRun && !shouldSchedule:
-		// If storage pod is supposed to run, but cannot be scheduled, add to suspended list.
-		// TODO
-	case shouldSchedule && !exists:
+	case shouldRun && !exists:
 		nodesNeedingStoragePods = append(nodesNeedingStoragePods, node.Name)
 	case shouldContinueRunning:
 		// If a storage pod failed, delete it.
@@ -784,6 +778,9 @@ func (c *Controller) podsShouldBeOnNode(
 	case !shouldContinueRunning && exists:
 		// If storage pod isn't supposed to run on node, but it is, delete all storage pods on node.
 		for _, pod := range storagePods {
+			if pod.DeletionTimestamp != nil {
+				continue
+			}
 			podsToDelete = append(podsToDelete, pod.Name)
 		}
 	}
@@ -791,15 +788,20 @@ func (c *Controller) podsShouldBeOnNode(
 	return nodesNeedingStoragePods, podsToDelete, nil
 }
 
-// nodeShouldRunStoragePod simulates a storage pod on the given node which helps
-// us determine whether we want to run the pod on that node, or if the pod should
-// to be scheduled on the node, or to allow running if it is already running.
+// nodeShouldRunStoragePod checks a set of preconditions against a (node, storagecluster) and
+// returns a summary. Returned booleans are:
+// * shouldRun:
+//     Returns true when a pod should run on the node if a storage pod is not already
+//     running on that node.
+// * shouldContinueRunning:
+//     Returns true when the pod should continue running on a node if a storage pod is
+//     already running on that node.
 func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1.StorageCluster,
-) (wantToRun, shouldSchedule, shouldContinueRunning bool, err error) {
+) (bool, bool, error) {
 	if !storagePodsEnabled(cluster) {
-		return false, false, false, nil
+		return false, false, nil
 	}
 
 	// If node is being deleted, don't need to schedule new storage pods
@@ -810,99 +812,34 @@ func (c *Controller) nodeShouldRunStoragePod(
 
 	if isBeingDeleted {
 		logrus.Infof("node: %s is in the process of being deleted. Will not create new pods here.", node.Name)
-		return false, false, true, nil
+		return false, true, nil
 	}
 
 	if k8s.IsNodeRecentlyCordoned(node, cluster) {
-		return false, false, true, nil
+		return false, true, nil
 	}
 
 	newPod, err := c.newSimulationPod(cluster, node.Name)
 	if err != nil {
 		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
-		return false, false, false, err
+		return false, false, err
 	}
 
-	wantToRun, shouldSchedule, shouldContinueRunning = true, true, true
-
-	// TODO: We should get rid of simulate and let the scheduler try to deploy
-	// the pods on the nodes based off the tolerations. The scheduler can handle
-	// the resource checks.
-	reasons, nodeInfo, err := c.simulate(newPod, node, cluster)
-	if err != nil {
-		logrus.Debugf("StorageCluster Predicates failed on node %s for storage cluster '%s' "+
-			"due to unexpected error: %v", node.Name, cluster.Name, err)
-		return false, false, false, err
+	taints := node.Spec.Taints
+	fitsNodeName, fitsNodeAffinity, fitsTaints := checkPredicates(newPod, node, taints)
+	if !fitsNodeName || !fitsNodeAffinity {
+		return false, false, nil
 	}
 
-	var insufficientResourceErr error
-	for _, r := range reasons {
-		logrus.Debugf("StorageCluster Predicates failed on node %s for storage cluster '%s'"+
-			" for reason: %v", node.Name, cluster.Name, r.GetReason())
+	if !fitsTaints {
+		// Scheduled storage pods should continue running if they tolerate NoExecute taint
+		shouldContinueRunning := v1helper.TolerationsTolerateTaintsWithFilter(newPod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+			return t.Effect == v1.TaintEffectNoExecute
+		})
+		return false, shouldContinueRunning, nil
+	}
 
-		switch reason := r.(type) {
-		case *predicates.InsufficientResourceError:
-			insufficientResourceErr = reason
-		case *predicates.PredicateFailureError:
-			var emitEvent bool
-			// we try to partition predicates into two partitions here:
-			// intentional on the part of the operator and not.
-			switch reason {
-			// intentional
-			case
-				predicates.ErrNodeSelectorNotMatch,
-				predicates.ErrPodNotMatchHostName,
-				predicates.ErrNodeLabelPresenceViolated,
-				// this one is probably intentional since it's a workaround for not having
-				// pod hard anti affinity.
-				predicates.ErrPodNotFitsHostPorts:
-				return false, false, false, nil
-			case predicates.ErrTaintsTolerationsNotMatch:
-				// StorageCluster is expected to respect taints and tolerations
-				fitsNoExecute, _, err := predicates.PodToleratesNodeNoExecuteTaints(newPod, nil, nodeInfo)
-				if err != nil {
-					return false, false, false, err
-				}
-				if !fitsNoExecute {
-					return false, false, false, nil
-				}
-				wantToRun, shouldSchedule = false, false
-			// unintentional
-			case
-				predicates.ErrDiskConflict,
-				predicates.ErrVolumeZoneConflict,
-				predicates.ErrMaxVolumeCountExceeded,
-				predicates.ErrNodeUnderMemoryPressure,
-				predicates.ErrNodeUnderDiskPressure:
-				// wantToRun and shouldContinueRunning are likely true here
-				shouldSchedule = false
-				emitEvent = true
-			// unexpected
-			case
-				predicates.ErrPodAffinityNotMatch,
-				predicates.ErrServiceAffinityViolated:
-				logrus.Warnf("unexpected predicate failure reason: %s", reason.GetReason())
-				return false, false, false,
-					fmt.Errorf("unexpected reason: StorageCluster Predicates should not return reason %s", reason.GetReason())
-			default:
-				logrus.Warnf("unknown predicate failure reason: %s", reason.GetReason())
-				wantToRun, shouldSchedule, shouldContinueRunning = false, false, false
-				emitEvent = true
-			}
-			if emitEvent {
-				c.recorder.Eventf(cluster, v1.EventTypeWarning, util.FailedPlacementReason,
-					"failed to place pod on %q: %s", node.Name, reason.GetReason)
-			}
-		}
-	}
-	// only emit this event if insufficient resource is the only thing
-	// preventing the storage cluster from scheduling
-	if shouldSchedule && insufficientResourceErr != nil {
-		c.recorder.Eventf(cluster, v1.EventTypeWarning, util.FailedPlacementReason,
-			"failed to place pod on %q: %s", node.Name, insufficientResourceErr.Error())
-		shouldSchedule = false
-	}
-	return
+	return true, true, nil
 }
 
 func (c *Controller) createPodTemplate(
@@ -970,34 +907,16 @@ func (c *Controller) newSimulationPod(
 	return newPod, nil
 }
 
-func (c *Controller) simulate(
-	newPod *v1.Pod,
-	node *v1.Node,
-	cluster *corev1.StorageCluster,
-) ([]predicates.PredicateFailureReason, *schedulernodeinfo.NodeInfo, error) {
-	podList := &v1.PodList{}
-	fieldSelector := fields.SelectorFromSet(map[string]string{nodeNameIndex: node.Name})
-	err := c.client.List(context.TODO(), podList, &client.ListOptions{FieldSelector: fieldSelector})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	nodeInfo := schedulernodeinfo.NewNodeInfo()
-	if err = nodeInfo.SetNode(node); err != nil {
-		logrus.Warnf("Error setting setting node object in cache: %v", err)
-	}
-
-	for _, pod := range podList.Items {
-		// Ignore pods that belong to the storage cluster when taking into account
-		// whether a storage cluster should bind to a node.
-		if isControlledByStorageCluster(&pod, cluster.GetUID()) {
-			continue
-		}
-		nodeInfo.AddPod(&pod)
-	}
-
-	_, reasons, err := checkPredicates(newPod, nodeInfo)
-	return reasons, nodeInfo, err
+// checkPredicates checks if a StorageCluster pod can run on a node
+func checkPredicates(
+	pod *v1.Pod, node *v1.Node, taints []v1.Taint,
+) (fitsNodeName, fitsNodeAffinity, fitsTaints bool) {
+	fitsNodeName = len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
+	fitsNodeAffinity = pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
+	fitsTaints = v1helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
+	})
+	return
 }
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
@@ -1053,41 +972,6 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		}
 	}
 	return nil
-}
-
-func isControlledByStorageCluster(pod *v1.Pod, uid types.UID) bool {
-	for _, ref := range pod.OwnerReferences {
-		if ref.Controller != nil && *ref.Controller && ref.UID == uid {
-			return true
-		}
-	}
-	return false
-}
-
-// checkPredicates checks if a StorageCluster's pod can be scheduled on a node using GeneralPredicates
-// and PodToleratesNodeTaints predicate
-func checkPredicates(
-	pod *v1.Pod,
-	nodeInfo *schedulernodeinfo.NodeInfo,
-) (bool, []predicates.PredicateFailureReason, error) {
-	var predicateFails []predicates.PredicateFailureReason
-
-	fit, reasons, err := predicates.PodToleratesNodeTaints(pod, nil, nodeInfo)
-	if err != nil {
-		return false, predicateFails, err
-	}
-	if !fit {
-		predicateFails = append(predicateFails, reasons...)
-	}
-	fit, reasons, err = predicates.GeneralPredicates(pod, nil, nodeInfo)
-	if err != nil {
-		return false, predicateFails, err
-	}
-	if !fit {
-		predicateFails = append(predicateFails, reasons...)
-	}
-
-	return len(predicateFails) == 0, predicateFails, nil
 }
 
 func (c *Controller) getNodeToStoragePods(

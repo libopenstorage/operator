@@ -36,6 +36,8 @@ spec:
           mountPath: /hostproc
         - name: optpwx
           mountPath: /opt/pwx
+        - name: sockpwx
+          mountPath: /var/lib/osd/driver
         - name: dbus
           mountPath: /var/run/dbus
         - name: sysdmount
@@ -63,6 +65,9 @@ spec:
       - name: optpwx
         hostPath:
           path: /opt/pwx
+      - name: sockpwx
+        hostPath:
+          path: /var/lib/osd/driver
       - name: dbus
         hostPath:
           path: /var/run/dbus

@@ -37,6 +37,7 @@ var (
 
 const (
 	dsOptPwxVolumeName                = "optpwx"
+	dsSockPwxVolumeName               = "sockpwx"
 	dsEtcPwxVolumeName                = "etcpwx"
 	dsHostProcVolumeName              = "hostproc"
 	dsDbusVolumeName                  = "dbus"
@@ -56,6 +57,7 @@ const (
 	pksPersistentStoreRoot            = "/var/vcap/store"
 	pxOptPwx                          = "/opt/pwx"
 	pxEtcPwx                          = "/etc/pwx"
+	pxSockPwx                         = "/var/lib/osd/driver"
 	pxNodeWiperServiceAccountName     = "px-node-wiper"
 	pxNodeWiperClusterRoleName        = "px-node-wiper"
 	pxNodeWiperClusterRoleBindingName = "px-node-wiper"
@@ -249,6 +251,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 									MountPath: pxOptPwx,
 								},
 								{
+									Name:      dsSockPwxVolumeName,
+									MountPath: pxSockPwx,
+								},
+								{
 									Name:      dsDbusVolumeName,
 									MountPath: dbusPath,
 								},
@@ -304,6 +310,14 @@ func (u *uninstallPortworx) RunNodeWiper(
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
 									Path: path.Join(pwxHostPathRoot, pxOptPwx),
+								},
+							},
+						},
+						{
+							Name: dsSockPwxVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: path.Join(pwxHostPathRoot + pxSockPwx),
 								},
 							},
 						},

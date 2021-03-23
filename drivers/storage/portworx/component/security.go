@@ -76,6 +76,14 @@ type security struct {
 	resourceVersionCache map[string]string
 }
 
+func (c *security) Name() string {
+	return SecurityComponentName
+}
+
+func (c *security) Priority() int32 {
+	return int32(0)
+}
+
 // Initialize initializes the componenet
 func (c *security) Initialize(
 	k8sClient client.Client,

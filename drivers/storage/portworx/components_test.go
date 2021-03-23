@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
 	osdapi "github.com/libopenstorage/openstorage/api"
@@ -21,6 +20,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -41,6 +41,47 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func TestOrderOfComponents(t *testing.T) {
+	components := component.GetAll()
+
+	componentNames := make([]string, len(components))
+	for i, comp := range components {
+		componentNames[i] = comp.Name()
+	}
+	require.Len(t, components, 14)
+	// Higher priority components come first
+	require.ElementsMatch(t,
+		[]string{
+			component.PSPComponentName,
+			component.SecurityComponentName,
+		},
+		[]string{componentNames[0], componentNames[1]},
+	)
+	require.ElementsMatch(t,
+		[]string{
+			component.AutopilotComponentName,
+			component.CSIComponentName,
+			component.DisruptionBudgetComponentName,
+			component.LighthouseComponentName,
+			component.MonitoringComponentName,
+			component.PortworxAPIComponentName,
+			component.PortworxBasicComponentName,
+			component.PortworxCRDComponentName,
+			component.PortworxProxyComponentName,
+			component.PortworxStorageClassComponentName,
+			component.PrometheusComponentName,
+			component.PVCControllerComponentName,
+		},
+		componentNames[2:],
+	)
+
+	require.Equal(t, int32(0), components[0].Priority())
+	require.Equal(t, int32(0), components[1].Priority())
+	for _, comp := range components[2:] {
+		require.Equal(t, component.DefaultComponentPriority, comp.Priority())
+	}
+}
 
 func TestBasicComponentsInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
@@ -552,7 +593,7 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, "new-custom-px-sa", "")
+	err = testutil.Get(k8sClient, sa, "new-custom-px-sa", cluster.Namespace)
 	require.NoError(t, err)
 
 	crb = &rbacv1.ClusterRoleBinding{}
@@ -594,11 +635,11 @@ func TestDisablePortworx(t *testing.T) {
 	require.NoError(t, err)
 
 	role := &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.PxRoleName, "")
+	err = testutil.Get(k8sClient, role, component.PxRoleName, cluster.Namespace)
 	require.NoError(t, err)
 
 	rb := &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, "")
+	err = testutil.Get(k8sClient, rb, component.PxRoleBindingName, cluster.Namespace)
 	require.NoError(t, err)
 
 	pxSvc := &v1.Service{}
@@ -2945,21 +2986,159 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
 }
 
-func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {
-	iat, ok := jwtClaims["iat"]
-	require.True(t, ok, "iat should present in token")
-	iatFloat64, ok := iat.(float64)
-	require.True(t, ok, "iat should be a number")
-	exp, ok := jwtClaims["exp"]
-	require.True(t, ok, "exp should present in token")
-	expFloat64, ok := exp.(float64)
-	require.True(t, ok, "exp should be a number")
-	iatTime := time.Unix(int64(iatFloat64), 0)
-	expTime := time.Unix(int64(expFloat64), 0)
-	tokenLifetime := expTime.Sub(iatTime)
-	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+func TestAutopilotVolumesChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.13.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	volumeSpecs := []corev1.VolumeSpec{
+		{
+			Name:      "testvol",
+			MountPath: "/var/testvol",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/host/test",
+				},
+			},
+		},
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Volumes: volumeSpecs,
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// Case: Volumes should be applied to the deployment
+	volumes, volumeMounts := expectedVolumesAndMounts(volumeSpecs)
+
+	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
-	require.Equal(t, tokenLifetime, duration)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	// Checking after first volume as autopilot deployment already has 1 volume
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Updated volumes should be applied to the deployment
+	propagation := v1.MountPropagationBidirectional
+	pathType := v1.HostPathDirectory
+	volumeSpecs[0].MountPropagation = &propagation
+	volumeSpecs[0].HostPath.Type = &pathType
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: New volumes should be applied to the deployment
+	volumeSpecs = append(volumeSpecs, corev1.VolumeSpec{
+		Name:      "testvol2",
+		MountPath: "/var/testvol2",
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: "volume-secret",
+			},
+		},
+	})
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Removed volumes should be removed from the deployment
+	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: If volumes are empty, should be removed from the deployment
+	cluster.Spec.Autopilot.Volumes = []corev1.VolumeSpec{}
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: Volumes should be added back if not present in deployment
+	cluster.Spec.Autopilot.Volumes = volumeSpecs
+	k8sClient.Update(context.TODO(), cluster)
+	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumeMounts,
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+
+	// Case: If volumes is nil, deployment should not have volumes
+	cluster.Spec.Autopilot.Volumes = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
 }
 
 func TestSecurityInstall(t *testing.T) {
@@ -3156,7 +3335,6 @@ func TestSecurityInstall(t *testing.T) {
 	existingSharedSecretName := "existingSharedsecret"
 	sharedSecret.Name = existingSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data = make(map[string][]byte)
 	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
@@ -3213,7 +3391,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	// token should be refreshed if the issuer changes
 	err = driver.PreInstall(cluster) // regenerate token with long lifetime
 	require.NoError(t, err)
-	updateSharedSecretResourceVersion(t, k8sClient, cluster) // initial resource version
 
 	userSecret := &v1.Secret{}
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer_for_newtoken")
@@ -3238,7 +3415,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	sharedSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret")
 	err = testutil.Update(k8sClient, sharedSecret)
 	require.NoError(t, err)
@@ -3262,7 +3438,6 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	newSharedSecretName := "newsharedsecret"
 	sharedSecret.Name = newSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
-	sharedSecret.ResourceVersion = testutil.NewResourceVersion()
 	sharedSecret.Data = make(map[string][]byte)
 	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
@@ -3874,7 +4049,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	actualCRD, err := extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, expectedCRD.Name, actualCRD.Name)
 	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
@@ -3883,7 +4058,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	// Expect the CRD to be created even for k8s version 1.13.*
 	err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Delete(expectedCRD.Name, nil)
+		Delete(context.TODO(), expectedCRD.Name, metav1.DeleteOptions{})
 	require.NoError(t, err)
 	csiComponent, _ := component.Get(component.CSIComponentName)
 	csiComponent.MarkDeleted()
@@ -3903,7 +4078,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	actualCRD, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, expectedCRD.Name, actualCRD.Name)
 	require.Equal(t, expectedCRD.Labels, actualCRD.Labels)
@@ -3912,7 +4087,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	// CRD should not to be created for k8s version 1.11.* or below
 	err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Delete(expectedCRD.Name, nil)
+		Delete(context.TODO(), expectedCRD.Name, metav1.DeleteOptions{})
 	require.NoError(t, err)
 	csiComponent.MarkDeleted()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -3926,7 +4101,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	_, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.True(t, errors.IsNotFound(err))
 
 	// CRD should not to be created for k8s version 1.14+
@@ -3942,7 +4117,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	_, err = extensionsClient.ApiextensionsV1beta1().
 		CustomResourceDefinitions().
-		Get(expectedCRD.Name, metav1.GetOptions{})
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -9198,7 +9373,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestPodSecurityPolicies(t *testing.T) {
+func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -9207,14 +9382,13 @@ func TestPodSecurityPolicies(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Stork: &corev1.StorkSpec{
-				Enabled: true,
-			},
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
-				Image:   "autopilotimage",
 			},
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
@@ -9224,72 +9398,23 @@ func TestPodSecurityPolicies(t *testing.T) {
 			FeatureGates: map[string]string{
 				"CSI": "T",
 			},
+			UserInterface: &corev1.UserInterfaceSpec{
+				Enabled: true,
+			},
 		},
 	}
 
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	driver.SetDefaultsOnStorageCluster(cluster)
+
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// check that podsecuritpolicies have been created
-	expectedPSPs := []policyv1beta1.PodSecurityPolicy{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: constants.PrivilegedPSPName,
-			},
-			Spec: policyv1beta1.PodSecurityPolicySpec{
-				Privileged:             true,
-				HostNetwork:            true,
-				ReadOnlyRootFilesystem: true,
-				Volumes: []policyv1beta1.FSType{
-					policyv1beta1.ConfigMap,
-					policyv1beta1.Secret,
-					policyv1beta1.HostPath,
-					policyv1beta1.EmptyDir,
-				},
-				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-				},
-				FSGroup: policyv1beta1.FSGroupStrategyOptions{
-					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-				},
-				SELinux: policyv1beta1.SELinuxStrategyOptions{
-					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-				},
-				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: constants.RestrictedPSPName,
-			},
-			Spec: policyv1beta1.PodSecurityPolicySpec{
-				Privileged:             false,
-				ReadOnlyRootFilesystem: true,
-				Volumes: []policyv1beta1.FSType{
-					policyv1beta1.ConfigMap,
-					policyv1beta1.Secret,
-					policyv1beta1.HostPath,
-					policyv1beta1.EmptyDir,
-				},
-				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-				},
-				FSGroup: policyv1beta1.FSGroupStrategyOptions{
-					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-				},
-				SELinux: policyv1beta1.SELinuxStrategyOptions{
-					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-				},
-				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-				},
-			},
-		},
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
 	}
 	expectedOwnerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
@@ -9298,8 +9423,8 @@ func TestPodSecurityPolicies(t *testing.T) {
 		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
 		require.NoError(t, err)
 
-		require.Equalf(t, metav1.GetControllerOf(policy), expectedOwnerRef, "check owner reference for %s podsecuritypolicy", expectedPolicy.Name)
-
+		require.Equalf(t, metav1.GetControllerOf(policy), expectedOwnerRef,
+			"check owner reference for %s podsecuritypolicy", expectedPolicy.Name)
 		require.Equalf(t, expectedPolicy.Spec, policy.Spec, "check psp spec for %s", expectedPolicy.Name)
 	}
 
@@ -9317,6 +9442,14 @@ func TestPodSecurityPolicies(t *testing.T) {
 			pspName:         constants.PrivilegedPSPName,
 		},
 		{
+			clusterRoleName: component.PVCClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
+			clusterRoleName: component.LhClusterRoleName,
+			pspName:         constants.PrivilegedPSPName,
+		},
+		{
 			clusterRoleName: component.AutopilotClusterRoleName,
 			pspName:         constants.RestrictedPSPName,
 		},
@@ -9326,10 +9459,6 @@ func TestPodSecurityPolicies(t *testing.T) {
 		},
 		{
 			clusterRoleName: component.PrometheusOperatorClusterRoleName,
-			pspName:         constants.RestrictedPSPName,
-		},
-		{
-			clusterRoleName: component.PVCClusterRoleName,
 			pspName:         constants.RestrictedPSPName,
 		},
 		// stork
@@ -9353,10 +9482,127 @@ func TestPodSecurityPolicies(t *testing.T) {
 		err = testutil.Get(k8sClient, clusterRole, expected.clusterRoleName, "")
 		require.NoError(t, err)
 
-		if !containsPolicyRule(clusterRole.Rules, "use", "policy", "podsecuritypolicies", expected.pspName) {
-			t.Fatalf("check %s cluster role: podsecuritypolicy: exptected=%s, got %v", expected.clusterRoleName, expected.pspName, clusterRole)
-		}
+		require.Truef(t, containsPolicyRule(clusterRole.Rules, "use", "policy", "podsecuritypolicies", expected.pspName),
+			"check %s cluster role: podsecuritypolicy: expected=%s, got %v", expected.clusterRoleName, expected.pspName, clusterRole)
 	}
+}
+
+func TestRemovePodSecurityPolicies(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "T",
+			},
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// check that podsecuritpolicies have been created
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+	}
+
+	// Removing the annotation will disable pod security policies
+	// as they are disabled by default
+	cluster.Annotations = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	policies := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, policies)
+	require.NoError(t, err)
+	require.Empty(t, len(policies.Items))
+}
+
+func TestDisablePodSecurityPolicies(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPodSecurityPolicy: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "T",
+			},
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// check that podsecuritpolicies have been created
+	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
+		testutil.GetExpectedPSP(t, "privilegedPSP.yaml"),
+		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+	}
+
+	// Removing the annotation will disable pod security policies
+	// as they are disabled by default
+	cluster.Annotations[pxutil.AnnotationPodSecurityPolicy] = "false"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	policies := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, policies)
+	require.NoError(t, err)
+	require.Empty(t, len(policies.Items))
 }
 
 func contains(slice []string, val string) bool {
@@ -9374,34 +9620,40 @@ func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 			Name: crdName,
 		},
 	}
-	_, err := fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+	_, err := fakeClient.ApiextensionsV1beta1().
+		CustomResourceDefinitions().
+		Create(context.TODO(), crd, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return testutil.ActivateCRDWhenCreated(fakeClient, crdName)
 }
 
-// updateSharedSecretResourceVersion mocks the behavior of the API server assigning a resource version.
-func updateSharedSecretResourceVersion(t *testing.T, k8sClient client.Client, cluster *corev1.StorageCluster) {
-	secret := &v1.Secret{}
-	err := testutil.Get(k8sClient, secret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
-	if err != nil {
-		t.Fatalf("failed to get k8s secret to update resource ver: %s", err.Error())
-	}
+func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {
+	iat, ok := jwtClaims["iat"]
+	require.True(t, ok, "iat should present in token")
+	iatFloat64, ok := iat.(float64)
+	require.True(t, ok, "iat should be a number")
+	exp, ok := jwtClaims["exp"]
+	require.True(t, ok, "exp should present in token")
+	expFloat64, ok := exp.(float64)
+	require.True(t, ok, "exp should be a number")
+	iatTime := time.Unix(int64(iatFloat64), 0)
+	expTime := time.Unix(int64(expFloat64), 0)
+	tokenLifetime := expTime.Sub(iatTime)
+	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+	require.NoError(t, err)
+	require.Equal(t, tokenLifetime, duration)
+}
 
-	// assign resource ver
-	secret.ResourceVersion = testutil.NewResourceVersion()
-
-	// update does not work for this. Need to delete/recreate.
-	err = k8sClient.Delete(context.TODO(), secret)
-	if err != nil {
-		t.Fatalf("failed to delete k8s secret to update resource ver: %s", err.Error())
+func expectedVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1.VolumeMount) {
+	expectedVolumeSpecs := make([]corev1.VolumeSpec, len(volumeSpecs))
+	for i, v := range volumeSpecs {
+		vCopy := v.DeepCopy()
+		vCopy.Name = "user-" + v.Name
+		expectedVolumeSpecs[i] = *vCopy
 	}
-	err = k8sClient.Create(context.TODO(), secret)
-	if err != nil {
-		t.Fatalf("failed to create k8s secret to update resource ver: %s", err.Error())
-	}
-
+	return util.ExtractVolumesAndMounts(expectedVolumeSpecs)
 }
 
 func reregisterComponents() {

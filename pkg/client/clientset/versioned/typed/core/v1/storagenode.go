@@ -19,6 +19,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"time"
 
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -37,15 +38,15 @@ type StorageNodesGetter interface {
 
 // StorageNodeInterface has methods to work with StorageNode resources.
 type StorageNodeInterface interface {
-	Create(*v1.StorageNode) (*v1.StorageNode, error)
-	Update(*v1.StorageNode) (*v1.StorageNode, error)
-	UpdateStatus(*v1.StorageNode) (*v1.StorageNode, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.StorageNode, error)
-	List(opts metav1.ListOptions) (*v1.StorageNodeList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.StorageNode, err error)
+	Create(ctx context.Context, storageNode *v1.StorageNode, opts metav1.CreateOptions) (*v1.StorageNode, error)
+	Update(ctx context.Context, storageNode *v1.StorageNode, opts metav1.UpdateOptions) (*v1.StorageNode, error)
+	UpdateStatus(ctx context.Context, storageNode *v1.StorageNode, opts metav1.UpdateOptions) (*v1.StorageNode, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.StorageNode, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.StorageNodeList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.StorageNode, err error)
 	StorageNodeExpansion
 }
 
@@ -64,20 +65,20 @@ func newStorageNodes(c *CoreV1Client, namespace string) *storageNodes {
 }
 
 // Get takes name of the storageNode, and returns the corresponding storageNode object, and an error if there is any.
-func (c *storageNodes) Get(name string, options metav1.GetOptions) (result *v1.StorageNode, err error) {
+func (c *storageNodes) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.StorageNode, err error) {
 	result = &v1.StorageNode{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("storagenodes").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of StorageNodes that match those selectors.
-func (c *storageNodes) List(opts metav1.ListOptions) (result *v1.StorageNodeList, err error) {
+func (c *storageNodes) List(ctx context.Context, opts metav1.ListOptions) (result *v1.StorageNodeList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -88,13 +89,13 @@ func (c *storageNodes) List(opts metav1.ListOptions) (result *v1.StorageNodeList
 		Resource("storagenodes").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested storageNodes.
-func (c *storageNodes) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *storageNodes) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -105,87 +106,90 @@ func (c *storageNodes) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 		Resource("storagenodes").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a storageNode and creates it.  Returns the server's representation of the storageNode, and an error, if there is any.
-func (c *storageNodes) Create(storageNode *v1.StorageNode) (result *v1.StorageNode, err error) {
+func (c *storageNodes) Create(ctx context.Context, storageNode *v1.StorageNode, opts metav1.CreateOptions) (result *v1.StorageNode, err error) {
 	result = &v1.StorageNode{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("storagenodes").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageNode).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a storageNode and updates it. Returns the server's representation of the storageNode, and an error, if there is any.
-func (c *storageNodes) Update(storageNode *v1.StorageNode) (result *v1.StorageNode, err error) {
+func (c *storageNodes) Update(ctx context.Context, storageNode *v1.StorageNode, opts metav1.UpdateOptions) (result *v1.StorageNode, err error) {
 	result = &v1.StorageNode{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("storagenodes").
 		Name(storageNode.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageNode).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-
-func (c *storageNodes) UpdateStatus(storageNode *v1.StorageNode) (result *v1.StorageNode, err error) {
+func (c *storageNodes) UpdateStatus(ctx context.Context, storageNode *v1.StorageNode, opts metav1.UpdateOptions) (result *v1.StorageNode, err error) {
 	result = &v1.StorageNode{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("storagenodes").
 		Name(storageNode.Name).
 		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(storageNode).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the storageNode and deletes it. Returns an error if one occurs.
-func (c *storageNodes) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *storageNodes) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("storagenodes").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *storageNodes) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *storageNodes) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("storagenodes").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched storageNode.
-func (c *storageNodes) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.StorageNode, err error) {
+func (c *storageNodes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.StorageNode, err error) {
 	result = &v1.StorageNode{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("storagenodes").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }

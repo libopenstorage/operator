@@ -19,6 +19,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	time "time"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -61,13 +62,13 @@ func NewFilteredStorageClusterInformer(client versioned.Interface, namespace str
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.CoreV1().StorageClusters(namespace).List(options)
+				return client.CoreV1().StorageClusters(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.CoreV1().StorageClusters(namespace).Watch(options)
+				return client.CoreV1().StorageClusters(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&corev1.StorageCluster{},

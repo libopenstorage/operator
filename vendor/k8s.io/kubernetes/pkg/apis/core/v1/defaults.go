@@ -19,11 +19,14 @@ package v1
 import (
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/kubernetes/pkg/util/parsers"
 	utilpointer "k8s.io/utils/pointer"
+
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/features"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -67,11 +70,6 @@ func SetDefaults_Volume(obj *v1.Volume) {
 		}
 	}
 }
-func SetDefaults_ContainerPort(obj *v1.ContainerPort) {
-	if obj.Protocol == "" {
-		obj.Protocol = v1.ProtocolTCP
-	}
-}
 func SetDefaults_Container(obj *v1.Container) {
 	if obj.ImagePullPolicy == "" {
 		// Ignore error and assume it has been validated elsewhere
@@ -90,6 +88,10 @@ func SetDefaults_Container(obj *v1.Container) {
 	if obj.TerminationMessagePolicy == "" {
 		obj.TerminationMessagePolicy = v1.TerminationMessageReadFile
 	}
+}
+
+func SetDefaults_EphemeralContainer(obj *v1.EphemeralContainer) {
+	SetDefaults_Container((*v1.Container)(&obj.EphemeralContainerCommon))
 }
 
 func SetDefaults_Service(obj *v1.Service) {
@@ -128,6 +130,45 @@ func SetDefaults_Service(obj *v1.Service) {
 		obj.Spec.ExternalTrafficPolicy == "" {
 		obj.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyTypeCluster
 	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.IPv6DualStack) {
+		// Default obj.Spec.IPFamilyPolicy if we *know* we can, otherwise it will
+		// be handled later in allocation.
+		if obj.Spec.Type != v1.ServiceTypeExternalName {
+			if obj.Spec.IPFamilyPolicy == nil {
+				if len(obj.Spec.ClusterIPs) == 2 || len(obj.Spec.IPFamilies) == 2 {
+					requireDualStack := v1.IPFamilyPolicyRequireDualStack
+					obj.Spec.IPFamilyPolicy = &requireDualStack
+				}
+			}
+
+			// If the user demanded dual-stack, but only specified one family, we add
+			// the other.
+			if obj.Spec.IPFamilyPolicy != nil && *(obj.Spec.IPFamilyPolicy) == v1.IPFamilyPolicyRequireDualStack && len(obj.Spec.IPFamilies) == 1 {
+				if obj.Spec.IPFamilies[0] == v1.IPv4Protocol {
+					obj.Spec.IPFamilies = append(obj.Spec.IPFamilies, v1.IPv6Protocol)
+				} else {
+					obj.Spec.IPFamilies = append(obj.Spec.IPFamilies, v1.IPv4Protocol)
+				}
+
+				// Any other dual-stack defaulting depends on cluster configuration.
+				// Further IPFamilies, IPFamilyPolicy defaulting is in ClusterIP alloc/reserve logic
+				// NOTE: strategy handles cases where ClusterIPs is used (but not ClusterIP).
+			}
+		}
+
+		// any other defaulting depends on cluster configuration.
+		// further IPFamilies, IPFamilyPolicy defaulting is in ClusterIP alloc/reserve logic
+		// note: conversion logic handles cases where ClusterIPs is used (but not ClusterIP).
+	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.ServiceLBNodePortControl) {
+		if obj.Spec.Type == v1.ServiceTypeLoadBalancer {
+			if obj.Spec.AllocateLoadBalancerNodePorts == nil {
+				obj.Spec.AllocateLoadBalancerNodePorts = utilpointer.BoolPtr(true)
+			}
+		}
+	}
 }
 func SetDefaults_Pod(obj *v1.Pod) {
 	// If limits are specified, but requests are not, default requests to limits
@@ -141,7 +182,7 @@ func SetDefaults_Pod(obj *v1.Pod) {
 			}
 			for key, value := range obj.Spec.Containers[i].Resources.Limits {
 				if _, exists := obj.Spec.Containers[i].Resources.Requests[key]; !exists {
-					obj.Spec.Containers[i].Resources.Requests[key] = *(value.Copy())
+					obj.Spec.Containers[i].Resources.Requests[key] = value.DeepCopy()
 				}
 			}
 		}
@@ -153,7 +194,7 @@ func SetDefaults_Pod(obj *v1.Pod) {
 			}
 			for key, value := range obj.Spec.InitContainers[i].Resources.Limits {
 				if _, exists := obj.Spec.InitContainers[i].Resources.Requests[key]; !exists {
-					obj.Spec.InitContainers[i].Resources.Requests[key] = *(value.Copy())
+					obj.Spec.InitContainers[i].Resources.Requests[key] = value.DeepCopy()
 				}
 			}
 		}
@@ -254,9 +295,11 @@ func SetDefaults_PersistentVolumeClaim(obj *v1.PersistentVolumeClaim) {
 	if obj.Status.Phase == "" {
 		obj.Status.Phase = v1.ClaimPending
 	}
-	if obj.Spec.VolumeMode == nil {
-		obj.Spec.VolumeMode = new(v1.PersistentVolumeMode)
-		*obj.Spec.VolumeMode = v1.PersistentVolumeFilesystem
+}
+func SetDefaults_PersistentVolumeClaimSpec(obj *v1.PersistentVolumeClaimSpec) {
+	if obj.VolumeMode == nil {
+		obj.VolumeMode = new(v1.PersistentVolumeMode)
+		*obj.VolumeMode = v1.PersistentVolumeFilesystem
 	}
 }
 func SetDefaults_ISCSIVolumeSource(obj *v1.ISCSIVolumeSource) {
@@ -315,7 +358,7 @@ func SetDefaults_NodeStatus(obj *v1.NodeStatus) {
 	if obj.Allocatable == nil && obj.Capacity != nil {
 		obj.Allocatable = make(v1.ResourceList, len(obj.Capacity))
 		for key, value := range obj.Capacity {
-			obj.Allocatable[key] = *(value.Copy())
+			obj.Allocatable[key] = value.DeepCopy()
 		}
 		obj.Allocatable = obj.Capacity
 	}
@@ -339,19 +382,19 @@ func SetDefaults_LimitRangeItem(obj *v1.LimitRangeItem) {
 		// If a default limit is unspecified, but the max is specified, default the limit to the max
 		for key, value := range obj.Max {
 			if _, exists := obj.Default[key]; !exists {
-				obj.Default[key] = *(value.Copy())
+				obj.Default[key] = value.DeepCopy()
 			}
 		}
 		// If a default limit is specified, but the default request is not, default request to limit
 		for key, value := range obj.Default {
 			if _, exists := obj.DefaultRequest[key]; !exists {
-				obj.DefaultRequest[key] = *(value.Copy())
+				obj.DefaultRequest[key] = value.DeepCopy()
 			}
 		}
 		// If a default request is not specified, but the min is provided, default request to the min
 		for key, value := range obj.Min {
 			if _, exists := obj.DefaultRequest[key]; !exists {
-				obj.DefaultRequest[key] = *(value.Copy())
+				obj.DefaultRequest[key] = value.DeepCopy()
 			}
 		}
 	}

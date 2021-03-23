@@ -6,23 +6,23 @@ import (
 	"os"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/controller/storagenode"
 	_ "github.com/libopenstorage/operator/pkg/log"
+	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
 	"github.com/libopenstorage/operator/pkg/version"
-	"github.com/operator-framework/operator-sdk/pkg/metrics"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
-	"k8s.io/kubernetes/staging/src/k8s.io/sample-controller/pkg/signals"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -182,7 +182,7 @@ func run(c *cli.Context) {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
 	}
 }

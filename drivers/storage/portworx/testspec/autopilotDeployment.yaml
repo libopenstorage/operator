@@ -59,6 +59,7 @@ spec:
         - name: config-volume
           configMap:
             name: autopilot-config
+            defaultMode: 420
             items:
             - key: config.yaml
               path: config.yaml

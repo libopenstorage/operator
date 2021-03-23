@@ -3,9 +3,9 @@ package component
 import (
 	"context"
 	"fmt"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 
 	"github.com/hashicorp/go-version"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -21,17 +21,16 @@ const (
 	PSPComponentName = "PodSecurityPolicies"
 )
 
-// RegisterPSPComponent registers a component for installing podsecuritypolicies.
-func RegisterPSPComponent() {
-	Register(PSPComponentName, &podsecuritypolicies{})
-}
-
-func init() {
-	RegisterPSPComponent()
-}
-
 type podsecuritypolicies struct {
 	k8sClient client.Client
+}
+
+func (p *podsecuritypolicies) Name() string {
+	return PSPComponentName
+}
+
+func (p *podsecuritypolicies) Priority() int32 {
+	return int32(0)
 }
 
 func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion version.Version, scheme *runtime.Scheme, recorder record.EventRecorder) {
@@ -39,7 +38,7 @@ func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion ver
 }
 
 func (p *podsecuritypolicies) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return true
+	return pxutil.PodSecurityPolicyEnabled(cluster)
 }
 
 func (p *podsecuritypolicies) Reconcile(cluster *corev1.StorageCluster) error {
@@ -56,6 +55,12 @@ func (p *podsecuritypolicies) Reconcile(cluster *corev1.StorageCluster) error {
 }
 
 func (p *podsecuritypolicies) Delete(cluster *corev1.StorageCluster) error {
+	if cluster.DeletionTimestamp != nil &&
+		cluster.Spec.DeleteStrategy != nil &&
+		cluster.Spec.DeleteStrategy.Type != "" {
+		return nil
+	}
+
 	for _, policy := range portworxPodSecurityPolicies() {
 		err := p.k8sClient.Delete(context.TODO(), &policy)
 		if err != nil && !errors.IsNotFound(err) {
@@ -77,7 +82,7 @@ func portworxPodSecurityPolicies() []policyv1beta1.PodSecurityPolicy {
 			Spec: policyv1beta1.PodSecurityPolicySpec{
 				Privileged:             true,
 				HostNetwork:            true,
-				ReadOnlyRootFilesystem: true,
+				ReadOnlyRootFilesystem: false,
 				Volumes: []policyv1beta1.FSType{
 					policyv1beta1.ConfigMap,
 					policyv1beta1.Secret,
@@ -127,4 +132,13 @@ func portworxPodSecurityPolicies() []policyv1beta1.PodSecurityPolicy {
 			},
 		},
 	}
+}
+
+// RegisterPSPComponent registers a component for installing podsecuritypolicies.
+func RegisterPSPComponent() {
+	Register(PSPComponentName, &podsecuritypolicies{})
+}
+
+func init() {
+	RegisterPSPComponent()
 }
