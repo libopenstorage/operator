@@ -8,10 +8,11 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
 	github.com/hashicorp/go-version v1.2.1
-	github.com/libopenstorage/cloudops v0.0.0-20190815012442-6e0d676b6c3e
-	github.com/libopenstorage/openstorage v8.0.1-0.20200730032300-bef55ec5700c+incompatible
+	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
+	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
 	github.com/portworx/sched-ops v1.20.4-rc1
+	github.com/portworx/torpedo v0.20.4-rc1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.7.0

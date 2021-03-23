@@ -1,0 +1,3664 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "pkg/apis/v1/api.proto",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/backup": {
+      "post": {
+        "summary": "Create creates a new backup object",
+        "operationId": "Backup_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Backup"
+        ]
+      },
+      "put": {
+        "summary": "Update given backup details",
+        "operationId": "Backup_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/v1/backup/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of objects",
+        "operationId": "Backup_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "description": "Organization id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.max_objects",
+            "description": "max objects to fetch.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "enumerate_options.time_range.start_time",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "enumerate_options.time_range.end_time",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "enumerate_options.name_filter",
+            "description": "Filter to use for name of objects. Any object that contains the filter\nwill be returned.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.cluster_name_filter",
+            "description": "Filter to use for cluster name of objects. Any object that contains the\nfilter will be returned.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.object_index",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          }
+        ],
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/v1/backup/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detail information about a specified object",
+        "operationId": "Backup_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Backup"
+        ]
+      },
+      "delete": {
+        "summary": "Delete triggers delete of a backup",
+        "operationId": "Backup_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/v1/backuplocation": {
+      "post": {
+        "summary": "Create creates new backup location",
+        "operationId": "BackupLocation_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupLocationCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      },
+      "put": {
+        "summary": "Update given backup location details",
+        "operationId": "BackupLocation_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupLocationUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      }
+    },
+    "/v1/backuplocation/validate": {
+      "post": {
+        "summary": "Verify if a backup location is valid",
+        "operationId": "BackupLocation_Validate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationValidateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupLocationValidateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      }
+    },
+    "/v1/backuplocation/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of backup locations",
+        "operationId": "BackupLocation_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      }
+    },
+    "/v1/backuplocation/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detailed information about a specified backup location",
+        "operationId": "BackupLocation_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a backup location",
+        "operationId": "BackupLocation_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupLocationDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "delete_backups",
+            "description": "delete_backups indicates whether the cloud backup files need to\nbe deleted or retained.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "BackupLocation"
+        ]
+      }
+    },
+    "/v1/backupschedule": {
+      "post": {
+        "summary": "Create creates new backup schedule",
+        "operationId": "BackupSchedule_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BackupSchedule"
+        ]
+      },
+      "put": {
+        "summary": "Update updates a backup schedule",
+        "operationId": "BackupSchedule_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BackupSchedule"
+        ]
+      }
+    },
+    "/v1/backupschedule/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of backup schedule",
+        "operationId": "BackupSchedule_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "BackupSchedule"
+        ]
+      }
+    },
+    "/v1/backupschedule/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detail information about a specified backup schedule",
+        "operationId": "BackupSchedule_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "BackupSchedule"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a backup schedule",
+        "operationId": "BackupSchedule_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/BackupScheduleDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "delete_backups",
+            "description": "delete_backups indicates whether the cloud backup files need to\nbe deleted or retained.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "BackupSchedule"
+        ]
+      }
+    },
+    "/v1/cloudcredential": {
+      "post": {
+        "summary": "Create creates new cloud credential",
+        "operationId": "CloudCredential_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "CloudCredential"
+        ]
+      },
+      "put": {
+        "summary": "Update given cloud credential details",
+        "operationId": "CloudCredential_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "CloudCredential"
+        ]
+      }
+    },
+    "/v1/cloudcredential/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of cloud credentials",
+        "operationId": "CloudCredential_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "include_secrets",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "CloudCredential"
+        ]
+      }
+    },
+    "/v1/cloudcredential/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detailed information about the specified cloud credential",
+        "operationId": "CloudCredential_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "include_secrets",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "CloudCredential"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a cloud credential",
+        "operationId": "CloudCredential_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/CloudCredentialDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "CloudCredential"
+        ]
+      }
+    },
+    "/v1/cluster": {
+      "post": {
+        "summary": "Create creates a new cluster",
+        "operationId": "Cluster_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/ClusterCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ClusterCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      },
+      "put": {
+        "summary": "Update given cluster details",
+        "operationId": "Cluster_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/ClusterUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ClusterUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      }
+    },
+    "/v1/cluster/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of clusters",
+        "operationId": "Cluster_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/ClusterEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "include_secrets",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      }
+    },
+    "/v1/cluster/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detail information about a specified cluster",
+        "operationId": "Cluster_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/ClusterInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "include_secrets",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a cluster",
+        "operationId": "Cluster_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/ClusterDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "delete_backups",
+            "description": "delete_backups indicates whether the backup related to cluster need to\nbe deleted or retained.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "delete_restores",
+            "description": "delete_restores indicates whether the restore related to cluster  need to\nbe deleted or retained.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "summary": "Status checks the health of the server",
+        "operationId": "Health_Status",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/HealthStatusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/v1/license": {
+      "post": {
+        "summary": "Activate activate a new license",
+        "operationId": "License_Activate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/LicenseActivateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LicenseActivateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "License"
+        ]
+      }
+    },
+    "/v1/license/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of license for given cluster",
+        "operationId": "License_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/LicenseInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "License"
+        ]
+      }
+    },
+    "/v1/metrics/{org_id}": {
+      "get": {
+        "operationId": "Metrics_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/MetricsInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/v1/organization": {
+      "get": {
+        "summary": "Enumerate returns a list of organization object",
+        "operationId": "Organization_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/OrganizationEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      },
+      "post": {
+        "summary": "Create creates new organization object in datastore",
+        "operationId": "Organization_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/OrganizationCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/OrganizationCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/v1/organization/{name}": {
+      "get": {
+        "summary": "Inspect returns detailed information about specified organization object",
+        "operationId": "Organization_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/OrganizationInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/v1/restore": {
+      "post": {
+        "summary": "Create creates new restore object in datastore\nIt will also trigger a restore operation on the target cluster",
+        "operationId": "Restore_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RestoreCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RestoreCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Restore"
+        ]
+      },
+      "put": {
+        "summary": "Update given restore details",
+        "operationId": "Restore_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RestoreUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RestoreUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Restore"
+        ]
+      }
+    },
+    "/v1/restore/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of restore objects",
+        "operationId": "Restore_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RestoreEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "description": "Organization id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.max_objects",
+            "description": "max objects to fetch.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          },
+          {
+            "name": "enumerate_options.time_range.start_time",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "enumerate_options.time_range.end_time",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "enumerate_options.name_filter",
+            "description": "Filter to use for name of objects. Any object that contains the filter\nwill be returned.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.cluster_name_filter",
+            "description": "Filter to use for cluster name of objects. Any object that contains the\nfilter will be returned.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "enumerate_options.object_index",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "uint64"
+          }
+        ],
+        "tags": [
+          "Restore"
+        ]
+      }
+    },
+    "/v1/restore/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detailed information about specified restore object",
+        "operationId": "Restore_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RestoreInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Restore"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a restore object",
+        "operationId": "Restore_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RestoreDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Restore"
+        ]
+      }
+    },
+    "/v1/rule": {
+      "post": {
+        "summary": "Create creates new rule",
+        "operationId": "Rules_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RuleCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuleCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Rules"
+        ]
+      },
+      "put": {
+        "summary": "Update given rule details",
+        "operationId": "Rules_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RuleUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuleUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Rules"
+        ]
+      }
+    },
+    "/v1/rule/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of rules",
+        "operationId": "Rules_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RuleEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Rules"
+        ]
+      }
+    },
+    "/v1/rule/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detailed information about the specified rule",
+        "operationId": "Rules_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RuleInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Rules"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes rule from px-backup",
+        "operationId": "Rules_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/RuleDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Rules"
+        ]
+      }
+    },
+    "/v1/schedulepolicy": {
+      "post": {
+        "summary": "Create creates new schedule policy.",
+        "operationId": "SchedulePolicy_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyCreateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyCreateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SchedulePolicy"
+        ]
+      },
+      "put": {
+        "summary": "Update given schedule policy details",
+        "operationId": "SchedulePolicy_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyUpdateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyUpdateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SchedulePolicy"
+        ]
+      }
+    },
+    "/v1/schedulepolicy/{org_id}": {
+      "get": {
+        "summary": "Enumerate returns a list of schedule policy",
+        "operationId": "SchedulePolicy_Enumerate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyEnumerateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "SchedulePolicy"
+        ]
+      }
+    },
+    "/v1/schedulepolicy/{org_id}/{name}": {
+      "get": {
+        "summary": "Inspect returns detail information about a specified schedule policy",
+        "operationId": "SchedulePolicy_Inspect",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyInspectResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "SchedulePolicy"
+        ]
+      },
+      "delete": {
+        "summary": "Delete removes a schedule policy",
+        "operationId": "SchedulePolicy_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedulePolicyDeleteResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "SchedulePolicy"
+        ]
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "summary": "Get gets the version of the server",
+        "operationId": "Version_Get",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/VersionGetResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "AWSConfig": {
+      "type": "object",
+      "properties": {
+        "access_key": {
+          "type": "string"
+        },
+        "secret_key": {
+          "type": "string"
+        }
+      }
+    },
+    "AzureConfig": {
+      "type": "object",
+      "properties": {
+        "account_name": {
+          "type": "string"
+        },
+        "account_key": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "tenant_id": {
+          "type": "string"
+        },
+        "subscription_id": {
+          "type": "string",
+          "description": "TODO: Need to see if this has to be here or in the backup object."
+        }
+      }
+    },
+    "BackupCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "backup_location": {
+          "type": "string",
+          "title": "Name or UID + orgid of BackupLocation"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name or UID of Cluster"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Namespaces to backup. Only an admin can provide multiple namespaces"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "pre_exec_rule": {
+          "type": "string",
+          "title": "Pre check rule to run before backup is started"
+        },
+        "post_exec_rule": {
+          "type": "string",
+          "title": "Post check rule to run after backup is completed"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          },
+          "title": "List of resources to backup (optional)"
+        }
+      },
+      "title": "Request message structure for backup create"
+    },
+    "BackupCreateResponse": {
+      "type": "object",
+      "title": "Response message structure for backup create"
+    },
+    "BackupDeleteResponse": {
+      "type": "object",
+      "title": "Response message strcuture for object delete"
+    },
+    "BackupEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "backups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BackupObject"
+          }
+        },
+        "total_count": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "title": "Response message structure for enumerate create"
+    },
+    "BackupInfo": {
+      "type": "object",
+      "properties": {
+        "backup_location": {
+          "type": "string",
+          "title": "Name of BackupLocation"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name of Cluster"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Namespaces to backup. Only an admin can provide multiple namespaces"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "status": {
+          "$ref": "#/definitions/BackupInfoStatusInfo"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          }
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BackupInfoVolume"
+          }
+        },
+        "backup_path": {
+          "type": "string"
+        },
+        "stage": {
+          "$ref": "#/definitions/BackupInfoStage"
+        },
+        "pre_exec_rule": {
+          "type": "string"
+        },
+        "post_exec_rule": {
+          "type": "string"
+        },
+        "backup_schedule": {
+          "$ref": "#/definitions/BackupInfoBackupSchedule",
+          "description": "Name of the backup schedule, if the backup was taken by schedule through\npx-backup.\nOtherwise it will be empty."
+        },
+        "cr_name": {
+          "type": "string"
+        },
+        "total_size": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "cloud_credential": {
+          "type": "string",
+          "title": "Reference to cloud credential object used for backup"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          }
+        }
+      }
+    },
+    "BackupInfoBackupSchedule": {
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "BackupInfoStage": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Initial",
+        "PreExecRule",
+        "PostExecRule",
+        "Volumes",
+        "Applications",
+        "Final"
+      ],
+      "default": "Invalid"
+    },
+    "BackupInfoStatusInfo": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/BackupInfoStatusInfoStatus"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Message for maintaing status of the object."
+    },
+    "BackupInfoStatusInfoStatus": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Pending",
+        "InProgress",
+        "Aborted",
+        "Failed",
+        "Deleting",
+        "Success",
+        "Captured",
+        "PartialSuccess",
+        "DeletePending",
+        "CloudBackupMissing"
+      ],
+      "default": "Invalid"
+    },
+    "BackupInfoVolume": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "pvc": {
+          "type": "string"
+        },
+        "backup_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/BackupInfoStatusInfo"
+        },
+        "driver_name": {
+          "type": "string"
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "total_size": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "actual_size": {
+          "type": "string",
+          "format": "uint64",
+          "title": "actual size of the backup\nincase of invremental, it's the incremental backup size"
+        }
+      }
+    },
+    "BackupInspectResponse": {
+      "type": "object",
+      "properties": {
+        "backup": {
+          "$ref": "#/definitions/BackupObject"
+        }
+      },
+      "title": "Response message strcuture for object inspect"
+    },
+    "BackupLocationCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "backup_location": {
+          "$ref": "#/definitions/BackupLocationInfo"
+        }
+      },
+      "title": "Define BackupLocationCreateRequest struct"
+    },
+    "BackupLocationCreateResponse": {
+      "type": "object",
+      "title": "Define BackupLocationCreateResponse struct"
+    },
+    "BackupLocationDeleteResponse": {
+      "type": "object",
+      "title": "Define BackupLocationDeleteResponse struct"
+    },
+    "BackupLocationEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "backup_locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BackupLocationObject"
+          }
+        }
+      },
+      "title": "Define BackupLocationEnumerateResponse struct"
+    },
+    "BackupLocationInfo": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/BackupLocationInfoType"
+        },
+        "path": {
+          "type": "string"
+        },
+        "encryption_key": {
+          "type": "string"
+        },
+        "cloud_credential": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/BackupLocationInfoStatusInfo"
+        },
+        "delete_backups": {
+          "type": "boolean"
+        },
+        "validate_cloud_credential": {
+          "type": "boolean"
+        },
+        "s3_config": {
+          "$ref": "#/definitions/S3Config"
+        }
+      }
+    },
+    "BackupLocationInfoStatusInfo": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/BackupLocationInfoStatusInfoStatus"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Message for maintaing status of the object."
+    },
+    "BackupLocationInfoStatusInfoStatus": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Valid",
+        "DeletePending"
+      ],
+      "default": "Invalid"
+    },
+    "BackupLocationInfoType": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "S3",
+        "Azure",
+        "Google"
+      ],
+      "default": "Invalid"
+    },
+    "BackupLocationInspectResponse": {
+      "type": "object",
+      "properties": {
+        "backup_location": {
+          "$ref": "#/definitions/BackupLocationObject"
+        }
+      },
+      "title": "Define BackupLocationInspectResponse struct"
+    },
+    "BackupLocationObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "backup_location_info": {
+          "$ref": "#/definitions/BackupLocationInfo"
+        }
+      }
+    },
+    "BackupLocationUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "backup_location": {
+          "$ref": "#/definitions/BackupLocationInfo"
+        }
+      },
+      "title": "Define BackupLocationUpdateRequest struct"
+    },
+    "BackupLocationUpdateResponse": {
+      "type": "object",
+      "title": "Define BackupLocationUpdateResponse struct"
+    },
+    "BackupLocationValidateRequest": {
+      "type": "object",
+      "properties": {
+        "org_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "title": "Define BackupLocationValidateRequest struct"
+    },
+    "BackupLocationValidateResponse": {
+      "type": "object",
+      "title": "Define BackupLocationValidateResponse struct"
+    },
+    "BackupObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "backup_info": {
+          "$ref": "#/definitions/BackupInfo"
+        }
+      },
+      "description": "Message for Backup object which will be stored in Datastore."
+    },
+    "BackupScheduleCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "schedule_policy": {
+          "type": "string"
+        },
+        "reclaim_policy": {
+          "$ref": "#/definitions/BackupScheduleInfoReclaimPolicyType"
+        },
+        "backup_location": {
+          "type": "string",
+          "title": "Name of BackupLocation"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name of Cluster"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Namespaces to backup. Only an admin can provide multiple namespaces"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "pre_exec_rule": {
+          "type": "string"
+        },
+        "post_exec_rule": {
+          "type": "string"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          },
+          "title": "List of resources to backup (optional)"
+        }
+      },
+      "title": "Define BackupScheduleCreateRequest struct"
+    },
+    "BackupScheduleCreateResponse": {
+      "type": "object",
+      "title": "Define BackupScheduleCreateResponse struct"
+    },
+    "BackupScheduleDeleteResponse": {
+      "type": "object",
+      "title": "Define BackupScheduleDeleteResponse struct"
+    },
+    "BackupScheduleEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "backup_schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BackupScheduleObject"
+          }
+        }
+      },
+      "title": "Define BackupScheduleEnumerateResponse struct"
+    },
+    "BackupScheduleInfo": {
+      "type": "object",
+      "properties": {
+        "schedule_policy": {
+          "type": "string"
+        },
+        "suspend": {
+          "type": "boolean"
+        },
+        "reclaim_policy": {
+          "$ref": "#/definitions/BackupScheduleInfoReclaimPolicyType"
+        },
+        "backup_status": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BackupScheduleInfoStatusInfoList"
+          }
+        },
+        "backup_location": {
+          "type": "string",
+          "title": "Name of BackupLocation"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name of Cluster"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Namespaces to backup. Only an admin can provide multiple namespaces"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "pre_exec_rule": {
+          "type": "string"
+        },
+        "post_exec_rule": {
+          "type": "string"
+        },
+        "delete_backups": {
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/definitions/BackupScheduleInfoStatusInfo"
+        },
+        "suspended_by": {
+          "$ref": "#/definitions/BackupScheduleInfoSuspendedBy"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          }
+        }
+      }
+    },
+    "BackupScheduleInfoReclaimPolicyType": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Delete",
+        "Retain"
+      ],
+      "default": "Invalid"
+    },
+    "BackupScheduleInfoStatusInfo": {
+      "type": "object",
+      "properties": {
+        "backup_name": {
+          "type": "string",
+          "title": "backup name"
+        },
+        "create_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finish_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "$ref": "#/definitions/BackupScheduleInfoStatusInfoStatus"
+        },
+        "Reason": {
+          "type": "string"
+        }
+      }
+    },
+    "BackupScheduleInfoStatusInfoList": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BackupScheduleInfoStatusInfo"
+          }
+        }
+      }
+    },
+    "BackupScheduleInfoStatusInfoStatus": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Pending",
+        "InProgress",
+        "Aborted",
+        "Failed",
+        "Deleting",
+        "Success",
+        "Captured",
+        "PartialSuccess",
+        "DeletePending"
+      ],
+      "default": "Invalid"
+    },
+    "BackupScheduleInfoSuspendedBy": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/definitions/SuspendedBySource"
+        }
+      }
+    },
+    "BackupScheduleInspectResponse": {
+      "type": "object",
+      "properties": {
+        "backup_schedule": {
+          "$ref": "#/definitions/BackupScheduleObject"
+        }
+      },
+      "title": "Define BackupScheduleInspectResponse struct"
+    },
+    "BackupScheduleObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "backup_schedule_info": {
+          "$ref": "#/definitions/BackupScheduleInfo"
+        }
+      }
+    },
+    "BackupScheduleUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "schedule_policy": {
+          "type": "string"
+        },
+        "reclaim_policy": {
+          "$ref": "#/definitions/BackupScheduleInfoReclaimPolicyType"
+        },
+        "backup_location": {
+          "type": "string",
+          "title": "Name of BackupLocation"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name of Cluster"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Namespaces to backup. Only an admin can provide multiple namespaces"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "pre_exec_rule": {
+          "type": "string"
+        },
+        "post_exec_rule": {
+          "type": "string"
+        },
+        "suspend": {
+          "type": "boolean"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          },
+          "title": "List of resources to backup (optional)"
+        }
+      },
+      "title": "Define BackupScheduleUpdateRequest struct"
+    },
+    "BackupScheduleUpdateResponse": {
+      "type": "object",
+      "title": "Define BackupScheduleUpdateResponse struct"
+    },
+    "BackupUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "cloud_credential": {
+          "type": "string",
+          "title": "Reference to cloud credential object used for backup"
+        }
+      },
+      "title": "Define BackupUpdateRequest struct"
+    },
+    "BackupUpdateResponse": {
+      "type": "object",
+      "title": "Define BackupUpdateResponse struct"
+    },
+    "CloudCredentialCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "cloud_credential": {
+          "$ref": "#/definitions/CloudCredentialInfo"
+        }
+      },
+      "title": "Define CloudCredentialCreateRequest struct"
+    },
+    "CloudCredentialCreateResponse": {
+      "type": "object",
+      "title": "Define CloudCredentialCreateResponse struct"
+    },
+    "CloudCredentialDeleteResponse": {
+      "type": "object",
+      "title": "Define CloudCredentialInspectResponse struct"
+    },
+    "CloudCredentialEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "cloud_credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CloudCredentialObject"
+          }
+        }
+      },
+      "title": "Define CloudCredentialEnumerateResponse struct"
+    },
+    "CloudCredentialInfo": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/CloudCredentialInfoType"
+        },
+        "aws_config": {
+          "$ref": "#/definitions/AWSConfig"
+        },
+        "azure_config": {
+          "$ref": "#/definitions/AzureConfig"
+        },
+        "google_config": {
+          "$ref": "#/definitions/GoogleConfig"
+        }
+      }
+    },
+    "CloudCredentialInfoType": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "AWS",
+        "Azure",
+        "Google"
+      ],
+      "default": "Invalid"
+    },
+    "CloudCredentialInspectResponse": {
+      "type": "object",
+      "properties": {
+        "cloud_credential": {
+          "$ref": "#/definitions/CloudCredentialObject"
+        }
+      },
+      "title": "Define CloudCredentialInspectResponse struct"
+    },
+    "CloudCredentialObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "cloud_credential_info": {
+          "$ref": "#/definitions/CloudCredentialInfo"
+        }
+      }
+    },
+    "CloudCredentialUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "cloud_credential": {
+          "$ref": "#/definitions/CloudCredentialInfo"
+        }
+      },
+      "title": "Define CloudCredentialUpdateRequest struct"
+    },
+    "CloudCredentialUpdateResponse": {
+      "type": "object",
+      "title": "Define CloudCredentialUpdateResponse struct"
+    },
+    "ClusterCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "px_config": {
+          "$ref": "#/definitions/PXConfig"
+        },
+        "kubeconfig": {
+          "type": "string"
+        },
+        "cloud_credential": {
+          "type": "string"
+        }
+      },
+      "title": "Define ClusterCreateRequest struct"
+    },
+    "ClusterCreateResponse": {
+      "type": "object",
+      "title": "Define ClusterCreateResponse struct"
+    },
+    "ClusterDeleteResponse": {
+      "type": "object",
+      "title": "Define ClusterInspectResponse struct"
+    },
+    "ClusterEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "clusters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClusterObject"
+          }
+        }
+      },
+      "title": "Define ClusterEnumerateResponse struct"
+    },
+    "ClusterInfo": {
+      "type": "object",
+      "properties": {
+        "px_config": {
+          "$ref": "#/definitions/PXConfig"
+        },
+        "kubeconfig": {
+          "type": "string"
+        },
+        "cloud_credential": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ClusterInfoStatusInfo"
+        },
+        "delete_backups": {
+          "type": "boolean",
+          "description": "delete_backups will determine whether the backups\nbelong to given cluster needs to be deleted or not."
+        },
+        "delete_restores": {
+          "type": "boolean",
+          "description": "delete_restores will determine whether the restore\nbelong to given cluster needs to be deleted or not."
+        }
+      }
+    },
+    "ClusterInfoStatusInfo": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/ClusterInfoStatusInfoStatus"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Message for maintaing status of the cluster."
+    },
+    "ClusterInfoStatusInfoStatus": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Online",
+        "Offline",
+        "DeletePending"
+      ],
+      "default": "Invalid"
+    },
+    "ClusterInspectResponse": {
+      "type": "object",
+      "properties": {
+        "cluster": {
+          "$ref": "#/definitions/ClusterObject"
+        }
+      },
+      "title": "Define ClusterInspectResponse struct"
+    },
+    "ClusterObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "clusterInfo": {
+          "$ref": "#/definitions/ClusterInfo"
+        }
+      }
+    },
+    "ClusterUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "px_config": {
+          "$ref": "#/definitions/PXConfig"
+        },
+        "kubeconfig": {
+          "type": "string"
+        },
+        "cloud_credential": {
+          "type": "string"
+        }
+      },
+      "title": "Define ClusterUpdateRequest struct"
+    },
+    "ClusterUpdateResponse": {
+      "type": "object",
+      "title": "Define ClusterUpdateResponse struct"
+    },
+    "CreateMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "name of the object"
+        },
+        "org_id": {
+          "type": "string",
+          "title": "org id of the object"
+        },
+        "owner": {
+          "type": "string",
+          "title": "owner of the object"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "labels associated with the object"
+        }
+      }
+    },
+    "EnumerateOptions": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "label selectors for the object for filtering"
+        },
+        "max_objects": {
+          "type": "string",
+          "format": "uint64",
+          "title": "max objects to fetch"
+        },
+        "time_range": {
+          "$ref": "#/definitions/TimeRange",
+          "title": "Time range for which to return objects"
+        },
+        "name_filter": {
+          "type": "string",
+          "title": "Filter to use for name of objects. Any object that contains the filter\nwill be returned"
+        },
+        "cluster_name_filter": {
+          "type": "string",
+          "title": "Filter to use for cluster name of objects. Any object that contains the\nfilter will be returned"
+        },
+        "object_index": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "GoogleConfig": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string"
+        },
+        "json_key": {
+          "type": "string"
+        }
+      }
+    },
+    "HealthStatusResponse": {
+      "type": "object"
+    },
+    "LicenseActivateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "activation_id": {
+          "type": "string"
+        },
+        "license_data": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "LicenseActivateResponse": {
+      "type": "object"
+    },
+    "LicenseInspectResponse": {
+      "type": "object",
+      "properties": {
+        "license_resp_info": {
+          "$ref": "#/definitions/LicenseResponseInfo"
+        }
+      }
+    },
+    "LicenseResponseInfo": {
+      "type": "object",
+      "properties": {
+        "feature_info": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LicenseResponseInfoFeatureInfo"
+          }
+        }
+      }
+    },
+    "LicenseResponseInfoEntitlementInfo": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "string",
+          "format": "int64",
+          "title": "License count"
+        },
+        "expires": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Expiry time of license"
+        },
+        "starts": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Start time of license"
+        }
+      }
+    },
+    "LicenseResponseInfoFeatureInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Feature name"
+        },
+        "consumed": {
+          "type": "string",
+          "format": "int64",
+          "title": "Consumed count"
+        },
+        "entitlement_info": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LicenseResponseInfoEntitlementInfo"
+          },
+          "title": "License entitlement info"
+        }
+      }
+    },
+    "Metadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "name of the object"
+        },
+        "uid": {
+          "type": "string",
+          "title": "uid for the object"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "org_id": {
+          "type": "string",
+          "title": "organization uid"
+        },
+        "create_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_update_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "label selectors for the object for filtering"
+        }
+      }
+    },
+    "MetricsInspectResponse": {
+      "type": "object",
+      "properties": {
+        "stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MetricsInspectResponseStats"
+          }
+        }
+      }
+    },
+    "MetricsInspectResponseStats": {
+      "type": "object",
+      "properties": {
+        "cluster": {
+          "type": "string"
+        },
+        "num_namespaces": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "total_backup_size": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "num_schedules": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "OrganizationCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        }
+      },
+      "title": "Define OrganizationCreateRequest struct"
+    },
+    "OrganizationCreateResponse": {
+      "type": "object",
+      "title": "Define OrganizationCreateResponse struct"
+    },
+    "OrganizationEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "organizations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OrganizationObject"
+          }
+        }
+      },
+      "title": "Define OrganizationEnumerateResponse struct"
+    },
+    "OrganizationInspectResponse": {
+      "type": "object",
+      "properties": {
+        "organization": {
+          "$ref": "#/definitions/OrganizationObject"
+        }
+      },
+      "title": "Define OrganizationInspectResponse struct"
+    },
+    "OrganizationObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        }
+      }
+    },
+    "PXConfig": {
+      "type": "object",
+      "properties": {
+        "access_token": {
+          "type": "string"
+        }
+      }
+    },
+    "ReplacePolicyType": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Retain",
+        "Delete"
+      ],
+      "default": "Invalid"
+    },
+    "ResourceInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "RestoreCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "backup": {
+          "type": "string",
+          "title": "uid or name of backup"
+        },
+        "cluster": {
+          "type": "string",
+          "title": "uid or name of cluster"
+        },
+        "namespace_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "mapping of the namespaces from the backup to which restore should be done"
+        },
+        "replace_policy": {
+          "$ref": "#/definitions/ReplacePolicyType",
+          "title": "replace policy to use if the resource already exists"
+        },
+        "include_optional_resource_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "optional resource types to be restored (eg Jobs)"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          },
+          "title": "List of resources to restore (optional)"
+        }
+      },
+      "title": "Define RestoreCreateRequest struct"
+    },
+    "RestoreCreateResponse": {
+      "type": "object",
+      "title": "Define RestoreCreateResponse struct"
+    },
+    "RestoreDeleteResponse": {
+      "type": "object",
+      "title": "Define RestoreDeleteResponse struct"
+    },
+    "RestoreEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "restores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RestoreObject"
+          }
+        },
+        "total_count": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "title": "Define RestoreEnumerateResponse struct"
+    },
+    "RestoreInfo": {
+      "type": "object",
+      "properties": {
+        "backup": {
+          "type": "string",
+          "title": "Name of backup to restore from"
+        },
+        "backup_location": {
+          "type": "string",
+          "title": "Name of backup location to restore from"
+        },
+        "label_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label selectors to choose resources"
+        },
+        "namespace_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Namespace Mapping"
+        },
+        "replace_policy": {
+          "$ref": "#/definitions/ReplacePolicyType",
+          "title": "Restore replace policy type (\"delete\"/\"retain\")"
+        },
+        "status": {
+          "$ref": "#/definitions/RestoreInfoStatusInfo"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RestoreInfoRestoredResource"
+          }
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RestoreInfoVolume"
+          }
+        },
+        "cluster": {
+          "type": "string",
+          "title": "Name of the cluster"
+        },
+        "include_optional_resource_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "total_size": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "include_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceInfo"
+          }
+        }
+      },
+      "title": "Message for restore info"
+    },
+    "RestoreInfoRestoredResource": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/RestoreInfoStatusInfo"
+        }
+      }
+    },
+    "RestoreInfoStatusInfo": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/RestoreInfoStatusInfoStatus"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Message for maintaing status of the object."
+    },
+    "RestoreInfoStatusInfoStatus": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "Pending",
+        "InProgress",
+        "Aborted",
+        "Failed",
+        "Deleting",
+        "Success",
+        "Retained",
+        "PartialSuccess"
+      ],
+      "default": "Invalid"
+    },
+    "RestoreInfoVolume": {
+      "type": "object",
+      "properties": {
+        "pvc": {
+          "type": "string"
+        },
+        "source_namespace": {
+          "type": "string"
+        },
+        "source_volume": {
+          "type": "string"
+        },
+        "restore_volume": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/RestoreInfoStatusInfo"
+        },
+        "driver_name": {
+          "type": "string"
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "total_size": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "RestoreInspectResponse": {
+      "type": "object",
+      "properties": {
+        "restore": {
+          "$ref": "#/definitions/RestoreObject"
+        }
+      },
+      "title": "Define RestoreInspectResponse struct"
+    },
+    "RestoreObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "restore_info": {
+          "$ref": "#/definitions/RestoreInfo"
+        }
+      },
+      "description": "Message for Restore object which will be stored in Datastore."
+    },
+    "RestoreUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        }
+      },
+      "title": "Define RestoreUpdateRequest struct"
+    },
+    "RestoreUpdateResponse": {
+      "type": "object",
+      "title": "Define RestoreUpdateResponse struct"
+    },
+    "RuleCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "rules_info": {
+          "$ref": "#/definitions/RulesInfo"
+        }
+      },
+      "title": "Request message for creating rules"
+    },
+    "RuleCreateResponse": {
+      "type": "object"
+    },
+    "RuleDeleteResponse": {
+      "type": "object",
+      "title": "Define RuleDeleteResponse struct"
+    },
+    "RuleEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleObject"
+          }
+        }
+      },
+      "title": "Define RuleEnumerateResponse struct"
+    },
+    "RuleInspectResponse": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "$ref": "#/definitions/RuleObject"
+        }
+      },
+      "title": "Define RuleInspectResponse struct"
+    },
+    "RuleObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "rules_info": {
+          "$ref": "#/definitions/RulesInfo"
+        }
+      }
+    },
+    "RuleUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "rules_info": {
+          "$ref": "#/definitions/RulesInfo"
+        }
+      }
+    },
+    "RuleUpdateResponse": {
+      "type": "object",
+      "title": "Define RuleUpdateResponse struct"
+    },
+    "RulesInfo": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RulesInfoRuleItem"
+          }
+        }
+      },
+      "title": "Message for passing pre and post exec rules for backup"
+    },
+    "RulesInfoAction": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "type": "boolean"
+        },
+        "run_in_single_pod": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "RulesInfoRuleItem": {
+      "type": "object",
+      "properties": {
+        "pod_selector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RulesInfoAction"
+          }
+        },
+        "container": {
+          "type": "string"
+        }
+      }
+    },
+    "S3Config": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "disable_ssl": {
+          "type": "boolean"
+        },
+        "disable_path_style": {
+          "type": "boolean"
+        },
+        "storage_class": {
+          "type": "string"
+        }
+      }
+    },
+    "SchedulePolicyCreateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "schedule_policy": {
+          "$ref": "#/definitions/SchedulePolicyInfo"
+        }
+      },
+      "title": "Define SchedulePolicyCreateRequest struct"
+    },
+    "SchedulePolicyCreateResponse": {
+      "type": "object",
+      "title": "Define SchedulePolicyCreateResponse struct"
+    },
+    "SchedulePolicyDeleteResponse": {
+      "type": "object",
+      "title": "Define SchedulePolicyDeleteResponse struct"
+    },
+    "SchedulePolicyEnumerateResponse": {
+      "type": "object",
+      "properties": {
+        "schedule_policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchedulePolicyObject"
+          }
+        }
+      },
+      "title": "Define SchedulePolicyEnumerateResponse struct"
+    },
+    "SchedulePolicyInfo": {
+      "type": "object",
+      "properties": {
+        "interval": {
+          "$ref": "#/definitions/SchedulePolicyInfoIntervalPolicy"
+        },
+        "daily": {
+          "$ref": "#/definitions/SchedulePolicyInfoDailyPolicy"
+        },
+        "weekly": {
+          "$ref": "#/definitions/SchedulePolicyInfoWeeklyPolicy"
+        },
+        "monthly": {
+          "$ref": "#/definitions/SchedulePolicyInfoMonthlyPolicy"
+        },
+        "backup_schedule": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "list of backup schedule object that uses this schedule policy."
+        }
+      }
+    },
+    "SchedulePolicyInfoDailyPolicy": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "Time, when the policy should be triggered. Expected format is\ntime.Kitchen eg 12:04PM or 12:04pm."
+        },
+        "retain": {
+          "type": "string",
+          "format": "int64",
+          "description": "Number of objects to retain for daily policy, default value is 10."
+        },
+        "incremental_count": {
+          "$ref": "#/definitions/SchedulePolicyInfoIncrementalCount",
+          "description": "Number of incremental snapshots to take before taking a full\nsnapshot."
+        }
+      }
+    },
+    "SchedulePolicyInfoIncrementalCount": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "SchedulePolicyInfoIntervalPolicy": {
+      "type": "object",
+      "properties": {
+        "minutes": {
+          "type": "string",
+          "format": "int64",
+          "description": "Interval in minutes at which an action should be triggered."
+        },
+        "retain": {
+          "type": "string",
+          "format": "int64",
+          "description": "Number of objects to retain for interval policy, default value is 10."
+        },
+        "incremental_count": {
+          "$ref": "#/definitions/SchedulePolicyInfoIncrementalCount",
+          "description": "Number of incremental snapshots to take before taking a full\nsnapshot."
+        }
+      }
+    },
+    "SchedulePolicyInfoMonthlyPolicy": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "int64",
+          "description": "Date of the month when the policy should be triggered. If a given\ndate\ndoesn't exist in a month it'll rollover to the next date of the\nmonth.\nFor example if 31 is specified, it'll trigger on either 1st or 2nd\nMarch\ndepending on if it is a leap year."
+        },
+        "time": {
+          "type": "string",
+          "description": "Time, when the policy should be triggered. Expected format is\ntime.Kitchen eg 12:04PM or 12:04pm."
+        },
+        "retain": {
+          "type": "string",
+          "format": "int64",
+          "description": "Number of objects to retain for monthly policy, default value is 10."
+        },
+        "incremental_count": {
+          "$ref": "#/definitions/SchedulePolicyInfoIncrementalCount",
+          "description": "Number of incremental snapshots to take before taking a full\nsnapshot."
+        }
+      }
+    },
+    "SchedulePolicyInfoWeeklyPolicy": {
+      "type": "object",
+      "properties": {
+        "day": {
+          "type": "string",
+          "title": "Day of the week when the policy should be triggered.\nFor example, sunday or sun"
+        },
+        "time": {
+          "type": "string",
+          "description": "Time, when the policy should be triggered. Expected format is\ntime.Kitchen eg 12:04PM or 12:04pm."
+        },
+        "retain": {
+          "type": "string",
+          "format": "int64",
+          "description": "Number of objects to retain for weekly policy, default value is 10."
+        },
+        "incremental_count": {
+          "$ref": "#/definitions/SchedulePolicyInfoIncrementalCount",
+          "description": "Number of incremental snapshots to take before taking a full\nsnapshot."
+        }
+      }
+    },
+    "SchedulePolicyInspectResponse": {
+      "type": "object",
+      "properties": {
+        "schedule_policy": {
+          "$ref": "#/definitions/SchedulePolicyObject"
+        }
+      },
+      "title": "Define SchedulePolicyInspectResponse struct"
+    },
+    "SchedulePolicyObject": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "schedule_policy_info": {
+          "$ref": "#/definitions/SchedulePolicyInfo"
+        }
+      }
+    },
+    "SchedulePolicyUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/CreateMetadata"
+        },
+        "schedule_policy": {
+          "$ref": "#/definitions/SchedulePolicyInfo"
+        }
+      },
+      "title": "Define SchedulePolicyUpdateRequest struct"
+    },
+    "SchedulePolicyUpdateResponse": {
+      "type": "object",
+      "title": "Define SchedulePolicyUpdateResponse struct"
+    },
+    "SuspendedBySource": {
+      "type": "string",
+      "enum": [
+        "Invalid",
+        "User",
+        "LicenseCheck"
+      ],
+      "default": "Invalid"
+    },
+    "TimeRange": {
+      "type": "object",
+      "properties": {
+        "start_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end_time": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "VersionGetResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "#/definitions/VersionInfo",
+          "title": "version information of the server"
+        }
+      }
+    },
+    "VersionInfo": {
+      "type": "object",
+      "properties": {
+        "major": {
+          "type": "string"
+        },
+        "minor": {
+          "type": "string"
+        },
+        "patch": {
+          "type": "string"
+        },
+        "git_commit": {
+          "type": "string"
+        },
+        "build_date": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "type_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "runtimeError": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}
