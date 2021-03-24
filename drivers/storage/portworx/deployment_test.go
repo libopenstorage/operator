@@ -2777,9 +2777,6 @@ func TestStorageNodeConfig(t *testing.T) {
 }
 
 func TestSecuritySetEnv(t *testing.T) {
-	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
-	coreops.SetInstance(k8sClient)
-	nodeName := "testNode"
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2791,6 +2788,31 @@ func TestSecuritySetEnv(t *testing.T) {
 			},
 		},
 	}
+	validateSecuritySetEnv(t, cluster)
+
+	// security disabled, auth enabled
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: false,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+		},
+	}
+	validateSecuritySetEnv(t, cluster)
+}
+
+func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(k8sClient)
+	nodeName := "testNode"
+
 	setSecuritySpecDefaults(cluster)
 
 	driver := portworx{}

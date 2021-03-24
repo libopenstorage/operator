@@ -3142,14 +3142,6 @@ func TestAutopilotVolumesChange(t *testing.T) {
 }
 
 func TestSecurityInstall(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	recorder := record.NewFakeRecorder(100)
-	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
-	require.NoError(t, err)
-
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3169,6 +3161,42 @@ func TestSecurityInstall(t *testing.T) {
 			},
 		},
 	}
+	validateAuthSecurityInstall(t, cluster)
+
+	// validate with security disabled, but auth enabled
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: false,
+				Auth: &corev1.AuthSpec{
+					Enabled:     boolPtr(true),
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
+						// Since we have a token expiration buffer of one minute,
+						// a new token will constantly be fetched.
+						TokenLifetime: stringPtr("1s"),
+					},
+				},
+			},
+		},
+	}
+	validateAuthSecurityInstall(t, cluster)
+
+}
+
+func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(100)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 
@@ -3361,13 +3389,6 @@ func TestSecurityInstall(t *testing.T) {
 }
 
 func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
-
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3385,6 +3406,38 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 			},
 		},
 	}
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+
+	// Auth enabled, security disabled
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: false,
+				Auth: &corev1.AuthSpec{
+					Enabled:     boolPtr(true),
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
+						TokenLifetime: stringPtr("1h"),
+					},
+				},
+			},
+		},
+	}
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+}
+
+func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 

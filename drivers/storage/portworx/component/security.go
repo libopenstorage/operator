@@ -102,6 +102,15 @@ func (c *security) IsEnabled(cluster *corev1.StorageCluster) bool {
 
 // Reconcile reconciles the component to match the current state of the StorageCluster
 func (c *security) Reconcile(cluster *corev1.StorageCluster) error {
+	if pxutil.AuthEnabled(&cluster.Spec) {
+		logrus.Infof("Auth is enabled ... creating secrets")
+		return c.reconcileAuth(cluster)
+	}
+	logrus.Infof("Auth is not enabled ... skipping secret creation")
+	return nil
+}
+
+func (c *security) reconcileAuth(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	err := c.createPrivateKeysSecret(cluster, ownerRef)
@@ -129,6 +138,9 @@ func (c *security) Reconcile(cluster *corev1.StorageCluster) error {
 
 // Delete deletes the component if present
 func (c *security) Delete(cluster *corev1.StorageCluster) error {
+	// It is possible for security component to be enabled even if auth is disabled (i.e. tls + no auth).
+	//   So it's possible that secrets may not exist at this time. We delete them just in case.
+	//   k8s client does not error out of deleted object is "not found" ... so we should be ok
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	// delete token secrets - these are ephemeral and can be recreated easily

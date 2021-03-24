@@ -702,7 +702,7 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	}
 
 	if toUpdate.Spec.Security != nil {
-		if toUpdate.Spec.Security.Enabled {
+		if pxutil.AuthEnabled(&toUpdate.Spec) {
 			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1.AuthSpec{}) {
 				if toUpdate.Spec.Security.Auth.GuestAccess == nil || (*toUpdate.Spec.Security.Auth.GuestAccess == "") {
 					// if not provided, enabled by default.
@@ -730,7 +730,7 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.SelfSigned
 				}
 			} else {
-				// security enabled, but no auth configuration
+				// auth enabled, but no auth configuration
 				toUpdate.Spec.Security.Auth = defaultAuthTemplate
 			}
 		}

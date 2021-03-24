@@ -692,7 +692,7 @@ func AuthEnabled(spec *corev1.StorageClusterSpec) bool {
 		if spec.Security.Auth != nil && spec.Security.Auth.Enabled != nil {
 			return *spec.Security.Auth.Enabled // override value exists, use override value and ignore parent
 		}
-		logrus.Printf("auth.enabled flag not supplied, using value from security.enabled: %v", spec.Security.Enabled)
+		logrus.Debugf("auth.enabled flag not supplied, using value from security.enabled: %v", spec.Security.Enabled)
 		return spec.Security.Enabled // parent value is valid
 	}
 	return false
