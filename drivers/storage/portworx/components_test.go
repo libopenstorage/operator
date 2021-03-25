@@ -3290,7 +3290,7 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1s")
 
@@ -3557,7 +3557,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	})
 
 	component.DeregisterAllComponents()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
 
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
@@ -3593,7 +3593,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3605,7 +3605,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	cluster.Status.Phase = string(corev1.ClusterInit)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3622,7 +3622,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3643,7 +3643,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3663,7 +3663,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3687,7 +3687,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 
 	// set to managed to avoid more calls without a corresponding mock expect
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
@@ -9723,6 +9723,6 @@ func reregisterComponents() {
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
 	component.RegisterPSPComponent()
 }
