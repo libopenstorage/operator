@@ -607,7 +607,7 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 		}
 		apicertFilename := advTLSOptions.ServerCert.FileName
 		if advTLSOptions.ServerKey == nil || advTLSOptions.ServerKey.FileName == nil {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.ServerKey.filename is required")
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey.filename is required")
 		}
 		apikeyFilename := advTLSOptions.ServerKey.FileName
 		return []string{

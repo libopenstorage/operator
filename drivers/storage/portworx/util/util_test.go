@@ -12,17 +12,17 @@ import (
 
 func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// setup
-	CACertFileName := stringPtr("util_testCA.crt")
+	caCertFileName := stringPtr("util_testCA.crt")
 	serverCertFileName := stringPtr("util_testServer.crt")
 	serverKeyFileName := stringPtr("util_testServer.key")
 	certRootPath := "/etc/pwx/"
 	expectedArgs := []string{
-		"-apirootca", certRootPath + *CACertFileName,
+		"-apirootca", certRootPath + *caCertFileName,
 		"-apicert", certRootPath + *serverCertFileName,
 		"-apikey", certRootPath + *serverKeyFileName,
 		"-apidisclientauth",
 	}
-	cluster := testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	// test
 	args, err := GetOciMonArgumentsForTLS(cluster)
 	// validate
@@ -32,7 +32,7 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// error scenarios
 	// GetOciMonArgumentsForTLS expects that defaults have already been applied
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, nil, serverKeyFileName)
+	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, nil, serverKeyFileName)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 
@@ -40,7 +40,7 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 
-	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, nil)
+	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, nil)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 }

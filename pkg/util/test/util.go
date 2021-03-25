@@ -1042,11 +1042,11 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 }
 
 // CreatePodSpecWithTLS is a helper method
-func CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName *string) *corev1.StorageCluster {
+func CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName *string) *corev1.StorageCluster {
 	var apicert *corev1.CertLocation = nil
-	if CACertFileName != nil {
+	if caCertFileName != nil {
 		apicert = &corev1.CertLocation{
-			FileName: CACertFileName,
+			FileName: caCertFileName,
 		}
 	}
 	var serverCert *corev1.CertLocation = nil

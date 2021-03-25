@@ -337,23 +337,23 @@ func TestPodSpecWithTLS(t *testing.T) {
 	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
 	coreops.SetInstance(k8sClient)
 	nodeName := "testNode"
-	CACertFileName := stringPtr("testCA.crt")
+	caCertFileName := stringPtr("testCA.crt")
 	serverCertFileName := stringPtr("testServer.crt")
 	serverKeyFileName := stringPtr("testServer.key")
 
 	driver := portworx{}
 
 	// Test1: user specifies all cert files
-	cluster := testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	validatePodSpecWithTLS("with all files specified", t, *CACertFileName, *serverCertFileName, *serverKeyFileName, actual)
+	validatePodSpecWithTLS("with all files specified", t, *caCertFileName, *serverCertFileName, *serverKeyFileName, actual)
 
 	// Test2: user specifies one cert file, rest are left blank. driver should fill in the default values
-	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -361,10 +361,10 @@ func TestPodSpecWithTLS(t *testing.T) {
 	setTLSSpecDefaults(cluster)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	validatePodSpecWithTLS("with root ca file specified", t, *CACertFileName, defaultTLSServerCertFilename, defaultTLSServerKeyFilename, actual)
+	validatePodSpecWithTLS("with root ca file specified", t, *caCertFileName, defaultTLSServerCertFilename, defaultTLSServerKeyFilename, actual)
 
 	// Test3: user specifies no certs, driver should fill in the default values
-	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
@@ -377,12 +377,12 @@ func TestPodSpecWithTLS(t *testing.T) {
 }
 
 // validatePodSpecWithTLS is a helper method used by TestPodSpecWithTLS
-func validatePodSpecWithTLS(testName string, t *testing.T, CACertFileName, serverCertFileName, serverKeyFileName string, actual v1.PodSpec) {
+func validatePodSpecWithTLS(testName string, t *testing.T, caCertFileName, serverCertFileName, serverKeyFileName string, actual v1.PodSpec) {
 	certRootPath := "/etc/pwx/"
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
-		"-apirootca", certRootPath + CACertFileName,
+		"-apirootca", certRootPath + caCertFileName,
 		"-apicert", certRootPath + serverCertFileName,
 		"-apikey", certRootPath + serverKeyFileName,
 		"-apidisclientauth",

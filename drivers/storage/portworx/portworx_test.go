@@ -6382,26 +6382,26 @@ func manifestSetup() {
 func TestSetTLSSpecDefaults(t *testing.T) {
 	// all filenames supplied
 	// setup
-	CACertFileName := stringPtr("testCA.crt")
+	caCertFileName := stringPtr("testCA.crt")
 	serverCertFileName := stringPtr("testServer.crt")
 	serverKeyFileName := stringPtr("testServer.key")
 	// test
-	cluster := testutil.CreatePodSpecWithTLS(CACertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, CACertFileName, serverCertFileName, serverKeyFileName)
+	verifyTLSSpecFileNames(t, cluster, caCertFileName, serverCertFileName, serverKeyFileName)
 
 	// only one filename supplied
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(CACertFileName, nil, nil)
+	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, nil, nil)
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, CACertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
 
 	// no filename supplied
 	// setup
@@ -6463,7 +6463,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
 }
 
-func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, CACertFileName, serverCertFileName, serverKeyFileName *string) {
+func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, caCertFileName, serverCertFileName, serverKeyFileName *string) {
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under verification = \n, %v", string(s))
 	assert.NotNil(t, cluster.Spec.Security)
@@ -6473,7 +6473,7 @@ func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, CACert
 	// validate Root CA
 	assert.NotNil(t, advancedOptions.APIRootCA)
 	assert.NotNil(t, advancedOptions.APIRootCA.FileName)
-	assert.Equal(t, *CACertFileName, *advancedOptions.APIRootCA.FileName)
+	assert.Equal(t, *caCertFileName, *advancedOptions.APIRootCA.FileName)
 	// validate Server Cert (public key)
 	assert.NotNil(t, advancedOptions.ServerCert)
 	assert.NotNil(t, advancedOptions.ServerCert.FileName)

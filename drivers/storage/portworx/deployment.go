@@ -778,9 +778,9 @@ func (t *template) getArguments() []string {
 	}
 
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		logrus.Info("TLS is enabled! Getting oci-monitor arugments")
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
 		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
-			logrus.Infof("oci-monitor arguments for TLS: %v\n", tlsArgs)
+			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
 			args = append(args, tlsArgs...)
 		} else {
 			logrus.Warnf("error parsing tls spec: %v", err)
@@ -915,10 +915,10 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
-	// We're setting this to signal to operator code, oci-monitor code and porx code that tls is enabled
+	// We're setting this to signal to porx that tls is enabled
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
 		// Set:
-		//	  env:
+		//    env:
 		//    - name: PX_ENABLE_TLS
 		//      value: "true"
 		//    - name: PX_ENFORCE_TLS
