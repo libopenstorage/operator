@@ -610,13 +610,13 @@ func isBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 	// Auth enabled status changed
 	if util.AuthEnabled(oldSpec) != util.AuthEnabled(currentSpec) {
-		logrus.Info("Auth status changed: security bounce required")
+		logrus.Debug("Auth status changed: security bounce required")
 		return true
 	}
 
 	// TLS enabled status changed
 	if util.IsTLSEnabledOnCluster(oldSpec) != util.IsTLSEnabledOnCluster(currentSpec) {
-		logrus.Info("TLS status changed: security bounce required")
+		logrus.Debug("TLS status changed: security bounce required")
 		return true
 	}
 
@@ -625,10 +625,10 @@ func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) b
 		// safe to assume currentSpec.Security.Auth.SelfSigned is non-nil as it will always be have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
 		if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.Issuer, oldSpec.Security.Auth.SelfSigned.Issuer) {
-			logrus.Info("Issue changed: security bounce required")
+			logrus.Debug("Issuer changed: security bounce required")
 			return true
 		} else if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.SharedSecret, oldSpec.Security.Auth.SelfSigned.SharedSecret) {
-			logrus.Info("SharedSecret changed: security bounce required")
+			logrus.Debug("SharedSecret changed: security bounce required")
 			return true
 		}
 	}
@@ -637,14 +637,14 @@ func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) b
 	if util.IsTLSEnabledOnCluster(currentSpec) {
 		// safe to assume currentSpec.Security.TLS.AdvancedOptions is non-nil as it will always be have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
-		if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.APIRootCA, oldSpec.Security.TLS.AdvancedTLSOptions.APIRootCA) {
-			logrus.Info("apirootCA changed: security bounce required")
+		if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.RootCA, oldSpec.Security.TLS.AdvancedTLSOptions.RootCA) {
+			logrus.Debug("apirootCA changed: security bounce required")
 			return true
 		} else if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.ServerCert, oldSpec.Security.TLS.AdvancedTLSOptions.ServerCert) {
-			logrus.Info("server cert changed: security bounce required")
+			logrus.Debug("server cert changed: security bounce required")
 			return true
 		} else if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions.ServerKey, oldSpec.Security.TLS.AdvancedTLSOptions.ServerKey) {
-			logrus.Info("server key changed: security bounce required")
+			logrus.Debug("server key changed: security bounce required")
 			return true
 		}
 	}

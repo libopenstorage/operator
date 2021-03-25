@@ -598,10 +598,10 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 	// for now, only support file spec
 	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
 		advTLSOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-		if advTLSOptions.APIRootCA == nil || advTLSOptions.APIRootCA.FileName == nil {
+		if advTLSOptions.RootCA == nil || advTLSOptions.RootCA.FileName == nil {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.apirootCA.filename is required")
 		}
-		apirootCAfilename := advTLSOptions.APIRootCA.FileName
+		apirootCAfilename := advTLSOptions.RootCA.FileName
 		if advTLSOptions.ServerCert == nil || advTLSOptions.ServerCert.FileName == nil {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert.filename is required")
 		}

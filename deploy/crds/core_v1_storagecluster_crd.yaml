@@ -872,7 +872,7 @@ spec:
                             used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
                 tls:
                   type: object
-                  description: Authorization configurations for a TLS enabled storage cluster
+                  description: Security configurations for a TLS enabled storage cluster
                   properties:
                     enabled:
                       type: boolean

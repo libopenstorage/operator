@@ -2534,20 +2534,9 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	// s, _ := json.MarshalIndent(revisions.Items, "", "\t")
-	// t.Logf(string(s))
-	var revision1, revision2 *appsv1.ControllerRevision = nil, nil
+
 	// validate revision 1 and revision 2 exist
-	for i, rev := range revisions.Items {
-		if rev.Revision == int64(1) {
-			revision1 = &revisions.Items[i]
-		}
-		if rev.Revision == int64(2) {
-			revision2 = &revisions.Items[i]
-		}
-	}
-	require.NotNil(t, revision1, "Unable to find revision 1")
-	require.NotNil(t, revision2, "Unable to find revision 2")
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// The old pod should be marked for deletion
 	require.Empty(t, podControl.Templates)
@@ -2584,26 +2573,15 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	t.Logf(string(s))
 	require.Len(t, podControl.Templates, 1)
 	// validate revision 1 and revision 2 exist
-	revision1, revision2 = nil, nil
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
+
+	// New revision's hash should match that of the new pod.
+	var revision2 *appsv1.ControllerRevision = nil
 	for i, rev := range revisions.Items {
-		if rev.Revision == 1 {
-			revision1 = &revisions.Items[i]
-		}
 		if rev.Revision == 2 {
 			revision2 = &revisions.Items[i]
 		}
 	}
-
-	s, _ = json.MarshalIndent(revision1, "", "\t")
-	t.Logf("revision1 = \n, %v", string(s))
-	s, _ = json.MarshalIndent(revision2, "", "\t")
-	t.Logf("revision2 = \n, %v", string(s))
-
-	require.NotNil(t, revision1, "Unable to find revision 1")
-	require.NotNil(t, revision2, "Unable to find revision 2")
-	require.Equal(t, int64(2), revision2.Revision)
-
-	// New revision's hash should match that of the new pod.
 	require.Equal(t, revision2.Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
 }
@@ -5424,7 +5402,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: testutil.BoolPtr(false),
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-			APIRootCA: &corev1.CertLocation{
+			RootCA: &corev1.CertLocation{
 				FileName: stringPtr("defaultCA.crt"),
 			},
 			ServerCert: &corev1.CertLocation{
@@ -5480,7 +5458,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA.FileName = stringPtr("newca.crt")
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName = stringPtr("newca.crt")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 

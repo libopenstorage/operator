@@ -1164,7 +1164,7 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	require.Equal(t, defaultTLSCACertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA.FileName)
+	require.Equal(t, defaultTLSCACertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName)
 	require.Equal(t, defaultTLSServerCertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName)
 	require.Equal(t, defaultTLSServerKeyFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName)
 }
@@ -1247,7 +1247,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				APIRootCA: &corev1.CertLocation{},
+				RootCA: &corev1.CertLocation{},
 			},
 		},
 	}
@@ -1258,7 +1258,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				APIRootCA: &corev1.CertLocation{
+				RootCA: &corev1.CertLocation{
 					FileName: nil,
 				},
 			},
@@ -1271,7 +1271,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				APIRootCA: &corev1.CertLocation{
+				RootCA: &corev1.CertLocation{
 					FileName: stringPtr(""),
 				},
 			},
@@ -6386,7 +6386,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 	serverCertFileName := stringPtr("testServer.crt")
 	serverKeyFileName := stringPtr("testServer.key")
 	// test
-	cluster := testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
@@ -6395,7 +6395,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// only one filename supplied
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
@@ -6405,7 +6405,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// no filename supplied
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
@@ -6415,7 +6415,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// no tls section, but security is enabled, defaults should be generated
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = nil
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -6426,7 +6426,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// empty tls section, but security is enabled, defaults should be generated
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
 	// test
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -6437,7 +6437,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// tls section with no advancedOptions, but security is enabled, defaults should be generated
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: boolPtr(true),
 	}
@@ -6450,7 +6450,7 @@ func TestSetTLSSpecDefaults(t *testing.T) {
 
 	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
 	// setup
-	cluster = testutil.CreatePodSpecWithTLS(nil, nil, nil)
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled:            boolPtr(true),
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
@@ -6471,9 +6471,9 @@ func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, caCert
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
 	advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
 	// validate Root CA
-	assert.NotNil(t, advancedOptions.APIRootCA)
-	assert.NotNil(t, advancedOptions.APIRootCA.FileName)
-	assert.Equal(t, *caCertFileName, *advancedOptions.APIRootCA.FileName)
+	assert.NotNil(t, advancedOptions.RootCA)
+	assert.NotNil(t, advancedOptions.RootCA.FileName)
+	assert.Equal(t, *caCertFileName, *advancedOptions.RootCA.FileName)
 	// validate Server Cert (public key)
 	assert.NotNil(t, advancedOptions.ServerCert)
 	assert.NotNil(t, advancedOptions.ServerCert.FileName)

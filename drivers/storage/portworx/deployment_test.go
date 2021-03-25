@@ -344,7 +344,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	driver := portworx{}
 
 	// Test1: user specifies all cert files
-	cluster := testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	setTLSSpecDefaults(cluster)
@@ -353,7 +353,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	validatePodSpecWithTLS("with all files specified", t, *caCertFileName, *serverCertFileName, *serverKeyFileName, actual)
 
 	// Test2: user specifies one cert file, rest are left blank. driver should fill in the default values
-	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -364,8 +364,8 @@ func TestPodSpecWithTLS(t *testing.T) {
 	validatePodSpecWithTLS("with root ca file specified", t, *caCertFileName, defaultTLSServerCertFilename, defaultTLSServerKeyFilename, actual)
 
 	// Test3: user specifies no certs, driver should fill in the default values
-	cluster = testutil.CreatePodSpecWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = nil
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")

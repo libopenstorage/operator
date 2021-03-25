@@ -132,9 +132,12 @@ type TLSSpec struct {
 
 // AdvancedTLSOptions is a reference to TLS certificates
 type AdvancedTLSOptions struct {
-	APIRootCA  *CertLocation `json:"apirootCA,omitempty"`
-	ServerKey  *CertLocation `json:"certKey,omitempty"`
+	// RootCA defines the location of the Root CA certificate needed to enable TLS
+	RootCA *CertLocation `json:"rootCA,omitempty"`
+	// ServerCert defines the location of the Server certificate (public key) certificate needed to enable TLS
 	ServerCert *CertLocation `json:"serverCert,omitempty"`
+	// ServerKey defines the location of the Server key (private key) needed to enable TLS
+	ServerKey *CertLocation `json:"serverKey,omitempty"`
 }
 
 // CertLocation specifies where portworx should pick up the certificate.

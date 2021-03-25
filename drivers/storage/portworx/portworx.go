@@ -623,7 +623,7 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 	defaultTLSTemplate := &corev1.TLSSpec{
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-			APIRootCA: &corev1.CertLocation{
+			RootCA: &corev1.CertLocation{
 				FileName: stringPtr(defaultTLSCACertFilename),
 			},
 			ServerKey: &corev1.CertLocation{
@@ -662,10 +662,10 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 
 	// set default filenames
 	// defaults for tls.advancedOptions.apirootCA
-	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA == nil ||
-		util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA.FileName) {
+	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA == nil ||
+		util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName) {
 		logrus.Tracef("apirootCA not specified - applying defaults")
-		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.APIRootCA = defaultTLSTemplate.AdvancedTLSOptions.APIRootCA
+		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
 	}
 	// defaults for tls.advancedOptions.serverCert
 	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert == nil ||
