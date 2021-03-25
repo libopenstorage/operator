@@ -58,9 +58,9 @@ func TestAuthEnabled(t *testing.T) {
 	testAuthEnabled(t, true, boolPtr(true), true)
 	testAuthEnabled(t, true, boolPtr(false), false)
 	testAuthEnabled(t, true, nil, true)
-	testAuthEnabled(t, true, boolPtr(true), true)
-	testAuthEnabled(t, true, boolPtr(false), false)
-	testAuthEnabled(t, true, nil, true)
+	testAuthEnabled(t, false, boolPtr(true), true)
+	testAuthEnabled(t, false, boolPtr(false), false)
+	testAuthEnabled(t, false, nil, false)
 
 	// security.enabled    security.auth.enabled        Auth enabled?
 	// ==============================================================
@@ -100,16 +100,16 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	// =============================================================
 	// true                true                         true
 	// true                false                        false
-	// true                nil                          true
+	// true                nil                          false
 	// false               true                         true
 	// false               false                        false
 	// false               nil                          false
 	testIsTLSEnabledOnCluster(t, true, boolPtr(true), true)
 	testIsTLSEnabledOnCluster(t, true, boolPtr(false), false)
-	testIsTLSEnabledOnCluster(t, true, nil, true)
-	testIsTLSEnabledOnCluster(t, true, boolPtr(true), true)
-	testIsTLSEnabledOnCluster(t, true, boolPtr(false), false)
-	testIsTLSEnabledOnCluster(t, true, nil, true)
+	testIsTLSEnabledOnCluster(t, true, nil, false)
+	testIsTLSEnabledOnCluster(t, false, boolPtr(true), true)
+	testIsTLSEnabledOnCluster(t, false, boolPtr(false), false)
+	testIsTLSEnabledOnCluster(t, false, nil, false)
 
 	// security.enabled    security.tls.enabled          TLS enabled?
 	// ==============================================================
@@ -130,7 +130,7 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	actual = IsTLSEnabledOnCluster(&cluster.Spec)
-	assert.Equal(t, actual, true)
+	assert.Equal(t, actual, false)
 
 	// security.enabled    security.tls.enabled          TLS enabled?
 	// ==============================================================

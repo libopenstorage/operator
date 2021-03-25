@@ -622,6 +622,7 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 
 func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 	defaultTLSTemplate := &corev1.TLSSpec{
+		Enabled: boolPtr(false),
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
 			RootCA: &corev1.CertLocation{
 				FileName: stringPtr(defaultTLSCACertFilename),
@@ -651,6 +652,11 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 		logrus.Tracef("TLS is enabled, but no TLS settings specified. Default values will be applied")
 		toUpdate.Spec.Security.TLS = defaultTLSTemplate
 		return
+	}
+
+	// disabled by default
+	if toUpdate.Spec.Security.TLS.Enabled == nil {
+		toUpdate.Spec.Security.TLS.Enabled = boolPtr(false)
 	}
 
 	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions == nil {

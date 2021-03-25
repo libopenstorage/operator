@@ -1150,23 +1150,28 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
 }
 
-func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
+func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster, expectAuthDefaults, expectTLSDefaults bool) {
+	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under validation = \n, %v", string(s))
+
 	require.NotNil(t, cluster.Spec.Security)
 	require.Equal(t, true, cluster.Spec.Security.Enabled)
-	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
-	require.Equal(t, "operator.portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
-	require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
-	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
-	require.NoError(t, err)
-	require.Equal(t, 24*time.Hour, duration)
+	if expectAuthDefaults {
+		require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.Issuer)
+		require.Equal(t, "operator.portworx.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
+		require.NotNil(t, true, cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+		duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
+		require.NoError(t, err)
+		require.Equal(t, 24*time.Hour, duration)
+	}
 
-	require.NotNil(t, cluster.Spec.Security.TLS)
-	require.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
-	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	require.Equal(t, defaultTLSCACertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName)
-	require.Equal(t, defaultTLSServerCertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName)
-	require.Equal(t, defaultTLSServerKeyFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName)
+	if expectTLSDefaults {
+		require.NotNil(t, cluster.Spec.Security.TLS)
+		require.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
+		require.Equal(t, defaultTLSCACertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName)
+		require.Equal(t, defaultTLSServerCertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName)
+		require.Equal(t, defaultTLSServerKeyFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName)
+	}
 }
 
 func TestStorageClusterDefaultsForSecurity(t *testing.T) {
@@ -1194,36 +1199,49 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	require.Nil(t, cluster.Spec.Security.Auth)
 	require.Nil(t, cluster.Spec.Security.TLS)
 
-	// Check for default values when only enabled=true
+	// security enabled, auth & tls missing - Check for default auth values, no tls defaults
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
-	// Check for default values when only enabled=true and fields non-nil but empty
+	// security enabled, auth and tls empty - Check for default auth values, no tls defaults
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth:    &corev1.AuthSpec{},
 		TLS:     &corev1.TLSSpec{},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth empty & tls missing - Check for default auth values, no tls defaults
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth:    &corev1.AuthSpec{},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth missing & tls empty - Check for default auth values, no tls defaults
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS:     &corev1.TLSSpec{},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth missing & tls empty but enabled - Check for default auth values, default tls defaults
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
+
+	// security enabled, auth has empty selfsignedSpec & tls missing - Check for default auth values, no tls defaults
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth: &corev1.AuthSpec{
@@ -1231,8 +1249,9 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth is missing, tls has empty advancedOptions - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1240,9 +1259,20 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
-	// validate default APIRootCA
+	// security enabled, auth is missing, tls is enabled and has empty advancedOptions - Check for default auth values, default tls values
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		TLS: &corev1.TLSSpec{
+			Enabled:            boolPtr(true),
+			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
+
+	// security enabled, auth is missing, tls has empty RootCA - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1252,21 +1282,22 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth is missing, tls is enabled and has empty RootCA - Check for default auth values, default tls values
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				RootCA: &corev1.CertLocation{
-					FileName: nil,
-				},
+				RootCA: &corev1.CertLocation{},
 			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
 
+	// security enabled, auth is missing, tls has empty string for RootCA filename - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1278,9 +1309,24 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
-	// validate default ServerCert
+	// security enabled, auth is missing, tls is enabled has empty string for RootCA filename - Check for default auth values, default tls values
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
+			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+				RootCA: &corev1.CertLocation{
+					FileName: stringPtr(""),
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
+
+	// security enabled, auth is missing, tls has empty ServerCert - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1290,21 +1336,22 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth is missing, tls enabled and has empty ServerCert - Check for default auth values, default tls values
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				ServerCert: &corev1.CertLocation{
-					FileName: nil,
-				},
+				ServerCert: &corev1.CertLocation{},
 			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
 
+	// security enabled, auth is missing, tls has empty string for ServerCert filename - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1316,9 +1363,24 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
-	// validate default ServerKey
+	// security enabled, auth is missing, tls enabled and has empty string for ServerCert filename - Check for default auth values, default tls values
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
+			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+				ServerCert: &corev1.CertLocation{
+					FileName: stringPtr(""),
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
+
+	// security enabled, auth is missing, tls has empty ServerKey - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1328,21 +1390,22 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
+	// security enabled, auth is missing, tls enabled and has empty ServerKey - Check for default auth values, default tls values
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
 			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-				ServerKey: &corev1.CertLocation{
-					FileName: nil,
-				},
+				ServerKey: &corev1.CertLocation{},
 			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
 
+	// security enabled, auth is missing, tls has empty string for ServerKey filename - Check for default auth values, no tls defaults because user did not explicitly enable tls
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		TLS: &corev1.TLSSpec{
@@ -1354,7 +1417,22 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
+
+	// security enabled, auth is missing, tls enabled and has empty string for ServerKey filename - Check for default auth values, default tls values
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
+			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+				ServerKey: &corev1.CertLocation{
+					FileName: stringPtr(""),
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	assertDefaultSecuritySpec(t, cluster, true, true)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
@@ -1365,7 +1443,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
@@ -1381,7 +1459,7 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	assertDefaultSecuritySpec(t, cluster)
+	assertDefaultSecuritySpec(t, cluster, true, false)
 
 	// issuer, when manually set, is not overwritten.
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("myissuer.io")
@@ -1404,13 +1482,14 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 }
 
 func TestTLSDefaultsWithOverrides(t *testing.T) {
-	///////////////////////Tests for TLS defaults////////////////////////
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+
 	// all filenames supplied
 	// setup
 	caCertFileName := stringPtr("testCA.crt")
 	serverCertFileName := stringPtr("testServer.crt")
 	serverKeyFileName := stringPtr("testServer.key")
-	driver := portworx{}
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	// test
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -1439,7 +1518,7 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	// verify
 	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
 
-	// no tls section, but security is enabled, defaults should be generated
+	// security is enabled, but no tls section, defaults should not be generated
 	// setup
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = nil
@@ -1448,9 +1527,9 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	assert.Nil(t, cluster.Spec.Security.TLS)
 
-	// empty tls section, but security is enabled, defaults should be generated
+	// security is enabled, empty tls section, defaults should not be generated
 	// setup
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
@@ -1459,7 +1538,8 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	assert.NotNil(t, cluster.Spec.Security.TLS)
+	assert.Equal(t, *cluster.Spec.Security.TLS, corev1.TLSSpec{})
 
 	// tls section with no advancedOptions, but security is enabled, defaults should be generated
 	// setup

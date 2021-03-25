@@ -580,15 +580,13 @@ func IsTLSEnabled() bool {
 
 // IsTLSEnabledOnCluster checks if TLS is enabled on the StorageCluster spec
 func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
-	// tls is enabled if:
-	// spec.security.enabled		spec.security.tls.enabled
-	// true							nil/true
-	// false						true
-	if spec.Security != nil {
-		if spec.Security.TLS != nil && spec.Security.TLS.Enabled != nil {
-			return *spec.Security.TLS.Enabled // override value exists, use override value and ignore parent
-		}
-		return spec.Security.Enabled // parent value is valid
+	// tls is disabled by default, so we don't break existing customers who
+	//   have already enabled security and expect only RBAC
+	//   TODO: This should change in the future when we can autogenerate tls certificates and
+	//   enabling tls without user preparation won't break any apps
+	// tls is enabled iff spec.secuirty.tls.enabled == true
+	if spec.Security != nil && spec.Security.TLS != nil && spec.Security.TLS.Enabled != nil {
+		return *spec.Security.TLS.Enabled
 	}
 	return false
 }
