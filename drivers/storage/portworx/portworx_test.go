@@ -1401,8 +1401,92 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	duration, err = pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, time.Hour*24*365, duration)
+}
 
-	// See TestSetTLSSpecDefaults for verification that TLS specs, when manually specified, are not overwritten
+func TestTLSDefaultsWithOverrides(t *testing.T) {
+	///////////////////////Tests for TLS defaults////////////////////////
+	// all filenames supplied
+	// setup
+	caCertFileName := stringPtr("testCA.crt")
+	serverCertFileName := stringPtr("testServer.crt")
+	serverKeyFileName := stringPtr("testServer.key")
+	driver := portworx{}
+	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	// test
+	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, caCertFileName, serverCertFileName, serverKeyFileName)
+
+	// only one filename supplied
+	// setup
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// no filename supplied
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// no tls section, but security is enabled, defaults should be generated
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = nil
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// empty tls section, but security is enabled, defaults should be generated
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// tls section with no advancedOptions, but security is enabled, defaults should be generated
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled: boolPtr(true),
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+
+	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled:            boolPtr(true),
+		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
@@ -6377,90 +6461,6 @@ func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
-}
-
-func TestSetTLSSpecDefaults(t *testing.T) {
-	// all filenames supplied
-	// setup
-	caCertFileName := stringPtr("testCA.crt")
-	serverCertFileName := stringPtr("testServer.crt")
-	serverKeyFileName := stringPtr("testServer.key")
-	// test
-	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
-	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, caCertFileName, serverCertFileName, serverKeyFileName)
-
-	// only one filename supplied
-	// setup
-	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
-
-	// no filename supplied
-	// setup
-	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
-
-	// no tls section, but security is enabled, defaults should be generated
-	// setup
-	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
-	cluster.Spec.Security.TLS = nil
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
-
-	// empty tls section, but security is enabled, defaults should be generated
-	// setup
-	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
-	cluster.Spec.Security.TLS = &corev1.TLSSpec{}
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
-
-	// tls section with no advancedOptions, but security is enabled, defaults should be generated
-	// setup
-	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
-	cluster.Spec.Security.TLS = &corev1.TLSSpec{
-		Enabled: boolPtr(true),
-	}
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
-
-	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
-	// setup
-	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
-	cluster.Spec.Security.TLS = &corev1.TLSSpec{
-		Enabled:            boolPtr(true),
-		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{},
-	}
-	// test
-	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
-	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
 }
 
 func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, caCertFileName, serverCertFileName, serverKeyFileName *string) {

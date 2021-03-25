@@ -347,7 +347,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
+	driver.SetDefaultsOnStorageCluster(cluster)
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	validatePodSpecWithTLS("with all files specified", t, *caCertFileName, *serverCertFileName, *serverKeyFileName, actual)
@@ -358,7 +358,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
+	driver.SetDefaultsOnStorageCluster(cluster)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	validatePodSpecWithTLS("with root ca file specified", t, *caCertFileName, defaultTLSServerCertFilename, defaultTLSServerKeyFilename, actual)
@@ -370,7 +370,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	setTLSSpecDefaults(cluster)
+	driver.SetDefaultsOnStorageCluster(cluster)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	validatePodSpecWithTLS("with no files specified", t, defaultTLSCACertFilename, defaultTLSServerCertFilename, defaultTLSServerKeyFilename, actual)
@@ -382,6 +382,9 @@ func validatePodSpecWithTLS(testName string, t *testing.T, caCertFileName, serve
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
+		"-b",
+		"-a",
+		"-secret_type", "k8s",
 		"-apirootca", certRootPath + caCertFileName,
 		"-apicert", certRootPath + serverCertFileName,
 		"-apikey", certRootPath + serverKeyFileName,
