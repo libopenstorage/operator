@@ -3937,11 +3937,53 @@ func TestCSIInstallWithNewerCSIVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
-	require.False(t, *csiDriver.Spec.PodInfoOnMount)
+	require.True(t, *csiDriver.Spec.PodInfoOnMount)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.20.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDriver := &storagev1beta1.CSIDriver{}
+	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
+	require.NoError(t, err)
+	require.Empty(t, csiDriver.OwnerReferences)
+	require.False(t, *csiDriver.Spec.AttachRequired)
+	require.True(t, *csiDriver.Spec.PodInfoOnMount)
+	require.Equal(t, len(csiDriver.Spec.VolumeLifecycleModes), 2)
+	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1beta1.VolumeLifecyclePersistent)
+	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1beta1.VolumeLifecycleEphemeral)
 }
 
 func TestCSIInstallWithPKS(t *testing.T) {
@@ -4176,7 +4218,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
-	require.False(t, *csiDriver.Spec.PodInfoOnMount)
+	require.True(t, *csiDriver.Spec.PodInfoOnMount)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
