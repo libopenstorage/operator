@@ -1040,3 +1040,56 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 
 	return cluster, nil
 }
+
+// CreateClusterWithTLS is a helper method
+func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName *string) *corev1.StorageCluster {
+	var apicert *corev1.CertLocation = nil
+	if caCertFileName != nil {
+		apicert = &corev1.CertLocation{
+			FileName: caCertFileName,
+		}
+	}
+	var serverCert *corev1.CertLocation = nil
+	if serverCertFileName != nil {
+		serverCert = &corev1.CertLocation{
+			FileName: serverCertFileName,
+		}
+	}
+	var serverkey *corev1.CertLocation = nil
+	if serverKeyFileName != nil {
+		serverkey = &corev1.CertLocation{
+			FileName: serverKeyFileName,
+		}
+	}
+	var advancedOptions *corev1.AdvancedTLSOptions = nil
+	advancedOptions = &corev1.AdvancedTLSOptions{
+		RootCA:     apicert,
+		ServerCert: serverCert,
+		ServerKey:  serverkey,
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: BoolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled:            BoolPtr(true),
+					AdvancedTLSOptions: advancedOptions,
+				},
+			},
+		},
+	}
+	return cluster
+}
+
+// BoolPtr returns a pointer to provided bool value
+func BoolPtr(val bool) *bool {
+	return &val
+}

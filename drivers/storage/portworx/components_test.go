@@ -21,6 +21,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -54,7 +55,7 @@ func TestOrderOfComponents(t *testing.T) {
 	require.ElementsMatch(t,
 		[]string{
 			component.PSPComponentName,
-			component.SecurityComponentName,
+			component.AuthComponentName,
 		},
 		[]string{componentNames[0], componentNames[1]},
 	)
@@ -3142,14 +3143,7 @@ func TestAutopilotVolumesChange(t *testing.T) {
 }
 
 func TestSecurityInstall(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	recorder := record.NewFakeRecorder(100)
-	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
-	require.NoError(t, err)
-
+	logrus.SetLevel(logrus.TraceLevel)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3169,6 +3163,19 @@ func TestSecurityInstall(t *testing.T) {
 			},
 		},
 	}
+	validateAuthSecurityInstall(t, cluster)
+
+}
+
+func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(100)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 
@@ -3262,7 +3269,7 @@ func TestSecurityInstall(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1s")
 
@@ -3361,13 +3368,6 @@ func TestSecurityInstall(t *testing.T) {
 }
 
 func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
-
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3385,6 +3385,38 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 			},
 		},
 	}
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+
+	// auth enabled explicitly
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled:     boolPtr(true),
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
+						TokenLifetime: stringPtr("1h"),
+					},
+				},
+			},
+		},
+	}
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+}
+
+func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 
@@ -3504,7 +3536,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	})
 
 	component.DeregisterAllComponents()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
 
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
@@ -3540,7 +3572,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3548,11 +3580,11 @@ func TestGuestAccessSecurity(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// GuestAccess disabled but hould not call update as cluster is still initializing
+	// GuestAccess disabled but should not call update as cluster is still initializing
 	cluster.Status.Phase = string(corev1.ClusterInit)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3569,7 +3601,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3590,7 +3622,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3610,7 +3642,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3634,7 +3666,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 
 	// set to managed to avoid more calls without a corresponding mock expect
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
@@ -9712,6 +9744,6 @@ func reregisterComponents() {
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
 	component.RegisterPSPComponent()
 }

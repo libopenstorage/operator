@@ -294,7 +294,6 @@ func (p *portworx) GetKVDBPodSpec(
 func (p *portworx) GetStoragePodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
-
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return v1.PodSpec{}, err
@@ -778,6 +777,16 @@ func (t *template) getArguments() []string {
 		logrus.Warnf("error parsing misc args: %v", err)
 	}
 
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
+		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
+			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
+			args = append(args, tlsArgs...)
+		} else {
+			logrus.Warnf("error parsing tls spec: %v", err)
+		}
+	}
+
 	if pxutil.EssentialsEnabled() {
 		for args[len(args)-1] == "--oem" {
 			args = args[:len(args)-1]
@@ -906,8 +915,26 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
+	// We're setting this to signal to porx that tls is enabled
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		// Set:
+		//    env:
+		//    - name: PX_ENABLE_TLS
+		//      value: "true"
+		//    - name: PX_ENFORCE_TLS
+		//      value: "true"
+		envMap[pxutil.EnvKeyPortworxEnableTLS] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		}
+		envMap[pxutil.EnvKeyPortworxEnforceTLS] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxEnforceTLS,
+			Value: "true",
+		}
+	}
+
 	// Add self signed values from spec if security is enabled
-	if pxutil.SecurityEnabled(t.cluster) {
+	if pxutil.AuthEnabled(&t.cluster.Spec) {
 		envMap[pxutil.EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
