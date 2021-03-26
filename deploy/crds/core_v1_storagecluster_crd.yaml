@@ -859,6 +859,10 @@ spec:
                   type: object
                   description: Authorization configurations for a RBAC enabled storage cluster
                   properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage 
+                        cluster. If omited take the value of the parent flag (security.enabled)
                     guestAccess:
                       type: string
                       description: Defines the access mode of a guest user
@@ -876,6 +880,42 @@ spec:
                           type: string
                           description: Shared secret is the name of the Kubernetes secret containing the shared key
                             used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
+                tls:
+                  type: object
+                  description: Security configurations for a TLS enabled storage cluster
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicating whether TLS features need to be enabled for the storage 
+                        cluster. If omited take the value of the parent flag (security.enabled)
+                    advancedOptions:
+                      type: object
+                      description: Overrides for the default values in the parent tls section.
+                      properties:
+                        rootCA:
+                          type: object
+                          description: Overrides the source of the CA certificate specified in the tls section.
+                          properties:
+                            filename:
+                              type: string
+                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
+                                folder on each node i.e. /etc/pwx.
+                        serverCert:
+                          type: object
+                          description: Overrides the source of the public key certificate used by the portworx service for TLS.
+                          properties:
+                            filename:
+                              type: string
+                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
+                                folder on each node i.e. /etc/pwx.
+                        serverKey:
+                          type: object
+                          description: Overrides the source of the private key certificate used by the portworx service for TLS.
+                          properties:
+                            filename:
+                              type: string
+                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
+                                folder on each node i.e. /etc/pwx.
             env:
               type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes
