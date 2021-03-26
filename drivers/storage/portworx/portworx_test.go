@@ -30,7 +30,6 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -6116,7 +6115,6 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 }
 
 func TestUpdateStorageNodeKVDB(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	// Create fake k8s client without any nodes to lookup
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 

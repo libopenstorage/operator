@@ -55,7 +55,7 @@ func TestOrderOfComponents(t *testing.T) {
 	require.ElementsMatch(t,
 		[]string{
 			component.PSPComponentName,
-			component.SecurityComponentName,
+			component.AuthComponentName,
 		},
 		[]string{componentNames[0], componentNames[1]},
 	)

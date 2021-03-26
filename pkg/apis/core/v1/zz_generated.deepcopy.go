@@ -35,13 +35,13 @@ func (in *AdvancedTLSOptions) DeepCopyInto(out *AdvancedTLSOptions) {
 		*out = new(CertLocation)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ServerKey != nil {
-		in, out := &in.ServerKey, &out.ServerKey
+	if in.ServerCert != nil {
+		in, out := &in.ServerCert, &out.ServerCert
 		*out = new(CertLocation)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ServerCert != nil {
-		in, out := &in.ServerCert, &out.ServerCert
+	if in.ServerKey != nil {
+		in, out := &in.ServerKey, &out.ServerKey
 		*out = new(CertLocation)
 		(*in).DeepCopyInto(*out)
 	}

@@ -76,11 +76,11 @@ type auth struct {
 	resourceVersionCache map[string]string
 }
 
-func (c *security) Name() string {
-	return SecurityComponentName
+func (a *auth) Name() string {
+	return AuthComponentName
 }
 
-func (c *security) Priority() int32 {
+func (a *auth) Priority() int32 {
 	return int32(0)
 }
 
