@@ -23,7 +23,6 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -2534,7 +2533,9 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+
+	// validate revision 1 and revision 2 exist
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// The old pod should be marked for deletion
 	require.Empty(t, podControl.Templates)
@@ -2565,9 +2566,22 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Len(t, podControl.ControllerRefs, 1)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 
-	// New revision's hash should match that of the new pod.
+	s, _ := json.MarshalIndent(revisions.Items, "", "\t")
+	t.Logf(string(s))
+	s, _ = json.MarshalIndent(podControl.Templates, "", "\t")
+	t.Logf(string(s))
 	require.Len(t, podControl.Templates, 1)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	// validate revision 1 and revision 2 exist
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
+
+	// New revision's hash should match that of the new pod.
+	var revision2 *appsv1.ControllerRevision = nil
+	for i, rev := range revisions.Items {
+		if rev.Revision == 2 {
+			revision2 = &revisions.Items[i]
+		}
+	}
+	require.Equal(t, revision2.Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
 }
 
@@ -5276,7 +5290,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: enabled -> disabled
+	// TestCase: security enabled -> disabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -5291,7 +5305,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: disabled -> enabled
+	// TestCase: security disabled -> enabled
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -5370,6 +5384,114 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = nil
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: tls disabled -> enabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled: testutil.BoolPtr(true),
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: tls enabled -> disabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS = &corev1.TLSSpec{
+		Enabled: testutil.BoolPtr(false),
+		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+			RootCA: &corev1.CertLocation{
+				FileName: stringPtr("defaultCA.crt"),
+			},
+			ServerCert: &corev1.CertLocation{
+				FileName: stringPtr("default.crt"),
+			},
+			ServerKey: &corev1.CertLocation{
+				FileName: stringPtr("default.key"),
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: tls disabled -> enabled
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Security.TLS.Enabled = testutil.BoolPtr(true)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update rootCA
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName = stringPtr("newca.crt")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update serverCert
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName = stringPtr("newcert.crt")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: update serverKey
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName = stringPtr("new.key")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5971,7 +6093,6 @@ func TestHistoryCleanup(t *testing.T) {
 }
 
 func TestNodeShouldRunStoragePod(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	cluster := createStorageCluster()
