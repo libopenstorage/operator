@@ -597,9 +597,9 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
 		advTLSOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
 		if advTLSOptions.RootCA == nil || advTLSOptions.RootCA.FileName == nil {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.apirootCA.filename is required")
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.rootCA.filename is required")
 		}
-		apirootCAfilename := advTLSOptions.RootCA.FileName
+		rootCAfilename := advTLSOptions.RootCA.FileName
 		if advTLSOptions.ServerCert == nil || advTLSOptions.ServerCert.FileName == nil {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert.filename is required")
 		}
@@ -609,7 +609,7 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 		}
 		apikeyFilename := advTLSOptions.ServerKey.FileName
 		return []string{
-			"-apirootca", path.Join(PortworxTLSCertsDir, *apirootCAfilename),
+			"-apirootca", path.Join(PortworxTLSCertsDir, *rootCAfilename),
 			"-apicert", path.Join(PortworxTLSCertsDir + *apicertFilename),
 			"-apikey", path.Join(PortworxTLSCertsDir + *apikeyFilename),
 			"-apidisclientauth",

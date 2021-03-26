@@ -5454,7 +5454,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: update apiRootCA
+	// TestCase: update rootCA
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)

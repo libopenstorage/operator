@@ -882,7 +882,7 @@ spec:
                       type: object
                       description: Overrides for the default values in the parent tls section.
                       properties:
-                        apirootCA:
+                        rootCA:
                           type: object
                           description: Overrides the source of the CA certificate specified in the tls section.
                           properties:
