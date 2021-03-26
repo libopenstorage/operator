@@ -460,6 +460,24 @@ func getCSIDeploymentSpec(
 	}
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
 
+	var args []string
+	if util.GetImageMajorVersion(provisionerImage) >= 2 {
+		args = []string{
+			"--v=3",
+			"--csi-address=$(ADDRESS)",
+			"--leader-election=true",
+			"--default-fstype=ext4",
+		}
+	} else {
+		args = []string{
+			"--v=3",
+			"--provisioner=" + csiConfig.DriverName,
+			"--csi-address=$(ADDRESS)",
+			"--enable-leader-election",
+			"--leader-election-type=" + provisionerLeaderElectionType,
+		}
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CSIApplicationName,
@@ -482,13 +500,7 @@ func getCSIDeploymentSpec(
 							Name:            csiProvisionerContainerName,
 							Image:           provisionerImage,
 							ImagePullPolicy: imagePullPolicy,
-							Args: []string{
-								"--v=3",
-								"--provisioner=" + csiConfig.DriverName,
-								"--csi-address=$(ADDRESS)",
-								"--enable-leader-election",
-								"--leader-election-type=" + provisionerLeaderElectionType,
-							},
+							Args:            args,
 							Env: []v1.EnvVar{
 								{
 									Name:  "ADDRESS",

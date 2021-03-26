@@ -75,3 +75,23 @@ func TestGetImageURN(t *testing.T) {
 	out = GetImageURN("registry.io//", "test/this/image")
 	require.Equal(t, "registry.io/image", out)
 }
+
+func TestGetImageMajorVersion(t *testing.T) {
+	ver := GetImageMajorVersion("docker.io/test/image:v0.1.0")
+	require.Equal(t, 0, ver)
+
+	ver = GetImageMajorVersion("quay.io/test/image:v5.1.0")
+	require.Equal(t, 5, ver)
+
+	ver = GetImageMajorVersion("quay.io/test/image:5.1.0")
+	require.Equal(t, 5, ver)
+
+	ver = GetImageMajorVersion("quay.io/test/image")
+	require.Equal(t, -1, ver)
+
+	ver = GetImageMajorVersion("")
+	require.Equal(t, -1, ver)
+
+	ver = GetImageMajorVersion("quay.io/a:v999.998.997")
+	require.Equal(t, 999, ver)
+}
