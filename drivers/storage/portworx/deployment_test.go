@@ -2793,7 +2793,7 @@ func TestSecuritySetEnv(t *testing.T) {
 	}
 	validateSecuritySetEnv(t, cluster)
 
-	// security disabled, auth enabled
+	// security enabled, auth enabled explicitly
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2801,7 +2801,7 @@ func TestSecuritySetEnv(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Security: &corev1.SecuritySpec{
-				Enabled: false,
+				Enabled: true,
 				Auth: &corev1.AuthSpec{
 					Enabled: boolPtr(true),
 				},

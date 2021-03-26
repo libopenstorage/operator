@@ -584,9 +584,9 @@ func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
 	//   have already enabled security and expect only RBAC
 	//   TODO: This should change in the future when we can autogenerate tls certificates and
 	//   enabling tls without user preparation won't break any apps
-	// tls is enabled iff spec.secuirty.tls.enabled == true
+	// tls is enabled iff spec.security.enabled == true && spec.security.tls.enabled == true
 	if spec.Security != nil && spec.Security.TLS != nil && spec.Security.TLS.Enabled != nil {
-		return *spec.Security.TLS.Enabled
+		return spec.Security.Enabled && *spec.Security.TLS.Enabled
 	}
 	return false
 }
@@ -682,16 +682,15 @@ func GetSecretValue(
 
 // AuthEnabled checks if the auth is set for a cluster
 func AuthEnabled(spec *corev1.StorageClusterSpec) bool {
-	// security is enabled if:
+	// auth is enabled iff:
 	// spec.security.enabled		spec.security.auth.enabled
 	// true							nil/true
-	// false						true
-	if spec.Security != nil {
+	if spec.Security != nil && spec.Security.Enabled {
 		if spec.Security.Auth != nil && spec.Security.Auth.Enabled != nil {
-			return *spec.Security.Auth.Enabled // override value exists, use override value and ignore parent
+			return *spec.Security.Auth.Enabled // override value exists, use override value
 		}
-		logrus.Debugf("auth.enabled flag not supplied, using value from security.enabled: %v", spec.Security.Enabled)
-		return spec.Security.Enabled // parent value is valid
+		logrus.Debugf("auth.enabled flag not supplied, auth is enabled because security.enabled = %v", spec.Security.Enabled)
+		return true // auth is enabled by default if security is enabled
 	}
 	return false
 }

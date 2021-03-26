@@ -51,14 +51,14 @@ func TestAuthEnabled(t *testing.T) {
 	// true                true                         true
 	// true                false                        false
 	// true                nil                          true
-	// false               true                         true
+	// false               true                         false
 	// false               false                        false
 	// false               nil                          false
 
 	testAuthEnabled(t, true, boolPtr(true), true)
 	testAuthEnabled(t, true, boolPtr(false), false)
 	testAuthEnabled(t, true, nil, true)
-	testAuthEnabled(t, false, boolPtr(true), true)
+	testAuthEnabled(t, false, boolPtr(true), false)
 	testAuthEnabled(t, false, boolPtr(false), false)
 	testAuthEnabled(t, false, nil, false)
 
@@ -101,13 +101,13 @@ func TestIsTLSEnabledOnCluster(t *testing.T) {
 	// true                true                         true
 	// true                false                        false
 	// true                nil                          false
-	// false               true                         true
+	// false               true                         false
 	// false               false                        false
 	// false               nil                          false
 	testIsTLSEnabledOnCluster(t, true, boolPtr(true), true)
 	testIsTLSEnabledOnCluster(t, true, boolPtr(false), false)
 	testIsTLSEnabledOnCluster(t, true, nil, false)
-	testIsTLSEnabledOnCluster(t, false, boolPtr(true), true)
+	testIsTLSEnabledOnCluster(t, false, boolPtr(true), false)
 	testIsTLSEnabledOnCluster(t, false, boolPtr(false), false)
 	testIsTLSEnabledOnCluster(t, false, nil, false)
 

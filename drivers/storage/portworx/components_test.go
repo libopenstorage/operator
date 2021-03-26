@@ -21,6 +21,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -3142,6 +3143,7 @@ func TestAutopilotVolumesChange(t *testing.T) {
 }
 
 func TestSecurityInstall(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3151,29 +3153,6 @@ func TestSecurityInstall(t *testing.T) {
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{
-					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
-					SelfSigned: &corev1.SelfSignedSpec{
-						// Since we have a token expiration buffer of one minute,
-						// a new token will constantly be fetched.
-						TokenLifetime: stringPtr("1s"),
-					},
-				},
-			},
-		},
-	}
-	validateAuthSecurityInstall(t, cluster)
-
-	// validate with security disabled, but auth enabled
-	cluster = &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Security: &corev1.SecuritySpec{
-				Enabled: false,
-				Auth: &corev1.AuthSpec{
-					Enabled:     boolPtr(true),
 					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
 					SelfSigned: &corev1.SelfSignedSpec{
 						// Since we have a token expiration buffer of one minute,
@@ -3408,7 +3387,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	}
 	validateSecurityTokenRefreshOnUpdate(t, cluster)
 
-	// Auth enabled, security disabled
+	// auth enabled explicitly
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3416,7 +3395,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Security: &corev1.SecuritySpec{
-				Enabled: false,
+				Enabled: true,
 				Auth: &corev1.AuthSpec{
 					Enabled:     boolPtr(true),
 					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
