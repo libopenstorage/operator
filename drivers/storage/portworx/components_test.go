@@ -2604,6 +2604,7 @@ func TestAutopilotWithoutImage(t *testing.T) {
 }
 
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -2693,21 +2694,25 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
-	// PX_CA_CERT_SECRET is present
-	require.Equal(t, pxutil.EnvKeyAutopilotCASecretName,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
-	require.Equal(t, pxutil.DefaultCASecretName,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
-	// PX_CA_CERT_SECRET_KEY is present
-	require.Equal(t, pxutil.EnvKeyAutopilotCASecretKey,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
-	require.Equal(t, pxutil.DefaultCASecretKey,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
-	// PX_ENABLE_TLS is present
-	require.Equal(t, pxutil.EnvKeyPortworxEnableTLS,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[3].Name)
-	require.Equal(t, "true",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[3].Value)
+	expectedEnv := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyAutopilotCASecretName,
+			Value: pxutil.DefaultCASecretName,
+		},
+		{
+			Name:  pxutil.EnvKeyAutopilotCASecretKey,
+			Value: pxutil.DefaultCASecretKey,
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 
 	// TestCase: user supplies name of the secret to use for the CA cert. Validate that it is not overwritten by defaults
 	cluster = &corev1.StorageCluster{
@@ -2750,21 +2755,26 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
-	// PX_CA_CERT_SECRET is present
-	require.Equal(t, pxutil.EnvKeyAutopilotCASecretName,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Name)
-	require.Equal(t, "non_default_ca_secret",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[0].Value)
-	// PX_CA_CERT_SECRET_KEY is present
-	require.Equal(t, pxutil.EnvKeyAutopilotCASecretKey,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Name)
-	require.Equal(t, "non_default_secret_key",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[1].Value)
-	// PX_ENABLE_TLS is present
-	require.Equal(t, pxutil.EnvKeyPortworxEnableTLS,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[3].Name)
-	require.Equal(t, "true",
-		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[3].Value)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyAutopilotCASecretName,
+			Value: "non_default_ca_secret",
+		},
+		{
+			Name:  pxutil.EnvKeyAutopilotCASecretKey,
+			Value: "non_default_secret_key",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
