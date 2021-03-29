@@ -13,6 +13,18 @@ const (
 	DeprecatedCSIDriverName = "com.openstorage.pxd"
 )
 
+var (
+	k8sVer1_12, _ = version.NewVersion("1.12")
+	k8sVer1_13, _ = version.NewVersion("1.13")
+	k8sVer1_14, _ = version.NewVersion("1.14")
+	k8sVer1_16, _ = version.NewVersion("1.16")
+	k8sVer1_17, _ = version.NewVersion("1.17")
+	k8sVer1_20, _ = version.NewVersion("1.20")
+	pxVer2_1, _   = version.NewVersion("2.1")
+	pxVer2_2, _   = version.NewVersion("2.2")
+	pxVer2_5, _   = version.NewVersion("2.5")
+)
+
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
 // containers, CSI Version, and other flags
 type CSIConfiguration struct {
@@ -86,7 +98,6 @@ func NewCSIGenerator(
 func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 	cv := new(CSIConfiguration)
 	cv.DriverName = g.driverName()
-	k8sVer1_14, _ := version.NewVersion("1.14")
 	if g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14) {
 		cv.IncludeCsiDriverInfo = true
 	}
@@ -97,13 +108,6 @@ func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 // GetCSIConfiguration returns the appropriate side car versions
 // for the specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
-	k8sVer1_12, _ := version.NewVersion("1.12")
-	k8sVer1_13, _ := version.NewVersion("1.13")
-	k8sVer1_14, _ := version.NewVersion("1.14")
-	k8sVer1_16, _ := version.NewVersion("1.16")
-	k8sVer1_17, _ := version.NewVersion("1.17")
-	pxVer2_2, _ := version.NewVersion("2.2")
-
 	var cv *CSIConfiguration
 	if g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13) {
 		cv = g.getDefaultConfigV1_0()
@@ -175,7 +179,6 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		cv.IncludeCsiDriverInfo = true
 	}
 
-	pxVer2_5, _ := version.NewVersion("2.5")
 	if g.pxVersion.GreaterThanOrEqual(pxVer2_5) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_16) {
 		cv.IncludeEphemeralSupport = true
 	}
@@ -187,14 +190,12 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 // specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIImages() *CSIImages {
 	var csiImages *CSIImages
-	k8sVer1_13, _ := version.NewVersion("1.13")
 	if g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13) {
-		csiImages = getSidecarContainerVersionsV1_0()
+		csiImages = g.getSidecarContainerVersionsV1_0()
 	} else {
-		csiImages = getSidecarContainerVersionsV0_4()
+		csiImages = g.getSidecarContainerVersionsV0_4()
 	}
 
-	k8sVer1_14, _ := version.NewVersion("1.14")
 	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
 		csiImages.Snapshotter = "quay.io/openstorage/csi-snapshotter:v1.2.2-1"
@@ -204,7 +205,6 @@ func (g *CSIGenerator) GetCSIImages() *CSIImages {
 }
 
 func (g *CSIGenerator) driverName() string {
-	pxVer2_2, _ := version.NewVersion("2.2")
 	// PX Versions <2.2.0 will always use the deprecated CSI Driver Name.
 	// PX Versions >=2.2.0 will default to the new name
 	if g.useDeprecatedDriverName || g.pxVersion.LessThan(pxVer2_2) {
@@ -220,7 +220,6 @@ func (g *CSIGenerator) getDefaultConfigV1_0() *CSIConfiguration {
 }
 
 func (g *CSIGenerator) getDefaultConfigV0_4() *CSIConfiguration {
-	pxVer2_1, _ := version.NewVersion("2.1")
 	c := &CSIConfiguration{
 		UseDeployment: false,
 	}
@@ -237,17 +236,30 @@ func (c *CSIConfiguration) DriverBasePath() string {
 	return path.Join(c.DriverRegistrationBasePath, c.DriverName)
 }
 
-func getSidecarContainerVersionsV1_0() *CSIImages {
+func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
+	provisionerImage := "docker.io/openstorage/csi-provisioner:v1.6.1-1"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v4.0.0"
+
+	// For k8s 1.19 and earlier, use older version
+	if g.kubeVersion.LessThan(k8sVer1_20) {
+		snapshotterImage = "k8s.gcr.io/sig-storage/csi-snapshotter:v3.0.3"
+	}
+
+	// For k8s 1.16 and earlier, use older version
+	if g.kubeVersion.LessThan(k8sVer1_17) {
+		provisionerImage = "docker.io/openstorage/csi-provisioner:v1.6.1-1"
+	}
+
 	return &CSIImages{
-		Attacher:      "quay.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0",
-		Provisioner:   "quay.io/openstorage/csi-provisioner:v1.4.0-1",
-		Snapshotter:   "quay.io/k8scsi/csi-snapshotter:v2.0.0",
-		Resizer:       "quay.io/k8scsi/csi-resizer:v0.3.0",
+		Attacher:      "docker.io/openstorage/csi-attacher:v1.2.1-1",
+		NodeRegistrar: "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
+		Provisioner:   provisionerImage,
+		Snapshotter:   snapshotterImage,
+		Resizer:       "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
 	}
 }
 
-func getSidecarContainerVersionsV0_4() *CSIImages {
+func (g *CSIGenerator) getSidecarContainerVersionsV0_4() *CSIImages {
 	return &CSIImages{
 		Attacher:    "quay.io/k8scsi/csi-attacher:v0.4.2",
 		Registrar:   "quay.io/k8scsi/driver-registrar:v0.4.2",
