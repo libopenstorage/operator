@@ -2696,11 +2696,11 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
 	expectedEnv := []v1.EnvVar{
 		{
-			Name:  pxutil.EnvKeyAutopilotCASecretName,
+			Name:  pxutil.EnvKeyCASecretName,
 			Value: pxutil.DefaultCASecretName,
 		},
 		{
-			Name:  pxutil.EnvKeyAutopilotCASecretKey,
+			Name:  pxutil.EnvKeyCASecretKey,
 			Value: pxutil.DefaultCASecretKey,
 		},
 		{
@@ -2758,11 +2758,11 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 
 	expectedEnv = []v1.EnvVar{
 		{
-			Name:  pxutil.EnvKeyAutopilotCASecretName,
+			Name:  pxutil.EnvKeyCASecretName,
 			Value: "non_default_ca_secret",
 		},
 		{
-			Name:  pxutil.EnvKeyAutopilotCASecretKey,
+			Name:  pxutil.EnvKeyCASecretKey,
 			Value: "non_default_secret_key",
 		},
 		{

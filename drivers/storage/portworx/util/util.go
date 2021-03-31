@@ -150,13 +150,13 @@ const (
 	// EnvKeyMarketplaceName env var for the name of the source marketplace
 	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
 
-	// EnvKeyAutopilotCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
-	EnvKeyAutopilotCASecretName = "PX_CA_CERT_SECRET"
-	// EnvKeyAutopilotCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
-	EnvKeyAutopilotCASecretKey = "PX_CA_CERT_SECRET_KEY"
-	// DefaultCASecretName is the default value for EnvKeyAutopilotCASecretName
+	// EnvKeyCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyCASecretName = "PX_CA_CERT_SECRET"
+	// EnvKeyCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyCASecretKey = "PX_CA_CERT_SECRET_KEY"
+	// DefaultCASecretName is the default value for EnvKeyCASecretName
 	DefaultCASecretName = "px-api-root-ca"
-	// DefaultCASecretKey is the default value for EnvKeyAutopilotCASecretKey
+	// DefaultCASecretKey is the default value for EnvKeyCASecretKey
 	DefaultCASecretKey = "root-ca"
 
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
@@ -598,6 +598,38 @@ func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
 		return spec.Security.Enabled && *spec.Security.TLS.Enabled
 	}
 	return false
+}
+
+func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.EnvVar) {
+	// If tls is enabled, add env for autopilot and all apps using openstorage client:
+	// (see vendor/github.com/libopenstorage/openstorage/volume/drivers/pwx/connection.go)
+	// CaCertSecretEnv:             "PX_CA_CERT_SECRET",
+	// CaCertSecretKeyEnv:          "PX_CA_CERT_SECRET_KEY",
+	// assumption: user has already uploaded CA cert to the specified k8s secret
+	// Also set PX_ENABLE_TLS
+	if IsTLSEnabledOnCluster(clusterSpec) {
+		// Set:
+		//	  env:
+		//    - name: PX_CA_CERT_SECRET
+		//      value: <default>
+		//    - name: PX_CA_CERT_SECRET_KEY
+		//      value: <default>
+		//    - name: PX_ENABLE_TLS
+		//	    value: "true"
+		logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+		envMap[EnvKeyCASecretName] = &v1.EnvVar{
+			Name:  EnvKeyCASecretName,
+			Value: DefaultCASecretName,
+		}
+		envMap[EnvKeyCASecretKey] = &v1.EnvVar{
+			Name:  EnvKeyCASecretKey,
+			Value: DefaultCASecretKey,
+		}
+		envMap[EnvKeyPortworxEnableTLS] = &v1.EnvVar{
+			Name:  EnvKeyPortworxEnableTLS,
+			Value: "true",
+		}
+	}
 }
 
 // GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon

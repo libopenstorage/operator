@@ -140,6 +140,7 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 			Value: issuer,
 		}
 	}
+	pxutil.AppendTLSEnv(&cluster.Spec, envMap)
 
 	return envMap
 }
