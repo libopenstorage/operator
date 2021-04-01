@@ -150,6 +150,30 @@ func TestGetStorkEnvMap(t *testing.T) {
 	cluster.Spec.Security.Enabled = false
 	envVars = driver.GetStorkEnvMap(cluster)
 	require.Len(t, envVars, 2)
+
+	// validate the TLS related env variables are added
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1.AuthSpec{
+			Enabled: boolPtr(false),
+		},
+		TLS: &corev1.TLSSpec{
+			Enabled: boolPtr(true),
+		},
+	}
+	envVars = driver.GetStorkEnvMap(cluster)
+	require.Len(t, envVars, 5)
+	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
+	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
+	// PX_ENABLE_TLS env set
+	require.Equal(t, pxutil.EnvKeyPortworxEnableTLS, envVars[pxutil.EnvKeyPortworxEnableTLS].Name)
+	require.Equal(t, "true", envVars[pxutil.EnvKeyPortworxEnableTLS].Value)
+	// PX_CA_CERT_SECRET env set
+	require.Equal(t, pxutil.EnvKeyCASecretName, envVars[pxutil.EnvKeyCASecretName].Name)
+	require.Equal(t, pxutil.DefaultCASecretName, envVars[pxutil.EnvKeyCASecretName].Value)
+	// PX_CA_CERT_SECRET_KEY env set
+	require.Equal(t, pxutil.EnvKeyCASecretKey, envVars[pxutil.EnvKeyCASecretKey].Name)
+	require.Equal(t, pxutil.DefaultCASecretKey, envVars[pxutil.EnvKeyCASecretKey].Value)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
