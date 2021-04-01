@@ -622,7 +622,7 @@ func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) b
 
 	// Auth enabled and certain field is updated
 	if util.AuthEnabled(currentSpec) {
-		// safe to assume currentSpec.Security.Auth.SelfSigned is non-nil as it will always be have defaults.
+		// safe to assume currentSpec.Security.Auth.SelfSigned is non-nil as it will always have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
 		if !reflect.DeepEqual(currentSpec.Security.Auth.SelfSigned.Issuer, oldSpec.Security.Auth.SelfSigned.Issuer) {
 			logrus.Debug("Issuer changed: security bounce required")
@@ -635,7 +635,7 @@ func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) b
 
 	// TLS enabled and certain field is updated
 	if util.IsTLSEnabledOnCluster(currentSpec) {
-		// safe to assume currentSpec.Security.TLS.AdvancedOptions is non-nil as it will always be have defaults.
+		// safe to assume currentSpec.Security.TLS.AdvancedOptions is non-nil as it will always have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
 		if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions, oldSpec.Security.TLS.AdvancedTLSOptions) {
 			logrus.Debug("tls cert source changed: security bounce required")
