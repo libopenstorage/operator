@@ -67,8 +67,6 @@ type StorageClusterSpec struct {
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
-	// Keep this only at cluster level for now until support to change
-	// cloud storage at node level is added.
 	CloudStorage *CloudStorageSpec `json:"cloudStorage,omitempty"`
 	// SecretsProvider is the name of secret provider that driver will connect to
 	SecretsProvider *string `json:"secretsProvider,omitempty"`
@@ -129,6 +127,9 @@ type NodeSpec struct {
 	// Selector rest of the attributes are applied to a node that matches
 	// the selector
 	Selector NodeSelector `json:"selector,omitempty"`
+	// CloudStorage details of storage in cloud environment for the nodegroup.
+	// This will override the cluster-level cloud storage configuration.
+	CloudStorage *CloudStorageNodeSpec `json:"cloudStorage,omitempty"`
 	// CommonConfig contains storage, network and other configuration specific
 	// to the group of nodes. This will override the cluster-level configuration.
 	CommonConfig
@@ -325,35 +326,49 @@ type CloudStorageCapacitySpec struct {
 	Options map[string]string `json:"options,omitempty"`
 }
 
-// CloudStorageSpec details of storage in cloud environment
+// CloudStorageSpec details of storage in cloud environment for entire cluster
 type CloudStorageSpec struct {
-	// DeviceSpecs list of storage device specs. A cloud storage device will
-	// be created for every spec in the DeviceSpecs list. Currently,
-	// CloudStorageSpec is only at the cluster level, so the below specs
-	// be applied to all storage nodes in the cluster.
-	// (Deprecated) DeviceSpecs will be removed from StorageCluster in v1alpha2.
-	// Use CapacitySpecs instead
-	DeviceSpecs *[]string `json:"deviceSpecs,omitempty"`
-
+	// CloudStorageCommon common cloud storage configuration
+	CloudStorageCommon
 	// CapacitySpecs list of cluster wide storage types and their capacities.
 	// A single capacity spec identifies a storage pool with a set of minimum
 	// requested IOPS and size. Based on the cloud provider, the total storage
 	// capacity will get divided amongst the nodes. The nodes bearing storage
 	// themselves will get uniformly distributed across all the zones.
-	// CapacitySpecs is slated to replace DeviceSpecs in v1alpha2 version of StorageCluster.
+	// CapacitySpecs may replace DeviceSpecs in v2 version of StorageCluster.
 	CapacitySpecs []CloudStorageCapacitySpec `json:"capacitySpecs,omitempty"`
+	// MaxStorageNodes maximum nodes that will have storage in the cluster
+	MaxStorageNodes *uint32 `json:"maxStorageNodes,omitempty"`
+	// MaxStorageNodesPerZone maximum nodes in every zone that will have
+	// storage in the cluster
+	MaxStorageNodesPerZone *uint32 `json:"maxStorageNodesPerZone,omitempty"`
+	// NodePoolLabel Kubernetes node label key with which nodes are grouped
+	// into node pools for cloud storage distribution
+	NodePoolLabel string `json:"nodePoolLabel,omitempty"`
+}
 
+// CloudStorageNodeSpec details of storage in cloud environment for node groups
+type CloudStorageNodeSpec struct {
+	// CloudStorageCommon common cloud storage configuration
+	CloudStorageCommon
+}
+
+// CloudStorageCommon details of storage in cloud environment
+type CloudStorageCommon struct {
+	// DeviceSpecs list of storage device specs. A cloud storage device will
+	// be created for every spec in the DeviceSpecs list.
+	// DeviceSpecs may be removed from StorageCluster eventually,
+	// in favor of CapacitySpecs at the cluster level.
+	DeviceSpecs *[]string `json:"deviceSpecs,omitempty"`
 	// JournalDeviceSpec spec for the journal device
 	JournalDeviceSpec *string `json:"journalDeviceSpec,omitempty"`
 	// SystemMdDeviceSpec spec for the metadata device
 	SystemMdDeviceSpec *string `json:"systemMetadataDeviceSpec,omitempty"`
 	// KvdbDeviceSpec spec for the internal kvdb device
 	KvdbDeviceSpec *string `json:"kvdbDeviceSpec,omitempty"`
-	// MaxStorageNodes maximum nodes that will have storage in the cluster
-	MaxStorageNodes *uint32 `json:"maxStorageNodes,omitempty"`
-	// MaxStorageNodesPerZone maximum nodes in every zone that will have
-	// storage in the cluster
-	MaxStorageNodesPerZone *uint32 `json:"maxStorageNodesPerZone,omitempty"`
+	// MaxStorageNodesPerZonePerNodeGroup maximum nodes per zone and per cloud node
+	// group that will have storage in the cluster
+	MaxStorageNodesPerZonePerNodeGroup *uint32 `json:"maxStorageNodesPerZonePerNodeGroup,omitempty"`
 }
 
 // Geography is topology information for a node
