@@ -2604,6 +2604,7 @@ func TestAutopilotWithoutImage(t *testing.T) {
 }
 
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -2650,6 +2651,130 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	require.Equal(t, cluster.Namespace,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+}
+
+func TestAutopilotWithTLSEnabled(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	// setup
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(0)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+
+	// test
+	err := driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
+	expectedEnv := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyCASecretName,
+			Value: pxutil.DefaultCASecretName,
+		},
+		{
+			Name:  pxutil.EnvKeyCASecretKey,
+			Value: pxutil.DefaultCASecretKey,
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: user supplies name of the secret to use for the CA cert. Validate that it is not overwritten by defaults
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_CA_CERT_SECRET",
+						Value: "non_default_ca_secret",
+					},
+					{
+						Name:  "PX_CA_CERT_SECRET_KEY",
+						Value: "non_default_secret_key",
+					},
+				},
+			},
+		},
+	}
+	// test
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyCASecretName,
+			Value: "non_default_ca_secret",
+		},
+		{
+			Name:  pxutil.EnvKeyCASecretKey,
+			Value: "non_default_secret_key",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
