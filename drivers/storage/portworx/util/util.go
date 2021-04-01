@@ -600,6 +600,7 @@ func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
 	return false
 }
 
+// AppendTLSEnv checks if tls is enabled. If yes, appends the needed env variables to envMap
 func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.EnvVar) {
 	// If tls is enabled, add env for autopilot and all apps using openstorage client:
 	// (see vendor/github.com/libopenstorage/openstorage/volume/drivers/pwx/connection.go)
