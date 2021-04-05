@@ -145,6 +145,16 @@ type AdvancedTLSOptions struct {
 type CertLocation struct {
 	// filename on the node for the cert file. All files must be installed on a fixed location (/etc/pwx)
 	FileName *string `json:"filename,omitempty"`
+	// reference to the k8s secret that holds the cert
+	SecretRef *SecretRef `json:"secretRef,omitempty"`
+}
+
+// SecretRef specifies which k8s secret portworx should pick up the certificate.
+type SecretRef struct {
+	// name of the k8s secret. Secret must live in the same namespace as the StorageCluster custom resource
+	SecretName *string `json:"secretName,omitempty"`
+	// the key that contains the cert.
+	SecretKey *string `json:"secretKey,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values

@@ -31,9 +31,6 @@ const (
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"
-	defaultTLSCACertFilename          = "rootCA.crt"
-	defaultTLSServerCertFilename      = "server.crt"
-	defaultTLSServerKeyFilename       = "server.key"
 	envKeyNodeWiperImage              = "PX_NODE_WIPER_IMAGE"
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
@@ -626,13 +623,13 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 		Enabled: boolPtr(false),
 		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
 			RootCA: &corev1.CertLocation{
-				FileName: stringPtr(defaultTLSCACertFilename),
-			},
-			ServerKey: &corev1.CertLocation{
-				FileName: stringPtr(defaultTLSServerKeyFilename),
+				FileName: stringPtr(pxutil.DefaultTLSCACertHostFile),
 			},
 			ServerCert: &corev1.CertLocation{
-				FileName: stringPtr(defaultTLSServerCertFilename),
+				FileName: stringPtr(pxutil.DefaultTLSServerCertHostFile),
+			},
+			ServerKey: &corev1.CertLocation{
+				FileName: stringPtr(pxutil.DefaultTLSServerKeyHostFile),
 			},
 		},
 	}
@@ -669,20 +666,17 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 
 	// set default filenames
 	// defaults for tls.advancedOptions.rootCA
-	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA == nil ||
-		util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName) {
+	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA) {
 		logrus.Tracef("rootCA not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
 	}
 	// defaults for tls.advancedOptions.serverCert
-	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert == nil ||
-		util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName) {
+	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert) {
 		logrus.Tracef("serverCert not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
 	}
 	// defaults for tls.advancedOptions.serverKey
-	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey == nil ||
-		util.IsEmptyOrNilStringPtr(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName) {
+	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey) {
 		logrus.Tracef("serverKey not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
 	}

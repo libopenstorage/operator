@@ -22,6 +22,7 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 		"-apikey", certRootPath + *serverKeyFileName,
 		"-apidisclientauth",
 	}
+	// ml TODO: tests for permutation of file/cert sources gets correct oci-mon arguments
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	// test
 	args, err := GetOciMonArgumentsForTLS(cluster)

@@ -40,8 +40,10 @@ const (
 
 type volumeInfo struct {
 	name             string
-	hostPath         string
-	mountPath        string
+	hostPath         string // The path on the host
+	mountPath        string // The path on the container
+	secretName       string // The name of the secret (mutually exclusive with hostPath)
+	secretKey        string // The key of the secret (mutually exclusive with hostPath)
 	readOnly         bool
 	mountPropagation *v1.MountPropagationMode
 	hostPathType     *v1.HostPathType
@@ -1012,6 +1014,9 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	if t.isK3s {
 		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 	}
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		volumeInfoList = append(volumeInfoList, t.GetVolumeInfoForTLSCerts()...)
+	}
 
 	volumeMounts := make([]v1.VolumeMount, 0, len(volumeInfoList))
 	for _, v := range volumeInfoList {
@@ -1058,22 +1063,40 @@ func (t *template) getVolumes() []v1.Volume {
 	if t.isK3s {
 		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 	}
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		volumeInfoList = append(volumeInfoList, t.GetVolumeInfoForTLSCerts()...)
+	}
 
 	volumes := make([]v1.Volume, 0, len(volumeInfoList))
 	for _, v := range volumeInfoList {
-		volume := v1.Volume{
-			Name: v.name,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: v.hostPath,
-					Type: v.hostPathType,
-				},
+		volumeSource := v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: v.hostPath,
+				Type: v.hostPathType,
 			},
+		}
+		if len(v.secretName) > 0 && len(v.secretKey) > 0 {
+			volumeSource = v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: v.secretName,
+					Items: []v1.KeyToPath{
+						{
+							Key:  v.secretKey,
+							Path: v.secretKey,
+						},
+					},
+				},
+			}
+		}
+		volume := v1.Volume{
+			Name:         v.name,
+			VolumeSource: volumeSource,
 		}
 		if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
 			volume.VolumeSource.HostPath.Path = v.pks.hostPath
 		}
-		if volume.VolumeSource.HostPath.Path != "" {
+		if (volume.VolumeSource.HostPath != nil && volume.VolumeSource.HostPath.Path != "") ||
+			(volume.VolumeSource.Secret != nil && volume.VolumeSource.Secret.SecretName != "") {
 			volumes = append(volumes, volume)
 		}
 	}
@@ -1154,6 +1177,32 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 			hostPath:  "/run/k3s/containerd/containerd.sock",
 			mountPath: "/run/containerd/containerd.sock",
 		},
+	}
+}
+
+func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
+	// TLS.AdvancedTLSOptions is assumed to be filled up here with defaults (if not supplied by the user)
+	advancedOptions := t.cluster.Spec.Security.TLS.AdvancedTLSOptions
+	ret := []volumeInfo{}
+	if !util.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
+	}
+	if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerCert, "apiservercert", pxutil.DefaultTLSServerCertMountPath))
+	}
+	if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerKey, "apiserverkey", pxutil.DefaultTLSServerKeyMountPath))
+	}
+	return ret
+}
+
+func (t *template) getVolumeInfoFromCertLocation(certLocation corev1.CertLocation, volumeName, mountPath string) volumeInfo {
+	return volumeInfo{
+		name:       volumeName,
+		secretName: *certLocation.SecretRef.SecretName,
+		secretKey:  *certLocation.SecretRef.SecretKey,
+		mountPath:  mountPath,
+		readOnly:   true,
 	}
 }
 

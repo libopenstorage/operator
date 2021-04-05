@@ -18,6 +18,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -37,8 +38,6 @@ const (
 	DefaultOpenshiftStartPort = 17001
 	// PortworxSpecsDir is the directory where all the Portworx specs are stored
 	PortworxSpecsDir = "/configs"
-	// PortworxTLSCertsDir is where all tls certs are to be placed
-	PortworxTLSCertsDir = "/etc/pwx/"
 
 	// DefaultPortworxServiceAccountName default name of the Portworx service account
 	DefaultPortworxServiceAccountName = "portworx"
@@ -126,10 +125,6 @@ const (
 	// EnvKeyDisableCSIAlpha key for the env var that is used to disable CSI
 	// alpha features
 	EnvKeyDisableCSIAlpha = "PORTWORX_DISABLE_CSI_ALPHA"
-	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
-	EnvKeyPortworxEnableTLS = "PX_ENABLE_TLS"
-	// EnvKeyPortworxEnforceTLS is a flag for enabling operator TLS with PX. TODO: temporary
-	EnvKeyPortworxEnforceTLS = "PX_ENFORCE_TLS"
 	// EnvKeyPortworxAuthSystemKey is the environment variable name for the PX security secret
 	EnvKeyPortworxAuthSystemKey = "PORTWORX_AUTH_SYSTEM_KEY"
 	// EnvKeyPortworxAuthJwtSharedSecret is an environment variable defining the PX Security JWT secret
@@ -149,15 +144,6 @@ const (
 	EnvKeyPortworxEssentials = "PORTWORX_ESSENTIALS"
 	// EnvKeyMarketplaceName env var for the name of the source marketplace
 	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
-
-	// EnvKeyCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
-	EnvKeyCASecretName = "PX_CA_CERT_SECRET"
-	// EnvKeyCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
-	EnvKeyCASecretKey = "PX_CA_CERT_SECRET_KEY"
-	// DefaultCASecretName is the default value for EnvKeyCASecretName
-	DefaultCASecretName = "px-api-root-ca"
-	// DefaultCASecretKey is the default value for EnvKeyCASecretKey
-	DefaultCASecretKey = "root-ca"
 
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
@@ -190,6 +176,38 @@ const (
 	pxAnnotationPrefix   = "portworx.io"
 	labelKeyName         = "name"
 	defaultSDKPort       = 9020
+)
+
+// TLS related constants
+const (
+	// DefaultTLSCertsFolder is the host location of tls cert files
+	DefaultTLSCertsFolder = "/etc/pwx"
+	// DefaultTLSCACertHostPath is the default file on the host for CA cert used by the porx API
+	DefaultTLSCACertHostFile = "rootca.crt"
+	// DefaultTLSServerCertHostPath is the default file on the host for the server cert used by the porx API
+	DefaultTLSServerCertHostFile = "server.crt"
+	// DefaultTLSServerKeyHostPath is the default file on the host for the server key used by the porx API
+	DefaultTLSServerKeyHostFile = "server.key"
+	// DefaultTLSCACertMountPath is the fixed location on the runc container where the CA cert will be mounted
+	DefaultTLSCACertMountPath = "/api-tls-certs/ca-cert/"
+	// DefaultTLSServerCertMountPath is the fixed location on the runc container where the server cert will be mounted
+	DefaultTLSServerCertMountPath = "/api-tls-certs/server-cert/"
+	// DefaultTLSServerKeyMountPath is the fixed location on the runc container where the server key will be mounted
+	DefaultTLSServerKeyMountPath = "/api-tls-certs/server-key/"
+
+	// EnvKeyCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyCASecretName = "PX_CA_CERT_SECRET"
+	// EnvKeyCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
+	EnvKeyCASecretKey = "PX_CA_CERT_SECRET_KEY"
+	// DefaultCASecretName is the default value for EnvKeyCASecretName
+	DefaultCASecretName = "px-api-root-ca"
+	// DefaultCASecretKey is the default value for EnvKeyCASecretKey
+	DefaultCASecretKey = "root-ca"
+
+	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
+	EnvKeyPortworxEnableTLS = "PX_ENABLE_TLS"
+	// EnvKeyPortworxEnforceTLS is a flag for enabling operator TLS with PX. TODO: temporary
+	EnvKeyPortworxEnforceTLS = "PX_ENFORCE_TLS"
 )
 
 var (
@@ -635,28 +653,40 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 
 // GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
-	// for now, only support file spec
 	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
-		advTLSOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-		if advTLSOptions.RootCA == nil || advTLSOptions.RootCA.FileName == nil {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.rootCA.filename is required")
+		advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+		if util.IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.rootCA is required")
 		}
-		rootCAfilename := advTLSOptions.RootCA.FileName
-		if advTLSOptions.ServerCert == nil || advTLSOptions.ServerCert.FileName == nil {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert.filename is required")
+		if util.IsEmptyOrNilCertLocation(advancedOptions.ServerCert) {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert is required")
 		}
-		apicertFilename := advTLSOptions.ServerCert.FileName
-		if advTLSOptions.ServerKey == nil || advTLSOptions.ServerKey.FileName == nil {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey.filename is required")
+		if util.IsEmptyOrNilCertLocation(advancedOptions.ServerKey) {
+			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey is required")
 		}
-		apikeyFilename := advTLSOptions.ServerKey.FileName
+
+		apirootca, apicert, apikey := "", "", ""
+		if !util.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
+			apirootca = path.Join(DefaultTLSCACertMountPath, *advancedOptions.RootCA.SecretRef.SecretKey)
+		} else {
+			apirootca = path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName)
+		}
+		if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
+			apicert = path.Join(DefaultTLSServerCertMountPath, *advancedOptions.ServerCert.SecretRef.SecretKey)
+		} else {
+			apicert = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerCert.FileName)
+		}
+		if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
+			apikey = path.Join(DefaultTLSServerKeyMountPath, *advancedOptions.ServerKey.SecretRef.SecretKey)
+		} else {
+			apikey = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerKey.FileName)
+		}
 		return []string{
-			"-apirootca", path.Join(PortworxTLSCertsDir, *rootCAfilename),
-			"-apicert", path.Join(PortworxTLSCertsDir + *apicertFilename),
-			"-apikey", path.Join(PortworxTLSCertsDir + *apikeyFilename),
+			"-apirootca", apirootca,
+			"-apicert", apicert,
+			"-apikey", apikey,
 			"-apidisclientauth",
 		}, nil
-
 	}
 	return nil, fmt.Errorf("spec.security.tls.advancedOptions is required")
 }

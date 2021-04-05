@@ -156,3 +156,23 @@ func IsEmptyOrNilStringPtr(sptr *string) bool {
 	}
 	return false
 }
+
+// IsEmptyOrNilSecretReference is a helper function that checks whether a SecretRef is empty
+func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
+	if sref == nil || sref.SecretName == nil || sref.SecretKey == nil {
+		return true
+	}
+	return false
+}
+
+// IsEmptyOrNilCertLocation is a helper function that checks whether a CertLocation is empty
+func IsEmptyOrNilCertLocation(certLocation *corev1.CertLocation) bool {
+	if certLocation == nil {
+		return true
+	}
+	if IsEmptyOrNilStringPtr(certLocation.FileName) && IsEmptyOrNilSecretReference(certLocation.SecretRef) {
+		return true
+	}
+
+	return false
+}
