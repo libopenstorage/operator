@@ -1531,7 +1531,6 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	// verify
 	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
 
-	// ml TODO: other combination of inputs (secret and file mixed)
 	// root ca from secret, servercert and serverkey not supplied
 	// setup
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
@@ -1547,10 +1546,40 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
 	verifyTLSSpecFileNames(t, cluster, nil, stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
-	// supplied cert should not be overwritten
+	// rootCA should be read from the secret
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef)
 	assert.Equal(t, stringPtr("rootcasecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretName)
 	assert.Equal(t, stringPtr("rootcasecretkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretKey)
+
+	// root ca not supplied, servercert and serverkey from secret
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("someothersecret"),
+			SecretKey:  stringPtr("someotherkey"),
+		},
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), nil, nil)
+	// rootCA should be read from the secret
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef)
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef)
+	assert.Equal(t, stringPtr("somesecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretName)
+	assert.Equal(t, stringPtr("somekey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretKey)
+	assert.Equal(t, stringPtr("someothersecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretName)
+	assert.Equal(t, stringPtr("someotherkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretKey)
 
 	// no filename supplied
 	// setup
