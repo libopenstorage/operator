@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -220,29 +219,29 @@ func testAuthEnabled(t *testing.T, securityEnabled bool, authEnabled *bool, expe
 }
 
 func TestIsEmptyOrNilCertLocation(t *testing.T) {
-	obj := &v1.CertLocation{
+	obj := &corev1.CertLocation{
 		FileName: stringPtr("somefile"),
 	}
 	assert.False(t, IsEmptyOrNilCertLocation(obj))
 
-	obj = &v1.CertLocation{
-		SecretRef: &v1.SecretRef{
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
 			SecretName: stringPtr("somename"),
 			SecretKey:  stringPtr("somekey"),
 		},
 	}
 	assert.False(t, IsEmptyOrNilCertLocation(obj))
 
-	obj = &v1.CertLocation{}
+	obj = &corev1.CertLocation{}
 	assert.True(t, IsEmptyOrNilCertLocation(obj))
 
-	obj = &v1.CertLocation{
-		SecretRef: &v1.SecretRef{},
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{},
 	}
 	assert.True(t, IsEmptyOrNilCertLocation(obj))
 
-	obj = &v1.CertLocation{
-		SecretRef: &v1.SecretRef{
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
 			SecretName: stringPtr("somename"),
 		},
 	}
