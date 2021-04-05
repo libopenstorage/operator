@@ -22,10 +22,61 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 		"-apikey", certRootPath + *serverKeyFileName,
 		"-apidisclientauth",
 	}
-	// ml TODO: tests for permutation of file/cert sources gets correct oci-mon arguments
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	// test
 	args, err := GetOciMonArgumentsForTLS(cluster)
+	// validate
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, expectedArgs, args)
+
+	// mixture of file and k8s secret as sources for tls certs
+
+	// rootCA from k8s secret, serverCert and serverKey from file
+	// setup
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	expectedArgs = []string{
+		"-apirootca", DefaultTLSCACertMountPath + "somekey",
+		"-apicert", certRootPath + *serverCertFileName,
+		"-apikey", certRootPath + *serverKeyFileName,
+		"-apidisclientauth",
+	}
+	// test
+	args, err = GetOciMonArgumentsForTLS(cluster)
+	// validate
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, expectedArgs, args)
+
+	// serverCert and serverKey from k8s secret, rootCA from file
+	// setup
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	tlsAdvancedOptions = cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("someothersecret"),
+			SecretKey:  stringPtr("someotherkey"),
+		},
+	}
+	expectedArgs = []string{
+		"-apirootca", certRootPath + *caCertFileName,
+		"-apicert", DefaultTLSServerCertMountPath + "somekey",
+		"-apikey", DefaultTLSServerKeyMountPath + "someotherkey",
+		"-apidisclientauth",
+	}
+	// test
+	args, err = GetOciMonArgumentsForTLS(cluster)
 	// validate
 	assert.Nil(t, err)
 	assert.ElementsMatch(t, expectedArgs, args)
