@@ -1184,13 +1184,13 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 	// TLS.AdvancedTLSOptions is assumed to be filled up here with defaults (if not supplied by the user)
 	advancedOptions := t.cluster.Spec.Security.TLS.AdvancedTLSOptions
 	ret := []volumeInfo{}
-	if !util.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
+	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
 	}
-	if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
+	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerCert, "apiservercert", pxutil.DefaultTLSServerCertMountPath))
 	}
-	if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
+	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerKey, "apiserverkey", pxutil.DefaultTLSServerKeyMountPath))
 	}
 	return ret

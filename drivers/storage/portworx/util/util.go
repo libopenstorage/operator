@@ -18,7 +18,6 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -655,28 +654,28 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
 	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
 		advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-		if util.IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
+		if IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.rootCA is required")
 		}
-		if util.IsEmptyOrNilCertLocation(advancedOptions.ServerCert) {
+		if IsEmptyOrNilCertLocation(advancedOptions.ServerCert) {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert is required")
 		}
-		if util.IsEmptyOrNilCertLocation(advancedOptions.ServerKey) {
+		if IsEmptyOrNilCertLocation(advancedOptions.ServerKey) {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey is required")
 		}
 
 		apirootca, apicert, apikey := "", "", ""
-		if !util.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
+		if !IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
 			apirootca = path.Join(DefaultTLSCACertMountPath, *advancedOptions.RootCA.SecretRef.SecretKey)
 		} else {
 			apirootca = path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName)
 		}
-		if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
+		if !IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
 			apicert = path.Join(DefaultTLSServerCertMountPath, *advancedOptions.ServerCert.SecretRef.SecretKey)
 		} else {
 			apicert = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerCert.FileName)
 		}
-		if !util.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
+		if !IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
 			apikey = path.Join(DefaultTLSServerKeyMountPath, *advancedOptions.ServerKey.SecretRef.SecretKey)
 		} else {
 			apikey = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerKey.FileName)
@@ -689,6 +688,34 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 		}, nil
 	}
 	return nil, fmt.Errorf("spec.security.tls.advancedOptions is required")
+}
+
+// IsEmptyOrNilCertLocation is a helper function that checks whether a CertLocation is empty
+func IsEmptyOrNilCertLocation(certLocation *corev1.CertLocation) bool {
+	if certLocation == nil {
+		return true
+	}
+	if IsEmptyOrNilStringPtr(certLocation.FileName) && IsEmptyOrNilSecretReference(certLocation.SecretRef) {
+		return true
+	}
+
+	return false
+}
+
+// IsEmptyOrNilSecretReference is a helper function that checks whether a SecretRef is empty
+func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
+	if sref == nil || sref.SecretName == nil || sref.SecretKey == nil {
+		return true
+	}
+	return false
+}
+
+// IsEmptyOrNilStringPtr is a helper function that checks whether a string pointer is pointing to a non-empty string
+func IsEmptyOrNilStringPtr(sptr *string) bool {
+	if sptr == nil || *sptr == "" {
+		return true
+	}
+	return false
 }
 
 // GenerateToken generates an auth token given a secret key

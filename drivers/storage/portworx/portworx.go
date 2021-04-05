@@ -666,17 +666,17 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 
 	// set default filenames
 	// defaults for tls.advancedOptions.rootCA
-	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA) {
+	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA) {
 		logrus.Tracef("rootCA not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
 	}
 	// defaults for tls.advancedOptions.serverCert
-	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert) {
+	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert) {
 		logrus.Tracef("serverCert not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
 	}
 	// defaults for tls.advancedOptions.serverKey
-	if util.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey) {
+	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey) {
 		logrus.Tracef("serverKey not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
 	}
