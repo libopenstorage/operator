@@ -622,6 +622,7 @@ func IsTLSEnabledOnCluster(spec *corev1.StorageClusterSpec) bool {
 
 // AppendTLSEnv checks if tls is enabled. If yes, appends the needed env variables to envMap
 func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.EnvVar) {
+
 	// If tls is enabled, add env for autopilot and all apps using openstorage client:
 	// (see vendor/github.com/libopenstorage/openstorage/volume/drivers/pwx/connection.go)
 	// CaCertSecretEnv:             "PX_CA_CERT_SECRET",
@@ -637,14 +638,18 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 		//      value: <default>
 		//    - name: PX_ENABLE_TLS
 		//	    value: "true"
-		logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
-		envMap[EnvKeyCASecretName] = &v1.EnvVar{
-			Name:  EnvKeyCASecretName,
-			Value: DefaultCASecretName,
-		}
-		envMap[EnvKeyCASecretKey] = &v1.EnvVar{
-			Name:  EnvKeyCASecretKey,
-			Value: DefaultCASecretKey,
+		if clusterSpec.Security.TLS.AdvancedTLSOptions != nil &&
+			!IsEmptyOrNilCertLocation(clusterSpec.Security.TLS.AdvancedTLSOptions.RootCA) {
+			// if no Root CA is specified, we assume server certs are signed by a well known cert authority. Do not need a CA
+			logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+			envMap[EnvKeyCASecretName] = &v1.EnvVar{
+				Name:  EnvKeyCASecretName,
+				Value: DefaultCASecretName,
+			}
+			envMap[EnvKeyCASecretKey] = &v1.EnvVar{
+				Name:  EnvKeyCASecretKey,
+				Value: DefaultCASecretKey,
+			}
 		}
 		envMap[EnvKeyPortworxEnableTLS] = &v1.EnvVar{
 			Name:  EnvKeyPortworxEnableTLS,
