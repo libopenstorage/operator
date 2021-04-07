@@ -1,0 +1,21 @@
+area/specs:
+- deploy/**/*
+area/build:
+- build/**/*
+area/ci:
+- .travis
+- .github/**/*
+area/components:
+- drivers/storage/portworx/component/**/*
+area/manifest:
+- drivers/storage/portworx/manifest/**/*
+area/portworx:
+- drivers/storage/portworx/*
+area/controller:
+- pkg/controller/**/*
+area/integration-test:
+- test/**/*
+area/vendor:
+- vendor/**/*
+area/cmd:
+- cmd/**/*
