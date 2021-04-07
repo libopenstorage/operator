@@ -1888,7 +1888,7 @@ func TestPodWithTelemetry(t *testing.T) {
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.4",
 	}
-	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry-with-location.yaml")
 
 	nodeName := "testNode"
 
@@ -1914,6 +1914,16 @@ func TestPodWithTelemetry(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+
+	// don't specify arcus location
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
+	delete(cluster.Annotations, "portworx.io/arcus-location")
+	driver = portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
