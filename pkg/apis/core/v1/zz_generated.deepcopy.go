@@ -322,6 +322,11 @@ func (in *MonitoringSpec) DeepCopyInto(out *MonitoringSpec) {
 		*out = new(PrometheusSpec)
 		**out = **in
 	}
+	if in.Telemetry != nil {
+		in, out := &in.Telemetry, &out.Telemetry
+		*out = new(TelemetrySpec)
+		**out = **in
+	}
 	return
 }
 
@@ -757,11 +762,6 @@ func (in *StorageClusterSpec) DeepCopyInto(out *StorageClusterSpec) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
-	}
-	if in.Telemetry != nil {
-		in, out := &in.Telemetry, &out.Telemetry
-		*out = new(TelemetrySpec)
-		**out = **in
 	}
 	if in.Nodes != nil {
 		in, out := &in.Nodes, &out.Nodes

@@ -186,7 +186,7 @@ func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerRefer
 				{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list", "create", "update", "patch"},
+					Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
 				},
 			},
 		},
@@ -236,7 +236,7 @@ func (c *portworxBasic) createClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
 					APIGroups: []string{""},

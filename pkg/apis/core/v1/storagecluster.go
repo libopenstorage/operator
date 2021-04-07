@@ -96,8 +96,6 @@ type StorageClusterSpec struct {
 	Security *SecuritySpec `json:"security,omitempty"`
 	// Volumes extra list of volumes for the storage driver pod
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
-	// Telemetry contains custom configuration for storage driver telemetry. This is optional.
-	Telemetry *TelemetrySpec `json:"telemetry,omitempty"`
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
@@ -446,9 +444,11 @@ type MonitoringSpec struct {
 	// Prometheus contains the details of the Prometheus stack deployed to monitor
 	// metrics from the storage cluster.
 	Prometheus *PrometheusSpec `json:"prometheus,omitempty"`
+	// Telemetry contains custom configuration for storage driver telemetry. This is optional.
+	Telemetry *TelemetrySpec `json:"telemetry,omitempty"`
 }
 
-// TelemetrySpec contains details of an telemetry component
+// TelemetrySpec contains details of a telemetry component
 type TelemetrySpec struct {
 	// Enabled decides whether telemetry needs to be enabled
 	Enabled bool `json:"enabled,omitempty"`

@@ -711,3 +711,10 @@ func ParseExtendedDuration(s string) (time.Duration, error) {
 func UserVolumeName(name string) string {
 	return userVolumeNamePrefix + name
 }
+
+// IsTelemetryEnabled returns true is telemetry is enabled
+func IsTelemetryEnabled(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Telemetry != nil &&
+		cluster.Spec.Monitoring.Telemetry.Enabled
+}

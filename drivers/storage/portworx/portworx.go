@@ -767,9 +767,7 @@ func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 }
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.Telemetry != nil &&
-		cluster.Spec.Telemetry.Enabled &&
-		cluster.Status.DesiredImages.Telemetry == ""
+	return autoUpdateTelemetry(cluster) && cluster.Status.DesiredImages.Telemetry == ""
 }
 
 func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
@@ -792,9 +790,8 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 }
 
 func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.Telemetry != nil &&
-		cluster.Spec.Telemetry.Enabled &&
-		cluster.Spec.Telemetry.Image == ""
+	return pxutil.IsTelemetryEnabled(cluster) &&
+		cluster.Spec.Monitoring.Telemetry.Image == ""
 }
 
 func autoUpdateLighthouse(cluster *corev1.StorageCluster) bool {

@@ -54,8 +54,9 @@ type pksVolumeInfo struct {
 }
 
 var (
-	// defaultVolumeInfoList is a list of volumes across all options
-	defaultVolumeInfoList = []volumeInfo{
+
+	// commonVolumeList is the common list of volumes across all containers
+	commonVolumeList = []volumeInfo{
 		{
 			name:      "diagsdump",
 			hostPath:  "/var/cores",
@@ -63,39 +64,6 @@ var (
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/cores",
 			},
-		},
-		{
-			name:      "dockersock",
-			hostPath:  "/var/run/docker.sock",
-			mountPath: "/var/run/docker.sock",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/docker/docker.sock",
-			},
-		},
-		{
-			name:      "containerdsock",
-			hostPath:  "/run/containerd",
-			mountPath: "/run/containerd",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/containerd",
-			},
-		},
-		{
-			name:      "criosock",
-			hostPath:  "/var/run/crio",
-			mountPath: "/var/run/crio",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/crio",
-			},
-		},
-		{
-			name:      "crioconf",
-			hostPath:  "/etc/crictl.yaml",
-			mountPath: "/etc/crictl.yaml",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/crictl.yaml",
-			},
-			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
 		},
 		{
 			name:      "etcpwx",
@@ -113,24 +81,6 @@ var (
 			},
 		},
 		{
-			name:      "optpwx",
-			hostPath:  "/opt/pwx",
-			mountPath: "/opt/pwx",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/opt/pwx",
-			},
-		},
-		{
-			name:      "procmount",
-			hostPath:  "/proc",
-			mountPath: "/host_proc",
-		},
-		{
-			name:      "sysdmount",
-			hostPath:  "/etc/systemd/system",
-			mountPath: "/etc/systemd/system",
-		},
-		{
 			name:      "journalmount1",
 			hostPath:  "/var/run/log",
 			mountPath: "/var/run/log",
@@ -141,11 +91,6 @@ var (
 			hostPath:  "/var/log",
 			mountPath: "/var/log",
 			readOnly:  true,
-		},
-		{
-			name:      "dbusmount",
-			hostPath:  "/var/run/dbus",
-			mountPath: "/var/run/dbus",
 		},
 	}
 
@@ -336,7 +281,7 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
-	if cluster.Spec.Telemetry != nil && cluster.Spec.Telemetry.Enabled {
+	if pxutil.IsTelemetryEnabled(cluster) {
 		telemetryContainer := t.telemetryContainer()
 		if telemetryContainer != nil {
 			if len(telemetryContainer.Image) == 0 {
@@ -1038,7 +983,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
+	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
 	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 	return t.mountsFromVolInfo(volumeInfoList)
 }
@@ -1081,7 +1026,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
+	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
 	volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
 	volumeInfoList = append(volumeInfoList, t.getTelemetryVolumeInfoList()...)
 	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
@@ -1097,7 +1042,12 @@ func (t *template) getVolumes() []v1.Volume {
 			Name: v.name,
 		}
 
-		if len(v.hostPath) > 0 {
+		if v.configMapType != nil {
+			volume.VolumeSource = v1.VolumeSource{
+				ConfigMap: v.configMapType,
+			}
+			volumes = append(volumes, volume)
+		} else {
 			volume.VolumeSource = v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
 					Path: v.hostPath,
@@ -1107,12 +1057,10 @@ func (t *template) getVolumes() []v1.Volume {
 			if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
 				volume.VolumeSource.HostPath.Path = v.pks.hostPath
 			}
-			volumes = append(volumes, volume)
-		} else if v.configMapType != nil {
-			volume.VolumeSource = v1.VolumeSource{
-				ConfigMap: v.configMapType,
+
+			if volume.VolumeSource.HostPath.Path != "" {
+				volumes = append(volumes, volume)
 			}
-			volumes = append(volumes, volume)
 		}
 
 		volumeSet[v.name] = volume
@@ -1192,8 +1140,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 }
 
 func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
-	if t.cluster.Spec.Telemetry != nil && t.cluster.Spec.Telemetry.Enabled {
-
+	if pxutil.IsTelemetryEnabled(t.cluster) {
 		configVolume := volumeInfo{
 			name:      "ccm-config",
 			mountPath: "/etc/ccm",
@@ -1219,41 +1166,6 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 		}
 		volumeInfoList := []volumeInfo{
 			{
-				name:      "diagsdump",
-				hostPath:  "/var/cores",
-				mountPath: "/var/cores",
-				pks: &pksVolumeInfo{
-					hostPath: "/var/vcap/store/cores",
-				},
-			},
-			{
-				name:      "etcpwx",
-				hostPath:  "/etc/pwx",
-				mountPath: "/etc/pwx",
-				pks: &pksVolumeInfo{
-					hostPath: "/var/vcap/store/etc/pwx",
-				},
-			},
-			{
-				name: "pxlogs",
-				pks: &pksVolumeInfo{
-					hostPath:  "/var/vcap/store/lib/osd/log",
-					mountPath: "/var/lib/osd/log",
-				},
-			},
-			{
-				name:      "journalmount1",
-				hostPath:  "/var/run/log",
-				mountPath: "/var/run/log",
-				readOnly:  true,
-			},
-			{
-				name:      "journalmount2",
-				hostPath:  "/var/log",
-				mountPath: "/var/log",
-				readOnly:  true,
-			},
-			{
 				name:      "varcache",
 				hostPath:  "/var/cache",
 				mountPath: "/var/cache",
@@ -1270,13 +1182,15 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 			},
 			configVolume,
 		}
+
+		volumeInfoList = append(volumeInfoList, commonVolumeList...)
 		return volumeInfoList
 	}
 	return []volumeInfo{}
 }
 
 func (t *template) getK3sVolumeInfoList() []volumeInfo {
-	if !t.isIKS {
+	if !t.isK3s {
 		return []volumeInfo{}
 	}
 
@@ -1314,12 +1228,14 @@ func (t *template) loadKvdbAuth() map[string]string {
 }
 
 func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) string {
-	if cluster.Spec.Telemetry.Image != "" {
-		return cluster.Spec.Telemetry.Image
-	}
+	if pxutil.IsTelemetryEnabled(cluster) {
+		if cluster.Spec.Monitoring.Telemetry.Image != "" {
+			return cluster.Spec.Monitoring.Telemetry.Image
+		}
 
-	if cluster.Status.DesiredImages != nil {
-		return cluster.Status.DesiredImages.Telemetry
+		if cluster.Status.DesiredImages != nil {
+			return cluster.Status.DesiredImages.Telemetry
+		}
 	}
 
 	return ""
@@ -1339,6 +1255,70 @@ func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
 
 func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
+}
+
+func getDefaultVolumeInfoList() []volumeInfo {
+	list := []volumeInfo{
+		{
+			name:      "dockersock",
+			hostPath:  "/var/run/docker.sock",
+			mountPath: "/var/run/docker.sock",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/docker/docker.sock",
+			},
+		},
+		{
+			name:      "containerdsock",
+			hostPath:  "/run/containerd",
+			mountPath: "/run/containerd",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/containerd",
+			},
+		},
+		{
+			name:      "criosock",
+			hostPath:  "/var/run/crio",
+			mountPath: "/var/run/crio",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/crio",
+			},
+		},
+		{
+			name:      "crioconf",
+			hostPath:  "/etc/crictl.yaml",
+			mountPath: "/etc/crictl.yaml",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/crictl.yaml",
+			},
+			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
+		},
+		{
+			name:      "optpwx",
+			hostPath:  "/opt/pwx",
+			mountPath: "/opt/pwx",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/opt/pwx",
+			},
+		},
+		{
+			name:      "procmount",
+			hostPath:  "/proc",
+			mountPath: "/host_proc",
+		},
+		{
+			name:      "sysdmount",
+			hostPath:  "/etc/systemd/system",
+			mountPath: "/etc/systemd/system",
+		},
+		{
+			name:      "dbusmount",
+			hostPath:  "/var/run/dbus",
+			mountPath: "/var/run/dbus",
+		},
+	}
+
+	list = append(list, commonVolumeList...)
+	return list
 }
 
 func isK3sCluster(ext string) bool {

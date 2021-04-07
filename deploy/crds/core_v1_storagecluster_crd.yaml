@@ -816,16 +816,6 @@ spec:
                       params:
                         type: object
                         description: Map of key-value params for the provider.
-            telemetry:
-              type: object
-              description: Contains telemetry configuration for the storage cluster.
-              properties:
-                enabled:
-                  type: boolean
-                  description: Flag indicates if telemetry component needs to be enabled
-                image:
-                  type: string
-                  description: Docker image of the telemetry container.
             monitoring:
               type: object
               description: Contains monitoring configuration for the storage cluster.
@@ -848,6 +838,16 @@ spec:
                     remoteWriteEndpoint:
                       type: string
                       description: Specifies the remote write endpoint for Prometheus.
+                telemetry:
+                  type: object
+                  description: Contains telemetry configuration for the storage cluster.
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicates if telemetry component needs to be enabled
+                    image:
+                      type: string
+                      description: Docker image of the telemetry container.
             security:
               type: object
               description: Contains security configuration for the storage cluster.

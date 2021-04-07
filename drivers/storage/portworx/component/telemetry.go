@@ -26,7 +26,6 @@ const (
 )
 
 type telemetry struct {
-	isCreated bool
 	k8sClient client.Client
 }
 
@@ -43,7 +42,7 @@ func (t *telemetry) Initialize(k8sClient client.Client, _ version.Version, _ *ru
 }
 
 func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.Telemetry != nil && cluster.Spec.Telemetry.Enabled
+	return pxutil.IsTelemetryEnabled(cluster)
 }
 
 func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
@@ -63,9 +62,7 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func (t *telemetry) MarkDeleted() {
-	t.isCreated = false
-}
+func (t *telemetry) MarkDeleted() {}
 
 // RegisterTelemetryComponent registers the telemetry  component
 func RegisterTelemetryComponent() {

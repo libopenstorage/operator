@@ -33,7 +33,7 @@ const (
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	// TODO change this once phone home team is done uploading image: https://jira.purestorage.com/browse/CLOUD-57162
+	// TODO https://portworx.atlassian.net/browse/OPERATOR-303 will populate this
 	defaultTelemetryImage          = ""
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
