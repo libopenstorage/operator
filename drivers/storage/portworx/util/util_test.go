@@ -88,13 +88,14 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
 
-	cluster = testutil.CreateClusterWithTLS(nil, serverCertFileName, serverKeyFileName)
-	_, err = GetOciMonArgumentsForTLS(cluster)
-	assert.NotNil(t, err)
-
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, nil)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.NotNil(t, err)
+
+	// ca can be null if cert/key specified
+	cluster = testutil.CreateClusterWithTLS(nil, serverCertFileName, serverKeyFileName)
+	_, err = GetOciMonArgumentsForTLS(cluster)
+	assert.Nil(t, err)
 }
 
 func TestAuthEnabled(t *testing.T) {

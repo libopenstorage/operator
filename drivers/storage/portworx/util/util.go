@@ -657,9 +657,6 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
 	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
 		advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-		if IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.rootCA is required")
-		}
 		if IsEmptyOrNilCertLocation(advancedOptions.ServerCert) {
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert is required")
 		}
@@ -667,12 +664,7 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey is required")
 		}
 
-		apirootca, apicert, apikey := "", "", ""
-		if !IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
-			apirootca = path.Join(DefaultTLSCACertMountPath, *advancedOptions.RootCA.SecretRef.SecretKey)
-		} else {
-			apirootca = path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName)
-		}
+		apicert, apikey := "", ""
 		if !IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
 			apicert = path.Join(DefaultTLSServerCertMountPath, *advancedOptions.ServerCert.SecretRef.SecretKey)
 		} else {
@@ -683,12 +675,23 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 		} else {
 			apikey = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerKey.FileName)
 		}
-		return []string{
-			"-apirootca", apirootca,
+
+		args := []string{
 			"-apicert", apicert,
 			"-apikey", apikey,
 			"-apidisclientauth",
-		}, nil
+		}
+		if !IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
+			if !IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
+				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, *advancedOptions.RootCA.SecretRef.SecretKey))
+			} else if !IsEmptyOrNilStringPtr(advancedOptions.RootCA.FileName) {
+				args = append(args, "-apirootca", path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName))
+			}
+		} else {
+			logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
+		}
+
+		return args, nil
 	}
 	return nil, fmt.Errorf("spec.security.tls.advancedOptions is required")
 }

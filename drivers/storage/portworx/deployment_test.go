@@ -347,19 +347,23 @@ func TestPodSpecWithTLS(t *testing.T) {
 	driver := portworx{}
 
 	// Test1: user specifies all cert files
+	logrus.Tracef("---Test1---")
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec after defaults = \n, %v", string(s))
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	// validate
 	validatePodSpecWithTLS("with all files specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName),
-		path.Join(pxutil.DefaultTLSCertsFolder, *serverCertFileName),
-		path.Join(pxutil.DefaultTLSCertsFolder, *serverKeyFileName), actual)
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, *serverCertFileName)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, *serverKeyFileName)), actual)
 
 	// Test2: user specifies one cert file, rest are left blank. driver should fill in the default values
+	logrus.Tracef("---Test2---")
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = nil
@@ -370,11 +374,12 @@ func TestPodSpecWithTLS(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	// validate
 	validatePodSpecWithTLS("with root ca file specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName),
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile),
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile), actual)
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile)), actual)
 
 	// Test3: user specifies no certs, driver should fill in the default values
+	logrus.Tracef("---Test3---")
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = nil
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = nil
@@ -386,11 +391,12 @@ func TestPodSpecWithTLS(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	// validate
 	validatePodSpecWithTLS("with no files specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSCACertHostFile),
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile),
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile), actual)
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSCACertHostFile)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile)), actual)
 
 	// Test4: user specifies ca cert in a secret, rest are left blank. driver should fill in the default values
+	logrus.Tracef("---Test4---")
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
@@ -405,13 +411,14 @@ func TestPodSpecWithTLS(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	// validate
 	validatePodSpecWithTLS("with ca in cert, no other file specified", t,
-		path.Join(pxutil.DefaultTLSCACertMountPath, "testrootcasecretkey"), // /api-tls-certs/ca-cert/testrootcasecretkey
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile),
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile), actual)
+		stringPtr(path.Join(pxutil.DefaultTLSCACertMountPath, "testrootcasecretkey")), // /api-tls-certs/ca-cert/testrootcasecretkey
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerCertHostFile)),
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSServerKeyHostFile)), actual)
 	// validate that volume and volume mount exist
 	validateVolumeAndMounts(t, actual, "testrootcasecret", "testrootcasecretkey", pxutil.DefaultTLSCACertMountPath)
 
-	// Test5: user specifies server cert/key in the same secret, no ca cert source specified, driver should fill in the default values
+	// Test5: user specifies server cert/key in the same secret, no ca cert source specified, assume signed by well known cert auth. No -apirootca arg needed
+	logrus.Tracef("---Test5---")
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
@@ -434,14 +441,15 @@ func TestPodSpecWithTLS(t *testing.T) {
 	s, _ = json.MarshalIndent(actual, "", "\t")
 	t.Logf("pod spec under validation = \n, %v", string(s))
 	validatePodSpecWithTLS("with server/key in secret, ca not specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSCACertHostFile),
-		path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt"),
-		path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key"), actual)
+		nil,
+		stringPtr(path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt")),
+		stringPtr(path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key")), actual)
 	// validate that volume and volume mount exist
 	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.crt", pxutil.DefaultTLSServerCertMountPath)
 	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.key", pxutil.DefaultTLSServerKeyMountPath)
 
-	// Test6: user specifies server cert/key in the different secrets, no ca cert source specified, driver should fill in the default values
+	// Test6: user specifies server cert/key in the different secrets, no ca cert source specified, assume signed by well known cert auth. No -apirootca arg needed
+	logrus.Tracef("---Test6---")
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
@@ -464,14 +472,15 @@ func TestPodSpecWithTLS(t *testing.T) {
 	s, _ = json.MarshalIndent(actual, "", "\t")
 	t.Logf("pod spec under validation = \n, %v", string(s))
 	validatePodSpecWithTLS("with server/key in different secrets, ca not specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, pxutil.DefaultTLSCACertHostFile),
-		path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt"),
-		path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key"), actual)
+		nil,
+		stringPtr(path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt")),
+		stringPtr(path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key")), actual)
 	// validate that volume and volume mount exist
 	validateVolumeAndMounts(t, actual, "testserversecret1", "testserversecret.crt", pxutil.DefaultTLSServerCertMountPath)
 	validateVolumeAndMounts(t, actual, "testserversecret2", "testserversecret.key", pxutil.DefaultTLSServerKeyMountPath)
 
 	// Test7: user specifies ca cert as a file, cert/key in the same secret,
+	logrus.Tracef("---Test7---")
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
@@ -494,9 +503,9 @@ func TestPodSpecWithTLS(t *testing.T) {
 	s, _ = json.MarshalIndent(actual, "", "\t")
 	t.Logf("pod spec under validation = \n, %v", string(s))
 	validatePodSpecWithTLS("with server/key in same secrets, ca file specified", t,
-		path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName),
-		path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt"),
-		path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key"), actual)
+		stringPtr(path.Join(pxutil.DefaultTLSCertsFolder, *caCertFileName)),
+		stringPtr(path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt")),
+		stringPtr(path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key")), actual)
 	// validate that volume and volume mount exist
 	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.crt", pxutil.DefaultTLSServerCertMountPath)
 	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.key", pxutil.DefaultTLSServerKeyMountPath)
@@ -528,17 +537,23 @@ func validateVolumeAndMounts(t *testing.T, actual v1.PodSpec, secretName, secret
 }
 
 // validateTLSEnvAndParams is a helper method used by TestPodSpecWithTLS
-func validatePodSpecWithTLS(testName string, t *testing.T, apirootcaArg, apicertArg, apikeyArg string, actual v1.PodSpec) {
+func validatePodSpecWithTLS(testName string, t *testing.T, apirootcaArg, apicertArg, apikeyArg *string, actual v1.PodSpec) {
 	expectedArgs := []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
 		"-b",
 		"-a",
 		"-secret_type", "k8s",
-		"-apirootca", apirootcaArg,
-		"-apicert", apicertArg,
-		"-apikey", apikeyArg,
 		"-apidisclientauth",
+	}
+	if apirootcaArg != nil {
+		expectedArgs = append(expectedArgs, "-apirootca", *apirootcaArg)
+	}
+	if apicertArg != nil {
+		expectedArgs = append(expectedArgs, "-apicert", *apicertArg)
+	}
+	if apikeyArg != nil {
+		expectedArgs = append(expectedArgs, "-apikey", *apikeyArg)
 	}
 
 	// validate that PX_ENABLE_TLS is set

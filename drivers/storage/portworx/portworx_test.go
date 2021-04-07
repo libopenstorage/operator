@@ -1572,7 +1572,7 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), nil, nil)
+	verifyTLSSpecFileNames(t, cluster, nil, nil, nil)
 	// rootCA should be read from the secret
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef)
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef)
