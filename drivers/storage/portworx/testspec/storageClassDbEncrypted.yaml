@@ -9,3 +9,4 @@ parameters:
   repl: "3"
   secure: "true"
   io_profile: "db"
+allowVolumeExpansion: true
