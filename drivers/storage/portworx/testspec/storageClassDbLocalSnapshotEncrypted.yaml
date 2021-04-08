@@ -10,3 +10,4 @@ parameters:
     schedulePolicyName: default-daily-policy
     annotations:
       portworx/snapshot-type: local
+allowVolumeExpansion: true
