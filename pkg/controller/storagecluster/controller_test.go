@@ -5330,6 +5330,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
+	// ml TODO: change of cert sources should result in pod being deleted/recreated
 	// TestCase: Change security to enabled
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
