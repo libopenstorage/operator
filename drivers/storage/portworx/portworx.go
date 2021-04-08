@@ -685,7 +685,7 @@ func setDefaultAutopilotProviders(
 				Name: "default",
 				Type: "prometheus",
 				Params: map[string]string{
-					"url": "http://prometheus:9090",
+					"url": component.AutopilotDefaultProviderEndpoint,
 				},
 			},
 		}
