@@ -6,6 +6,7 @@ provisioner: kubernetes.io/portworx-volume
 parameters:
   repl: "3"
   secure: "true"
+  io_profile: "db_remote"
   snapshotschedule.stork.libopenstorage.org/daily-schedule: |
     schedulePolicyName: default-daily-policy
     annotations:

@@ -37,6 +37,8 @@ const (
 	PxDbCloudSnapshotEncryptedStorageClass = "px-db-cloud-snapshot-encrypted"
 
 	portworxProvisioner = "kubernetes.io/portworx-volume"
+
+	portworxIoProfile = "db_remote"
 )
 
 type portworxStorageClass struct {
@@ -90,7 +92,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			Provisioner: portworxProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
-				api.SpecIoProfile: "db",
+				api.SpecIoProfile: portworxIoProfile,
 			},
 			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
@@ -104,7 +106,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			Provisioner: portworxProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
-				api.SpecIoProfile: "db",
+				api.SpecIoProfile: portworxIoProfile,
 				api.SpecSecure:    "true",
 			},
 			AllowVolumeExpansion: &allowVolumeExpansion,
@@ -140,7 +142,8 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
-					api.SpecHaLevel: "3",
+					api.SpecHaLevel:   "3",
+					api.SpecIoProfile: portworxIoProfile,
 					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
 annotations:
   portworx/snapshot-type: local
@@ -154,8 +157,9 @@ annotations:
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
-					api.SpecHaLevel: "3",
-					api.SpecSecure:  "true",
+					api.SpecHaLevel:   "3",
+					api.SpecSecure:    "true",
+					api.SpecIoProfile: portworxIoProfile,
 					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
 annotations:
   portworx/snapshot-type: local
@@ -169,7 +173,8 @@ annotations:
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
-					api.SpecHaLevel: "3",
+					api.SpecHaLevel:   "3",
+					api.SpecIoProfile: portworxIoProfile,
 					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
 annotations:
   portworx/snapshot-type: cloud
@@ -183,8 +188,9 @@ annotations:
 				},
 				Provisioner: portworxProvisioner,
 				Parameters: map[string]string{
-					api.SpecHaLevel: "3",
-					api.SpecSecure:  "true",
+					api.SpecHaLevel:   "3",
+					api.SpecSecure:    "true",
+					api.SpecIoProfile: portworxIoProfile,
 					"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
 annotations:
   portworx/snapshot-type: cloud
