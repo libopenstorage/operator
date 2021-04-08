@@ -102,6 +102,9 @@ const (
 	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
 	// of pod security policies
 	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
+	// AnnotationTelemetryArcusLocation annotation indicates the location (internal/external) of Arcus
+	// that CCM should use
+	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -707,4 +710,11 @@ func ParseExtendedDuration(s string) (time.Duration, error) {
 // UserVolumeName returns modified volume name for the user given volume name
 func UserVolumeName(name string) string {
 	return userVolumeNamePrefix + name
+}
+
+// IsTelemetryEnabled returns true is telemetry is enabled
+func IsTelemetryEnabled(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Telemetry != nil &&
+		cluster.Spec.Monitoring.Telemetry.Enabled
 }

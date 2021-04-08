@@ -1,0 +1,196 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: portworx
+  namespace: kube-system
+  labels:
+    name: portworx
+  annotations:
+    portworx.io/arcus-location: "internal"
+spec:
+  selector:
+    matchLabels:
+      name: portworx
+  minReadySeconds: 0
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: portworx
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+      hostNetwork: true
+      hostPID: false
+      containers:
+        - name: portworx
+          image: portworx/oci-monitor:2.8.0
+          imagePullPolicy: Always
+          args:
+            ["-c", "px-cluster", "-a", "-b",
+             "-secret_type", "k8s",
+             "-x", "kubernetes"]
+          env:
+            - name: "PX_TEMPLATE_VERSION"
+              value: "v4"
+            - name: "PX_NAMESPACE"
+              value: "kube-system"
+            - name: "PX_SECRETS_NAMESPACE"
+              value: "kube-system"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            periodSeconds: 30
+            initialDelaySeconds: 840 # allow image pull in slow networks
+            httpGet:
+              host: 127.0.0.1
+              path: /status
+              port: 9001
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              host: 127.0.0.1
+              path: /health
+              port: 9015
+          terminationMessagePath: "/tmp/px-termination-log"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: diagsdump
+              mountPath: /var/cores
+            - name: dockersock
+              mountPath: /var/run/docker.sock
+            - name: containerdsock
+              mountPath: /run/containerd
+            - name: criosock
+              mountPath: /var/run/crio
+            - name: crioconf
+              mountPath: /etc/crictl.yaml
+            - name: etcpwx
+              mountPath: /etc/pwx
+            - name: optpwx
+              mountPath: /opt/pwx
+            - name: procmount
+              mountPath: /host_proc
+            - name: sysdmount
+              mountPath: /etc/systemd/system
+            - name: journalmount1
+              mountPath: /var/run/log
+              readOnly: true
+            - name: journalmount2
+              mountPath: /var/log
+              readOnly: true
+            - name: dbusmount
+              mountPath: /var/run/dbus
+        - env:
+            - name: configFile
+              value: /etc/ccm/ccm.properties
+            - name: PX_NAMESPACE
+              value: kube-system
+          image: portworx/px-telemetry:2.1.2
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
+          name: telemetry
+          readinessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
+          securityContext:
+            privileged: true
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/cache
+              name: varcache
+            - mountPath: /etc/timezone
+              name: timezone
+            - mountPath: /etc/localtime
+              name: localtime
+            - mountPath: /etc/ccm
+              name: ccm-config
+            - mountPath: /var/cores
+              name: diagsdump
+            - mountPath: /etc/pwx
+              name: etcpwx
+            - mountPath: /var/run/log
+              name: journalmount1
+              readOnly: true
+            - mountPath: /var/log
+              name: journalmount2
+              readOnly: true
+      restartPolicy: Always
+      serviceAccountName: portworx
+      volumes:
+        - name: diagsdump
+          hostPath:
+            path: /var/cores
+        - name: dockersock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: containerdsock
+          hostPath:
+            path: /run/containerd
+        - name: criosock
+          hostPath:
+            path: /var/run/crio
+        - name: crioconf
+          hostPath:
+            path: /etc/crictl.yaml
+            type: FileOrCreate
+        - name: etcpwx
+          hostPath:
+            path: /etc/pwx
+        - name: optpwx
+          hostPath:
+            path: /opt/pwx
+        - name: procmount
+          hostPath:
+            path: /proc
+        - name: sysdmount
+          hostPath:
+            path: /etc/systemd/system
+        - name: journalmount1
+          hostPath:
+            path: /var/run/log
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - name: dbusmount
+          hostPath:
+            path: /var/run/dbus
+        - hostPath:
+            path: /var/cache
+          name: varcache
+        - hostPath:
+            path: /etc/timezone
+          name: timezone
+        - hostPath:
+            path: /etc/localtime
+          name: localtime
+        - configMap:
+            items:
+              - key: ccm.properties
+                path: ccm.properties
+              - key: location
+                path: location
+            name: px-telemetry-config
+          name: ccm-config

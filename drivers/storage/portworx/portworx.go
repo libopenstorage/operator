@@ -203,6 +203,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
 		}
 
+		if autoUpdateTelemetry(toUpdate) &&
+			(toUpdate.Status.DesiredImages.Telemetry == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
+			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
+		}
+
 		if pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) &&
 			(toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
 				pxVersionChanged ||
@@ -243,6 +250,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if !autoUpdateLighthouse(toUpdate) {
 		toUpdate.Status.DesiredImages.UserInterface = ""
+	}
+
+	if !autoUpdateTelemetry(toUpdate) {
+		toUpdate.Status.DesiredImages.Telemetry = ""
 	}
 
 	if !pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) {
@@ -734,6 +745,7 @@ func hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasAutopilotChanged(cluster) ||
 		hasLighthouseChanged(cluster) ||
 		hasCSIChanged(cluster) ||
+		hasTelemetryChanged(cluster) ||
 		hasPrometheusChanged(cluster)
 }
 
@@ -754,6 +766,10 @@ func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Status.DesiredImages.CSIProvisioner == ""
 }
 
+func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateTelemetry(cluster) && cluster.Status.DesiredImages.Telemetry == ""
+}
+
 func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
@@ -771,6 +787,11 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Autopilot != nil &&
 		cluster.Spec.Autopilot.Enabled &&
 		cluster.Spec.Autopilot.Image == ""
+}
+
+func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
+	return pxutil.IsTelemetryEnabled(cluster) &&
+		cluster.Spec.Monitoring.Telemetry.Image == ""
 }
 
 func autoUpdateLighthouse(cluster *corev1.StorageCluster) bool {

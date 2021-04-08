@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
@@ -27,7 +28,6 @@ import (
 const (
 	pxContainerName       = "portworx"
 	pxKVDBContainerName   = "portworx-kvdb"
-	pxAnnotationPrefix    = "portworx.io"
 	templateVersion       = "v4"
 	secretKeyKvdbCA       = "kvdb-ca.crt"
 	secretKeyKvdbCert     = "kvdb.crt"
@@ -35,7 +35,6 @@ const (
 	secretKeyKvdbUsername = "username"
 	secretKeyKvdbPassword = "password"
 	secretKeyKvdbACLToken = "acl-token"
-	envKeyPXImage         = "PX_IMAGE"
 )
 
 type volumeInfo struct {
@@ -45,6 +44,7 @@ type volumeInfo struct {
 	readOnly         bool
 	mountPropagation *v1.MountPropagationMode
 	hostPathType     *v1.HostPathType
+	configMapType    *v1.ConfigMapVolumeSource
 	pks              *pksVolumeInfo
 }
 
@@ -54,8 +54,9 @@ type pksVolumeInfo struct {
 }
 
 var (
-	// defaultVolumeInfoList is a list of volumes across all options
-	defaultVolumeInfoList = []volumeInfo{
+
+	// commonVolumeList is the common list of volumes across all containers
+	commonVolumeList = []volumeInfo{
 		{
 			name:      "diagsdump",
 			hostPath:  "/var/cores",
@@ -63,39 +64,6 @@ var (
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/cores",
 			},
-		},
-		{
-			name:      "dockersock",
-			hostPath:  "/var/run/docker.sock",
-			mountPath: "/var/run/docker.sock",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/docker/docker.sock",
-			},
-		},
-		{
-			name:      "containerdsock",
-			hostPath:  "/run/containerd",
-			mountPath: "/run/containerd",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/containerd",
-			},
-		},
-		{
-			name:      "criosock",
-			hostPath:  "/var/run/crio",
-			mountPath: "/var/run/crio",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/crio",
-			},
-		},
-		{
-			name:      "crioconf",
-			hostPath:  "/etc/crictl.yaml",
-			mountPath: "/etc/crictl.yaml",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/crictl.yaml",
-			},
-			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
 		},
 		{
 			name:      "etcpwx",
@@ -113,24 +81,6 @@ var (
 			},
 		},
 		{
-			name:      "optpwx",
-			hostPath:  "/opt/pwx",
-			mountPath: "/opt/pwx",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/opt/pwx",
-			},
-		},
-		{
-			name:      "procmount",
-			hostPath:  "/proc",
-			mountPath: "/host_proc",
-		},
-		{
-			name:      "sysdmount",
-			hostPath:  "/etc/systemd/system",
-			mountPath: "/etc/systemd/system",
-		},
-		{
 			name:      "journalmount1",
 			hostPath:  "/var/run/log",
 			mountPath: "/var/run/log",
@@ -141,11 +91,6 @@ var (
 			hostPath:  "/var/log",
 			mountPath: "/var/log",
 			readOnly:  true,
-		},
-		{
-			name:      "dbusmount",
-			hostPath:  "/var/run/dbus",
-			mountPath: "/var/run/dbus",
 		},
 	}
 
@@ -294,7 +239,6 @@ func (p *portworx) GetKVDBPodSpec(
 func (p *portworx) GetStoragePodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
-
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return v1.PodSpec{}, err
@@ -334,6 +278,20 @@ func (p *portworx) GetStoragePodSpec(
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
+		}
+	}
+
+	if pxutil.IsTelemetryEnabled(cluster) {
+		telemetryContainer := t.telemetryContainer()
+		if telemetryContainer != nil {
+			if len(telemetryContainer.Image) == 0 {
+				msg := fmt.Sprintf("telemetry image is required in the spec." +
+					" Not enabling telemetry")
+				p.warningEvent(cluster, util.FailedComponentReason, msg)
+			} else {
+				podSpec.Containers = append(podSpec.Containers, *telemetryContainer)
+
+			}
 		}
 	}
 
@@ -564,6 +522,50 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 
 	if container.Name == "" {
 		return nil
+	}
+	return &container
+}
+
+func (t *template) telemetryContainer() *v1.Container {
+	container := v1.Container{
+		Name: "telemetry",
+		Image: util.GetImageURN(
+			t.cluster.Spec.CustomImageRegistry,
+			t.getDesiredTelemetryImage(t.cluster),
+		),
+		ImagePullPolicy: t.imagePullPolicy,
+		Env: []v1.EnvVar{
+			{
+				Name:  "configFile",
+				Value: "/etc/ccm/" + component.TelemetryPropertiesFilename,
+			},
+			{
+				Name:  pxutil.EnvKeyPortworxNamespace,
+				Value: t.cluster.Namespace,
+			},
+		},
+		LivenessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+		},
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: boolPtr(true),
+		},
+		VolumeMounts: t.mountsFromVolInfo(t.getTelemetryVolumeInfoList()),
 	}
 	return &container
 }
@@ -981,13 +983,14 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
-	if t.isK3s {
-		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
-	}
+	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
+	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	return t.mountsFromVolInfo(volumeInfoList)
+}
 
-	volumeMounts := make([]v1.VolumeMount, 0, len(volumeInfoList))
-	for _, v := range volumeInfoList {
+func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
+	volumeMounts := make([]v1.VolumeMount, 0, len(vols))
+	for _, v := range vols {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
 			MountPath:        v.mountPath,
@@ -1023,32 +1026,44 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	volumeInfoList := append([]volumeInfo{}, defaultVolumeInfoList...)
-
-	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
-		volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
-	}
-	if t.isK3s {
-		volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
-	}
+	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
+	volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
+	volumeInfoList = append(volumeInfoList, t.getTelemetryVolumeInfoList()...)
+	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 
 	volumes := make([]v1.Volume, 0, len(volumeInfoList))
+	volumeSet := make(map[string]v1.Volume)
 	for _, v := range volumeInfoList {
+		if _, present := volumeSet[v.name]; present {
+			continue
+		}
+
 		volume := v1.Volume{
 			Name: v.name,
-			VolumeSource: v1.VolumeSource{
+		}
+
+		if v.configMapType != nil {
+			volume.VolumeSource = v1.VolumeSource{
+				ConfigMap: v.configMapType,
+			}
+			volumes = append(volumes, volume)
+		} else {
+			volume.VolumeSource = v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
 					Path: v.hostPath,
 					Type: v.hostPathType,
 				},
-			},
+			}
+			if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
+				volume.VolumeSource.HostPath.Path = v.pks.hostPath
+			}
+
+			if volume.VolumeSource.HostPath.Path != "" {
+				volumes = append(volumes, volume)
+			}
 		}
-		if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
-			volume.VolumeSource.HostPath.Path = v.pks.hostPath
-		}
-		if volume.VolumeSource.HostPath.Path != "" {
-			volumes = append(volumes, volume)
-		}
+
+		volumeSet[v.name] = volume
 	}
 
 	kvdbAuth := t.loadKvdbAuth()
@@ -1099,6 +1114,10 @@ func (t *template) getVolumes() []v1.Volume {
 }
 
 func (t *template) getCSIVolumeInfoList() []volumeInfo {
+	if !pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
+		return []volumeInfo{}
+	}
+
 	kubeletPath := pxutil.KubeletPath(t.cluster)
 	registrationVol := volumeInfo{
 		name:         "registration-dir",
@@ -1120,7 +1139,61 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 	return volumeInfoList
 }
 
+func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
+	if pxutil.IsTelemetryEnabled(t.cluster) {
+		configVolume := volumeInfo{
+			name:      "ccm-config",
+			mountPath: "/etc/ccm",
+			configMapType: &v1.ConfigMapVolumeSource{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: component.TelemetryConfigMapName,
+				},
+				Items: []v1.KeyToPath{
+					{
+						Key:  component.TelemetryPropertiesFilename,
+						Path: component.TelemetryPropertiesFilename,
+					},
+				},
+			},
+		}
+
+		// reference location from config map only if the default was overridden using annotations
+		if location, present := t.cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]; present && len(location) > 0 {
+			configVolume.configMapType.Items = append(configVolume.configMapType.Items, v1.KeyToPath{
+				Key:  component.TelemetryArcusLocationFilename,
+				Path: component.TelemetryArcusLocationFilename,
+			})
+		}
+		volumeInfoList := []volumeInfo{
+			{
+				name:      "varcache",
+				hostPath:  "/var/cache",
+				mountPath: "/var/cache",
+			},
+			{
+				name:      "timezone",
+				hostPath:  "/etc/timezone",
+				mountPath: "/etc/timezone",
+			},
+			{
+				name:      "localtime",
+				hostPath:  "/etc/localtime",
+				mountPath: "/etc/localtime",
+			},
+			configVolume,
+		}
+
+		volumeInfoList = append(volumeInfoList, commonVolumeList...)
+		return volumeInfoList
+	}
+	return []volumeInfo{}
+}
+
 func (t *template) getK3sVolumeInfoList() []volumeInfo {
+	if !t.isK3s {
+		return []volumeInfo{}
+	}
+
 	return []volumeInfo{
 		{
 			name:      "containerd-k3s",
@@ -1154,6 +1227,20 @@ func (t *template) loadKvdbAuth() map[string]string {
 	return t.kvdb
 }
 
+func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) string {
+	if pxutil.IsTelemetryEnabled(cluster) {
+		if cluster.Spec.Monitoring.Telemetry.Image != "" {
+			return cluster.Spec.Monitoring.Telemetry.Image
+		}
+
+		if cluster.Status.DesiredImages != nil {
+			return cluster.Status.DesiredImages.Telemetry
+		}
+	}
+
+	return ""
+}
+
 func stringPtr(val string) *string {
 	return &val
 }
@@ -1168,6 +1255,70 @@ func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
 
 func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
+}
+
+func getDefaultVolumeInfoList() []volumeInfo {
+	list := []volumeInfo{
+		{
+			name:      "dockersock",
+			hostPath:  "/var/run/docker.sock",
+			mountPath: "/var/run/docker.sock",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/docker/docker.sock",
+			},
+		},
+		{
+			name:      "containerdsock",
+			hostPath:  "/run/containerd",
+			mountPath: "/run/containerd",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/containerd",
+			},
+		},
+		{
+			name:      "criosock",
+			hostPath:  "/var/run/crio",
+			mountPath: "/var/run/crio",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/sys/run/crio",
+			},
+		},
+		{
+			name:      "crioconf",
+			hostPath:  "/etc/crictl.yaml",
+			mountPath: "/etc/crictl.yaml",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/crictl.yaml",
+			},
+			hostPathType: hostPathTypePtr(v1.HostPathFileOrCreate),
+		},
+		{
+			name:      "optpwx",
+			hostPath:  "/opt/pwx",
+			mountPath: "/opt/pwx",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/opt/pwx",
+			},
+		},
+		{
+			name:      "procmount",
+			hostPath:  "/proc",
+			mountPath: "/host_proc",
+		},
+		{
+			name:      "sysdmount",
+			hostPath:  "/etc/systemd/system",
+			mountPath: "/etc/systemd/system",
+		},
+		{
+			name:      "dbusmount",
+			hostPath:  "/var/run/dbus",
+			mountPath: "/var/run/dbus",
+		},
+	}
+
+	list = append(list, commonVolumeList...)
+	return list
 }
 
 func isK3sCluster(ext string) bool {

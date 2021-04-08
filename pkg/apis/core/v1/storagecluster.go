@@ -444,6 +444,16 @@ type MonitoringSpec struct {
 	// Prometheus contains the details of the Prometheus stack deployed to monitor
 	// metrics from the storage cluster.
 	Prometheus *PrometheusSpec `json:"prometheus,omitempty"`
+	// Telemetry contains custom configuration for storage driver telemetry. This is optional.
+	Telemetry *TelemetrySpec `json:"telemetry,omitempty"`
+}
+
+// TelemetrySpec contains details of a telemetry component
+type TelemetrySpec struct {
+	// Enabled decides whether telemetry needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is docker image of the telemetry container
+	Image string `json:"image,omitempty"`
 }
 
 // PrometheusSpec contains configuration of Prometheus stack
@@ -493,6 +503,7 @@ type ComponentImages struct {
 	PrometheusConfigMapReload string `json:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `json:"prometheusConfigReloader,omitempty"`
 	Prometheus                string `json:"prometheus,omitempty"`
+	Telemetry                 string `json:"telemetry,omitempty"`
 }
 
 // Storage represents cluster storage details

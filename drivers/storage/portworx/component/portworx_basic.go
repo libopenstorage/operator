@@ -186,7 +186,7 @@ func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerRefer
 				{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list", "create", "update", "patch"},
+					Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
 				},
 			},
 		},

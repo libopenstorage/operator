@@ -49,7 +49,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 14)
+	require.Len(t, components, 15)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -70,6 +70,7 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PortworxCRDComponentName,
 			component.PortworxProxyComponentName,
 			component.PortworxStorageClassComponentName,
+			component.TelemetryComponentName,
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
 		},
@@ -9737,6 +9738,103 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 	require.Empty(t, len(policies.Items))
 }
 
+func TestTelemetryEnable(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationTelemetryArcusLocation: "internal",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "portworx/px-telemetry:2.1.2",
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CCM config map
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmconfig.yaml")
+	telemetryConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, telemetryConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, telemetryConfigMap.Namespace)
+	require.Len(t, telemetryConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, telemetryConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
+
+	// without location
+	delete(cluster.Annotations, "portworx.io/arcus-location")
+	delete(expectedConfigMap.Data, "location")
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	telemetryConfigMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, telemetryConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, telemetryConfigMap.Namespace)
+	require.Len(t, telemetryConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, telemetryConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
+}
+
+func TestDisableTelemetry(t *testing.T) {
+	// first enabled
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "portworx/px-telemetry:2.1.2",
+				},
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CCM config map
+	telemetryConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// disable telemetry, config map should go away
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CCM config map
+	telemetryConfigMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {
@@ -9804,4 +9902,5 @@ func reregisterComponents() {
 	component.RegisterPrometheusComponent()
 	component.RegisterSecurityComponent()
 	component.RegisterPSPComponent()
+	component.RegisterTelemetryComponent()
 }

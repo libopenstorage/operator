@@ -6231,6 +6231,97 @@ func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 	os.Unsetenv(pxutil.EnvKeyPortworxEssentials)
 }
 
+func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Don't enable telemetry by default
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring) // telemetry is under monitoring
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: false,
+		},
+	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+
+	// enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster.Spec.Monitoring.Telemetry.Image = "portworx/px-telemetry:" + compVersion()
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Spec.Monitoring.Telemetry.Image)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+
+	// Use image from release manifest if spec image is reset
+	cluster.Spec.Monitoring.Telemetry.Image = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Status.DesiredImages.Telemetry)
+
+	// Do not overwrite desired image if nothing has changed
+	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
+
+	// Do not overwrite desired autopilot image even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
+	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired image if px image has changed
+	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
+
+	// Change desired image if auto update of components is always enabled
+	updateStrategy := corev1.AlwaysAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Status.DesiredImages.Telemetry)
+
+	// Change desired image if auto update of components is enabled once
+	updateStrategy = corev1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
+
+	// Don't change desired image if auto update of components is never
+	updateStrategy = corev1.NeverAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
+
+	// Reset desired image if telemetry has been disabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+}
+
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
 }
@@ -6254,6 +6345,7 @@ func (m *fakeManifest) GetVersions(
 			Autopilot:                 "portworx/autopilot:" + compVersion,
 			Lighthouse:                "portworx/px-lighthouse:" + compVersion,
 			NodeWiper:                 "portworx/px-node-wiper:" + compVersion,
+			Telemetry:                 "portworx/px-telemetry:" + compVersion,
 			CSIProvisioner:            "quay.io/k8scsi/csi-provisioner:v1.2.3",
 			CSIAttacher:               "quay.io/k8scsi/csi-attacher:v1.2.3",
 			CSIDriverRegistrar:        "quay.io/k8scsi/driver-registrar:v1.2.3",

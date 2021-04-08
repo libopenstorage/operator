@@ -1882,6 +1882,53 @@ func TestPodSpecForK3s(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodWithTelemetry(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.4",
+	}
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry-with-location.yaml")
+
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				"portworx.io/arcus-location": "internal",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.8.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "portworx/px-telemetry:2.1.2",
+				},
+			},
+		},
+	}
+	driver := portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+
+	// don't specify arcus location
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
+	delete(cluster.Annotations, "portworx.io/arcus-location")
+	driver = portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_master.yaml")

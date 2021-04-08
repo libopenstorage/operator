@@ -12,7 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -33,7 +33,9 @@ const (
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	defaultManifestRefreshInterval        = 3 * time.Hour
+	// TODO https://portworx.atlassian.net/browse/OPERATOR-303 will populate this
+	defaultTelemetryImage          = ""
+	defaultManifestRefreshInterval = 3 * time.Hour
 )
 
 var (
@@ -57,6 +59,7 @@ type Release struct {
 	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
 	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `yaml:"prometheusConfigReloader,omitempty"`
+	Telemetry                 string `yaml:"telemetry,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -172,6 +175,7 @@ func defaultRelease(
 			PrometheusOperator:        defaultPrometheusOperatorImage,
 			PrometheusConfigMapReload: defaultPrometheusConfigMapReloadImage,
 			PrometheusConfigReloader:  defaultPrometheusConfigReloaderImage,
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
@@ -205,6 +209,10 @@ func fillDefaults(
 	}
 	if rel.Components.PrometheusConfigReloader == "" {
 		rel.Components.PrometheusConfigReloader = defaultPrometheusConfigReloaderImage
+	}
+
+	if rel.Components.Telemetry == "" {
+		rel.Components.Telemetry = defaultTelemetryImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 }

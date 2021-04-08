@@ -1,0 +1,79 @@
+apiVersion: v1
+data:
+  ccm.properties: |
+    {
+          "product_name": "portworx",
+           "logging": {
+             "array_info_path": "/var/log/array_info.json"
+           },
+           "features": {
+             "appliance_info": "config",
+             "cert_store": "k8s",
+             "config_reload": "file",
+             "env_info": "file",
+             "scheduled_log_uploader":"enabled",
+             "upload": "enabled"
+           },
+          "cert": {
+            "activation": {
+                  "private": "/dev/null",
+                  "public": "/dev/null"
+            },
+            "registration_enabled": "true",
+            "appliance": {
+              "current_cert_dir": "/etc/pwx/ccm/cert"
+            }
+          },
+          "k8s": {
+            "cert_secret_name": "pure-telemetry-certs",
+            "cert_secret_namespace": "kube-test"
+         },
+         "cloud": {
+           "array_loc_file_path": "/etc/ccm/location"
+         },
+          "server": {
+            "hostname": "0.0.0.0"
+          },
+          "logupload": {
+            "logfile_patterns": [
+                "/var/cores/*diags*",
+                "/var/cores/*px-cores*",
+                "/var/cores/*.heap",
+                "/var/cores/*.stack",
+                "/var/cores/.alerts/alerts*"
+            ],
+            "skip_patterns": [],
+            "additional_files": [
+                "/etc/pwx/config.json",
+                "/var/cores/.alerts/alerts.log",
+                "/var/cores/px_etcd_watch.log",
+                "/var/cores/px_cache_mon.log",
+                "/var/cores/px_cache_mon_watch.log",
+                "/var/cores/px_healthmon_watch.log",
+                "/var/cores/px_event_watch.log"
+            ],
+            "phonehome_sent": "/var/cache/phonehome.sent"
+          },
+          "xml_rpc": {},
+          "standalone": {
+            "version": "1.0.0",
+            "controller_sn": "SA-0",
+            "component_name": "SA-0",
+            "product_name": "portworx",
+            "appliance_id_path": "/etc/pwx/appliance_id"
+          },
+          "proxy": {
+            "path": "/dev/null"
+          }
+        }
+  location: internal
+kind: ConfigMap
+metadata:
+  name: px-telemetry-config
+  namespace: kube-test
+  ownerReferences:
+  - apiVersion: core.libopenstorage.org/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StorageCluster
+    name: px-cluster
