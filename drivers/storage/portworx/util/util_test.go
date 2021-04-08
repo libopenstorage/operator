@@ -29,6 +29,58 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	assert.Nil(t, err)
 	assert.ElementsMatch(t, expectedArgs, args)
 
+	// mixture of file and k8s secret as sources for tls certs
+
+	// rootCA from k8s secret, serverCert and serverKey from file
+	// setup
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	expectedArgs = []string{
+		"-apirootca", DefaultTLSCACertMountPath + "somekey",
+		"-apicert", certRootPath + *serverCertFileName,
+		"-apikey", certRootPath + *serverKeyFileName,
+		"-apidisclientauth",
+	}
+	// test
+	args, err = GetOciMonArgumentsForTLS(cluster)
+	// validate
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, expectedArgs, args)
+
+	// serverCert and serverKey from k8s secret, rootCA from file
+	// setup
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	tlsAdvancedOptions = cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("someothersecret"),
+			SecretKey:  stringPtr("someotherkey"),
+		},
+	}
+	expectedArgs = []string{
+		"-apirootca", certRootPath + *caCertFileName,
+		"-apicert", DefaultTLSServerCertMountPath + "somekey",
+		"-apikey", DefaultTLSServerKeyMountPath + "someotherkey",
+		"-apidisclientauth",
+	}
+	// test
+	args, err = GetOciMonArgumentsForTLS(cluster)
+	// validate
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, expectedArgs, args)
+
 	// error scenarios
 	// GetOciMonArgumentsForTLS expects that defaults have already been applied
 	// setup
@@ -164,6 +216,40 @@ func testAuthEnabled(t *testing.T, securityEnabled bool, authEnabled *bool, expe
 	t.Logf("Security spec under test = \n, %v", string(s))
 	actual := AuthEnabled(&cluster.Spec)
 	assert.Equal(t, actual, expectedResult)
+}
+
+func TestIsEmptyOrNilCertLocation(t *testing.T) {
+	obj := &corev1.CertLocation{
+		FileName: stringPtr("somefile"),
+	}
+	assert.False(t, IsEmptyOrNilCertLocation(obj))
+
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somename"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	assert.False(t, IsEmptyOrNilCertLocation(obj))
+
+	obj = &corev1.CertLocation{}
+	assert.True(t, IsEmptyOrNilCertLocation(obj))
+
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{},
+	}
+	assert.True(t, IsEmptyOrNilCertLocation(obj))
+
+	obj = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somename"),
+		},
+	}
+	assert.True(t, IsEmptyOrNilCertLocation(obj))
+
+	obj = nil
+	assert.True(t, IsEmptyOrNilCertLocation(obj))
+
 }
 
 func createClusterWithAuth() *corev1.StorageCluster {
