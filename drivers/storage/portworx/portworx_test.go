@@ -1191,9 +1191,9 @@ func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster, exp
 	if expectTLSDefaults {
 		require.NotNil(t, cluster.Spec.Security.TLS)
 		require.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
-		require.Equal(t, defaultTLSCACertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName)
-		require.Equal(t, defaultTLSServerCertFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName)
-		require.Equal(t, defaultTLSServerKeyFilename, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName)
+		require.Equal(t, pxutil.DefaultTLSCACertHostFile, *cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName)
+		require.Equal(t, pxutil.DefaultTLSServerCertHostFile, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName)
+		require.Equal(t, pxutil.DefaultTLSServerKeyHostFile, *cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName)
 	}
 }
 
@@ -1529,7 +1529,57 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	verifyTLSSpecFileNames(t, cluster, caCertFileName, stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
+
+	// root ca from secret, servercert and serverkey not supplied
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("rootcasecret"),
+			SecretKey:  stringPtr("rootcasecretkey"),
+		},
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, nil, stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
+	// rootCA should be read from the secret
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef)
+	assert.Equal(t, stringPtr("rootcasecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretName)
+	assert.Equal(t, stringPtr("rootcasecretkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretKey)
+
+	// root ca not supplied, servercert and serverkey from secret
+	// setup
+	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
+	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
+	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("somesecret"),
+			SecretKey:  stringPtr("somekey"),
+		},
+	}
+	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: stringPtr("someothersecret"),
+			SecretKey:  stringPtr("someotherkey"),
+		},
+	}
+	// test
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	// verify
+	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), nil, nil)
+	// rootCA should be read from the secret
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef)
+	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef)
+	assert.Equal(t, stringPtr("somesecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretName)
+	assert.Equal(t, stringPtr("somekey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretKey)
+	assert.Equal(t, stringPtr("someothersecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretName)
+	assert.Equal(t, stringPtr("someotherkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretKey)
 
 	// no filename supplied
 	// setup
@@ -1539,7 +1589,7 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
 
 	// security is enabled, but no tls section, defaults should not be generated
 	// setup
@@ -1575,7 +1625,7 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
 
 	// tls section with empty advancedOptions, but security is enabled, defaults should be generated
 	// setup
@@ -1589,7 +1639,7 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(defaultTLSCACertFilename), stringPtr(defaultTLSServerCertFilename), stringPtr(defaultTLSServerKeyFilename))
+	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
 }
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
@@ -6664,17 +6714,29 @@ func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, caCert
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions)
 	advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
 	// validate Root CA
-	assert.NotNil(t, advancedOptions.RootCA)
-	assert.NotNil(t, advancedOptions.RootCA.FileName)
-	assert.Equal(t, *caCertFileName, *advancedOptions.RootCA.FileName)
+	if caCertFileName != nil {
+		assert.NotNil(t, advancedOptions.RootCA)
+		assert.NotNil(t, advancedOptions.RootCA.FileName)
+		assert.Equal(t, *caCertFileName, *advancedOptions.RootCA.FileName)
+	} else {
+		assert.Nil(t, advancedOptions.RootCA.FileName)
+	}
 	// validate Server Cert (public key)
-	assert.NotNil(t, advancedOptions.ServerCert)
-	assert.NotNil(t, advancedOptions.ServerCert.FileName)
-	assert.Equal(t, *serverCertFileName, *advancedOptions.ServerCert.FileName)
+	if serverCertFileName != nil {
+		assert.NotNil(t, advancedOptions.ServerCert)
+		assert.NotNil(t, advancedOptions.ServerCert.FileName)
+		assert.Equal(t, *serverCertFileName, *advancedOptions.ServerCert.FileName)
+	} else {
+		assert.Nil(t, advancedOptions.ServerCert.FileName)
+	}
 	// validate Server (private) key
-	assert.NotNil(t, advancedOptions.ServerKey)
-	assert.NotNil(t, advancedOptions.ServerKey.FileName)
-	assert.Equal(t, *serverKeyFileName, *advancedOptions.ServerKey.FileName)
+	if serverKeyFileName != nil {
+		assert.NotNil(t, advancedOptions.ServerKey)
+		assert.NotNil(t, advancedOptions.ServerKey.FileName)
+		assert.Equal(t, *serverKeyFileName, *advancedOptions.ServerKey.FileName)
+	} else {
+		assert.Nil(t, advancedOptions.ServerKey.FileName)
+	}
 }
 
 type fakeManifest struct{}
