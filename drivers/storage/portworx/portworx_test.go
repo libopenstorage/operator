@@ -641,6 +641,13 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	cluster.Spec.Autopilot.Enabled = false
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
+
+	// Check default autopilot provider is set if not specified
+	driver.SetDefaultsOnStorageCluster(cluster)
+	providers := cluster.Spec.Autopilot.Providers
+	require.Equal(t, 1, len(providers))
+	require.Equal(t, "prometheus", providers[0].Type)
+	require.Equal(t, component.AutopilotDefaultProviderEndpoint, providers[0].Params["url"])
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
