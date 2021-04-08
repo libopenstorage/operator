@@ -79,6 +79,8 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 		"params/journal":           "Flag to indicate if you want to use journal device for the volume's metadata. This will use the journal device that you used when installing Portworx. It is recommended to use a journal device to absorb PX metadata writes",
 	}
 
+	allowVolumeExpansion := true
+
 	storageClasses := []*storagev1.StorageClass{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -90,6 +92,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				api.SpecHaLevel:   "3",
 				api.SpecIoProfile: "db",
 			},
+			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -104,6 +107,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				api.SpecIoProfile: "db",
 				api.SpecSecure:    "true",
 			},
+			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -113,6 +117,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			Parameters: map[string]string{
 				api.SpecHaLevel: "2",
 			},
+			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -123,6 +128,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				api.SpecHaLevel: "2",
 				api.SpecSecure:  "true",
 			},
+			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
 	}
 
@@ -140,6 +146,7 @@ annotations:
   portworx/snapshot-type: local
 `,
 				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
@@ -154,6 +161,7 @@ annotations:
   portworx/snapshot-type: local
 `,
 				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
@@ -167,6 +175,7 @@ annotations:
   portworx/snapshot-type: cloud
 `,
 				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
 			},
 			&storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
@@ -181,6 +190,7 @@ annotations:
   portworx/snapshot-type: cloud
 `,
 				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
 			},
 		)
 	}
