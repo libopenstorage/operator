@@ -400,8 +400,8 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testrootcasecret"),
-			SecretKey:  stringPtr("testrootcasecretkey"),
+			SecretName: "testrootcasecret",
+			SecretKey:  "testrootcasecretkey",
 		},
 	}
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -422,14 +422,14 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret"),
-			SecretKey:  stringPtr("testserversecret.crt"),
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.crt",
 		},
 	}
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret"),
-			SecretKey:  stringPtr("testserversecret.key"),
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.key",
 		},
 	}
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -453,14 +453,14 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret1"),
-			SecretKey:  stringPtr("testserversecret.crt"),
+			SecretName: "testserversecret1",
+			SecretKey:  "testserversecret.crt",
 		},
 	}
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret2"),
-			SecretKey:  stringPtr("testserversecret.key"),
+			SecretName: "testserversecret2",
+			SecretKey:  "testserversecret.key",
 		},
 	}
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
@@ -484,14 +484,14 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret"),
-			SecretKey:  stringPtr("testserversecret.crt"),
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.crt",
 		},
 	}
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("testserversecret"),
-			SecretKey:  stringPtr("testserversecret.key"),
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.key",
 		},
 	}
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")

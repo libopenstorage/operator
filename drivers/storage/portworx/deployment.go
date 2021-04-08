@@ -1016,7 +1016,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
 	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		volumeInfoList = append(volumeInfoList, t.GetVolumeInfoForTLSCerts()...)
+		volumeInfoList = append(volumeInfoList, t.getVolumeInfoForTLSCerts()...)
 	}
 	return t.mountsFromVolInfo(volumeInfoList)
 }
@@ -1065,7 +1065,7 @@ func (t *template) getVolumes() []v1.Volume {
 	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
 
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		volumeInfoList = append(volumeInfoList, t.GetVolumeInfoForTLSCerts()...)
+		volumeInfoList = append(volumeInfoList, t.getVolumeInfoForTLSCerts()...)
 	}
 
 	volumes := make([]v1.Volume, 0, len(volumeInfoList))
@@ -1254,7 +1254,7 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 	}
 }
 
-func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
+func (t *template) getVolumeInfoForTLSCerts() []volumeInfo {
 	// TLS.AdvancedTLSOptions is assumed to be filled up here with defaults (if not supplied by the user)
 	advancedOptions := t.cluster.Spec.Security.TLS.AdvancedTLSOptions
 	ret := []volumeInfo{}
@@ -1273,8 +1273,8 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 func (t *template) getVolumeInfoFromCertLocation(certLocation corev1.CertLocation, volumeName, mountPath string) volumeInfo {
 	return volumeInfo{
 		name:       volumeName,
-		secretName: *certLocation.SecretRef.SecretName,
-		secretKey:  *certLocation.SecretRef.SecretKey,
+		secretName: certLocation.SecretRef.SecretName,
+		secretKey:  certLocation.SecretRef.SecretKey,
 		mountPath:  mountPath,
 		readOnly:   true,
 	}

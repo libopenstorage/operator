@@ -37,8 +37,8 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
 	tlsAdvancedOptions.RootCA = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("somesecret"),
-			SecretKey:  stringPtr("somekey"),
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
 		},
 	}
 	expectedArgs = []string{
@@ -59,14 +59,14 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	tlsAdvancedOptions = cluster.Spec.Security.TLS.AdvancedTLSOptions
 	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("somesecret"),
-			SecretKey:  stringPtr("somekey"),
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
 		},
 	}
 	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("someothersecret"),
-			SecretKey:  stringPtr("someotherkey"),
+			SecretName: "someothersecret",
+			SecretKey:  "someotherkey",
 		},
 	}
 	expectedArgs = []string{
@@ -227,8 +227,8 @@ func TestIsEmptyOrNilCertLocation(t *testing.T) {
 
 	obj = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("somename"),
-			SecretKey:  stringPtr("somekey"),
+			SecretName: "somename",
+			SecretKey:  "somekey",
 		},
 	}
 	assert.False(t, IsEmptyOrNilCertLocation(obj))
@@ -243,7 +243,7 @@ func TestIsEmptyOrNilCertLocation(t *testing.T) {
 
 	obj = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("somename"),
+			SecretName: "somename",
 		},
 	}
 	assert.True(t, IsEmptyOrNilCertLocation(obj))

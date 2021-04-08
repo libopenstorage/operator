@@ -671,12 +671,12 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 
 		apicert, apikey := "", ""
 		if !IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
-			apicert = path.Join(DefaultTLSServerCertMountPath, *advancedOptions.ServerCert.SecretRef.SecretKey)
+			apicert = path.Join(DefaultTLSServerCertMountPath, advancedOptions.ServerCert.SecretRef.SecretKey)
 		} else {
 			apicert = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerCert.FileName)
 		}
 		if !IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
-			apikey = path.Join(DefaultTLSServerKeyMountPath, *advancedOptions.ServerKey.SecretRef.SecretKey)
+			apikey = path.Join(DefaultTLSServerKeyMountPath, advancedOptions.ServerKey.SecretRef.SecretKey)
 		} else {
 			apikey = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerKey.FileName)
 		}
@@ -688,7 +688,7 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 		}
 		if !IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
 			if !IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
-				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, *advancedOptions.RootCA.SecretRef.SecretKey))
+				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, advancedOptions.RootCA.SecretRef.SecretKey))
 			} else if !IsEmptyOrNilStringPtr(advancedOptions.RootCA.FileName) {
 				args = append(args, "-apirootca", path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName))
 			}
@@ -715,7 +715,7 @@ func IsEmptyOrNilCertLocation(certLocation *corev1.CertLocation) bool {
 
 // IsEmptyOrNilSecretReference is a helper function that checks whether a SecretRef is empty
 func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
-	if sref == nil || sref.SecretName == nil || sref.SecretKey == nil {
+	if sref == nil || len(sref.SecretName) == 0 || len(sref.SecretKey) == 0 {
 		return true
 	}
 	return false
