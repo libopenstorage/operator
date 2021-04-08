@@ -41,6 +41,8 @@ const (
 	AutopilotDeploymentName = "autopilot"
 	// AutopilotContainerName name of the autopilot container
 	AutopilotContainerName = "autopilot"
+	// AutopilotDefaultProviderEndpoint endpoint of default provider
+	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
 
 	defaultAutopilotCPU = "0.1"
 )
