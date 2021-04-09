@@ -675,19 +675,31 @@ func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
 		return
 	}
 
+	caSpecified, certSpecified, keySpecified :=
+		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA),
+		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert),
+		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey)
+
 	// set default filenames
 	// defaults for tls.advancedOptions.rootCA
-	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA) {
-		logrus.Tracef("rootCA not specified - applying defaults")
-		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
+	if !caSpecified {
+		if !certSpecified && !keySpecified {
+			logrus.Tracef("rootCA not specified - applying defaults")
+			toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
+		} else {
+			logrus.Tracef("rootCA not specified, but cert and key specified. Assuming cert/key signed by well known CA, defaulting to empty rootCA value")
+			toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{}
+			// for certs signed by well known CA, no CA is supplied but cert/key pair is specified
+		}
 	}
+
 	// defaults for tls.advancedOptions.serverCert
-	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert) {
+	if !certSpecified {
 		logrus.Tracef("serverCert not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
 	}
 	// defaults for tls.advancedOptions.serverKey
-	if pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey) {
+	if !keySpecified {
 		logrus.Tracef("serverKey not specified - applying defaults")
 		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
 	}

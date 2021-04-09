@@ -152,9 +152,9 @@ type CertLocation struct {
 // SecretRef specifies which k8s secret portworx should pick up the certificate.
 type SecretRef struct {
 	// name of the k8s secret. Secret must live in the same namespace as the StorageCluster custom resource
-	SecretName *string `json:"secretName,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
 	// the key that contains the cert.
-	SecretKey *string `json:"secretKey,omitempty"`
+	SecretKey string `json:"secretKey,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
