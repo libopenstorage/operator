@@ -30,6 +30,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -92,6 +93,7 @@ func TestGetStorkDriverName(t *testing.T) {
 }
 
 func TestGetStorkEnvMap(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,6 +161,17 @@ func TestGetStorkEnvMap(t *testing.T) {
 		},
 		TLS: &corev1.TLSSpec{
 			Enabled: boolPtr(true),
+			AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
+				RootCA: &corev1.CertLocation{
+					FileName: stringPtr("somefile"),
+				},
+				ServerCert: &corev1.CertLocation{
+					FileName: stringPtr("certfile"),
+				},
+				ServerKey: &corev1.CertLocation{
+					FileName: stringPtr("keyfile"),
+				},
+			},
 		},
 	}
 	envVars = driver.GetStorkEnvMap(cluster)
@@ -174,6 +187,14 @@ func TestGetStorkEnvMap(t *testing.T) {
 	// PX_CA_CERT_SECRET_KEY env set
 	require.Equal(t, pxutil.EnvKeyCASecretKey, envVars[pxutil.EnvKeyCASecretKey].Name)
 	require.Equal(t, pxutil.DefaultCASecretKey, envVars[pxutil.EnvKeyCASecretKey].Value)
+
+	// validate commercially signed tls certificates (no CA cert supplied)
+	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = nil
+	envVars = driver.GetStorkEnvMap(cluster)
+	require.Len(t, envVars, 3)
+	// PX_ENABLE_TLS env set
+	require.Equal(t, pxutil.EnvKeyPortworxEnableTLS, envVars[pxutil.EnvKeyPortworxEnableTLS].Name)
+	require.Equal(t, "true", envVars[pxutil.EnvKeyPortworxEnableTLS].Value)
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
@@ -1634,8 +1655,8 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(nil, nil, nil)
 	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("rootcasecret"),
-			SecretKey:  stringPtr("rootcasecretkey"),
+			SecretName: "rootcasecret",
+			SecretKey:  "rootcasecretkey",
 		},
 	}
 	// test
@@ -1646,8 +1667,8 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	verifyTLSSpecFileNames(t, cluster, nil, stringPtr(pxutil.DefaultTLSServerCertHostFile), stringPtr(pxutil.DefaultTLSServerKeyHostFile))
 	// rootCA should be read from the secret
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef)
-	assert.Equal(t, stringPtr("rootcasecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretName)
-	assert.Equal(t, stringPtr("rootcasecretkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretKey)
+	assert.Equal(t, "rootcasecret", cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretName)
+	assert.Equal(t, "rootcasecretkey", cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.SecretRef.SecretKey)
 
 	// root ca not supplied, servercert and serverkey from secret
 	// setup
@@ -1655,14 +1676,14 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
 	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("somesecret"),
-			SecretKey:  stringPtr("somekey"),
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
 		},
 	}
 	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
-			SecretName: stringPtr("someothersecret"),
-			SecretKey:  stringPtr("someotherkey"),
+			SecretName: "someothersecret",
+			SecretKey:  "someotherkey",
 		},
 	}
 	// test
@@ -1670,14 +1691,14 @@ func TestTLSDefaultsWithOverrides(t *testing.T) {
 	t.Logf("Security spec under test = \n, %v", string(s))
 	driver.SetDefaultsOnStorageCluster(cluster)
 	// verify
-	verifyTLSSpecFileNames(t, cluster, stringPtr(pxutil.DefaultTLSCACertHostFile), nil, nil)
+	verifyTLSSpecFileNames(t, cluster, nil, nil, nil)
 	// rootCA should be read from the secret
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef)
 	assert.NotNil(t, cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef)
-	assert.Equal(t, stringPtr("somesecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretName)
-	assert.Equal(t, stringPtr("somekey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretKey)
-	assert.Equal(t, stringPtr("someothersecret"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretName)
-	assert.Equal(t, stringPtr("someotherkey"), cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretKey)
+	assert.Equal(t, "somesecret", cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretName)
+	assert.Equal(t, "somekey", cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.SecretRef.SecretKey)
+	assert.Equal(t, "someothersecret", cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretName)
+	assert.Equal(t, "someotherkey", cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.SecretRef.SecretKey)
 
 	// no filename supplied
 	// setup

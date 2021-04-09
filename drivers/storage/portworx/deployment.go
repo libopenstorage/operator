@@ -1332,8 +1332,8 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 func (t *template) getVolumeInfoFromCertLocation(certLocation corev1.CertLocation, volumeName, mountPath string) volumeInfo {
 	return volumeInfo{
 		name:       volumeName,
-		secretName: *certLocation.SecretRef.SecretName,
-		secretKey:  *certLocation.SecretRef.SecretKey,
+		secretName: certLocation.SecretRef.SecretName,
+		secretKey:  certLocation.SecretRef.SecretKey,
 		mountPath:  mountPath,
 		readOnly:   true,
 	}

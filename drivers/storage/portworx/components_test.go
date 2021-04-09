@@ -2687,6 +2687,7 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	}
 
 	// test
+	driver.SetDefaultsOnStorageCluster(cluster)
 	err := driver.PreInstall(cluster)
 
 	// validate
