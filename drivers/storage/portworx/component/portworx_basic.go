@@ -362,10 +362,12 @@ func getPortworxServiceSpec(
 	kvdbTargetPort := 9019
 	sdkTargetPort := 9020
 	restGatewayTargetPort := 9021
+	pxAPITLSPort := 9023
 	if startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = startPort + 15
 		sdkTargetPort = startPort + 16
 		restGatewayTargetPort = startPort + 17
+		pxAPITLSPort = startPort + 19
 	}
 
 	newService := &v1.Service{
@@ -401,6 +403,12 @@ func getPortworxServiceSpec(
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9021),
 					TargetPort: intstr.FromInt(restGatewayTargetPort),
+				},
+				{
+					Name:       pxutil.PortworxRESTTLSPortName,
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(9023),
+					TargetPort: intstr.FromInt(pxAPITLSPort),
 				},
 			},
 		},

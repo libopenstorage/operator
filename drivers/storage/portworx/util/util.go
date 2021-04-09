@@ -44,6 +44,8 @@ const (
 	PortworxServiceName = "portworx-service"
 	// PortworxRESTPortName name of the Portworx API port
 	PortworxRESTPortName = "px-api"
+	// PortworxRESTTLSPortName name of the Portworx API port that is secured through TLS
+	PortworxRESTTLSPortName = "px-api-tls"
 	// PortworxSDKPortName name of the Portworx SDK port
 	PortworxSDKPortName = "px-sdk"
 	// PortworxKVDBPortName name of the Portworx internal KVDB port

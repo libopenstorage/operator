@@ -90,9 +90,11 @@ func (c *portworxAPI) createService(
 	startPort := pxutil.StartPort(cluster)
 	sdkTargetPort := 9020
 	restGatewayTargetPort := 9021
+	pxAPITLSPort := 9023
 	if startPort != pxutil.DefaultStartPort {
 		sdkTargetPort = startPort + 16
 		restGatewayTargetPort = startPort + 17
+		pxAPITLSPort = startPort + 19
 	}
 
 	newService := &v1.Service{
@@ -123,6 +125,12 @@ func (c *portworxAPI) createService(
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9021),
 					TargetPort: intstr.FromInt(restGatewayTargetPort),
+				},
+				{
+					Name:       pxutil.PortworxRESTTLSPortName,
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(9023),
+					TargetPort: intstr.FromInt(pxAPITLSPort),
 				},
 			},
 		},
