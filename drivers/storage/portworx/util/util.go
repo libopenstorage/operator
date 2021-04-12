@@ -182,14 +182,6 @@ const (
 
 // TLS related constants
 const (
-	// DefaultTLSCertsFolder is the host location of tls cert files
-	DefaultTLSCertsFolder = "/etc/pwx"
-	// DefaultTLSCACertHostPath is the default file on the host for CA cert used by the porx API
-	DefaultTLSCACertHostFile = "rootca.crt"
-	// DefaultTLSServerCertHostPath is the default file on the host for the server cert used by the porx API
-	DefaultTLSServerCertHostFile = "server.crt"
-	// DefaultTLSServerKeyHostPath is the default file on the host for the server key used by the porx API
-	DefaultTLSServerKeyHostFile = "server.key"
 	// DefaultTLSCACertMountPath is the fixed location on the runc container where the CA cert will be mounted
 	DefaultTLSCACertMountPath = "/api-tls-certs/ca-cert/"
 	// DefaultTLSServerCertMountPath is the fixed location on the runc container where the server cert will be mounted
@@ -638,8 +630,8 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 		//      value: <default>
 		//    - name: PX_ENABLE_TLS
 		//	    value: "true"
-		if clusterSpec.Security.TLS.AdvancedTLSOptions != nil &&
-			!IsEmptyOrNilCertLocation(clusterSpec.Security.TLS.AdvancedTLSOptions.RootCA) {
+		if clusterSpec.Security.TLS != nil &&
+			!IsEmptyOrNilCertLocation(clusterSpec.Security.TLS.RootCA) {
 			// if no Root CA is specified, we assume server certs are signed by a well known cert authority. Do not need a CA
 			logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
 			envMap[EnvKeyCASecretName] = &v1.EnvVar{
@@ -660,25 +652,25 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 
 // GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
-	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil && cluster.Spec.Security.TLS.AdvancedTLSOptions != nil {
-		advancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-		if IsEmptyOrNilCertLocation(advancedOptions.ServerCert) {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverCert is required")
+	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil {
+		tls := cluster.Spec.Security.TLS
+		if IsEmptyOrNilCertLocation(tls.ServerCert) {
+			return nil, fmt.Errorf("spec.security.tls.serverCert is required")
 		}
-		if IsEmptyOrNilCertLocation(advancedOptions.ServerKey) {
-			return nil, fmt.Errorf("spec.security.tls.advancedOptions.serverKey is required")
+		if IsEmptyOrNilCertLocation(tls.ServerKey) {
+			return nil, fmt.Errorf("spec.security.tls.serverKey is required")
 		}
 
 		apicert, apikey := "", ""
-		if !IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
-			apicert = path.Join(DefaultTLSServerCertMountPath, advancedOptions.ServerCert.SecretRef.SecretKey)
+		if !IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
+			apicert = path.Join(DefaultTLSServerCertMountPath, tls.ServerCert.SecretRef.SecretKey)
 		} else {
-			apicert = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerCert.FileName)
+			apicert = *tls.ServerCert.FileName
 		}
-		if !IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
-			apikey = path.Join(DefaultTLSServerKeyMountPath, advancedOptions.ServerKey.SecretRef.SecretKey)
+		if !IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
+			apikey = path.Join(DefaultTLSServerKeyMountPath, tls.ServerKey.SecretRef.SecretKey)
 		} else {
-			apikey = path.Join(DefaultTLSCertsFolder, *advancedOptions.ServerKey.FileName)
+			apikey = *tls.ServerKey.FileName
 		}
 
 		args := []string{
@@ -686,11 +678,11 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 			"-apikey", apikey,
 			"-apidisclientauth",
 		}
-		if !IsEmptyOrNilCertLocation(advancedOptions.RootCA) {
-			if !IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
-				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, advancedOptions.RootCA.SecretRef.SecretKey))
-			} else if !IsEmptyOrNilStringPtr(advancedOptions.RootCA.FileName) {
-				args = append(args, "-apirootca", path.Join(DefaultTLSCertsFolder, *advancedOptions.RootCA.FileName))
+		if !IsEmptyOrNilCertLocation(tls.RootCA) {
+			if !IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
+				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, tls.RootCA.SecretRef.SecretKey))
+			} else if !IsEmptyOrNilStringPtr(tls.RootCA.FileName) {
+				args = append(args, "-apirootca", *tls.RootCA.FileName)
 			}
 		} else {
 			logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
@@ -698,7 +690,7 @@ func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) 
 
 		return args, nil
 	}
-	return nil, fmt.Errorf("spec.security.tls.advancedOptions is required")
+	return nil, fmt.Errorf("spec.security.tls is required")
 }
 
 // IsEmptyOrNilCertLocation is a helper function that checks whether a CertLocation is empty
@@ -716,6 +708,20 @@ func IsEmptyOrNilCertLocation(certLocation *corev1.CertLocation) bool {
 // IsEmptyOrNilSecretReference is a helper function that checks whether a SecretRef is empty
 func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
 	if sref == nil || len(sref.SecretName) == 0 || len(sref.SecretKey) == 0 {
+		return true
+	}
+	return false
+}
+
+// PartialSecretRef is a helper method that checks if a SecretRef is partially specified (i.e. only one of the needed cert name and key specified)
+func PartialSecretRef(sref *corev1.SecretRef) bool {
+	if sref == nil {
+		return false
+	}
+	X := len(sref.SecretName) > 0
+	Y := len(sref.SecretKey) > 0
+	// X xor Y -> (X || Y) && !(X && Y)
+	if (X || Y) && !(X && Y) {
 		return true
 	}
 	return false

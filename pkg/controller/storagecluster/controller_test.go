@@ -23,6 +23,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -277,6 +278,134 @@ func TestSingleClusterValidation(t *testing.T) {
 		fmt.Sprintf("%v %v only one StorageCluster is allowed in a Kubernetes cluster. "+
 			"StorageCluster %s/%s already exists", v1.EventTypeWarning, util.FailedValidationReason,
 			existingCluster.Namespace, existingCluster.Name))
+}
+
+func TestTLSSpecValidation(t *testing.T) {
+
+	logrus.SetLevel(logrus.TraceLevel)
+	caCertFileName := stringPtr("/etc/pwx/testCA.crt")
+	serverCertFileName := stringPtr("/etc/pwx/testServer.crt")
+	serverKeyFileName := stringPtr("/etc/pwx/testServer.key")
+
+	// missing ca cert
+	cluster := testutil.CreateClusterWithTLS(nil, serverCertFileName, serverKeyFileName)
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: must specify location of tls certificate as either file or kubernetes secret")
+
+	//// invalid values of ca cert
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{}
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: can not specify both filename and secretRef as source for tls certs")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+		},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "rootCA: for kubernetes secret must specify both name and key")
+
+	// missing serverCert
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, serverKeyFileName)
+	validateThatWarningEventIsRaised(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	//// invalid values of serverCert
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{}
+	validateThatWarningEventIsRaised(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverCert: can not specify both filename and secretRef as source for tls certs")
+
+	// missing serverKey
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, nil)
+	validateThatWarningEventIsRaised(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	//// invalid values of serverKey
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{}
+	validateThatWarningEventIsRaised(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaised(t, cluster, "serverKey: can not specify both filename and secretRef as source for tls certs")
+}
+
+func validateThatWarningEventIsRaised(t *testing.T, cluster *corev1.StorageCluster, warningStr string) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driver := testutil.MockDriver(mockCtrl)
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	recorder := record.NewFakeRecorder(10)
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		Driver:            driver,
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), warningStr)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events, warningStr)
 }
 
 func TestStorageClusterDefaults(t *testing.T) {
@@ -5270,7 +5399,6 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
-	// ml TODO: change of cert sources should result in pod being deleted/recreated
 	// TestCase: Change security to enabled
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -5401,6 +5529,15 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: testutil.BoolPtr(true),
+		RootCA: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/ca.crt"),
+		},
+		ServerCert: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.crt"),
+		},
+		ServerKey: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.key"),
+		},
 	}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
@@ -5418,16 +5555,14 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: testutil.BoolPtr(false),
-		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-			RootCA: &corev1.CertLocation{
-				FileName: stringPtr("defaultCA.crt"),
-			},
-			ServerCert: &corev1.CertLocation{
-				FileName: stringPtr("default.crt"),
-			},
-			ServerKey: &corev1.CertLocation{
-				FileName: stringPtr("default.key"),
-			},
+		RootCA: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/ca.crt"),
+		},
+		ServerCert: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.crt"),
+		},
+		ServerKey: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.key"),
 		},
 	}
 	err = k8sClient.Update(context.TODO(), cluster)
@@ -5460,7 +5595,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName = stringPtr("newca.crt")
+	cluster.Spec.Security.TLS.RootCA.FileName = stringPtr("/etc/pwx/newca.crt")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5476,7 +5611,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName = stringPtr("newcert.crt")
+	cluster.Spec.Security.TLS.ServerCert.FileName = stringPtr("/etc/pwx/newcert.crt")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5492,7 +5627,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName = stringPtr("new.key")
+	cluster.Spec.Security.TLS.ServerKey.FileName = stringPtr("/etc/pwx/new.key")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 

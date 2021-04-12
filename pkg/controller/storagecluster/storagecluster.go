@@ -30,6 +30,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -77,6 +78,7 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
+	supportedRootFolderForTLSCerts      = "/etc/pwx"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -220,6 +222,53 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	}
 	if err := c.validateSingleCluster(cluster); err != nil {
 		return err
+	}
+	if err := c.validateTLSSpecs(cluster); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) validateTLSSpecs(current *corev1.StorageCluster) error {
+	if pxutil.IsTLSEnabledOnCluster(&current.Spec) {
+		tls := current.Spec.Security.TLS
+		// validate that any file paths are rooted to our mounted folder: /etc/pwx
+		if err := validateCertLocation("rootCA", tls.RootCA); err != nil {
+			return err
+		}
+		if err := validateCertLocation("serverCert", tls.ServerCert); err != nil {
+			return err
+		}
+		if err := validateCertLocation("serverKey", tls.ServerKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCertLocation(certName string, certLocation *corev1.CertLocation) error {
+	// pxutil.IsEmptyOrNilCertLocation will also catch this scenario where no file specified, and only one of server cert or key specified
+	//   special casing here because we want a more helpful message than "must specify location of tls certificate as either file or kubernetes secret"
+	if certLocation != nil && pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) && certLocation.SecretRef != nil && pxutil.PartialSecretRef(certLocation.SecretRef) {
+		return fmt.Errorf("%s: for kubernetes secret must specify both name and key", certName)
+	}
+
+	// should not be nil
+	if pxutil.IsEmptyOrNilCertLocation(certLocation) {
+		return fmt.Errorf("%s: must specify location of tls certificate as either file or kubernetes secret", certName)
+	}
+
+	// should not specify both file location and k8s secret
+	if !pxutil.IsEmptyOrNilSecretReference(certLocation.SecretRef) && !pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) {
+		return fmt.Errorf("%s: can not specify both filename and secretRef as source for tls certs. ", certName)
+	}
+	// file must be under mounted folder /etc/pwx
+	if !pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) {
+		if strings.HasPrefix(*certLocation.FileName, supportedRootFolderForTLSCerts) {
+			return nil // all good
+		} else {
+			return fmt.Errorf("%s: file path (%s) not under folder %s", certName, *certLocation.FileName, supportedRootFolderForTLSCerts)
+		}
 	}
 	return nil
 }
@@ -921,6 +970,8 @@ func checkPredicates(
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
+	s, _ := json.MarshalIndent(cluster, "", "\t")
+	logrus.Tracef("setStorageClusterDefaults: cluster = \n, %v", string(s))
 
 	updateStrategy := &toUpdate.Spec.UpdateStrategy
 	if updateStrategy.Type == "" {

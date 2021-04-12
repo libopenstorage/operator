@@ -635,9 +635,9 @@ func isSecurityBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) b
 
 	// TLS enabled and certain field is updated
 	if util.IsTLSEnabledOnCluster(currentSpec) {
-		// safe to assume currentSpec.Security.TLS.AdvancedOptions is non-nil as it will always have defaults.
+		// safe to assume currentSpec.Security.TLS.RootCA/ServerCert/ServerKey is non-nil as it will always have defaults.
 		// individual fields may be nil though, so use DeepEqual to safely check for nil too.
-		if !reflect.DeepEqual(currentSpec.Security.TLS.AdvancedTLSOptions, oldSpec.Security.TLS.AdvancedTLSOptions) {
+		if !reflect.DeepEqual(currentSpec.Security.TLS, oldSpec.Security.TLS) {
 			logrus.Debug("tls cert source changed: security bounce required")
 			return true
 		}

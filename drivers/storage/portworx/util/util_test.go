@@ -12,14 +12,13 @@ import (
 
 func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// setup
-	caCertFileName := stringPtr("util_testCA.crt")
-	serverCertFileName := stringPtr("util_testServer.crt")
-	serverKeyFileName := stringPtr("util_testServer.key")
-	certRootPath := "/etc/pwx/"
+	caCertFileName := stringPtr("/etc/pwx/util_testCA.crt")
+	serverCertFileName := stringPtr("/etc/pwx/util_testServer.crt")
+	serverKeyFileName := stringPtr("/etc/pwx/util_testServer.key")
 	expectedArgs := []string{
-		"-apirootca", certRootPath + *caCertFileName,
-		"-apicert", certRootPath + *serverCertFileName,
-		"-apikey", certRootPath + *serverKeyFileName,
+		"-apirootca", *caCertFileName,
+		"-apicert", *serverCertFileName,
+		"-apikey", *serverKeyFileName,
 		"-apidisclientauth",
 	}
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
@@ -34,8 +33,8 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// rootCA from k8s secret, serverCert and serverKey from file
 	// setup
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
-	tlsAdvancedOptions := cluster.Spec.Security.TLS.AdvancedTLSOptions
-	tlsAdvancedOptions.RootCA = &corev1.CertLocation{
+	tls := cluster.Spec.Security.TLS
+	tls.RootCA = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
 			SecretName: "somesecret",
 			SecretKey:  "somekey",
@@ -43,8 +42,8 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	}
 	expectedArgs = []string{
 		"-apirootca", DefaultTLSCACertMountPath + "somekey",
-		"-apicert", certRootPath + *serverCertFileName,
-		"-apikey", certRootPath + *serverKeyFileName,
+		"-apicert", *serverCertFileName,
+		"-apikey", *serverKeyFileName,
 		"-apidisclientauth",
 	}
 	// test
@@ -56,21 +55,21 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	// serverCert and serverKey from k8s secret, rootCA from file
 	// setup
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
-	tlsAdvancedOptions = cluster.Spec.Security.TLS.AdvancedTLSOptions
-	tlsAdvancedOptions.ServerCert = &corev1.CertLocation{
+	tls = cluster.Spec.Security.TLS
+	tls.ServerCert = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
 			SecretName: "somesecret",
 			SecretKey:  "somekey",
 		},
 	}
-	tlsAdvancedOptions.ServerKey = &corev1.CertLocation{
+	tls.ServerKey = &corev1.CertLocation{
 		SecretRef: &corev1.SecretRef{
 			SecretName: "someothersecret",
 			SecretKey:  "someotherkey",
 		},
 	}
 	expectedArgs = []string{
-		"-apirootca", certRootPath + *caCertFileName,
+		"-apirootca", *caCertFileName,
 		"-apicert", DefaultTLSServerCertMountPath + "somekey",
 		"-apikey", DefaultTLSServerKeyMountPath + "someotherkey",
 		"-apidisclientauth",

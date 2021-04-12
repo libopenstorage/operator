@@ -2677,6 +2677,15 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 				},
 				TLS: &corev1.TLSSpec{
 					Enabled: boolPtr(true),
+					RootCA: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/ca.crt"),
+					},
+					ServerCert: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.crt"),
+					},
+					ServerKey: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.key"),
+					},
 				},
 			},
 			Autopilot: &corev1.AutopilotSpec{

@@ -1061,12 +1061,6 @@ func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName 
 			FileName: serverKeyFileName,
 		}
 	}
-	var advancedOptions *corev1.AdvancedTLSOptions = nil
-	advancedOptions = &corev1.AdvancedTLSOptions{
-		RootCA:     apicert,
-		ServerCert: serverCert,
-		ServerKey:  serverkey,
-	}
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1080,8 +1074,10 @@ func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName 
 					Enabled: BoolPtr(false),
 				},
 				TLS: &corev1.TLSSpec{
-					Enabled:            BoolPtr(true),
-					AdvancedTLSOptions: advancedOptions,
+					Enabled:    BoolPtr(true),
+					RootCA:     apicert,
+					ServerCert: serverCert,
+					ServerKey:  serverkey,
 				},
 			},
 		},
