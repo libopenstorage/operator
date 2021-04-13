@@ -585,6 +585,8 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 
 	updatedNodeSpecs := make([]corev1.NodeSpec, 0)
 	for _, nodeSpec := range toUpdate.Spec.Nodes {
+		// Populate node specs with all storage values, to make it explicit what values
+		// every node group is using.
 		nodeSpecCopy := nodeSpec.DeepCopy()
 		if nodeSpec.Storage == nil {
 			nodeSpecCopy.Storage = toUpdate.Spec.Storage.DeepCopy()
@@ -623,6 +625,38 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 				nodeSpecCopy.Storage.KvdbDevice = stringPtr(*toUpdate.Spec.Storage.KvdbDevice)
 			}
 		}
+
+		if toUpdate.Spec.CloudStorage != nil {
+			if nodeSpec.CloudStorage == nil {
+				nodeSpecCopy.CloudStorage = &corev1.CloudStorageNodeSpec{
+					CloudStorageCommon: *(toUpdate.Spec.CloudStorage.CloudStorageCommon.DeepCopy()),
+				}
+			} else {
+				if nodeSpecCopy.CloudStorage.DeviceSpecs == nil &&
+					toUpdate.Spec.CloudStorage.DeviceSpecs != nil {
+					deviceSpecs := append(make([]string, 0), *toUpdate.Spec.CloudStorage.DeviceSpecs...)
+					nodeSpecCopy.CloudStorage.DeviceSpecs = &deviceSpecs
+				}
+				if nodeSpecCopy.CloudStorage.JournalDeviceSpec == nil &&
+					toUpdate.Spec.CloudStorage.JournalDeviceSpec != nil {
+					nodeSpecCopy.CloudStorage.JournalDeviceSpec = stringPtr(*toUpdate.Spec.CloudStorage.JournalDeviceSpec)
+				}
+				if nodeSpecCopy.CloudStorage.SystemMdDeviceSpec == nil &&
+					toUpdate.Spec.CloudStorage.SystemMdDeviceSpec != nil {
+					nodeSpecCopy.CloudStorage.SystemMdDeviceSpec = stringPtr(*toUpdate.Spec.CloudStorage.SystemMdDeviceSpec)
+				}
+				if nodeSpecCopy.CloudStorage.KvdbDeviceSpec == nil &&
+					toUpdate.Spec.CloudStorage.KvdbDeviceSpec != nil {
+					nodeSpecCopy.CloudStorage.KvdbDeviceSpec = stringPtr(*toUpdate.Spec.CloudStorage.KvdbDeviceSpec)
+				}
+				if nodeSpecCopy.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
+					toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup != nil {
+					maxStorageNodes := *toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup
+					nodeSpecCopy.CloudStorage.MaxStorageNodesPerZonePerNodeGroup = &maxStorageNodes
+				}
+			}
+		}
+
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs

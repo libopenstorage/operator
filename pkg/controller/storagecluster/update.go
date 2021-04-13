@@ -677,6 +677,12 @@ func overwriteClusterSpecWithNodeSpec(
 	if nodeSpec.Storage != nil {
 		clusterSpec.Storage = nodeSpec.Storage.DeepCopy()
 	}
+	if nodeSpec.CloudStorage != nil {
+		if clusterSpec.CloudStorage == nil {
+			clusterSpec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+		clusterSpec.CloudStorage.CloudStorageCommon = *(nodeSpec.CloudStorage.CloudStorageCommon.DeepCopy())
+	}
 	if nodeSpec.Network != nil {
 		clusterSpec.Network = nodeSpec.Network.DeepCopy()
 	}

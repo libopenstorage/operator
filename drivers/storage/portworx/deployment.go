@@ -718,6 +718,9 @@ func (t *template) getArguments() []string {
 			*t.cluster.Spec.CloudStorage.KvdbDeviceSpec != "" {
 			args = append(args, "-kvdb_dev", *t.cluster.Spec.CloudStorage.KvdbDeviceSpec)
 		}
+		if t.cluster.Spec.CloudStorage.NodePoolLabel != "" {
+			args = append(args, "-node_pool_label", t.cluster.Spec.CloudStorage.NodePoolLabel)
+		}
 		if t.cluster.Spec.CloudStorage.MaxStorageNodes != nil &&
 			*t.cluster.Spec.CloudStorage.MaxStorageNodes > 0 {
 			args = append(args, "-max_drive_set_count",
@@ -726,12 +729,18 @@ func (t *template) getArguments() []string {
 		if t.cloudConfig != nil && t.cloudConfig.StorageInstancesPerZone > 0 {
 			args = append(args, "-max_storage_nodes_per_zone",
 				strconv.Itoa(int(t.cloudConfig.StorageInstancesPerZone)))
-		} else if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil &&
-			// cloudConfig is not generated use the max storage nodes per zone
-			// provided by the user
-			*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone > 0 {
-			args = append(args, "-max_storage_nodes_per_zone",
-				strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone)))
+		} else {
+			// cloudConfig is not generated use the storage limits provided by the user
+			if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil &&
+				*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone > 0 {
+				args = append(args, "-max_storage_nodes_per_zone",
+					strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZone)))
+			}
+			if t.cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup != nil &&
+				*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup > 0 {
+				args = append(args, "-max_storage_nodes_per_zone_per_nodegroup",
+					strconv.Itoa(int(*t.cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup)))
+			}
 		}
 	}
 
