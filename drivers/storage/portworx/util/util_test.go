@@ -252,6 +252,52 @@ func TestIsEmptyOrNilCertLocation(t *testing.T) {
 
 }
 
+func TestPartialSecretRef(t *testing.T) {
+	// happy
+	obj := &corev1.SecretRef{
+		SecretName: "a",
+		SecretKey:  "b",
+	}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	// no valid secret key
+	obj = &corev1.SecretRef{
+		SecretName: "a",
+		SecretKey:  "",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{
+		SecretName: "a",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	// no valid secret name
+	obj = &corev1.SecretRef{
+		SecretName: "",
+		SecretKey:  "b",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{
+		SecretKey: "b",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	// no valid secret key or name. Return false because it's empty, not partial
+	obj = &corev1.SecretRef{
+		SecretName: "",
+		SecretKey:  "",
+	}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	obj = nil
+	assert.False(t, IsPartialSecretRef(obj))
+}
+
 func createClusterWithAuth() *corev1.StorageCluster {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{

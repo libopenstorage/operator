@@ -249,7 +249,7 @@ func (c *Controller) validateTLSSpecs(current *corev1.StorageCluster) error {
 func validateCertLocation(certName string, certLocation *corev1.CertLocation) error {
 	// pxutil.IsEmptyOrNilCertLocation will also catch this scenario where no file specified, and only one of server cert or key specified
 	//   special casing here because we want a more helpful message than "must specify location of tls certificate as either file or kubernetes secret"
-	if certLocation != nil && pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) && certLocation.SecretRef != nil && pxutil.PartialSecretRef(certLocation.SecretRef) {
+	if certLocation != nil && pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) && certLocation.SecretRef != nil && pxutil.IsPartialSecretRef(certLocation.SecretRef) {
 		return fmt.Errorf("%s: for kubernetes secret must specify both name and key", certName)
 	}
 

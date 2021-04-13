@@ -713,8 +713,8 @@ func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
 	return false
 }
 
-// PartialSecretRef is a helper method that checks if a SecretRef is partially specified (i.e. only one of the needed cert name and key specified)
-func PartialSecretRef(sref *corev1.SecretRef) bool {
+// IsPartialSecretRef is a helper method that checks if a SecretRef is partially specified (i.e. only one of the needed cert name and key specified)
+func IsPartialSecretRef(sref *corev1.SecretRef) bool {
 	if sref == nil {
 		return false
 	}
