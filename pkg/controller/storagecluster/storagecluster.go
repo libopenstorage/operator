@@ -266,9 +266,9 @@ func validateCertLocation(certName string, certLocation *corev1.CertLocation) er
 	if !pxutil.IsEmptyOrNilStringPtr(certLocation.FileName) {
 		if strings.HasPrefix(*certLocation.FileName, supportedRootFolderForTLSCerts) {
 			return nil // all good
-		} else {
-			return fmt.Errorf("%s: file path (%s) not under folder %s", certName, *certLocation.FileName, supportedRootFolderForTLSCerts)
 		}
+		return fmt.Errorf("%s: file path (%s) not under folder %s", certName, *certLocation.FileName, supportedRootFolderForTLSCerts)
+
 	}
 	return nil
 }
