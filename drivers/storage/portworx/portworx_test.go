@@ -31,7 +31,6 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -6529,39 +6528,6 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
-}
-
-func verifyTLSSpecFileNames(t *testing.T, cluster *corev1.StorageCluster, caCertFileName, serverCertFileName, serverKeyFileName *string) {
-	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
-	t.Logf("Security spec under verification = \n, %v", string(s))
-	assert.NotNil(t, cluster.Spec.Security)
-	assert.NotNil(t, cluster.Spec.Security.TLS)
-	assert.NotNil(t, cluster.Spec.Security.TLS)
-	advancedOptions := cluster.Spec.Security.TLS
-	// validate Root CA
-	if caCertFileName != nil {
-		assert.NotNil(t, advancedOptions.RootCA)
-		assert.NotNil(t, advancedOptions.RootCA.FileName)
-		assert.Equal(t, *caCertFileName, *advancedOptions.RootCA.FileName)
-	} else {
-		assert.Nil(t, advancedOptions.RootCA.FileName)
-	}
-	// validate Server Cert (public key)
-	if serverCertFileName != nil {
-		assert.NotNil(t, advancedOptions.ServerCert)
-		assert.NotNil(t, advancedOptions.ServerCert.FileName)
-		assert.Equal(t, *serverCertFileName, *advancedOptions.ServerCert.FileName)
-	} else {
-		assert.Nil(t, advancedOptions.ServerCert.FileName)
-	}
-	// validate Server (private) key
-	if serverKeyFileName != nil {
-		assert.NotNil(t, advancedOptions.ServerKey)
-		assert.NotNil(t, advancedOptions.ServerKey.FileName)
-		assert.Equal(t, *serverKeyFileName, *advancedOptions.ServerKey.FileName)
-	} else {
-		assert.Nil(t, advancedOptions.ServerKey.FileName)
-	}
 }
 
 type fakeManifest struct{}
