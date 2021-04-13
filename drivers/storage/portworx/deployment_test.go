@@ -782,7 +782,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
 			CloudStorage: &corev1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal")},
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					JournalDeviceSpec: stringPtr("type=journal")},
+			},
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(
@@ -819,7 +821,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Empty journal device
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		JournalDeviceSpec: stringPtr(""),
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			JournalDeviceSpec: stringPtr(""),
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -832,7 +836,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Metadata device
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		SystemMdDeviceSpec: stringPtr("type=metadata"),
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			SystemMdDeviceSpec: stringPtr("type=metadata"),
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -845,7 +851,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Empty metadata device
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		SystemMdDeviceSpec: stringPtr(""),
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			SystemMdDeviceSpec: stringPtr(""),
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -858,7 +866,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Kvdb device
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		KvdbDeviceSpec: stringPtr("type=kvdb"),
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			KvdbDeviceSpec: stringPtr("type=kvdb"),
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -871,7 +881,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	// Empty kvdb device
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		KvdbDeviceSpec: stringPtr(""),
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			KvdbDeviceSpec: stringPtr(""),
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -885,7 +897,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	// Storage device specs
 	devices := []string{"type=one", "type=two", "type=three"}
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		DeviceSpecs: &devices,
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: &devices,
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -903,7 +917,9 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	// Storage device specs empty
 	devices = []string{}
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		DeviceSpecs: &devices,
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: &devices,
+		},
 	}
 	expectedArgs = []string{
 		"-c", "px-cluster",
@@ -913,6 +929,19 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Node pool label
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		NodePoolLabel: "px-storage-type",
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-node_pool_label", "px-storage-type",
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	// Max storage nodes
@@ -1079,7 +1108,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
 	assert.Equal(t, 1, len(list), "expected storage nodes in list")
 
-	// Nil cloud config but max storage nodes per zone is set
+	// TestCase: Nil cloud config but max storage nodes per zone is set
 	expectedArgs = []string{
 		"-c", "px-cluster",
 		"-x", "kubernetes",
@@ -1090,6 +1119,28 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	maxStorageNodesPerZone := uint32(2)
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 		MaxStorageNodesPerZone: &maxStorageNodesPerZone,
+	}
+
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	list, err = driver.storageNodesList(cluster)
+	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
+	assert.Equal(t, 1, len(list), "expected storage nodes in list")
+
+	// TestCase: Nil cloud config but max storage nodes per zone per node group is set
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-max_storage_nodes_per_zone_per_nodegroup", "3",
+	}
+
+	// Empty cloud config
+	maxStorageNodesPerZonePerNodeGroup := uint32(3)
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			MaxStorageNodesPerZonePerNodeGroup: &maxStorageNodesPerZonePerNodeGroup,
+		},
 	}
 
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
@@ -1139,7 +1190,9 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 	nodeName := "testNode"
 
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		DeviceSpecs: &deviceSpecs,
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: &deviceSpecs,
+		},
 		CapacitySpecs: []corev1.CloudStorageCapacitySpec{
 			{
 				MinIOPS:          uint32(100),
@@ -1232,7 +1285,9 @@ func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
 				},
 			},
 			CloudStorage: &corev1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal"),
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					JournalDeviceSpec: stringPtr("type=journal"),
+				},
 			},
 		},
 	}
@@ -2572,7 +2627,9 @@ func TestStorageNodeConfig(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.0.3.4",
 			CloudStorage: &corev1.CloudStorageSpec{
-				JournalDeviceSpec: stringPtr("type=journal")},
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					JournalDeviceSpec: stringPtr("type=journal")},
+			},
 		},
 	}
 

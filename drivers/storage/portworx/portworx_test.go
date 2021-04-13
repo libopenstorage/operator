@@ -968,7 +968,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigMapReload)
 }
 
-func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
+func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
@@ -1153,6 +1153,97 @@ func TestStorageClusterDefaultsForNodeSpecs(t *testing.T) {
 	require.Equal(t, "node-journal", *cluster.Spec.Nodes[0].Storage.JournalDevice)
 	require.Equal(t, "node-metadata", *cluster.Spec.Nodes[0].Storage.SystemMdDevice)
 	require.Equal(t, "node-kvdb", *cluster.Spec.Nodes[0].Storage.KvdbDevice)
+}
+
+func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Node specs should be nil if already nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Nodes)
+
+	// Node specs should be empty if already empty
+	cluster.Spec.Nodes = make([]corev1.NodeSpec, 0)
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Len(t, cluster.Spec.Nodes, 0)
+
+	// Empty cloudstorage spec at node level should copy spec from cluster level
+	cluster.Spec.Nodes = []corev1.NodeSpec{{}}
+	clusterStorageSpec := &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			JournalDeviceSpec: stringPtr("type=journal"),
+		},
+	}
+	cluster.Spec.CloudStorage = clusterStorageSpec.DeepCopy()
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, clusterStorageSpec.CloudStorageCommon, cluster.Spec.Nodes[0].CloudStorage.CloudStorageCommon)
+
+	// Do not set node spec cloudstorage fields if not set at the cluster level
+	cluster.Spec.CloudStorage = nil
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			CloudStorage: &corev1.CloudStorageNodeSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
+	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
+	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
+	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
+	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
+
+	// Set node spec cloudstorage fields from cluster cloudstorage spec, if empty at node level
+	clusterDeviceSpecs := []string{"type=dev1", "type=dev2"}
+	maxStorageNodes := uint32(3)
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs:                        &clusterDeviceSpecs,
+			JournalDeviceSpec:                  stringPtr("type=journal"),
+			SystemMdDeviceSpec:                 stringPtr("type=metadata"),
+			KvdbDeviceSpec:                     stringPtr("type=kvdb"),
+			MaxStorageNodesPerZonePerNodeGroup: &maxStorageNodes,
+		},
+	}
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			CloudStorage: &corev1.CloudStorageNodeSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.ElementsMatch(t, clusterDeviceSpecs, *cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
+	require.Equal(t, "type=journal", *cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
+	require.Equal(t, "type=metadata", *cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
+	require.Equal(t, "type=kvdb", *cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
+	require.Equal(t, maxStorageNodes, *cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
+
+	// Should not overwrite storage spec from cluster level, if present at node level
+	nodeDeviceSpecs := []string{"type=node-dev1", "type=node-dev2"}
+	maxStorageNodesForNodeGroup := uint32(3)
+	cluster.Spec.Nodes[0].CloudStorage = &corev1.CloudStorageNodeSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs:                        &nodeDeviceSpecs,
+			JournalDeviceSpec:                  stringPtr("type=node-journal"),
+			SystemMdDeviceSpec:                 stringPtr("type=node-metadata"),
+			KvdbDeviceSpec:                     stringPtr("type=node-kvdb"),
+			MaxStorageNodesPerZonePerNodeGroup: &maxStorageNodesForNodeGroup,
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.ElementsMatch(t, nodeDeviceSpecs, *cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
+	require.Equal(t, "type=node-journal", *cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
+	require.Equal(t, "type=node-metadata", *cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
+	require.Equal(t, "type=node-kvdb", *cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
+	require.Equal(t, maxStorageNodesForNodeGroup, *cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
 }
 
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
