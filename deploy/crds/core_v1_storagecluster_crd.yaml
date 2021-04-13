@@ -329,11 +329,22 @@ spec:
                   format: int32
                   minimum: 0
                   description: Maximum nodes in every zone that will have storage in the cluster.
+                maxStorageNodesPerZonePerNodeGroup:
+                  type: integer
+                  format: int32
+                  minimum: 0
+                  description: Maximum nodes in every zone in every node group that will have storage
+                    in the cluster.
+                nodePoolLabel:
+                  type: string
+                  description: Kubernetes node label key with which nodes are grouped into node pools
+                    for storage distribution in cloud environment.
                 deviceSpecs:
                   type: array
                   description: List of storage device specs. A cloud storage device will be created
                     for every spec in the list. The specs will be applied to all nodes in the cluster
-                    up to spec.cloudStorage.maxStorageNodes or spec.cloudStorage.maxStorageNodesPerZone.
+                    up to spec.cloudStorage.maxStorageNodes or spec.cloudStorage.maxStorageNodesPerZone
+                    or spec.cloudStorage.maxStorageNodesPerZonePerNodeGroup.
                     This will be ignored if spec.cloudStorage.capacitySpecs is present.
                   items:
                     type: string
@@ -1100,6 +1111,35 @@ spec:
                       kvdbDevice:
                         type: string
                         description: Device used for internal KVDB.
+                  cloudStorage:
+                    type: object
+                    description: Details of storage used in cloud environment.
+                    properties:
+                      deviceSpecs:
+                        type: array
+                        description: List of storage device specs. A cloud storage device will be created
+                          for every spec in the list. The specs will be applied to all nodes in the cluster
+                          that match the node group selector. The number of nodes that will come up with
+                          storage are constrained by maxStorageNodes, maxStorageNodesPerZone and
+                          maxStorageNodesPerZonePerNodeGroup.
+                        items:
+                          type: string
+                      journalDeviceSpec:
+                        type: string
+                        description: Device spec for the journal device.
+                      systemMetadataDeviceSpec:
+                        type: string
+                        description: Device spec for the metadata device. This device will be used to store
+                          system metadata by the driver.
+                      kvdbDeviceSpec:
+                        type: string
+                        description: Device spec for internal KVDB device.
+                      maxStorageNodesPerZonePerNodeGroup:
+                        type: integer
+                        format: int32
+                        minimum: 0
+                        description: Maximum nodes in every zone in every node group that will have storage
+                          in the cluster.
                   network:
                     type: object
                     description: Contains network information that is needed by the storage driver.
