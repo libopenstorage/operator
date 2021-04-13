@@ -914,6 +914,11 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					"rt_two": "rt_val_2",
 				},
 			},
+			CloudStorage: &corev1.CloudStorageNodeSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
+				},
+			},
 		},
 		{
 			// Match using a label selector
@@ -1093,6 +1098,8 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
+				require.Equal(t, cluster.Spec.Nodes[0].CloudStorage.CloudStorageCommon,
+					c.Spec.CloudStorage.CloudStorageCommon)
 				require.Equal(t, cluster.Spec.Nodes[0].Network, c.Spec.Network)
 				require.Equal(t, cluster.Spec.Nodes[0].RuntimeOpts, c.Spec.RuntimeOpts)
 				expectedEnv := []v1.EnvVar{
@@ -3470,7 +3477,9 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	// TestCase: Add spec.cloudStorage.deviceSpecs
 	deviceSpecs := []string{"spec1", "spec2"}
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-		DeviceSpecs: &deviceSpecs,
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: &deviceSpecs,
+		},
 	}
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -3560,6 +3569,18 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
+	// TestCase: Change spec.cloudStorage.nodePoolLabel
+	nodePoolLabel := "node-pool-label"
+	cluster.Spec.CloudStorage.NodePoolLabel = nodePoolLabel
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
 	// TestCase: Change spec.cloudStorage.maxStorageNodes
 	maxStorageNodes := uint32(3)
 	cluster.Spec.CloudStorage.MaxStorageNodes = &maxStorageNodes
@@ -3574,6 +3595,17 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 
 	// TestCase: Change spec.cloudStorage.maxStorageNodesPerZone
 	cluster.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodes
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.cloudStorage.maxStorageNodesPerZonePerNodeGroup
+	cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup = &maxStorageNodes
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -4516,6 +4548,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// TestCase: Add node specific storage configuration.
 	// Should start with that instead of cluster level configuration.
 	devices := []string{"dev1", "dev2"}
+	deviceSpecs := []string{"type=dev1", "type=dev2"}
 	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
 			Selector: corev1.NodeSelector{
@@ -4545,6 +4578,11 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 				},
 				RuntimeOpts: map[string]string{
 					"node_rt_1": "node_rt_value_1",
+				},
+			},
+			CloudStorage: &corev1.CloudStorageNodeSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs: &deviceSpecs,
 				},
 			},
 		},
@@ -4619,6 +4657,28 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
 	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
 	k8sClient.Update(context.TODO(), oldPod)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change node specific cloudstorage configuration.
+	newDeviceSpecs := []string{"type=dev1", "type=dev2", "type=dev3"}
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs = &newDeviceSpecs
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	revs = &appsv1.ControllerRevisionList{}
+	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
+	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = revs.Items[len(revs.Items)-1].Labels[defaultStorageClusterUniqueLabelKey]
+	err = k8sClient.Update(context.TODO(), oldPod)
+	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
 
