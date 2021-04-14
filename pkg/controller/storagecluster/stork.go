@@ -208,13 +208,15 @@ func (c *Controller) createStorkConfigMap(
 }
 
 func (c *Controller) createStorkSnapshotStorageClass() error {
+	allowVolumeExpansion := true
 	return k8sutil.CreateStorageClass(
 		c.client,
 		&storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: storkSnapshotStorageClassName,
 			},
-			Provisioner: "stork-snapshot",
+			Provisioner:          "stork-snapshot",
+			AllowVolumeExpansion: &allowVolumeExpansion,
 		},
 	)
 }
