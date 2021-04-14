@@ -246,6 +246,7 @@ func TestStorkInstallation(t *testing.T) {
 	require.Equal(t, storkSnapshotStorageClassName, storkStorageClass.Name)
 	require.Empty(t, storkStorageClass.OwnerReferences)
 	require.Equal(t, "stork-snapshot", storkStorageClass.Provisioner)
+	require.True(t, *storkStorageClass.AllowVolumeExpansion)
 }
 
 func TestStorkWithoutImage(t *testing.T) {
