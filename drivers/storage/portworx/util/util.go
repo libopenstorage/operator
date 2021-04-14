@@ -630,17 +630,32 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 		//      value: <default>
 		//    - name: PX_ENABLE_TLS
 		//	    value: "true"
-		if clusterSpec.Security.TLS != nil &&
-			!IsEmptyOrNilCertLocation(clusterSpec.Security.TLS.RootCA) {
+		if clusterSpec.Security.TLS != nil && !IsEmptyOrNilCertLocation(clusterSpec.Security.TLS.RootCA) {
 			// if no Root CA is specified, we assume server certs are signed by a well known cert authority. Do not need a CA
-			logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
-			envMap[EnvKeyCASecretName] = &v1.EnvVar{
-				Name:  EnvKeyCASecretName,
-				Value: DefaultCASecretName,
-			}
-			envMap[EnvKeyCASecretKey] = &v1.EnvVar{
-				Name:  EnvKeyCASecretKey,
-				Value: DefaultCASecretKey,
+
+			// if the user specified a CA cert though k8s secret in spec.tls.rootCA.secretRef, use that
+			if !IsEmptyOrNilSecretReference(clusterSpec.Security.TLS.RootCA.SecretRef) {
+				rootCASecret := clusterSpec.Security.TLS.RootCA.SecretRef
+				logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+				envMap[EnvKeyCASecretName] = &v1.EnvVar{
+					Name:  EnvKeyCASecretName,
+					Value: rootCASecret.SecretName,
+				}
+				envMap[EnvKeyCASecretKey] = &v1.EnvVar{
+					Name:  EnvKeyCASecretKey,
+					Value: rootCASecret.SecretKey,
+				}
+			} else {
+				// The user installed a CA cert on the host file system. We assume that user has also uploaded it to the default k8s secret with the default key
+				logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+				envMap[EnvKeyCASecretName] = &v1.EnvVar{
+					Name:  EnvKeyCASecretName,
+					Value: DefaultCASecretName,
+				}
+				envMap[EnvKeyCASecretKey] = &v1.EnvVar{
+					Name:  EnvKeyCASecretKey,
+					Value: DefaultCASecretKey,
+				}
 			}
 		}
 		envMap[EnvKeyPortworxEnableTLS] = &v1.EnvVar{
@@ -708,20 +723,6 @@ func IsEmptyOrNilCertLocation(certLocation *corev1.CertLocation) bool {
 // IsEmptyOrNilSecretReference is a helper function that checks whether a SecretRef is empty
 func IsEmptyOrNilSecretReference(sref *corev1.SecretRef) bool {
 	if sref == nil || len(sref.SecretName) == 0 || len(sref.SecretKey) == 0 {
-		return true
-	}
-	return false
-}
-
-// IsPartialSecretRef is a helper method that checks if a SecretRef is partially specified (i.e. only one of the needed cert name and key specified)
-func IsPartialSecretRef(sref *corev1.SecretRef) bool {
-	if sref == nil {
-		return false
-	}
-	X := len(sref.SecretName) > 0
-	Y := len(sref.SecretKey) > 0
-	// X xor Y -> (X || Y) && !(X && Y)
-	if (X || Y) && !(X && Y) {
 		return true
 	}
 	return false
