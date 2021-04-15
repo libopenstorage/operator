@@ -16,7 +16,7 @@ import (
 const (
 	// TLSComponentName is the name for registering this component
 	TLSComponentName = "TLS"
-	// SupportedRootFolderForTLSCerts: all TLS cert files need to be placed here or in a subfolder.
+	// SupportedRootFolderForTLSCerts is where all TLS cert files need to be placed (or in a subfolder)
 	SupportedRootFolderForTLSCerts = "/etc/pwx"
 )
 
@@ -111,7 +111,7 @@ func (t *tls) Delete(cluster *corev1.StorageCluster) error {
 func (t *tls) MarkDeleted() {
 }
 
-// RegisterAuthComponent registers the auth component
+// RegisterTLSComponent registers the TLS component
 func RegisterTLSComponent() {
 	Register(TLSComponentName, &tls{})
 }
