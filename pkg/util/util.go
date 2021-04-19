@@ -184,8 +184,5 @@ func IsPartialSecretRef(sref *corev1.SecretRef) bool {
 	x := len(sref.SecretName) > 0
 	y := len(sref.SecretKey) > 0
 	// X xor Y -> (X || Y) && !(X && Y)
-	if (x || y) && !(x && y) {
-		return true
-	}
-	return false
+	return (x || y) && !(x && y)
 }
