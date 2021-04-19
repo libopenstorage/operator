@@ -5330,7 +5330,6 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
-	// ml TODO: change of cert sources should result in pod being deleted/recreated
 	// TestCase: Change security to enabled
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -5461,6 +5460,15 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: testutil.BoolPtr(true),
+		RootCA: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/ca.crt"),
+		},
+		ServerCert: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.crt"),
+		},
+		ServerKey: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.key"),
+		},
 	}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
@@ -5478,16 +5486,14 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Spec.Security.TLS = &corev1.TLSSpec{
 		Enabled: testutil.BoolPtr(false),
-		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-			RootCA: &corev1.CertLocation{
-				FileName: stringPtr("defaultCA.crt"),
-			},
-			ServerCert: &corev1.CertLocation{
-				FileName: stringPtr("default.crt"),
-			},
-			ServerKey: &corev1.CertLocation{
-				FileName: stringPtr("default.key"),
-			},
+		RootCA: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/ca.crt"),
+		},
+		ServerCert: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.crt"),
+		},
+		ServerKey: &corev1.CertLocation{
+			FileName: stringPtr("/etc/pwx/server.key"),
 		},
 	}
 	err = k8sClient.Update(context.TODO(), cluster)
@@ -5520,7 +5526,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.RootCA.FileName = stringPtr("newca.crt")
+	cluster.Spec.Security.TLS.RootCA.FileName = stringPtr("/etc/pwx/newca.crt")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5536,7 +5542,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerCert.FileName = stringPtr("newcert.crt")
+	cluster.Spec.Security.TLS.ServerCert.FileName = stringPtr("/etc/pwx/newcert.crt")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5552,7 +5558,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	cluster.Spec.Security.TLS.AdvancedTLSOptions.ServerKey.FileName = stringPtr("new.key")
+	cluster.Spec.Security.TLS.ServerKey.FileName = stringPtr("/etc/pwx/new.key")
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 

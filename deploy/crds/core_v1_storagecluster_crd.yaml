@@ -898,35 +898,61 @@ spec:
                     enabled:
                       type: boolean
                       description: Flag indicating whether TLS features need to be enabled for the storage 
-                        cluster. If omited take the value of the parent flag (security.enabled)
-                    advancedOptions:
+                        cluster. Must be supplied and enabled (true) for TLS to be enabled.
+                    rootCA:
                       type: object
-                      description: Overrides for the default values in the parent tls section.
+                      description: The source of the CA certificate.
                       properties:
-                        rootCA:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a certificate file installed in the same location 
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/ca.crt
+                        secretRef:
                           type: object
-                          description: Overrides the source of the CA certificate specified in the tls section.
+                          description: The k8s secret supplying the certificate
                           properties:
-                            filename:
+                            secretName:
                               type: string
-                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
-                                folder on each node i.e. /etc/pwx.
-                        serverCert:
+                              description: The name of the secret holding the certificate
+                            secretKey:
+                              type: string
+                              description: The key that contains the certificate
+                    serverCert:
+                      type: object
+                      description: The source of the public key certificate used by the portworx service for TLS.
+                      properties:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a certificate file installed in the same location 
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.crt
+                        secretRef:
                           type: object
-                          description: Overrides the source of the public key certificate used by the portworx service for TLS.
+                          description: The k8s secret supplying the certificate
                           properties:
-                            filename:
+                            secretName:
                               type: string
-                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
-                                folder on each node i.e. /etc/pwx.
-                        serverKey:
+                              description: The name of the secret holding the certificate
+                            secretKey:
+                              type: string
+                              description: The secret key that contains the certificate
+                    serverKey:
+                      type: object
+                      description: Overrides the source of the private key certificate used by the portworx service for TLS.
+                      properties:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a private key file installed in the same location 
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.key
+                        secretRef:
                           type: object
-                          description: Overrides the source of the private key certificate used by the portworx service for TLS.
+                          description: The k8s secret supplying the private key
                           properties:
-                            filename:
+                            secretName:
                               type: string
-                              description: If provided, Portworx will expect a certificate file installed in the default Portworx certificate
-                                folder on each node i.e. /etc/pwx.
+                              description: The name of the secret holding the private key
+                            secretKey:
+                              type: string
+                              description: The secret key that contains the private key
             env:
               type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes

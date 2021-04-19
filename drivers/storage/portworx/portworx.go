@@ -663,82 +663,6 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 	toUpdate.Spec.Nodes = updatedNodeSpecs
 }
 
-func setTLSSpecDefaults(toUpdate *corev1.StorageCluster) {
-	defaultTLSTemplate := &corev1.TLSSpec{
-		Enabled: boolPtr(false),
-		AdvancedTLSOptions: &corev1.AdvancedTLSOptions{
-			RootCA: &corev1.CertLocation{
-				FileName: stringPtr(pxutil.DefaultTLSCACertHostFile),
-			},
-			ServerCert: &corev1.CertLocation{
-				FileName: stringPtr(pxutil.DefaultTLSServerCertHostFile),
-			},
-			ServerKey: &corev1.CertLocation{
-				FileName: stringPtr(pxutil.DefaultTLSServerKeyHostFile),
-			},
-		},
-	}
-
-	if toUpdate.Spec.Security == nil {
-		logrus.Tracef("No security section - tls defaults not needed")
-		return // nothing to do
-	}
-
-	if !pxutil.IsTLSEnabledOnCluster(&toUpdate.Spec) {
-		logrus.Tracef("TLS is not enabled - tls defaults not needed")
-		return // nothing to do
-	}
-
-	// We know TLS is enabled, if there are any settings missing, apply defaults
-	if toUpdate.Spec.Security.TLS == nil {
-		// apply default TLS section.
-		logrus.Tracef("TLS is enabled, but no TLS settings specified. Default values will be applied")
-		toUpdate.Spec.Security.TLS = defaultTLSTemplate
-		return
-	}
-
-	// disabled by default
-	if toUpdate.Spec.Security.TLS.Enabled == nil {
-		toUpdate.Spec.Security.TLS.Enabled = boolPtr(false)
-	}
-
-	if toUpdate.Spec.Security.TLS.AdvancedTLSOptions == nil {
-		// apply defaults for all of tls.advancedOptions
-		logrus.Tracef("TLS is enabled, but no advancedOptions specified. Default values will be applied")
-		toUpdate.Spec.Security.TLS.AdvancedTLSOptions = defaultTLSTemplate.AdvancedTLSOptions
-		return
-	}
-
-	caSpecified, certSpecified, keySpecified :=
-		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA),
-		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert),
-		!pxutil.IsEmptyOrNilCertLocation(toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey)
-
-	// set default filenames
-	// defaults for tls.advancedOptions.rootCA
-	if !caSpecified {
-		if !certSpecified && !keySpecified {
-			logrus.Tracef("rootCA not specified - applying defaults")
-			toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = defaultTLSTemplate.AdvancedTLSOptions.RootCA
-		} else {
-			logrus.Tracef("rootCA not specified, but cert and key specified. Assuming cert/key signed by well known CA, defaulting to empty rootCA value")
-			toUpdate.Spec.Security.TLS.AdvancedTLSOptions.RootCA = &corev1.CertLocation{}
-			// for certs signed by well known CA, no CA is supplied but cert/key pair is specified
-		}
-	}
-
-	// defaults for tls.advancedOptions.serverCert
-	if !certSpecified {
-		logrus.Tracef("serverCert not specified - applying defaults")
-		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerCert = defaultTLSTemplate.AdvancedTLSOptions.ServerCert
-	}
-	// defaults for tls.advancedOptions.serverKey
-	if !keySpecified {
-		logrus.Tracef("serverKey not specified - applying defaults")
-		toUpdate.Spec.Security.TLS.AdvancedTLSOptions.ServerKey = defaultTLSTemplate.AdvancedTLSOptions.ServerKey
-	}
-}
-
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	// all default values if one is not provided below.
 	defaultAuthTemplate := &corev1.AuthSpec{
@@ -784,8 +708,6 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 			}
 		}
 	}
-
-	setTLSSpecDefaults(toUpdate)
 }
 
 func setDefaultAutopilotProviders(

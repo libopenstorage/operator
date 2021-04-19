@@ -1314,17 +1314,17 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 		return []volumeInfo{}
 	}
 
-	// TLS.AdvancedTLSOptions is assumed to be filled up here with defaults (if not supplied by the user)
-	advancedOptions := t.cluster.Spec.Security.TLS.AdvancedTLSOptions
+	// TLS is assumed to be filled up here with defaults (validated by storagecluster controller. See validateTLSSpecs() )
+	tls := t.cluster.Spec.Security.TLS
 	ret := []volumeInfo{}
-	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.RootCA.SecretRef) {
-		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
+	if !pxutil.IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
 	}
-	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.ServerCert.SecretRef) {
-		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerCert, "apiservercert", pxutil.DefaultTLSServerCertMountPath))
+	if !pxutil.IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.ServerCert, "apiservercert", pxutil.DefaultTLSServerCertMountPath))
 	}
-	if !pxutil.IsEmptyOrNilSecretReference(advancedOptions.ServerKey.SecretRef) {
-		ret = append(ret, t.getVolumeInfoFromCertLocation(*advancedOptions.ServerKey, "apiserverkey", pxutil.DefaultTLSServerKeyMountPath))
+	if !pxutil.IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.ServerKey, "apiserverkey", pxutil.DefaultTLSServerKeyMountPath))
 	}
 	return ret
 }

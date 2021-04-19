@@ -124,12 +124,6 @@ type VolumeSpec struct {
 type TLSSpec struct {
 	// Defaults to parent (i.e. if missing, takes value from spec.security.enabled )
 	Enabled *bool `json:"enabled,omitempty"`
-	// AdvancedTLSOptions provides overrides to the information specified in the spec.security.tls.certSecret
-	AdvancedTLSOptions *AdvancedTLSOptions `json:"advancedOptions,omitempty"`
-}
-
-// AdvancedTLSOptions is a reference to TLS certificates
-type AdvancedTLSOptions struct {
 	// RootCA defines the location of the Root CA certificate needed to enable TLS
 	RootCA *CertLocation `json:"rootCA,omitempty"`
 	// ServerCert defines the location of the Server certificate (public key) certificate needed to enable TLS
@@ -141,7 +135,7 @@ type AdvancedTLSOptions struct {
 // CertLocation specifies where portworx should pick up the certificate.
 // Certificate can be in a file on a fixed location or in a secret
 type CertLocation struct {
-	// filename on the node for the cert file. All files must be installed on a fixed location (/etc/pwx)
+	// file name with path on the node for the cert file. Currently all files must be installed on a subfolder under /etc/pwx
 	FileName *string `json:"filename,omitempty"`
 	// reference to the k8s secret that holds the cert
 	SecretRef *SecretRef `json:"secretRef,omitempty"`

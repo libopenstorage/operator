@@ -175,3 +175,14 @@ func ExtractVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v1
 
 	return volumes, volumeMounts
 }
+
+// IsPartialSecretRef is a helper method that checks if a SecretRef is partially specified (i.e. only one of the needed cert name and key specified)
+func IsPartialSecretRef(sref *corev1.SecretRef) bool {
+	if sref == nil {
+		return false
+	}
+	x := len(sref.SecretName) > 0
+	y := len(sref.SecretKey) > 0
+	// X xor Y -> (X || Y) && !(X && Y)
+	return (x || y) && !(x && y)
+}
