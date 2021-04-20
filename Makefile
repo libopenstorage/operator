@@ -75,6 +75,9 @@ $(GOPATH)/bin/errcheck:
 $(GOPATH)/bin/staticcheck:
 	go get -u honnef.co/go/tools/cmd/staticcheck
 
+$(GOPATH)/bin/revive:
+	go get -u github.com/mgechev/revive
+
 $(GOPATH)/bin/gomock:
 	go get -u github.com/golang/mock/gomock
 
@@ -95,16 +98,24 @@ lint: $(GOPATH)/bin/golint
 	done
 
 vet:
-	go vet $(PKGS)
+	# go vet check ...
+	@GO111MODULE=off go vet $(PKGS)
 
 check-fmt:
-	bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
+	# gofmt check ...
+	@bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
 errcheck: $(GOPATH)/bin/errcheck
-	errcheck -verbose -blank $(PKGS)
+	# errcheck check ...
+	@GO111MODULE=off errcheck -verbose -blank $(PKGS)
 
 staticcheck: $(GOPATH)/bin/staticcheck
-	staticcheck $(PKGS)
+	# staticcheck check ...
+	@GO111MODULE=off staticcheck $(PKGS)
+
+revive: $(GOPATH)/bin/revive
+	# revive check ...
+	@GO111MODULE=off revive -formatter friendly $(PKGS)
 
 pretest: check-fmt lint vet staticcheck
 
