@@ -1,3 +1,17 @@
+# set defaults
+ifndef DOCKER_HUB_REPO
+    DOCKER_HUB_REPO := portworx
+    $(warning DOCKER_HUB_REPO not defined, using '$(DOCKER_HUB_REPO)' instead)
+endif
+ifndef DOCKER_HUB_STORAGE_OPERATOR_IMAGE
+    DOCKER_HUB_STORAGE_OPERATOR_IMAGE := px-operator
+    $(warning DOCKER_HUB_STORAGE_OPERATOR_IMAGE not defined, using '$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE)' instead)
+endif
+ifndef DOCKER_HUB_STORAGE_OPERATOR_TAG
+    DOCKER_HUB_STORAGE_OPERATOR_TAG := latest
+    $(warning DOCKER_HUB_STORAGE_OPERATOR_TAG not defined, using '$(DOCKER_HUB_STORAGE_OPERATOR_TAG)' instead)
+endif
+
 STORAGE_OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TAG)
 STORAGE_OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_TEST_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG)
 PX_DOC_HOST ?= https://docs.portworx.com
@@ -49,11 +63,30 @@ vendor-update:
 vendor:
 	go mod vendor
 
+# Tools download  (if missing)
+# - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
+
+$(GOPATH)/bin/golint:
+	go get -u golang.org/x/lint/golint
+
+$(GOPATH)/bin/errcheck:
+	go get -u github.com/kisielk/errcheck
+
+$(GOPATH)/bin/staticcheck:
+	go get -u honnef.co/go/tools/cmd/staticcheck
+
+$(GOPATH)/bin/gomock:
+	go get -u github.com/golang/mock/gomock
+
+$(GOPATH)/bin/mockgen:
+	go get -u github.com/golang/mock/mockgen
+
+# Static checks
+
 vendor-tidy:
 	go mod tidy
 
-lint:
-	(mkdir -p tools && cd tools && GO111MODULE=off && go get -u golang.org/x/lint/golint)
+lint: $(GOPATH)/bin/golint
 	for file in $(GO_FILES); do \
 		golint $${file}; \
 		if [ -n "$$(golint $${file})" ]; then \
@@ -67,12 +100,10 @@ vet:
 check-fmt:
 	bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
-errcheck:
-	(mkdir -p tools && cd tools && GO111MODULE=off && go get -v github.com/kisielk/errcheck)
+errcheck: $(GOPATH)/bin/errcheck
 	errcheck -verbose -blank $(PKGS)
 
-staticcheck:
-	(mkdir -p tools && cd tools && GO111MODULE=off && go get -u honnef.co/go/tools/cmd/staticcheck)
+staticcheck: $(GOPATH)/bin/staticcheck
 	staticcheck $(PKGS)
 
 pretest: check-fmt lint vet staticcheck
@@ -144,9 +175,7 @@ get-release-manifest: clean-release-manifest
 	mkdir -p manifests
 	wget -q '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
-mockgen:
-	go get github.com/golang/mock/gomock
-	go get github.com/golang/mock/mockgen
+mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
 	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer
 	mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 	mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
