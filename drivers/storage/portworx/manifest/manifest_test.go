@@ -35,6 +35,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -68,6 +69,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 
@@ -152,6 +154,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.5.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.5.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -235,6 +238,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -310,6 +314,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
+			Telemetry:                 defaultTelemetryImage,
 		},
 	}
 	cluster := &corev1.StorageCluster{

@@ -33,9 +33,8 @@ const (
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	// TODO https://portworx.atlassian.net/browse/OPERATOR-303 will populate this
-	defaultTelemetryImage          = ""
-	defaultManifestRefreshInterval = 3 * time.Hour
+	defaultTelemetryImage                 = "purestorage/ccm-service:3.0.0-rc1"
+	defaultManifestRefreshInterval        = 3 * time.Hour
 )
 
 var (
