@@ -67,16 +67,16 @@ vendor:
 # - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
 
 $(GOPATH)/bin/golint:
-	go get -u golang.org/x/lint/golint
+	GO111MODULE=off go get -u golang.org/x/lint/golint
 
 $(GOPATH)/bin/errcheck:
-	go get -u github.com/kisielk/errcheck
+	GO111MODULE=off go get -u github.com/kisielk/errcheck
 
 $(GOPATH)/bin/staticcheck:
-	go get -u honnef.co/go/tools/cmd/staticcheck
+	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 
 $(GOPATH)/bin/revive:
-	go get -u github.com/mgechev/revive
+	GO111MODULE=off go get -u github.com/mgechev/revive
 
 $(GOPATH)/bin/gomock:
 	go get -u github.com/golang/mock/gomock
@@ -90,7 +90,8 @@ vendor-tidy:
 	go mod tidy
 
 lint: $(GOPATH)/bin/golint
-	for file in $(GO_FILES); do \
+	# golint check ...
+	@for file in $(GO_FILES); do \
 		golint $${file}; \
 		if [ -n "$$(golint $${file})" ]; then \
 			exit 1; \
@@ -99,7 +100,7 @@ lint: $(GOPATH)/bin/golint
 
 vet:
 	# go vet check ...
-	@GO111MODULE=off go vet $(PKGS)
+	@go vet $(PKGS)
 
 check-fmt:
 	# gofmt check ...
@@ -107,15 +108,15 @@ check-fmt:
 
 errcheck: $(GOPATH)/bin/errcheck
 	# errcheck check ...
-	@GO111MODULE=off errcheck -verbose -blank $(PKGS)
+	@errcheck -verbose -blank $(PKGS)
 
 staticcheck: $(GOPATH)/bin/staticcheck
 	# staticcheck check ...
-	@GO111MODULE=off staticcheck $(PKGS)
+	@staticcheck $(PKGS)
 
 revive: $(GOPATH)/bin/revive
 	# revive check ...
-	@GO111MODULE=off revive -formatter friendly $(PKGS)
+	@revive -formatter friendly $(PKGS)
 
 pretest: check-fmt lint vet staticcheck
 
