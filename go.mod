@@ -7,20 +7,27 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.5.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
+	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2 // indirect
 	github.com/hashicorp/go-version v1.2.1
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
-	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
+	github.com/libopenstorage/openstorage v8.0.1-0.20210421201603-7ed166ac3201+incompatible
 	github.com/libopenstorage/stork v1.3.0-beta1.0.20210415204554-6b98cc805c5f // indirect
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
 	github.com/portworx/px-backup-api v1.2.1-0.20210416161003-f19256c6e2c5 // indirect
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20210407163031-09e9dcbb0f2f
 	github.com/portworx/torpedo v0.20.4-rc1.0.20210325154352-eb81b0cdd145
+	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
-	google.golang.org/grpc v1.36.1
+	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
+	golang.org/x/net v0.0.0-20210420210106-798c2154c571 // indirect
+	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78 // indirect
+	golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988 // indirect
+	google.golang.org/genproto v0.0.0-20210421164718-3947dc264843 // indirect
+	google.golang.org/grpc v1.37.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver v0.20.4

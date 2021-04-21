@@ -87,6 +87,10 @@ const (
 	SpecScanPolicyTrigger    = "scan_policy_trigger"
 	SpecScanPolicyAction     = "scan_policy_action"
 	SpecProxyWrite           = "proxy_write"
+	SpecSharedv4ServiceType  = "sharedv4_svc_type"
+	SpecSharedv4ServiceName  = "sharedv4_svc_name"
+	SpecFastpath             = "fastpath"
+	SpecAutoFstrim           = "auto_fstrim"
 )
 
 // OptionKey specifies a set of recognized query params.
@@ -122,7 +126,7 @@ const (
 	// OptCredDisablePathStyle does not enforce path style for s3
 	OptCredDisablePathStyle = "CredDisablePathStyle"
 	// OptCredStorageClass indicates the storage class to be used for puts
-	// allowed values are STANDARD and STANDARD_IA
+	// allowed values are STANDARD, STANDARD_IA,ONEZONE_IA, REDUCED_REDUNDANCY
 	OptCredStorageClass = "CredStorageClass"
 	// OptCredEndpoint indicate the cloud endpoint
 	OptCredEndpoint = "CredEndpoint"
@@ -185,19 +189,6 @@ const (
 	AutoAggregation = math.MaxUint32
 )
 
-// The main goal of the following label keys is for the Kubernetes intree middleware
-// to keep track of the source location of the PVC with labels that cannot be modified
-// by the owner of the volume, but only by the storage administrator.
-const (
-	// KubernetesPvcNameKey is a label on the openstorage volume
-	// which tracks the source PVC for the volume.
-	KubernetesPvcNameKey = "openstorage.io/pvc-name"
-
-	// KubernetesPvcNamespaceKey is a label on the openstorage volume
-	// which tracks the source PVC namespace for the volume
-	KubernetesPvcNamespaceKey = "openstorage.io/pvc-namespace"
-)
-
 const (
 	// gRPC root path used to extract service and API information
 	SdkRootPath = "openstorage.api.OpenStorage"
@@ -250,6 +241,8 @@ type Node struct {
 	GossipPort string
 	// HWType is the type of the underlying hardware used by the node
 	HWType HardwareType
+	// Determine if the node is secure with authentication and authorization
+	SecurityStatus StorageNode_SecurityStatus
 }
 
 // FluentDConfig describes ip and port of a fluentdhost.
@@ -408,8 +401,16 @@ type CloudBackupGenericRequest struct {
 	// MetadataFilter indicates backups whose metadata has these kv pairs
 	MetadataFilter map[string]string
 	// CloudBackupID must be specified if one needs to enumerate known single
-	// backup( format is clusteruuidORBucketName/srcVolId-SnapId(-incr)
+	// backup (format is clusteruuidORBucketName/srcVolId-SnapId(-incr). If t\
+	// this is specified, everything else n the command is ignored
 	CloudBackupID string
+	// MissingSrcVol set to true enumerates cloudbackups for which srcVol is not
+	// present in the cluster. Either the source volume is deleted or the
+	// cloudbackup belongs to other cluster.( with older version this
+	// information may be missing, and in such a case these will list as
+	// missing cluster info field in enumeration). Specifying SrcVolumeID and
+	// this flag at the same time is an error
+	MissingSrcVolumes bool
 }
 
 type CloudBackupInfo struct {
@@ -426,6 +427,11 @@ type CloudBackupInfo struct {
 	Metadata map[string]string
 	// Status indicates the status of the backup
 	Status string
+	// ClusterType indicates if the cloudbackup was uploaded by this
+	// cluster. Could be unknown with older version cloudbackups
+	ClusterType SdkCloudBackupClusterType
+	// Namespace to which this cloudbackup belongs to
+	Namespace string
 }
 
 type CloudBackupEnumerateRequest struct {
@@ -937,6 +943,7 @@ func (s *Node) ToStorageNode() *StorageNode {
 		DataIp:            s.DataIp,
 		Hostname:          s.Hostname,
 		HWType:            s.HWType,
+		SecurityStatus:    s.SecurityStatus,
 	}
 
 	node.Disks = make(map[string]*StorageResource)
@@ -1040,6 +1047,8 @@ func (b *CloudBackupInfo) ToSdkCloudBackupInfo() *SdkCloudBackupInfo {
 		SrcVolumeId:   b.SrcVolumeID,
 		SrcVolumeName: b.SrcVolumeName,
 		Metadata:      b.Metadata,
+		ClusterType:   b.ClusterType,
+		Namespace:     b.Namespace,
 	}
 
 	info.Timestamp, _ = ptypes.TimestampProto(b.Timestamp)
@@ -1272,8 +1281,6 @@ func (v *Volume) IsAttached() bool {
 type TokenSecretContext struct {
 	SecretName      string
 	SecretNamespace string
-	PvcName         string
-	PvcNamespace    string
 }
 
 // ParseProxyEndpoint parses the proxy endpoint and returns the
