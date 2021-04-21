@@ -19,8 +19,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/portworx/torpedo/drivers/node"
+	_ "github.com/portworx/torpedo/drivers/node/ssh"
 	"github.com/portworx/torpedo/drivers/scheduler"
 	_ "github.com/portworx/torpedo/drivers/scheduler/k8s"
+	"github.com/portworx/torpedo/drivers/volume"
+	_ "github.com/portworx/torpedo/drivers/volume/aws"
+	_ "github.com/portworx/torpedo/drivers/volume/azure"
+	_ "github.com/portworx/torpedo/drivers/volume/gce"
+	_ "github.com/portworx/torpedo/drivers/volume/generic_csi"
+	_ "github.com/portworx/torpedo/drivers/volume/portworx"
 	. "github.com/portworx/torpedo/tests"
 )
 
@@ -36,6 +44,12 @@ var (
 )
 
 const (
+	// nodeDriverNmae is a name for node driver
+	nodeDriverName = "ssh"
+
+	// volumeDriverName is a name for storage driver
+	volumeDriverName = "pxd"
+
 	// schedulerDriverNam is a name of the schedule driver
 	schedulerDriverName = "k8s"
 
@@ -62,6 +76,8 @@ const (
 )
 
 var schedulerDriver scheduler.Driver
+var nodeDriver node.Driver
+var volumeDriver volume.Driver
 
 func TestMain(m *testing.M) {
 	flag.StringVar(&pxDockerUsername,
@@ -105,10 +121,37 @@ func setup() error {
 		return fmt.Errorf("Error getting scheduler driver %v: %v", schedulerDriverName, err)
 	}
 
+	err = schedulerDriver.RescanSpecs(appsDir, volumeDriverName)
+	if err != nil {
+		return fmt.Errorf("Unable to parse app spec dir: %v", err)
+	}
+
+	if nodeDriver, err = node.Get(nodeDriverName); err != nil {
+		return fmt.Errorf("Error getting node driver %v: %v", nodeDriverName, err)
+	}
+
+	if err = nodeDriver.Init(); err != nil {
+		return fmt.Errorf("Error initializing node driver %v: %v", nodeDriverName, err)
+	}
+
+	if volumeDriver, err = volume.Get(volumeDriverName); err != nil {
+		return fmt.Errorf("Error getting volume driver %v: %v", volumeDriverName, err)
+	}
+
+	if err = schedulerDriver.Init(scheduler.InitOptions{SpecDir: "specs",
+		NodeDriverName: nodeDriverName,
+		VolDriverName:  volumeDriverName,
+		//SecretConfigMapName: authTokenConfigMap,
+		//CustomAppConfig:     customAppConfig,
+	}); err != nil {
+		return fmt.Errorf("Error initializing scheduler driver %v: %v", schedulerDriverName, err)
+	}
+
 	return nil
 }
 
 func setupApp() ([]*scheduler.Context, error) {
+	fmt.Printf("KOKADBG: setupApp(): START\n")
 	var contexts []*scheduler.Context
 	scaleFactor := 1
 
@@ -118,10 +161,12 @@ func setupApp() ([]*scheduler.Context, error) {
 	}
 
 	ValidateApplications(contexts)
+	fmt.Printf("KOKADBG: setupApp(): END\n")
 	return contexts, nil
 }
 
 func teardownApp(contexts []*scheduler.Context) error {
+	fmt.Printf("KOKADBG: teardownApp(): START\n")
 	opts := make(map[string]bool)
 	opts[scheduler.OptionsWaitForResourceLeakCleanup] = true
 
@@ -129,6 +174,7 @@ func teardownApp(contexts []*scheduler.Context) error {
 		TearDownContext(ctx, opts)
 	}
 
+	fmt.Printf("KOKADBG: teardownApp(): END\n")
 	return nil
 }
 
