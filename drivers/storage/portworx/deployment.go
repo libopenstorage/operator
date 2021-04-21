@@ -21,6 +21,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -116,6 +117,7 @@ type template struct {
 	csiConfig       *pxutil.CSIConfiguration
 	kvdb            map[string]string
 	cloudConfig     *cloudstorage.Config
+	osImage         string
 }
 
 func newTemplate(
@@ -198,12 +200,33 @@ func (p *portworx) generateCloudStorageSpecs(
 	return cloudConfig, nil
 }
 
+func (p *portworx) getNodeByName(nodeName string) (*v1.Node, error) {
+	node := &v1.Node{}
+	var err error
+	if p != nil && p.k8sClient != nil {
+		err = p.k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name: nodeName,
+			},
+			node,
+		)
+	}
+	return node, err
+}
+
 func (p *portworx) GetKVDBPodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return v1.PodSpec{}, err
+	}
+
+	if node, err := p.getNodeByName(nodeName); err != nil {
+		logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
+	} else {
+		t.setOSImage(node.Status.NodeInfo.OSImage)
 	}
 
 	containers := t.kvdbContainer()
@@ -242,6 +265,12 @@ func (p *portworx) GetStoragePodSpec(
 	t, err := newTemplate(cluster)
 	if err != nil {
 		return v1.PodSpec{}, err
+	}
+
+	if node, err := p.getNodeByName(nodeName); err != nil {
+		logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
+	} else {
+		t.setOSImage(node.Status.NodeInfo.OSImage)
 	}
 
 	if cluster.Spec.CloudStorage != nil && len(cluster.Spec.CloudStorage.CapacitySpecs) > 0 {
@@ -814,6 +843,10 @@ func (t *template) getArguments() []string {
 		}
 	}
 
+	if t.isBottleRocketOS() {
+		args = append(args, "-disable-log-proxy", "--install-uncompress")
+	}
+
 	return args
 }
 
@@ -992,8 +1025,13 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
-	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	volumeInfoList := getDefaultVolumeInfoList()
+	extensions := []func() []volumeInfo{
+		t.getK3sVolumeInfoList, t.getBottleRocketVolumeInfoList,
+	}
+	for _, fn := range extensions {
+		volumeInfoList = append(volumeInfoList, fn()...)
+	}
 	return t.mountsFromVolInfo(volumeInfoList)
 }
 
@@ -1035,10 +1073,16 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	volumeInfoList := append([]volumeInfo{}, getDefaultVolumeInfoList()...)
-	volumeInfoList = append(volumeInfoList, t.getCSIVolumeInfoList()...)
-	volumeInfoList = append(volumeInfoList, t.getTelemetryVolumeInfoList()...)
-	volumeInfoList = append(volumeInfoList, t.getK3sVolumeInfoList()...)
+	volumeInfoList := getDefaultVolumeInfoList()
+	extensions := []func() []volumeInfo{
+		t.getCSIVolumeInfoList,
+		t.getTelemetryVolumeInfoList,
+		t.getK3sVolumeInfoList,
+		t.getBottleRocketVolumeInfoList,
+	}
+	for _, fn := range extensions {
+		volumeInfoList = append(volumeInfoList, fn()...)
+	}
 
 	volumes := make([]v1.Volume, 0, len(volumeInfoList))
 	volumeSet := make(map[string]v1.Volume)
@@ -1212,6 +1256,20 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 	}
 }
 
+func (t *template) getBottleRocketVolumeInfoList() []volumeInfo {
+	if !t.isBottleRocketOS() {
+		return []volumeInfo{}
+	}
+
+	return []volumeInfo{
+		{
+			name:      "containerd-br",
+			hostPath:  "/run/dockershim.sock",
+			mountPath: "/run/containerd/containerd.sock",
+		},
+	}
+}
+
 func (t *template) loadKvdbAuth() map[string]string {
 	if len(t.kvdb) > 0 {
 		return t.kvdb
@@ -1248,6 +1306,19 @@ func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) stri
 	}
 
 	return ""
+}
+
+func (t *template) setOSImage(osImage string) {
+	logrus.Infof("Template OSImage set to %q", osImage)
+	t.osImage = osImage
+}
+
+func (t *template) isBottleRocketOS() bool {
+	if t.osImage == "" {
+		return false
+	}
+	lc := strings.ToLower(t.osImage)
+	return strings.HasPrefix(lc, "bottlerocket os")
 }
 
 func stringPtr(val string) *string {
