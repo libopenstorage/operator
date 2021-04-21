@@ -4,22 +4,13 @@ go 1.15
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/emicklei/go-restful v2.11.1+incompatible // indirect
-	github.com/frankban/quicktest v1.4.1 // indirect
-	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/go-logr/logr v0.3.0
-	github.com/go-test/deep v1.0.4 // indirect
 	github.com/golang/mock v1.5.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
-	github.com/hashicorp/go-retryablehttp v0.6.6 // indirect
 	github.com/hashicorp/go-version v1.2.1
-	github.com/hashicorp/vault/api v1.0.5-0.20200317185738-82f498082f02 // indirect
-	github.com/hashicorp/vault/sdk v0.1.14-0.20200429182704-29fce8f27ce4 // indirect
-	github.com/kubernetes-csi/external-snapshotter/v2 v2.1.1 // indirect
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
 	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
 	github.com/libopenstorage/stork v1.3.0-beta1.0.20210415204554-6b98cc805c5f // indirect
-	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
 	github.com/portworx/px-backup-api v1.2.1-0.20210416161003-f19256c6e2c5 // indirect
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20210407163031-09e9dcbb0f2f
@@ -37,7 +28,6 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.20.4
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20210216185858-15cd8face8d6 // indirect
 	k8s.io/kubernetes v1.20.4
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 	sigs.k8s.io/cluster-api v0.2.11

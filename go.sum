@@ -1099,7 +1099,6 @@ github.com/kubernetes-csi/csi-test v2.0.0+incompatible/go.mod h1:YxJ4UiuPWIhMBkx
 github.com/kubernetes-csi/csi-test/v3 v3.0.0/go.mod h1:VdIKGnDZHOjg4M5yd0OZICtsoEzdn64d0K33N6dm35Q=
 github.com/kubernetes-csi/external-snapshotter/client/v4 v4.0.0/go.mod h1:YBCo4DoEeDndqvAn6eeu0vWM7QdXmHEeI9cFWplmBys=
 github.com/kubernetes-csi/external-snapshotter/v2 v2.0.1/go.mod h1:vUEcwbrEpsQ/rDgaO8WTe1gVIY/4CCj0S4Q+UuOq5wA=
-github.com/kubernetes-csi/external-snapshotter/v2 v2.1.1/go.mod h1:dV5oB3U62KBdlf9ADWkMmjGd3USauqQtwIm2OZb5mqI=
 github.com/kubernetes-sigs/aws-ebs-csi-driver v0.9.0/go.mod h1:9rv0ManDzr35FnHmuDQv+Vms73LGf6qyXlJhbOjqtZc=
 github.com/kylelemons/godebug v0.0.0-20160406211939-eadb3ce320cb/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
 github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
@@ -1129,7 +1128,6 @@ github.com/libopenstorage/openstorage v8.0.1-0.20200730032300-bef55ec5700c+incom
 github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible h1:bfqlyUfB2AhjS/dXM2DKliaG6w6j0efMow2cR7rU/cE=
 github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible/go.mod h1:Sp1sIObHjat1BeXhfMqLZ14wnOzEhNx2YQedreMcUyc=
 github.com/libopenstorage/operator v0.0.0-20191009190641-8642de5d0812/go.mod h1:Qh+VXOB6hj60VmlgsmY+R1w+dFuHK246UueM4SAqZG0=
-github.com/libopenstorage/operator v0.0.0-20200318035244-91d72e45b82d/go.mod h1:Qh+VXOB6hj60VmlgsmY+R1w+dFuHK246UueM4SAqZG0=
 github.com/libopenstorage/operator v0.0.0-20200725001727-48d03e197117/go.mod h1:Qh+VXOB6hj60VmlgsmY+R1w+dFuHK246UueM4SAqZG0=
 github.com/libopenstorage/operator v0.0.0-20210303221358-0bb211a9908c/go.mod h1:+83bY859mKGwHmWW8TPNYGrXAgt/hXOX2Ia7EytK17I=
 github.com/libopenstorage/secrets v0.0.0-20190403224602-c282e8dc17bf/go.mod h1:4QOUUeRMHtTniKPj+biL3wlusahU/7OnMsGKc4FN/EY=
@@ -1408,7 +1406,6 @@ github.com/portworx/px-backup-api v1.0.1-0.20200915150042-274508e876ef/go.mod h1
 github.com/portworx/px-backup-api v1.2.1-0.20210416161003-f19256c6e2c5 h1:KMJpK0EVMV4DEUg4MYGELqmG4pO0wsnQ6zDWVs6VsjU=
 github.com/portworx/px-backup-api v1.2.1-0.20210416161003-f19256c6e2c5/go.mod h1:i2STKqVzm1WjuO5GMMhncH6gRP9wiAp1ih61zsKBD+8=
 github.com/portworx/sched-ops v0.0.0-20200123020607-b0799c4686f5/go.mod h1:yb1ypNIiZQAmM7xAWGzO6dydwl/+vNC0WjUm5IvHUEY=
-github.com/portworx/sched-ops v0.0.0-20200723032629-257aba0944dc/go.mod h1:RbeNADz/3p8a/qNGyy7nUTWC8Yx7DMW9xL11JbYh9Ag=
 github.com/portworx/sched-ops v0.0.0-20210301232128-6cd5f08740bf/go.mod h1:nl2AP/W8sWmhmW7ScwNQrm5OCHiHjLYQ2NmO3TUjIhE=
 github.com/portworx/sched-ops v0.20.4-openstorage-rc3.0.20210325150944-0b2c202335f7/go.mod h1:DpRDDqXWQrReFJ5SHWWrURuZdzVKjrh2OxbAfwnrAyk=
 github.com/portworx/sched-ops v1.20.0-rc1/go.mod h1:nl2AP/W8sWmhmW7ScwNQrm5OCHiHjLYQ2NmO3TUjIhE=
@@ -1416,8 +1413,6 @@ github.com/portworx/sched-ops v1.20.4-rc1.0.20210407163031-09e9dcbb0f2f h1:L158m
 github.com/portworx/sched-ops v1.20.4-rc1.0.20210407163031-09e9dcbb0f2f/go.mod h1:fZ+nl20syzzXqeVuF41XfOJAmLXRV5+CFteuBkijB7A=
 github.com/portworx/talisman v0.0.0-20191007232806-837747f38224/go.mod h1:OjpMH9Uh5o9ntVGktm4FbjLNwubJ3ITih2OfYrAeWtA=
 github.com/portworx/talisman v0.0.0-20210302012732-8af4564777f7/go.mod h1:e8a6uFpSbOlRpZQlW9aXYogC+GWAo065G0RL9hDkD4Q=
-github.com/portworx/torpedo v0.20.4-rc1 h1:iI6J8IgMfZdqYpFQ2jNDNet7RbMOcuBmvh8T+B3NJF0=
-github.com/portworx/torpedo v0.20.4-rc1/go.mod h1:4m4ORL/hpBOP2DUaIK6CzRkYiEn3AT8WP65wZHmO8MI=
 github.com/portworx/torpedo v0.20.4-rc1.0.20210325154352-eb81b0cdd145 h1:J5D0JPZWueVAK8/Dr5s84I7/tCfin6NjIGbKKCSyyJ0=
 github.com/portworx/torpedo v0.20.4-rc1.0.20210325154352-eb81b0cdd145/go.mod h1:CkLAs/ojTzSu3SPyeDxc3qhsbRU78H5Xz1qJlj1Ap1U=
 github.com/posener/complete v1.1.1/go.mod h1:em0nMJCgc9GFtwrmVmEMR/ZL6WyhyjMBndrE9hABlRI=
