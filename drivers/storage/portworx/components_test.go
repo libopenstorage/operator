@@ -9757,7 +9757,6 @@ func TestTelemetryEnable(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
-					Image:   "portworx/px-telemetry:2.1.2",
 				},
 			},
 		},
