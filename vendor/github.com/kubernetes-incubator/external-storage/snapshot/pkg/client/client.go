@@ -17,6 +17,7 @@ limitations under the License.
 package client
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -48,7 +49,7 @@ func NewClient(cfg *rest.Config) (*rest.RESTClient, *runtime.Scheme, error) {
 	config.GroupVersion = &crdv1.SchemeGroupVersion
 	config.APIPath = "/apis"
 	config.ContentType = runtime.ContentTypeJSON
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: serializer.NewCodecFactory(scheme)}
+	config.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: serializer.NewCodecFactory(scheme)}
 
 	client, err := rest.RESTClientFor(&config)
 	if err != nil {
@@ -74,7 +75,7 @@ func CreateCRD(clientset apiextensionsclient.Interface) error {
 			},
 		},
 	}
-	res, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+	res, err := clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(context.TODO(), crd, metav1.CreateOptions{})
 
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		glog.Fatalf("failed to create VolumeSnapshotDataResource: %#v, err: %#v",
@@ -95,7 +96,7 @@ func CreateCRD(clientset apiextensionsclient.Interface) error {
 			},
 		},
 	}
-	res, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
+	res, err = clientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(context.TODO(), crd, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		glog.Fatalf("failed to create VolumeSnapshotResource: %#v, err: %#v",
 			res, err)
@@ -107,7 +108,7 @@ func CreateCRD(clientset apiextensionsclient.Interface) error {
 func WaitForSnapshotResource(snapshotClient *rest.RESTClient) error {
 	return wait.Poll(100*time.Millisecond, 60*time.Second, func() (bool, error) {
 		_, err := snapshotClient.Get().
-			Resource(crdv1.VolumeSnapshotDataResourcePlural).DoRaw()
+			Resource(crdv1.VolumeSnapshotDataResourcePlural).DoRaw(context.TODO())
 		if err == nil {
 			return true, nil
 		}
