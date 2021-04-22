@@ -223,12 +223,6 @@ func (p *portworx) GetKVDBPodSpec(
 		return v1.PodSpec{}, err
 	}
 
-	if node, err := p.getNodeByName(nodeName); err != nil {
-		logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
-	} else {
-		t.setOSImage(node.Status.NodeInfo.OSImage)
-	}
-
 	containers := t.kvdbContainer()
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
@@ -1318,7 +1312,7 @@ func (t *template) isBottleRocketOS() bool {
 		return false
 	}
 	lc := strings.ToLower(t.osImage)
-	return strings.HasPrefix(lc, "bottlerocket os")
+	return strings.HasPrefix(lc, "bottlerocket")
 }
 
 func stringPtr(val string) *string {
