@@ -798,6 +798,16 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 			},
 		},
 		cluster,
+		&v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testNode",
+			},
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{
+					OSImage: "Ubuntu 18.04.5 LTS",
+				},
+			},
+		},
 	)
 	nodeName := "testNode"
 
@@ -1182,6 +1192,16 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 			},
 		},
 		cluster,
+		&v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testNode",
+			},
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{
+					OSImage: "Ubuntu 18.04.5 LTS",
+				},
+			},
+		},
 	)
 
 	// Provide both devices specs and cloud capacity specs
@@ -1937,6 +1957,66 @@ func TestPodSpecForK3s(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecForBottleRocketAMI(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.20.1",
+	}
+
+	nodeName := "testNode"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.7.1",
+		},
+	}
+	driver := portworx{
+		k8sClient: testutil.FakeK8sClient(
+			&v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      nodeName,
+					Namespace: "",
+				},
+				Status: v1.NodeStatus{
+					NodeInfo: v1.NodeSystemInfo{
+						OSImage: "BottleRocket OS 123",
+					},
+				},
+			},
+		),
+	}
+
+	// we'll be expecting BottleRocket-specific args
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-disable-log-proxy",
+		"--install-uncompress",
+	}
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Len(t, actual.Containers, 1)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+	assert.Contains(t, actual.Volumes, v1.Volume{
+		Name: "containerd-br",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: "/run/dockershim.sock",
+			},
+		},
+	})
+	// also double-check for BottleRocket-specific mount
+	assert.Contains(t, actual.Containers[0].VolumeMounts, v1.VolumeMount{
+		Name:      "containerd-br",
+		MountPath: "/run/containerd/containerd.sock",
+	})
+}
+
 func TestPodWithTelemetry(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
@@ -2644,6 +2724,9 @@ func TestStorageNodeConfig(t *testing.T) {
 			},
 		},
 		cluster,
+		&v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "testNode"}},
+		&v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "testNode2"}},
+		&v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "testNode3"}},
 	)
 	nodeName := "testNode"
 	nodeName2 := "testNode2"
