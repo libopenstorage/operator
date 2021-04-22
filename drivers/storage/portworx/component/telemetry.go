@@ -92,6 +92,7 @@ func (t *telemetry) createConfigMap(
               "public": "/dev/null"
         },
         "registration_enabled": "true",
+        "no_rel_cert_enabled": "true",
         "appliance": {
           "current_cert_dir": "/etc/pwx/ccm/cert"
         }
