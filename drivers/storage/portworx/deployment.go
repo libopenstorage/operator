@@ -146,7 +146,9 @@ func newTemplate(
 	kubeletPath := pxutil.KubeletPath(cluster)
 	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion,
 		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
-	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
+
+	// Enable CSI by default. Allow the user to disable if necessary.
+	if pxutil.IsCSIEnabled(cluster) {
 		t.csiConfig = csiGenerator.GetCSIConfiguration()
 	} else {
 		t.csiConfig = csiGenerator.GetBasicCSIConfiguration()
@@ -262,6 +264,9 @@ func (p *portworx) GetStoragePodSpec(
 	if err != nil {
 		return v1.PodSpec{}, err
 	}
+	if t.cluster.Status.DesiredImages == nil {
+		t.cluster.Status.DesiredImages = &corev1.ComponentImages{}
+	}
 
 	if node, err := p.getNodeByName(nodeName); err != nil {
 		logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
@@ -299,7 +304,7 @@ func (p *portworx) GetStoragePodSpec(
 		Volumes:            t.getVolumes(),
 	}
 
-	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.IsCSIEnabled(t.cluster) {
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
@@ -915,7 +920,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 		}
 	}
 
-	if pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
+	if pxutil.IsCSIEnabled(t.cluster) {
 		envMap["CSI_ENDPOINT"] = &v1.EnvVar{
 			Name:  "CSI_ENDPOINT",
 			Value: "unix://" + t.csiConfig.DriverBasePath() + "/csi.sock",
@@ -1206,7 +1211,7 @@ func (t *template) getVolumes() []v1.Volume {
 }
 
 func (t *template) getCSIVolumeInfoList() []volumeInfo {
-	if !pxutil.FeatureCSI.IsEnabled(t.cluster.Spec.FeatureGates) {
+	if !pxutil.IsCSIEnabled(t.cluster) {
 		return []volumeInfo{}
 	}
 

@@ -50,6 +50,8 @@ spec:
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
+            - name: "CSI_ENDPOINT"
+              value: "unix:///var/vcap/data/kubelet/csi-plugins/com.openstorage.pxd/csi.sock"
             - name: "PRE-EXEC"
               value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
           livenessProbe:
@@ -140,3 +142,11 @@ spec:
         - name: pxlogs
           hostPath:
             path: /var/vcap/store/lib/osd/log
+        - name: registration-dir
+          hostPath:
+            path: /var/vcap/data/kubelet/plugins
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/vcap/data/kubelet/csi-plugins/com.openstorage.pxd
+            type: DirectoryOrCreate
