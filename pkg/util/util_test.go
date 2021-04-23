@@ -3,6 +3,8 @@ package util
 import (
 	"testing"
 
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,4 +96,50 @@ func TestGetImageMajorVersion(t *testing.T) {
 
 	ver = GetImageMajorVersion("quay.io/a:v999.998.997")
 	require.Equal(t, 999, ver)
+}
+
+func TestPartialSecretRef(t *testing.T) {
+	// happy
+	obj := &corev1.SecretRef{
+		SecretName: "a",
+		SecretKey:  "b",
+	}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	// no valid secret key
+	obj = &corev1.SecretRef{
+		SecretName: "a",
+		SecretKey:  "",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{
+		SecretName: "a",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	// no valid secret name
+	obj = &corev1.SecretRef{
+		SecretName: "",
+		SecretKey:  "b",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{
+		SecretKey: "b",
+	}
+	assert.True(t, IsPartialSecretRef(obj))
+
+	// no valid secret key or name. Return false because it's empty, not partial
+	obj = &corev1.SecretRef{
+		SecretName: "",
+		SecretKey:  "",
+	}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	obj = &corev1.SecretRef{}
+	assert.False(t, IsPartialSecretRef(obj))
+
+	obj = nil
+	assert.False(t, IsPartialSecretRef(obj))
 }

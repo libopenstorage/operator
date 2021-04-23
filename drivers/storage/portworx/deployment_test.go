@@ -1,8 +1,10 @@
 package portworx
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -11,6 +13,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -330,6 +333,134 @@ func TestAutoNodeRecoveryTimeoutEnvForPxVersion2_6(t *testing.T) {
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	require.NotContains(t, actual.Containers[0].Env, recoveryEnv)
+}
+
+func TestPodSpecWithTLS(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(k8sClient)
+	nodeName := "testNode"
+	caCertFileName := stringPtr("/etc/pwx/testCA.crt")
+	serverCertFileName := stringPtr("/etc/pwx/testServer.crt")
+	serverKeyFileName := stringPtr("/etc/pwx/testServer.key")
+
+	driver := portworx{}
+
+	// Test1: user specifies all cert files
+	logrus.Tracef("---Test1---")
+	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
+	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec after defaults = \n, %v", string(s))
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	// validate
+	validatePodSpecWithTLS("with all files specified", t,
+		caCertFileName,
+		serverCertFileName,
+		serverKeyFileName, actual)
+
+	// Test2: user specifies ca cert as a file, cert/key in the same secret,
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, nil)
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.crt",
+		},
+	}
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: "testserversecret",
+			SecretKey:  "testserversecret.key",
+		},
+	}
+	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
+	t.Logf("Security spec under test = \n, %v", string(s))
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	// validate
+	s, _ = json.MarshalIndent(actual, "", "\t")
+	t.Logf("pod spec under validation = \n, %v", string(s))
+	validatePodSpecWithTLS("with server/key in same secrets, ca file specified", t,
+		caCertFileName,
+		stringPtr(path.Join(pxutil.DefaultTLSServerCertMountPath, "testserversecret.crt")),
+		stringPtr(path.Join(pxutil.DefaultTLSServerKeyMountPath, "testserversecret.key")), actual)
+	// validate that volume and volume mount exist
+	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.crt", pxutil.DefaultTLSServerCertMountPath)
+	validateVolumeAndMounts(t, actual, "testserversecret", "testserversecret.key", pxutil.DefaultTLSServerKeyMountPath)
+}
+
+func validateVolumeAndMounts(t *testing.T, actual v1.PodSpec, secretName, secretKey, mountFolder string) {
+	var volumeMount *v1.VolumeMount = nil
+	for _, v := range actual.Containers[0].VolumeMounts {
+		if v.MountPath == mountFolder {
+			volumeMount = v.DeepCopy()
+			break
+		}
+	}
+	assert.NotNil(t, volumeMount)
+
+	var volume *v1.Volume = nil
+	for _, v := range actual.Volumes {
+		if v.Name == volumeMount.Name {
+			volume = v.DeepCopy()
+			break
+		}
+	}
+	assert.NotNil(t, volume) // validate secret is mounted
+	assert.NotNil(t, volume.Secret)
+	assert.NotEmpty(t, volume.Secret.Items) // volume has reference to required key
+	assert.Equal(t, 1, len(volume.Secret.Items))
+	assert.Equal(t, secretKey, volume.Secret.Items[0].Key)
+	assert.Equal(t, secretKey, volume.Secret.Items[0].Path)
+}
+
+// validateTLSEnvAndParams is a helper method used by TestPodSpecWithTLS
+func validatePodSpecWithTLS(testName string, t *testing.T, apirootcaArg, apicertArg, apikeyArg *string, actual v1.PodSpec) {
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-a",
+		"-secret_type", "k8s",
+		"-apidisclientauth",
+	}
+	if apirootcaArg != nil {
+		expectedArgs = append(expectedArgs, "-apirootca", *apirootcaArg)
+	}
+	if apicertArg != nil {
+		expectedArgs = append(expectedArgs, "-apicert", *apicertArg)
+	}
+	if apikeyArg != nil {
+		expectedArgs = append(expectedArgs, "-apikey", *apikeyArg)
+	}
+
+	// validate that PX_ENABLE_TLS is set
+	expectedVal := "true"
+	actualVal := ""
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxEnableTLS {
+			actualVal = env.Value
+			break
+		}
+	}
+	assert.Equal(t, expectedVal, actualVal, testName)
+
+	// validate that PX_ENFORCE_TLS is set
+	expectedVal = "true"
+	actualVal = ""
+	for _, env := range actual.Containers[0].Env {
+		if env.Name == pxutil.EnvKeyPortworxEnforceTLS {
+			actualVal = env.Value
+			break
+		}
+	}
+	assert.Equal(t, expectedVal, actualVal, testName)
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args, testName)
 }
 
 func TestPodSpecWithKvdbSpec(t *testing.T) {
@@ -2883,9 +3014,6 @@ func TestStorageNodeConfig(t *testing.T) {
 }
 
 func TestSecuritySetEnv(t *testing.T) {
-	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
-	coreops.SetInstance(k8sClient)
-	nodeName := "testNode"
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2897,6 +3025,31 @@ func TestSecuritySetEnv(t *testing.T) {
 			},
 		},
 	}
+	validateSecuritySetEnv(t, cluster)
+
+	// security enabled, auth enabled explicitly
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+		},
+	}
+	validateSecuritySetEnv(t, cluster)
+}
+
+func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
+	coreops.SetInstance(k8sClient)
+	nodeName := "testNode"
+
 	setSecuritySpecDefaults(cluster)
 
 	driver := portworx{}

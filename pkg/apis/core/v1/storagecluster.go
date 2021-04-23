@@ -120,6 +120,35 @@ type VolumeSpec struct {
 	MountPropagation *v1.MountPropagationMode `json:"mountPropagation,omitempty"`
 }
 
+// TLSSpec is the spec used to define TLS configuration for a cluster
+type TLSSpec struct {
+	// Defaults to parent (i.e. if missing, takes value from spec.security.enabled )
+	Enabled *bool `json:"enabled,omitempty"`
+	// RootCA defines the location of the Root CA certificate needed to enable TLS
+	RootCA *CertLocation `json:"rootCA,omitempty"`
+	// ServerCert defines the location of the Server certificate (public key) certificate needed to enable TLS
+	ServerCert *CertLocation `json:"serverCert,omitempty"`
+	// ServerKey defines the location of the Server key (private key) needed to enable TLS
+	ServerKey *CertLocation `json:"serverKey,omitempty"`
+}
+
+// CertLocation specifies where portworx should pick up the certificate.
+// Certificate can be in a file on a fixed location or in a secret
+type CertLocation struct {
+	// file name with path on the node for the cert file. Currently all files must be installed on a subfolder under /etc/pwx
+	FileName *string `json:"filename,omitempty"`
+	// reference to the k8s secret that holds the cert
+	SecretRef *SecretRef `json:"secretRef,omitempty"`
+}
+
+// SecretRef specifies which k8s secret portworx should pick up the certificate.
+type SecretRef struct {
+	// name of the k8s secret. Secret must live in the same namespace as the StorageCluster custom resource
+	SecretName string `json:"secretName,omitempty"`
+	// the key that contains the cert.
+	SecretKey string `json:"secretKey,omitempty"`
+}
+
 // NodeSpec is the spec used to define node level configuration. Values
 // here will override the ones present at cluster-level for nodes matching
 // the selector.
@@ -139,11 +168,14 @@ type NodeSpec struct {
 type SecuritySpec struct {
 	Enabled bool      `json:"enabled,omitempty"`
 	Auth    *AuthSpec `json:"auth,omitempty"`
+	TLS     *TLSSpec  `json:"tls,omitempty"`
 }
 
-// AuthSpec lets the user define authorization configurations
+// AuthSpec lets the user define authorization (RBAC) configurations
 // for creating a PX Security enabled cluster
 type AuthSpec struct {
+	// Defaults to parent (i.e. if missing, takes value from spec.security.enabled )
+	Enabled     *bool            `json:"enabled,omitempty"`
 	GuestAccess *GuestAccessType `json:"guestAccess,omitempty"`
 	SelfSigned  *SelfSignedSpec  `json:"selfSigned,omitempty"`
 }

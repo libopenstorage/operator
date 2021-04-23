@@ -9,7 +9,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/openstorage/pkg/auth"
+	osauth "github.com/libopenstorage/openstorage/pkg/auth"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -25,18 +25,18 @@ import (
 )
 
 const (
-	// SecurityComponentName is the name for registering this component
-	SecurityComponentName = "Security"
-	// SecurityTokenBufferLength is the time ahead of the token
+	// AuthComponentName is the name for registering this component
+	AuthComponentName = "Auth"
+	// AuthTokenBufferLength is the time ahead of the token
 	// expiration that we will start refreshing the token
-	SecurityTokenBufferLength = time.Minute * 1
-	// SecuritySystemGuestRoleName is the role name to maintain for the guest role
-	SecuritySystemGuestRoleName = "system.guest"
+	AuthTokenBufferLength = time.Minute * 1
+	// AuthSystemGuestRoleName is the role name to maintain for the guest role
+	AuthSystemGuestRoleName = "system.guest"
 )
 
 // GuestRoleEnabled is the default configuration for the guest role
 var GuestRoleEnabled = api.SdkRole{
-	Name: SecuritySystemGuestRoleName,
+	Name: AuthSystemGuestRoleName,
 	Rules: []*api.SdkRule{
 		{
 			Services: []string{"mountattach", "volume", "cloudbackup", "migrate"},
@@ -61,7 +61,7 @@ var GuestRoleEnabled = api.SdkRole{
 
 // GuestRoleDisabled is the disabled configuration for the guest role
 var GuestRoleDisabled = api.SdkRole{
-	Name: SecuritySystemGuestRoleName,
+	Name: AuthSystemGuestRoleName,
 	Rules: []*api.SdkRule{
 		{
 			Services: []string{"!*"},
@@ -70,56 +70,56 @@ var GuestRoleDisabled = api.SdkRole{
 	},
 }
 
-type security struct {
+type auth struct {
 	k8sClient            client.Client
 	sdkConn              *grpc.ClientConn
 	resourceVersionCache map[string]string
 }
 
-func (c *security) Name() string {
-	return SecurityComponentName
+func (a *auth) Name() string {
+	return AuthComponentName
 }
 
-func (c *security) Priority() int32 {
+func (a *auth) Priority() int32 {
 	return int32(0)
 }
 
 // Initialize initializes the componenet
-func (c *security) Initialize(
+func (a *auth) Initialize(
 	k8sClient client.Client,
 	k8sVersion version.Version,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) {
-	c.k8sClient = k8sClient
-	c.resourceVersionCache = make(map[string]string)
+	a.k8sClient = k8sClient
+	a.resourceVersionCache = make(map[string]string)
 }
 
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
-func (c *security) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.SecurityEnabled(cluster)
+func (a *auth) IsEnabled(cluster *corev1.StorageCluster) bool {
+	return pxutil.AuthEnabled(&cluster.Spec)
 }
 
 // Reconcile reconciles the component to match the current state of the StorageCluster
-func (c *security) Reconcile(cluster *corev1.StorageCluster) error {
+func (a *auth) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	err := c.createPrivateKeysSecret(cluster, ownerRef)
+	err := a.createPrivateKeysSecret(cluster, ownerRef)
 	if err != nil {
 		return err
 	}
 
-	err = c.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName, "system.admin", []string{"*"})
+	err = a.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName, "system.admin", []string{"*"})
 	if err != nil {
 		return fmt.Errorf("failed to maintain auth token secret %s: %s ", pxutil.SecurityPXAdminTokenSecretName, err.Error())
 	}
 
-	err = c.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName, "system.user", []string{})
+	err = a.maintainAuthTokenSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName, "system.user", []string{})
 	if err != nil {
 		return fmt.Errorf("failed to maintain auth token secret %s: %s ", pxutil.SecurityPXUserTokenSecretName, err.Error())
 	}
 
-	err = c.updateSystemGuestRole(cluster)
+	err = a.updateSystemGuestRole(cluster)
 	if err != nil {
 		return fmt.Errorf("failed to update system guest role: %s ", err.Error())
 	}
@@ -128,16 +128,16 @@ func (c *security) Reconcile(cluster *corev1.StorageCluster) error {
 }
 
 // Delete deletes the component if present
-func (c *security) Delete(cluster *corev1.StorageCluster) error {
+func (a *auth) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	// delete token secrets - these are ephemeral and can be recreated easily
-	err := c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName)
+	err := a.deleteSecret(cluster, ownerRef, pxutil.SecurityPXAdminTokenSecretName)
 	if err != nil {
 		return err
 	}
 
-	err = c.deleteSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName)
+	err = a.deleteSecret(cluster, ownerRef, pxutil.SecurityPXUserTokenSecretName)
 	if err != nil {
 		return err
 	}
@@ -150,12 +150,12 @@ func (c *security) Delete(cluster *corev1.StorageCluster) error {
 	}
 
 	// only deleted our default generated one. If they provide a secret name in the spec, do not delete it.
-	err = c.deleteSecret(cluster, nil, pxutil.SecurityPXSharedSecretSecretName)
+	err = a.deleteSecret(cluster, nil, pxutil.SecurityPXSharedSecretSecretName)
 	if err != nil {
 		return err
 	}
 
-	err = c.deleteSecret(cluster, nil, pxutil.SecurityPXSystemSecretsSecretName)
+	err = a.deleteSecret(cluster, nil, pxutil.SecurityPXSystemSecretsSecretName)
 	if err != nil {
 		return err
 	}
@@ -164,18 +164,18 @@ func (c *security) Delete(cluster *corev1.StorageCluster) error {
 }
 
 // MarkDeleted marks the component as deleted in situations like StorageCluster deletion
-func (c *security) MarkDeleted() {
+func (a *auth) MarkDeleted() {
 
 }
 
-func (c *security) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVarKey, secretName, secretKey string) (string, error) {
+func (a *auth) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVarKey, secretName, secretKey string) (string, error) {
 	var privateKey string
 	var err error
 
 	// check for pre-configured shared secret
 	for _, envVar := range cluster.Spec.Env {
 		if envVar.Name == envVarKey {
-			privateKey, err = pxutil.GetValueFromEnvVar(context.TODO(), c.k8sClient, &envVar, cluster.Namespace)
+			privateKey, err = pxutil.GetValueFromEnvVar(context.TODO(), a.k8sClient, &envVar, cluster.Namespace)
 			if err != nil {
 				return "", err
 
@@ -186,7 +186,7 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVa
 
 	// check for pre-existing secret
 	secret := &v1.Secret{}
-	c.k8sClient.Get(context.TODO(), types.NamespacedName{
+	a.k8sClient.Get(context.TODO(), types.NamespacedName{
 		Namespace: cluster.Namespace,
 		Name:      secretName,
 	}, secret)
@@ -204,14 +204,14 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVa
 	return string(secret.Data[secretKey]), nil
 }
 
-func (c *security) createPrivateKeysSecret(
+func (a *auth) createPrivateKeysSecret(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
 	var sharedSecretKey, internalSystemSecretKey string
 	var err error
 
-	sharedSecretKey, err = c.getPrivateKeyOrGenerate(
+	sharedSecretKey, err = a.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 		*cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
@@ -221,7 +221,7 @@ func (c *security) createPrivateKeysSecret(
 		return err
 	}
 
-	internalSystemSecretKey, err = c.getPrivateKeyOrGenerate(
+	internalSystemSecretKey, err = a.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthSystemKey,
 		pxutil.SecurityPXSystemSecretsSecretName,
@@ -231,7 +231,7 @@ func (c *security) createPrivateKeysSecret(
 		return err
 	}
 
-	appsSecretKey, err := c.getPrivateKeyOrGenerate(
+	appsSecretKey, err := a.getPrivateKeyOrGenerate(
 		cluster,
 		pxutil.EnvKeyPortworxAuthSystemAppsKey,
 		pxutil.SecurityPXSystemSecretsSecretName,
@@ -259,12 +259,12 @@ func (c *security) createPrivateKeysSecret(
 		},
 	}
 
-	err = k8sutil.CreateOrAppendToSecret(c.k8sClient, sharedSecret, nil)
+	err = k8sutil.CreateOrAppendToSecret(a.k8sClient, sharedSecret, nil)
 	if err != nil {
 		return err
 	}
 
-	err = k8sutil.CreateOrAppendToSecret(c.k8sClient, systemKeysSecret, nil)
+	err = k8sutil.CreateOrAppendToSecret(a.k8sClient, systemKeysSecret, nil)
 	if err != nil {
 		return err
 	}
@@ -286,14 +286,14 @@ func getTokenClaims(token string) (*jwt.StandardClaims, error) {
 	return claims, nil
 }
 
-func (c *security) createToken(
+func (a *auth) createToken(
 	cluster *corev1.StorageCluster,
 	authTokenSecretName string,
 	role string,
 	authSecret string,
 	groups []string) (string, error) {
 	// Generate token
-	claims := auth.Claims{
+	claims := osauth.Claims{
 		Issuer:  *cluster.Spec.Security.Auth.SelfSigned.Issuer,
 		Subject: fmt.Sprintf("%s@%s", authTokenSecretName, *cluster.Spec.Security.Auth.SelfSigned.Issuer),
 		Name:    authTokenSecretName,
@@ -316,7 +316,7 @@ func (c *security) createToken(
 
 // maintainAuthTokenSecret maintains a PX auth token inside of a given k8s secret.
 // Before token expiration, the token is refreshed for the user.
-func (c *security) maintainAuthTokenSecret(
+func (a *auth) maintainAuthTokenSecret(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	authTokenSecretName string,
@@ -325,13 +325,13 @@ func (c *security) maintainAuthTokenSecret(
 ) error {
 
 	// Check if token is expired or the signature has changed
-	updateNeeded, err := c.isTokenSecretRefreshRequired(cluster, authTokenSecretName)
+	updateNeeded, err := a.isTokenSecretRefreshRequired(cluster, authTokenSecretName)
 	if err != nil {
 		return err
 	}
 	if updateNeeded {
 		k8sAuthSecret := v1.Secret{}
-		err = c.k8sClient.Get(context.TODO(),
+		err = a.k8sClient.Get(context.TODO(),
 			types.NamespacedName{
 				Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 				Namespace: cluster.Namespace,
@@ -348,7 +348,7 @@ func (c *security) maintainAuthTokenSecret(
 			return err
 		}
 
-		token, err := c.createToken(cluster, authTokenSecretName, role, authSecret, groups)
+		token, err := a.createToken(cluster, authTokenSecretName, role, authSecret, groups)
 		if err != nil {
 			return err
 		}
@@ -364,7 +364,7 @@ func (c *security) maintainAuthTokenSecret(
 				pxutil.SecurityAuthTokenKey: []byte(token),
 			},
 		}
-		err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+		err = k8sutil.CreateOrUpdateSecret(a.k8sClient, secret, ownerRef)
 		if err != nil {
 			return err
 		}
@@ -372,20 +372,20 @@ func (c *security) maintainAuthTokenSecret(
 		// Cache new resource version
 
 		// Store which resource version the given authTokenSecret was last generated with
-		c.resourceVersionCache[authTokenSecretName] = k8sAuthSecret.ResourceVersion
+		a.resourceVersionCache[authTokenSecretName] = k8sAuthSecret.ResourceVersion
 	}
 
 	return nil
 }
 
-func (c *security) isTokenSecretRefreshRequired(
+func (a *auth) isTokenSecretRefreshRequired(
 	cluster *corev1.StorageCluster,
 	authTokenSecretName string,
 ) (bool, error) {
 
 	// Get auth secret and key value inside
 	k8sAuthSecret := v1.Secret{}
-	err := c.k8sClient.Get(context.TODO(),
+	err := a.k8sClient.Get(context.TODO(),
 		types.NamespacedName{
 			Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 			Namespace: cluster.Namespace,
@@ -396,14 +396,14 @@ func (c *security) isTokenSecretRefreshRequired(
 		return true, err
 	}
 	// Check if auth secret has been updated for the given authTokenSecret
-	lastResourceVersion, ok := c.resourceVersionCache[authTokenSecretName]
+	lastResourceVersion, ok := a.resourceVersionCache[authTokenSecretName]
 	if k8sAuthSecret.ResourceVersion != lastResourceVersion || !ok {
 		return true, nil
 	}
 
 	// Get Token Secret
 	k8sTokenSecret := v1.Secret{}
-	err = c.k8sClient.Get(context.TODO(),
+	err = a.k8sClient.Get(context.TODO(),
 		types.NamespacedName{
 			Name:      authTokenSecretName,
 			Namespace: cluster.Namespace,
@@ -434,7 +434,7 @@ func (c *security) isTokenSecretRefreshRequired(
 	}
 
 	// add some buffer to prevent missing a token refresh
-	currentTimeWithBuffer := time.Now().Add(SecurityTokenBufferLength).Unix()
+	currentTimeWithBuffer := time.Now().Add(AuthTokenBufferLength).Unix()
 	if currentTimeWithBuffer > claims.ExpiresAt {
 		// token has expired
 		return true, nil
@@ -460,30 +460,30 @@ func generateAuthSecret() (string, error) {
 	return string(password[:64]), nil
 }
 
-func (c *security) deleteSecret(
+func (a *auth) deleteSecret(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	name string,
 ) error {
 	if ownerRef == nil {
-		return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace)
+		return k8sutil.DeleteSecret(a.k8sClient, name, cluster.Namespace)
 	}
-	return k8sutil.DeleteSecret(c.k8sClient, name, cluster.Namespace, *ownerRef)
+	return k8sutil.DeleteSecret(a.k8sClient, name, cluster.Namespace, *ownerRef)
 }
 
 // closeSdkConn closes the sdk connection and resets it to nil
-func (c *security) closeSdkConn() {
-	if c.sdkConn == nil {
+func (a *auth) closeSdkConn() {
+	if a.sdkConn == nil {
 		return
 	}
 
-	if err := c.sdkConn.Close(); err != nil {
+	if err := a.sdkConn.Close(); err != nil {
 		logrus.Errorf("failed to close sdk connection: %s", err.Error())
 	}
-	c.sdkConn = nil
+	a.sdkConn = nil
 }
 
-func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
+func (a *auth) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 	if cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit) {
 		return nil
 	}
@@ -508,15 +508,15 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	a.sdkConn, err = pxutil.GetPortworxConn(a.sdkConn, a.k8sClient, cluster.Namespace)
 	if err != nil {
 		return err
 	}
 
-	roleClient := api.NewOpenStorageRoleClient(c.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
+	roleClient := api.NewOpenStorageRoleClient(a.sdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, a.k8sClient)
 	if err != nil {
-		c.closeSdkConn()
+		a.closeSdkConn()
 		return err
 	}
 
@@ -528,10 +528,10 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 		desiredRole = GuestRoleDisabled
 	}
 	currentRoleResp, err := roleClient.Inspect(ctx, &api.SdkRoleInspectRequest{
-		Name: SecuritySystemGuestRoleName,
+		Name: AuthSystemGuestRoleName,
 	})
 	if err != nil {
-		c.closeSdkConn()
+		a.closeSdkConn()
 		return nil
 	}
 	currentRole := *currentRoleResp.GetRole()
@@ -540,7 +540,7 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 			Role: &desiredRole,
 		})
 		if err != nil {
-			c.closeSdkConn()
+			a.closeSdkConn()
 			return err
 		}
 	}
@@ -548,11 +548,11 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-// RegisterSecurityComponent registers the security component
-func RegisterSecurityComponent() {
-	Register(SecurityComponentName, &security{})
+// RegisterAuthComponent registers the auth component
+func RegisterAuthComponent() {
+	Register(AuthComponentName, &auth{})
 }
 
 func init() {
-	RegisterSecurityComponent()
+	RegisterAuthComponent()
 }

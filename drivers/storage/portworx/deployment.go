@@ -40,8 +40,10 @@ const (
 
 type volumeInfo struct {
 	name             string
-	hostPath         string
-	mountPath        string
+	hostPath         string // The path on the host
+	mountPath        string // The path on the container
+	secretName       string // The name of the secret (mutually exclusive with hostPath)
+	secretKey        string // The key of the secret (mutually exclusive with hostPath)
 	readOnly         bool
 	mountPropagation *v1.MountPropagationMode
 	hostPathType     *v1.HostPathType
@@ -812,6 +814,16 @@ func (t *template) getArguments() []string {
 		logrus.Warnf("error parsing misc args: %v", err)
 	}
 
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
+		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
+			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
+			args = append(args, tlsArgs...)
+		} else {
+			logrus.Warnf("error parsing tls spec: %v", err)
+		}
+	}
+
 	if pxutil.EssentialsEnabled() {
 		for args[len(args)-1] == "--oem" {
 			args = args[:len(args)-1]
@@ -944,8 +956,26 @@ func (t *template) getEnvList() []v1.EnvVar {
 		envMap[env.Name] = env.DeepCopy()
 	}
 
+	// We're setting this to signal to porx that tls is enabled
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		// Set:
+		//    env:
+		//    - name: PX_ENABLE_TLS
+		//      value: "true"
+		//    - name: PX_ENFORCE_TLS
+		//      value: "true"
+		envMap[pxutil.EnvKeyPortworxEnableTLS] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		}
+		envMap[pxutil.EnvKeyPortworxEnforceTLS] = &v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxEnforceTLS,
+			Value: "true",
+		}
+	}
+
 	// Add self signed values from spec if security is enabled
-	if pxutil.SecurityEnabled(t.cluster) {
+	if pxutil.AuthEnabled(&t.cluster.Spec) {
 		envMap[pxutil.EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyPortworxAuthJwtSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
@@ -1021,7 +1051,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := getDefaultVolumeInfoList()
 	extensions := []func() []volumeInfo{
-		t.getK3sVolumeInfoList, t.getBottleRocketVolumeInfoList,
+		t.getK3sVolumeInfoList, t.getBottleRocketVolumeInfoList, t.GetVolumeInfoForTLSCerts,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1073,6 +1103,7 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getTelemetryVolumeInfoList,
 		t.getK3sVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
+		t.GetVolumeInfoForTLSCerts,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1101,11 +1132,25 @@ func (t *template) getVolumes() []v1.Volume {
 					Type: v.hostPathType,
 				},
 			}
+			if len(v.secretName) > 0 && len(v.secretKey) > 0 {
+				volume.VolumeSource = v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: v.secretName,
+						Items: []v1.KeyToPath{
+							{
+								Key:  v.secretKey,
+								Path: v.secretKey,
+							},
+						},
+					},
+				}
+			}
 			if t.isPKS && v.pks != nil && v.pks.hostPath != "" {
 				volume.VolumeSource.HostPath.Path = v.pks.hostPath
 			}
 
-			if volume.VolumeSource.HostPath.Path != "" {
+			if (volume.VolumeSource.HostPath != nil && volume.VolumeSource.HostPath.Path != "") ||
+				(volume.VolumeSource.Secret != nil && volume.VolumeSource.Secret.SecretName != "") {
 				volumes = append(volumes, volume)
 			}
 		}
@@ -1261,6 +1306,36 @@ func (t *template) getBottleRocketVolumeInfoList() []volumeInfo {
 			hostPath:  "/run/dockershim.sock",
 			mountPath: "/run/containerd/containerd.sock",
 		},
+	}
+}
+
+func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
+	if !pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
+		return []volumeInfo{}
+	}
+
+	// TLS is assumed to be filled up here with defaults (validated by storagecluster controller. See validateTLSSpecs() )
+	tls := t.cluster.Spec.Security.TLS
+	ret := []volumeInfo{}
+	if !pxutil.IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
+	}
+	if !pxutil.IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.ServerCert, "apiservercert", pxutil.DefaultTLSServerCertMountPath))
+	}
+	if !pxutil.IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
+		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.ServerKey, "apiserverkey", pxutil.DefaultTLSServerKeyMountPath))
+	}
+	return ret
+}
+
+func (t *template) getVolumeInfoFromCertLocation(certLocation corev1.CertLocation, volumeName, mountPath string) volumeInfo {
+	return volumeInfo{
+		name:       volumeName,
+		secretName: certLocation.SecretRef.SecretName,
+		secretKey:  certLocation.SecretRef.SecretKey,
+		mountPath:  mountPath,
+		readOnly:   true,
 	}
 }
 

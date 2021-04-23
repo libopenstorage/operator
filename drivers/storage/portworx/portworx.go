@@ -108,7 +108,7 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 		},
 	}
 
-	if pxutil.SecurityEnabled(cluster) {
+	if pxutil.AuthEnabled(&cluster.Spec) {
 		envMap[pxutil.EnvKeyStorkPXSharedSecret] = &v1.EnvVar{
 			Name: pxutil.EnvKeyStorkPXSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
@@ -137,6 +137,7 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 			Value: issuer,
 		}
 	}
+	pxutil.AppendTLSEnv(&cluster.Spec, envMap)
 
 	return envMap
 }
@@ -674,7 +675,7 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	}
 
 	if toUpdate.Spec.Security != nil {
-		if toUpdate.Spec.Security.Enabled {
+		if pxutil.AuthEnabled(&toUpdate.Spec) {
 			if toUpdate.Spec.Security.Auth != nil && (*toUpdate.Spec.Security.Auth != corev1.AuthSpec{}) {
 				if toUpdate.Spec.Security.Auth.GuestAccess == nil || (*toUpdate.Spec.Security.Auth.GuestAccess == "") {
 					// if not provided, enabled by default.
@@ -702,7 +703,7 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 					toUpdate.Spec.Security.Auth.SelfSigned = defaultAuthTemplate.SelfSigned
 				}
 			} else {
-				// security enabled, but no auth configuration
+				// auth enabled, but no auth configuration
 				toUpdate.Spec.Security.Auth = defaultAuthTemplate
 			}
 		}

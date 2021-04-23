@@ -2,8 +2,11 @@ package portworx
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -49,14 +53,15 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 15)
+	require.Len(t, components, 16)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
 			component.PSPComponentName,
-			component.SecurityComponentName,
+			component.AuthComponentName,
+			component.TLSComponentName,
 		},
-		[]string{componentNames[0], componentNames[1]},
+		[]string{componentNames[0], componentNames[1], componentNames[2]},
 	)
 	require.ElementsMatch(t,
 		[]string{
@@ -74,12 +79,13 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
 		},
-		componentNames[2:],
+		componentNames[3:],
 	)
 
 	require.Equal(t, int32(0), components[0].Priority())
 	require.Equal(t, int32(0), components[1].Priority())
-	for _, comp := range components[2:] {
+	require.Equal(t, int32(0), components[2].Priority())
+	for _, comp := range components[3:] {
 		require.Equal(t, component.DefaultComponentPriority, comp.Priority())
 	}
 }
@@ -2604,6 +2610,7 @@ func TestAutopilotWithoutImage(t *testing.T) {
 }
 
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -2650,6 +2657,216 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	require.Equal(t, cluster.Namespace,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+}
+
+func TestAutopilotWithTLSEnabled(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	// setup
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+					RootCA: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/ca.crt"),
+					},
+					ServerCert: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.crt"),
+					},
+					ServerKey: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.key"),
+					},
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+
+	// test
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
+	expectedEnv := []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyCASecretName,
+			Value: pxutil.DefaultCASecretName,
+		},
+		{
+			Name:  pxutil.EnvKeyCASecretKey,
+			Value: pxutil.DefaultCASecretKey,
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: user supplies name of the secret to use for the CA cert. Validate that it is not overwritten by defaults
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+					RootCA: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/ca.crt"),
+					},
+					ServerCert: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.crt"),
+					},
+					ServerKey: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.key"),
+					},
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_CA_CERT_SECRET",
+						Value: "non_default_ca_secret",
+					},
+					{
+						Name:  "PX_CA_CERT_SECRET_KEY",
+						Value: "non_default_secret_key",
+					},
+				},
+			},
+		},
+	}
+	// test
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyCASecretName,
+			Value: "non_default_ca_secret",
+		},
+		{
+			Name:  pxutil.EnvKeyCASecretKey,
+			Value: "non_default_secret_key",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: user supplies CA in k8s secret ... k8s secret name and key are supplied to autopilot
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+					RootCA: &corev1.CertLocation{
+						SecretRef: &corev1.SecretRef{
+							SecretName: "mycasecret",
+							SecretKey:  "mysecretkey",
+						},
+					},
+					ServerCert: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.crt"),
+					},
+					ServerKey: &corev1.CertLocation{
+						FileName: stringPtr("/etc/pwx/server.key"),
+					},
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+		},
+	}
+	// test
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 4)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyCASecretName,
+			Value: "mycasecret",
+		},
+		{
+			Name:  pxutil.EnvKeyCASecretKey,
+			Value: "mysecretkey",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
@@ -3143,14 +3360,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 }
 
 func TestSecurityInstall(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	recorder := record.NewFakeRecorder(100)
-	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
-	require.NoError(t, err)
-
+	// auth enabled through security.enabled
+	logrus.SetLevel(logrus.TraceLevel)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3170,6 +3381,22 @@ func TestSecurityInstall(t *testing.T) {
 			},
 		},
 	}
+	validateAuthSecurityInstall(t, cluster)
+
+	// auth enabled explicitly
+	cluster.Spec.Security.Auth.Enabled = boolPtr(true)
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+}
+
+func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(100)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 
@@ -3263,7 +3490,7 @@ func TestSecurityInstall(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1s")
 
@@ -3361,14 +3588,151 @@ func TestSecurityInstall(t *testing.T) {
 	require.Equal(t, string(sharedSecretKey), string(sharedSecretVal))
 }
 
-func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
-	k8sClient := testutil.FakeK8sClient()
+func TestTLSSpecValidation(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	caCertFileName := stringPtr("/etc/pwx/testCA.crt")
+	serverCertFileName := stringPtr("/etc/pwx/testServer.crt")
+	serverKeyFileName := stringPtr("/etc/pwx/testServer.key")
+
+	cluster := testutil.CreateClusterWithTLS(nil, serverCertFileName, serverKeyFileName)
+	// missing ca cert
+	// It is ok for ca cert to be missing if serverCert and serverKey specified
+	s, _ := json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
+	t.Logf("TLS spec under validation (expect no error): %+v", string(s))
+
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
+	// Should not return error and raise no event
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	//// invalid values of ca cert
+	// empty value of ca cert ok if serverCert and serverKey specified
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{}
+	s, _ = json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
+	t.Logf("TLS spec under validation (expect no error): %+v", string(s))
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	recorder = record.NewFakeRecorder(10)
+	driver = portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	// Should not return error and raise no event
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	// invalid value of rootCA
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: can not specify both filename and secretRef as source for tls certs")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: for kubernetes secret must specify both name and key")
+
+	// missing serverCert
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, serverKeyFileName)
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	//// invalid values of serverCert
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: can not specify both filename and secretRef as source for tls certs")
+
+	// missing serverKey
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, nil)
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	//// invalid values of serverKey
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: can not specify both filename and secretRef as source for tls certs")
+}
+
+func validateThatWarningEventIsRaisedOnPreinstall(t *testing.T, cluster *corev1.StorageCluster, errStr string) {
+	s, _ := json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
+	t.Logf("TLS spec under validation: %+v", string(s))
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+
+	// Should return error. This error will eventually bubble up into an event
+	err := driver.PreInstall(cluster)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), errStr))
+}
+
+func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
+	// auth enabled through security.enabled
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3386,6 +3750,21 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 			},
 		},
 	}
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+
+	// auth enabled explicitly
+	cluster.Spec.Security.Auth.Enabled = boolPtr(true)
+	validateSecurityTokenRefreshOnUpdate(t, cluster)
+}
+
+func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageCluster) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
 	// Initial run
 	setPortworxDefaults(cluster)
 
@@ -3394,7 +3773,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	userSecret := &v1.Secret{}
-	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("newissuer_for_newtoken")
+	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr(fmt.Sprintf("newissuer_for_newtoken%d", rand.Intn(100000)))
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	oldUserToken := userSecret.Data[pxutil.SecurityAuthTokenKey]
@@ -3416,7 +3795,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	sharedSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
-	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret")
+	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte(fmt.Sprintf("mynewsecret%d", rand.Intn(100000)))
 	err = testutil.Update(k8sClient, sharedSecret)
 	require.NoError(t, err)
 
@@ -3436,14 +3815,14 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	oldUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
 
 	sharedSecret = &v1.Secret{}
-	newSharedSecretName := "newsharedsecret"
+	newSharedSecretName := fmt.Sprintf("newsharedsecret%d", rand.Intn(100000))
 	sharedSecret.Name = newSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
 	sharedSecret.Data = make(map[string][]byte)
 	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
-	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret_in_different_location")
-	sharedSecret.StringData[pxutil.SecuritySharedSecretKey] = "mynewsecret_in_different_location"
+	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte(fmt.Sprintf("mynewsecret_in_different_location%d", rand.Intn(100000)))
+	sharedSecret.StringData[pxutil.SecuritySharedSecretKey] = fmt.Sprintf("mynewsecret_in_different_location%d", rand.Intn(100000))
 	err = k8sClient.Create(context.TODO(), sharedSecret)
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = &newSharedSecretName
@@ -3505,7 +3884,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	})
 
 	component.DeregisterAllComponents()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
 
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
@@ -3541,7 +3920,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3549,11 +3928,11 @@ func TestGuestAccessSecurity(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// GuestAccess disabled but hould not call update as cluster is still initializing
+	// GuestAccess disabled but should not call update as cluster is still initializing
 	cluster.Status.Phase = string(corev1.ClusterInit)
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(nil, nil).
 		Times(0)
@@ -3570,7 +3949,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3591,7 +3970,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3611,7 +3990,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
+			Name: component.AuthSystemGuestRoleName,
 		}).
 		Return(inspectedRoleResp, nil).
 		Times(1)
@@ -3635,7 +4014,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup %v.", v1.EventTypeWarning,
-			util.FailedComponentReason, component.SecurityComponentName))
+			util.FailedComponentReason, component.AuthComponentName))
 
 	// set to managed to avoid more calls without a corresponding mock expect
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
@@ -9899,7 +10278,8 @@ func reregisterComponents() {
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
-	component.RegisterSecurityComponent()
+	component.RegisterAuthComponent()
+	component.RegisterTLSComponent()
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
 }
