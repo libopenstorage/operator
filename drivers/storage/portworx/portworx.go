@@ -158,6 +158,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				Enabled: true,
 			}
 		}
+
 		setPortworxDefaults(toUpdate)
 	}
 
@@ -211,7 +212,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
 		}
 
-		if pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) &&
+		if pxutil.IsCSIEnabled(toUpdate) &&
 			(toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
@@ -257,7 +258,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.Telemetry = ""
 	}
 
-	if !pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates) {
+	if !pxutil.IsCSIEnabled(toUpdate) {
 		toUpdate.Status.DesiredImages.CSIProvisioner = ""
 		toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = ""
 		toUpdate.Status.DesiredImages.CSIDriverRegistrar = ""
@@ -566,14 +567,12 @@ func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
 		}
 	}
 
-	if t.isK3s {
-		// Enable CSI if running in k3s environment
-		if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
-			if toUpdate.Spec.FeatureGates == nil {
-				toUpdate.Spec.FeatureGates = make(map[string]string)
-			}
-			toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
+	// Enable CSI flag by default
+	if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
+		if toUpdate.Spec.FeatureGates == nil {
+			toUpdate.Spec.FeatureGates = make(map[string]string)
 		}
+		toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
 	}
 
 	setSecuritySpecDefaults(toUpdate)
@@ -797,7 +796,7 @@ func hasLighthouseChanged(cluster *corev1.StorageCluster) bool {
 }
 
 func hasCSIChanged(cluster *corev1.StorageCluster) bool {
-	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) &&
+	return pxutil.IsCSIEnabled(cluster) &&
 		cluster.Status.DesiredImages.CSIProvisioner == ""
 }
 

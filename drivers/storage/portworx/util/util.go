@@ -199,8 +199,7 @@ const (
 	DefaultCASecretKey = "root-ca"
 
 	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
-	EnvKeyPortworxEnableTLS = "PX_ENABLE_TLS"
-	// EnvKeyPortworxEnforceTLS is a flag for enabling operator TLS with PX. TODO: temporary
+	EnvKeyPortworxEnableTLS  = "PX_ENABLE_TLS"
 	EnvKeyPortworxEnforceTLS = "PX_ENFORCE_TLS"
 )
 
@@ -214,6 +213,11 @@ var (
 func IsPortworxEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationDisableStorage])
 	return err != nil || !disabled
+}
+
+// IsCSIEnabled returns true if CSI is not disabled by the feature flag
+func IsCSIEnabled(cluster *corev1.StorageCluster) bool {
+	return IsPortworxEnabled(cluster) && FeatureCSI.IsEnabled(cluster.Spec.FeatureGates)
 }
 
 // IsPKS returns true if the annotation has a PKS annotation and is true value
