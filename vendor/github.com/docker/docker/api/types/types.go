@@ -39,7 +39,6 @@ type ImageInspect struct {
 	Author          string
 	Config          *container.Config
 	Architecture    string
-	Variant         string `json:",omitempty"`
 	Os              string
 	OsVersion       string `json:",omitempty"`
 	Size            int64
@@ -154,11 +153,11 @@ type Info struct {
 	Images             int
 	Driver             string
 	DriverStatus       [][2]string
-	SystemStatus       [][2]string `json:",omitempty"` // SystemStatus is only propagated by the Swarm standalone API
+	SystemStatus       [][2]string
 	Plugins            PluginsInfo
 	MemoryLimit        bool
 	SwapLimit          bool
-	KernelMemory       bool // Deprecated: kernel 5.4 deprecated kmem.limit_in_bytes
+	KernelMemory       bool
 	KernelMemoryTCP    bool
 	CPUCfsPeriod       bool `json:"CpuCfsPeriod"`
 	CPUCfsQuota        bool `json:"CpuCfsQuota"`
@@ -175,11 +174,9 @@ type Info struct {
 	SystemTime         string
 	LoggingDriver      string
 	CgroupDriver       string
-	CgroupVersion      string `json:",omitempty"`
 	NEventsListener    int
 	KernelVersion      string
 	OperatingSystem    string
-	OSVersion          string
 	OSType             string
 	Architecture       string
 	IndexServerAddress string
@@ -195,35 +192,28 @@ type Info struct {
 	Labels             []string
 	ExperimentalBuild  bool
 	ServerVersion      string
-	ClusterStore       string `json:",omitempty"` // Deprecated: host-discovery and overlay networks with external k/v stores are deprecated
-	ClusterAdvertise   string `json:",omitempty"` // Deprecated: host-discovery and overlay networks with external k/v stores are deprecated
+	ClusterStore       string
+	ClusterAdvertise   string
 	Runtimes           map[string]Runtime
 	DefaultRuntime     string
 	Swarm              swarm.Info
 	// LiveRestoreEnabled determines whether containers should be kept
 	// running when the daemon is shutdown or upon daemon start if
 	// running containers are detected
-	LiveRestoreEnabled  bool
-	Isolation           container.Isolation
-	InitBinary          string
-	ContainerdCommit    Commit
-	RuncCommit          Commit
-	InitCommit          Commit
-	SecurityOptions     []string
-	ProductLicense      string               `json:",omitempty"`
-	DefaultAddressPools []NetworkAddressPool `json:",omitempty"`
-	Warnings            []string
+	LiveRestoreEnabled bool
+	Isolation          container.Isolation
+	InitBinary         string
+	ContainerdCommit   Commit
+	RuncCommit         Commit
+	InitCommit         Commit
+	SecurityOptions    []string
+	ProductLicense     string `json:",omitempty"`
+	Warnings           []string
 }
 
 // KeyValue holds a key/value pair
 type KeyValue struct {
 	Key, Value string
-}
-
-// NetworkAddressPool is a temp struct used by Info struct
-type NetworkAddressPool struct {
-	Base string
-	Size int
 }
 
 // SecurityOpt contains the name and options of a security option
@@ -326,7 +316,7 @@ type ContainerState struct {
 }
 
 // ContainerNode stores information about the node that a container
-// is running on.  It's only used by the Docker Swarm standalone API
+// is running on.  It's only available in Docker Swarm
 type ContainerNode struct {
 	ID        string
 	IPAddress string `json:"IP"`
@@ -350,7 +340,7 @@ type ContainerJSONBase struct {
 	HostnamePath    string
 	HostsPath       string
 	LogPath         string
-	Node            *ContainerNode `json:",omitempty"` // Node is only propagated by Docker Swarm standalone API
+	Node            *ContainerNode `json:",omitempty"`
 	Name            string
 	RestartCount    int
 	Driver          string
@@ -518,16 +508,6 @@ type Checkpoint struct {
 type Runtime struct {
 	Path string   `json:"path"`
 	Args []string `json:"runtimeArgs,omitempty"`
-
-	// This is exposed here only for internal use
-	// It is not currently supported to specify custom shim configs
-	Shim *ShimConfig `json:"-"`
-}
-
-// ShimConfig is used by runtime to configure containerd shims
-type ShimConfig struct {
-	Binary string
-	Opts   interface{}
 }
 
 // DiskUsage contains response of Engine API:

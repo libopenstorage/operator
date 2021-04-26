@@ -130,7 +130,9 @@ func setup() error {
 		return fmt.Errorf("Error getting node driver %v: %v", nodeDriverName, err)
 	}
 
-	if err = nodeDriver.Init(); err != nil {
+	if err = nodeDriver.Init(node.InitOptions{
+		SpecDir: appsDir,
+	}); err != nil {
 		return fmt.Errorf("Error initializing node driver %v: %v", nodeDriverName, err)
 	}
 

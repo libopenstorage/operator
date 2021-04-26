@@ -96,8 +96,12 @@ const (
 	// DefaultTimeout default timeout
 	DefaultTimeout = 2 * time.Minute
 
+	autopilotServiceName          = "autopilot"
+	autopilotDefaultNamespace     = "kube-system"
 	resizeSupportedAnnotationKey  = "torpedo.io/resize-supported"
 	autopilotEnabledAnnotationKey = "torpedo.io/autopilot-enabled"
+	pvcLabelsAnnotationKey        = "torpedo.io/pvclabels-enabled"
+	pvcNodesAnnotationKey         = "torpedo.io/pvcnodes-enabled"
 	deleteStrategyAnnotationKey   = "torpedo.io/delete-strategy"
 	specObjAppWorkloadSizeEnvVar  = "SIZE"
 )
@@ -176,7 +180,6 @@ func (k *K8s) IsNodeReady(n node.Node) error {
 	if _, err := task.DoRetryWithTimeout(t, k8sNodeReadyTimeout, DefaultRetryInterval); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -823,7 +826,6 @@ func (k *K8s) createStorageObject(spec interface{}, ns *corev1.Namespace, app *s
 
 		logrus.Infof("Setting provisioner of %v to %v", obj.Name, volume.GetStorageProvisioner())
 		obj.Provisioner = volume.GetStorageProvisioner()
-
 		sc, err := k8sStorage.CreateStorageClass(obj)
 		if errors.IsAlreadyExists(err) {
 			if sc, err = k8sStorage.GetStorageClass(obj.Name); err == nil {
@@ -844,12 +846,46 @@ func (k *K8s) createStorageObject(spec interface{}, ns *corev1.Namespace, app *s
 	} else if obj, ok := spec.(*corev1.PersistentVolumeClaim); ok {
 		obj.Namespace = ns.Name
 		k.substituteNamespaceInPVC(obj, ns.Name)
-		if len(options.Labels) > 0 {
-			k.addLabelsToPVC(obj, options.Labels)
+
+		if pvcLabelsAnnotationValue, ok := obj.Annotations[pvcLabelsAnnotationKey]; ok {
+			pvcLabelsEnabled, _ := strconv.ParseBool(pvcLabelsAnnotationValue)
+			if pvcLabelsEnabled {
+				if len(options.Labels) > 0 {
+					k.addLabelsToPVC(obj, options.Labels)
+				}
+			}
 		}
-		pvc, err := k8sCore.CreatePersistentVolumeClaim(obj)
+
+		if pvcNodesAnnotationValue, ok := obj.Annotations[pvcNodesAnnotationKey]; ok {
+			pvcNodesEnabled, _ := strconv.ParseBool(pvcNodesAnnotationValue)
+			if pvcNodesEnabled {
+				if len(options.PvcNodesAnnotation) > 0 {
+					k.addAnnotationsToPVC(obj, map[string]string{"nodes": strings.Join(options.PvcNodesAnnotation, ",")})
+				}
+			}
+		}
+
+		newPvcObj := obj.DeepCopy()
+		if options.PvcSize > 0 {
+			autopilotEnabled := false
+			if pvcAnnotationValue, ok := newPvcObj.Annotations[autopilotEnabledAnnotationKey]; ok {
+				autopilotEnabled, _ = strconv.ParseBool(pvcAnnotationValue)
+			}
+			if autopilotEnabled {
+				newPvcSize, parseErr := resource.ParseQuantity(strconv.FormatInt(options.PvcSize, 10))
+				if parseErr != nil {
+					return nil, &scheduler.ErrFailedToScheduleApp{
+						App:   app,
+						Cause: fmt.Sprintf("Failed to create PVC: %v. Err: %v", obj.Name, parseErr),
+					}
+				}
+				logrus.Infof("[%v] Using custom PVC size: %v for PVC: %v", app.Key, newPvcSize.String(), obj.Name)
+				newPvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = newPvcSize
+			}
+		}
+		pvc, err := k8sCore.CreatePersistentVolumeClaim(newPvcObj)
 		if errors.IsAlreadyExists(err) {
-			if pvc, err = k8sCore.GetPersistentVolumeClaim(obj.Name, obj.Namespace); err == nil {
+			if pvc, err = k8sCore.GetPersistentVolumeClaim(newPvcObj.Name, newPvcObj.Namespace); err == nil {
 				logrus.Infof("[%v] Found existing PVC: %v", app.Key, pvc.Name)
 				return pvc, nil
 			}
@@ -857,7 +893,7 @@ func (k *K8s) createStorageObject(spec interface{}, ns *corev1.Namespace, app *s
 		if err != nil {
 			return nil, &scheduler.ErrFailedToScheduleApp{
 				App:   app,
-				Cause: fmt.Sprintf("Failed to create PVC: %v. Err: %v", obj.Name, err),
+				Cause: fmt.Sprintf("Failed to create PVC: %v. Err: %v", newPvcObj.Name, err),
 			}
 		}
 
@@ -875,14 +911,12 @@ func (k *K8s) createStorageObject(spec interface{}, ns *corev1.Namespace, app *s
 				labelSelector := metav1.LabelSelector{MatchLabels: labels}
 				apRule.Spec.Selector = apapi.RuleObjectSelector{LabelSelector: labelSelector}
 				apRule.Spec.NamespaceSelector = apapi.RuleObjectSelector{LabelSelector: labelSelector}
-				aRule, err := k.CreateAutopilotRule(apRule)
+				_, err := k.CreateAutopilotRule(apRule)
 				if err != nil {
 					return nil, err
 				}
-				logrus.Infof("[%v] Created Autopilot rule: %+v", app.Key, aRule)
 			}
 		}
-
 		return pvc, nil
 
 	} else if obj, ok := spec.(*snapv1.VolumeSnapshot); ok {
@@ -1072,11 +1106,6 @@ func (k *K8s) addSecurityAnnotation(spec interface{}, configMap *corev1.ConfigMa
 
 func (k *K8s) createCoreObject(spec interface{}, ns *corev1.Namespace, app *spec.AppSpec,
 	options scheduler.ScheduleOptions) (interface{}, error) {
-	// configure app create options
-	opts := metav1.CreateOptions{}
-	if len(options.DryRun) > 0 {
-		opts.DryRun = options.DryRun
-	}
 	if obj, ok := spec.(*appsapi.Deployment); ok {
 		obj.Namespace = ns.Name
 		obj.Spec.Template.Spec.Volumes = k.substituteNamespaceInVolumes(obj.Spec.Template.Spec.Volumes, ns.Name)
@@ -1094,7 +1123,7 @@ func (k *K8s) createCoreObject(spec interface{}, ns *corev1.Namespace, app *spec
 		if secret != nil {
 			obj.Spec.Template.Spec.ImagePullSecrets = []v1.LocalObjectReference{{Name: secret.Name}}
 		}
-		dep, err := k8sApps.CreateDeployment(obj, opts)
+		dep, err := k8sApps.CreateDeployment(obj, metav1.CreateOptions{})
 		if errors.IsAlreadyExists(err) {
 			if dep, err = k8sApps.GetDeployment(obj.Name, obj.Namespace); err == nil {
 				logrus.Infof("[%v] Found existing deployment: %v", app.Key, dep.Name)
@@ -1157,7 +1186,7 @@ func (k *K8s) createCoreObject(spec interface{}, ns *corev1.Namespace, app *spec
 		if secret != nil {
 			obj.Spec.Template.Spec.ImagePullSecrets = []v1.LocalObjectReference{{Name: secret.Name}}
 		}
-		ss, err := k8sApps.CreateStatefulSet(obj, opts)
+		ss, err := k8sApps.CreateStatefulSet(obj, metav1.CreateOptions{})
 		if errors.IsAlreadyExists(err) {
 			if ss, err = k8sApps.GetStatefulSet(obj.Name, obj.Namespace); err == nil {
 				logrus.Infof("[%v] Found existing StatefulSet: %v", app.Key, ss.Name)
@@ -1795,7 +1824,6 @@ func (k *K8s) DeleteTasks(ctx *scheduler.Context, opts *scheduler.DeleteTasksOpt
 				Cause: fmt.Sprintf("failed to get pods due to: %v", err),
 			}
 		}
-
 		if k.isRollingDeleteStrategyEnabled(ctx) {
 			for _, pod := range pods {
 				if err := k8sOps.DeletePod(pod.Name, pod.Namespace, false); err != nil {
@@ -3448,7 +3476,9 @@ func (k *K8s) ValidateAutopilotEvents(ctx *scheduler.Context) error {
 						coolDownPeriod = 5 // default autopilot cool down period
 					}
 					// sleep to wait until all events are published
-					time.Sleep(time.Second*time.Duration(coolDownPeriod) + 10)
+					sleepTime := time.Second*time.Duration(coolDownPeriod+10)
+					logrus.Infof("sleep %s until all events are published", sleepTime)
+					time.Sleep(sleepTime)
 
 					objectToValidateName := fmt.Sprintf("%s:pvc-%s", rule.Name, obj.UID)
 					logrus.Infof("[%s] Validating events", objectToValidateName)
@@ -3461,6 +3491,50 @@ func (k *K8s) ValidateAutopilotEvents(ctx *scheduler.Context) error {
 		}
 	}
 	logrus.Infof("Finished validating events")
+	return nil
+}
+
+// ValidateAutopilotRuleObjects validates autopilot rule objects
+func (k *K8s) ValidateAutopilotRuleObjects() error {
+
+	// TODO: Implement ARO validation for specific pool if autopilot rule has pool LabelSelector
+	namespace, err := k.GetAutopilotNamespace()
+	if err != nil {
+		return err
+	}
+
+	expectedAroStates := []apapi.RuleState{
+		apapi.RuleStateTriggered,
+		apapi.RuleStateActiveActionsPending,
+		apapi.RuleStateActiveActionsInProgress,
+		apapi.RuleStateActiveActionsTaken,
+		apapi.RuleStateNormal,
+	}
+
+	listAutopilotRuleObjects, err := k8sAutopilot.ListAutopilotRuleObjects(namespace)
+	if err != nil {
+		return err
+	}
+	if len(listAutopilotRuleObjects.Items) == 0 {
+		logrus.Warnf("the list of autopilot rule objects is empty, please make sure that you have an appropriate autopilot rule")
+		return nil
+	}
+	for _, aro := range listAutopilotRuleObjects.Items {
+		var aroStates []apapi.RuleState
+		for _, aroStatusItem := range aro.Status.Items {
+			if aroStatusItem.State == "" {
+				continue
+			}
+			aroStates = append(aroStates, aroStatusItem.State)
+		}
+		if reflect.DeepEqual(aroStates, expectedAroStates) {
+			logrus.Debugf("autopilot rule object: %s has all expected states", aro.Name)
+		} else {
+			formattedObject, _ := json.MarshalIndent(listAutopilotRuleObjects.Items, "", "\t")
+			logrus.Debugf("autopilot rule objects items: %s", string(formattedObject))
+			return fmt.Errorf("autopilot rule object: %s doesn't have all expected states", aro.Name)
+		}
+	}
 	return nil
 }
 
@@ -3619,6 +3693,21 @@ func (k *K8s) AddLabelOnNode(n node.Node, lKey string, lValue string) error {
 	return nil
 }
 
+// RemoveLabelOnNode adds label for a given node
+func (k *K8s) RemoveLabelOnNode(n node.Node, lKey string) error {
+	k8sOps := k8sCore
+
+	if err := k8sOps.RemoveLabelOnNode(n.Name, lKey); err != nil {
+		return &scheduler.ErrFailedToRemoveLabelOnNode{
+			Key:   lKey,
+			Node:  n,
+			Cause: fmt.Sprintf("Failed to remove label on node. Err: %v", err),
+		}
+	}
+	logrus.Infof("Removed label: %s on node: %s", lKey, n.Name)
+	return nil
+}
+
 // IsAutopilotEnabledForVolume checks if autopilot enabled for a given volume
 func (k *K8s) IsAutopilotEnabledForVolume(vol *volume.Volume) bool {
 	autopilotEnabled := false
@@ -3649,6 +3738,29 @@ func (k *K8s) addLabelsToPVC(pvc *corev1.PersistentVolumeClaim, labels map[strin
 	}
 }
 
+func (k *K8s) addAnnotationsToPVC(pvc *corev1.PersistentVolumeClaim, annotations map[string]string) {
+	if len(pvc.Annotations) == 0 {
+		pvc.Annotations = map[string]string{}
+	}
+	for k, v := range annotations {
+		pvc.Annotations[k] = v
+	}
+}
+
+// GetAutopilotNamespace returns the autopilot namespace
+func (k *K8s) GetAutopilotNamespace() (string, error) {
+	allServices, err := k8sCore.ListServices("", metav1.ListOptions{})
+	if err != nil {
+		return "", err
+	}
+	for _, svc := range allServices.Items {
+		if svc.Name == autopilotServiceName {
+			return svc.Namespace, nil
+		}
+	}
+	return autopilotDefaultNamespace, nil
+}
+
 // CreateAutopilotRule creates the AutopilotRule object
 func (k *K8s) CreateAutopilotRule(apRule apapi.AutopilotRule) (*apapi.AutopilotRule, error) {
 	t := func() (interface{}, bool, error) {
@@ -3665,30 +3777,54 @@ func (k *K8s) CreateAutopilotRule(apRule apapi.AutopilotRule) (*apapi.AutopilotR
 		}
 		return aRule, false, nil
 	}
-
 	apRuleObj, err := task.DoRetryWithTimeout(t, k8sObjectCreateTimeout, DefaultRetryInterval)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Infof("Created autopilot rule: %+v", apRuleObj)
+	apRuleObjString, _ := json.MarshalIndent(apRuleObj, "", "\t")
+	logrus.Infof("Created autopilot rule: %s", apRuleObjString)
 
 	return apRuleObj.(*apapi.AutopilotRule), nil
 }
 
-// UpdateAutopilotRule updates the AutopilotRule
-func (k *K8s) UpdateAutopilotRule(apRule apapi.AutopilotRule) (*apapi.AutopilotRule, error) {
-	aRule, err := k8sAutopilot.GetAutopilotRule(apRule.Name)
-	if err != nil {
-		return nil, err
-	}
-	aRule.Spec = apRule.Spec
+// GetAutopilotRule gets the AutopilotRule for the provided name
+func (k *K8s) GetAutopilotRule(name string) (*apapi.AutopilotRule, error) {
+	return k8sAutopilot.GetAutopilotRule(name)
+}
 
-	return k8sAutopilot.UpdateAutopilotRule(aRule)
+// UpdateAutopilotRule updates the AutopilotRule
+func (k *K8s) UpdateAutopilotRule(apRule *apapi.AutopilotRule) (*apapi.AutopilotRule, error) {
+	return k8sAutopilot.UpdateAutopilotRule(apRule)
 }
 
 // ListAutopilotRules lists AutopilotRules
 func (k *K8s) ListAutopilotRules() (*apapi.AutopilotRuleList, error) {
 	return k8sAutopilot.ListAutopilotRules()
+}
+
+// DeleteAutopilotRule deletes the AutopilotRule of the given name
+func (k *K8s) DeleteAutopilotRule(name string) error {
+	return k8sAutopilot.DeleteAutopilotRule(name)
+}
+
+// GetActionApproval gets the ActionApproval for the provided name
+func (k *K8s) GetActionApproval(namespace, name string) (*apapi.ActionApproval, error) {
+	return k8sAutopilot.GetActionApproval(namespace, name)
+}
+
+// UpdateActionApproval updates the ActionApproval
+func (k *K8s) UpdateActionApproval(namespace string, actionApproval *apapi.ActionApproval) (*apapi.ActionApproval, error) {
+	return k8sAutopilot.UpdateActionApproval(namespace, actionApproval)
+}
+
+// DeleteActionApproval deletes the ActionApproval of the given name
+func (k *K8s) DeleteActionApproval(namespace, name string) error {
+	return k8sAutopilot.DeleteActionApproval(namespace, name)
+}
+
+// ListActionApprovals lists ActionApproval
+func (k *K8s) ListActionApprovals(namespace string) (*apapi.ActionApprovalList, error) {
+	return k8sAutopilot.ListActionApprovals(namespace)
 }
 
 func (k *K8s) isRollingDeleteStrategyEnabled(ctx *scheduler.Context) bool {

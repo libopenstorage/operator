@@ -75,6 +75,8 @@ const (
 	validateNodeStopTimeout           = 5 * time.Minute
 	validateStoragePoolSizeTimeout    = 3 * time.Hour
 	validateStoragePoolSizeInterval   = 30 * time.Second
+	validateRebalanceJobsTimeout      = 30 * time.Minute
+	validateRebalanceJobsInterval     = 30 * time.Second
 	getNodeTimeout                    = 3 * time.Minute
 	getNodeRetryInterval              = 5 * time.Second
 	stopDriverTimeout                 = 5 * time.Minute
@@ -125,6 +127,7 @@ type portworx struct {
 	clusterPairManager   api.OpenStorageClusterPairClient
 	alertsManager        api.OpenStorageAlertsClient
 	csbackupManager      api.OpenStorageCloudBackupClient
+	storagePoolManager   api.OpenStoragePoolClient
 	schedOps             schedops.Driver
 	nodeDriver           node.Driver
 	refreshEndpoint      bool
@@ -611,7 +614,7 @@ func (d *portworx) ValidateCreateVolume(volumeName string, params map[string]str
 	for k, v := range params {
 		switch k {
 		case api.SpecNodes:
-			if !reflect.DeepEqual(v, vol.Spec.ReplicaSet.Nodes) {
+			if v != strings.Join(vol.Spec.ReplicaSet.Nodes, ",") {
 				return errFailedToInspectVolume(volumeName, k, v, vol.Spec.ReplicaSet.Nodes)
 			}
 		case api.SpecParent:
@@ -1016,14 +1019,13 @@ func (d *portworx) WaitDriverDownOnNode(n node.Node) error {
 
 		for _, addr := range n.Addresses {
 			err := d.testAndSetEndpointUsingNodeIP(addr)
-			if err != nil {
-				if !strings.Contains(err.Error(), "connect: connection refused") {
-					return "", true, &ErrFailedToWaitForPx{
-						Node:  n,
-						Cause: fmt.Sprintf("px is not yet down on node"),
-					}
+			if err == nil || !strings.Contains(err.Error(), "connect: connection refused") {
+				return "", true, &ErrFailedToWaitForPx{
+					Node:  n,
+					Cause: fmt.Sprintf("px is not yet down on node"),
 				}
 			}
+			logrus.Warn(err.Error())
 		}
 
 		logrus.Infof("px on node %s is now down.", n.Name)
@@ -1086,6 +1088,27 @@ func (d *portworx) ValidateStoragePools() error {
 		if _, err := task.DoRetryWithTimeout(t, validateStoragePoolSizeTimeout, validateStoragePoolSizeInterval); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (d *portworx) ValidateRebalanceJobs() error {
+
+	// start a task to check if all rebalance jobs are done
+	t := func() (interface{}, bool, error) {
+		jobListResp, err := d.storagePoolManager.EnumerateRebalanceJobs(d.getContext(), &api.SdkEnumerateRebalanceJobsRequest{})
+		if err != nil {
+			return nil, true, err
+		}
+		for _, job := range jobListResp.Jobs {
+			if job.State != api.StorageRebalanceJobState_DONE {
+				return "", true, fmt.Errorf("rebalance job is not done. Job ID: %s, State: %s", job.Id, job.State.String())
+			}
+		}
+		return nil, false, nil
+	}
+	if _, err := task.DoRetryWithTimeout(t, validateRebalanceJobsTimeout, validateRebalanceJobsInterval); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1452,6 +1475,7 @@ func (d *portworx) testAndSetEndpoint(endpoint string, sdkport, apiport int32) e
 	}
 
 	d.volDriver = api.NewOpenStorageVolumeClient(conn)
+	d.storagePoolManager = api.NewOpenStoragePoolClient(conn)
 	d.nodeManager = api.NewOpenStorageNodeClient(conn)
 	d.mountAttachManager = api.NewOpenStorageMountAttachClient(conn)
 	d.clusterPairManager = api.NewOpenStorageClusterPairClient(conn)
@@ -2235,7 +2259,7 @@ func (d *portworx) EstimatePoolExpandSize(apRule apapi.AutopilotRule, pool node.
 						requiredNewDisks := uint64(math.Ceil(requiredScaleSize / float64(baseDiskSize)))
 						calculatedTotalSize += requiredNewDisks * baseDiskSize
 					} else {
-						calculatedTotalSize += uint64(requiredScaleSize)
+						calculatedTotalSize += uint64(requiredScaleSize) * uint64(len(node.Disks))
 					}
 				}
 			} else {

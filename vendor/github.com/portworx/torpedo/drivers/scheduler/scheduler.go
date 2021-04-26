@@ -104,8 +104,10 @@ type ScheduleOptions struct {
 	Scheduler string
 	// Labels is a map of {key,value} pairs for labeling spec objects
 	Labels map[string]string
-	// DryRun options for app scheduling
-	DryRun []string
+	// PvcNodesAnnotation is a comma separated Node ID's  to use for replication sets of the volume
+	PvcNodesAnnotation []string
+	// PvcSize is the size of PVC
+	PvcSize int64
 }
 
 // Driver must be implemented to provide test support to various schedulers.
@@ -206,8 +208,11 @@ type Driver interface {
 	// GetTokenFromConfigMap gets token for a volume
 	GetTokenFromConfigMap(string) (string, error)
 
-	// AddLabelOnNode adds key value labels on the node
+	// AddLabelOnNode adds key value label on the node
 	AddLabelOnNode(node.Node, string, string) error
+
+	// RemoveLabelOnNode removes label on the node
+	RemoveLabelOnNode(node.Node, string) error
 
 	// IsAutopilotEnabledForVolume checks if autopilot enabled for a given volume
 	IsAutopilotEnabledForVolume(*volume.Volume) bool
@@ -215,20 +220,44 @@ type Driver interface {
 	// SaveSchedulerLogsToFile gathers all scheduler logs into a file
 	SaveSchedulerLogsToFile(node.Node, string) error
 
+	// GetAutopilotNamespace gets the Autopilot namespace
+	GetAutopilotNamespace() (string, error)
+
 	// CreateAutopilotRule creates the AutopilotRule object
 	CreateAutopilotRule(apRule apapi.AutopilotRule) (*apapi.AutopilotRule, error)
 
+	// GetAutopilotRule gets the AutopilotRule for the provided name
+	GetAutopilotRule(name string) (*apapi.AutopilotRule, error)
+
 	// UpdateAutopilotRule updates the AutopilotRule
-	UpdateAutopilotRule(apapi.AutopilotRule) (*apapi.AutopilotRule, error)
+	UpdateAutopilotRule(*apapi.AutopilotRule) (*apapi.AutopilotRule, error)
 
 	// ListAutopilotRules lists AutopilotRules
 	ListAutopilotRules() (*apapi.AutopilotRuleList, error)
+
+	// DeleteAutopilotRules deletes AutopilotRule
+	DeleteAutopilotRule(name string) error
+
+	// GetActionApproval gets the ActionApproval for the provided name
+	GetActionApproval(namespace, name string) (*apapi.ActionApproval, error)
+
+	// UpdateActionApproval updates the ActionApproval
+	UpdateActionApproval(namespace string, actionApproval *apapi.ActionApproval) (*apapi.ActionApproval, error)
+
+	// DeleteActionApproval deletes the ActionApproval of the given name
+	DeleteActionApproval(namespace, name string) error
+
+	// ListActionApprovals lists ActionApproval
+	ListActionApprovals(namespace string) (*apapi.ActionApprovalList, error)
 
 	// GetEvents should return all the events from the scheduler since the time torpedo started
 	GetEvents() map[string][]Event
 
 	// ValidateAutopilotEvents validates events for PVCs injected by autopilot
 	ValidateAutopilotEvents(ctx *Context) error
+
+	// ValidateAutopilotRuleObject validates Autopilot rule object
+	ValidateAutopilotRuleObjects() error
 
 	// GetWorkloadSizeFromAppSpec gets workload size from an application spec
 	GetWorkloadSizeFromAppSpec(ctx *Context) (uint64, error)
