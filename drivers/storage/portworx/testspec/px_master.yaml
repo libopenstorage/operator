@@ -51,6 +51,10 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+            - name: "CSI_ENDPOINT"
+              value: "unix:///var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock"
+            - name: "PORTWORX_CSIVERSION"
+              value: "0.3"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
@@ -94,6 +98,27 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
+        - name: csi-node-driver-registrar
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.3
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock"
+          imagePullPolicy: Always
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: csi-driver-path
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
       restartPolicy: Always
       tolerations:
         - key: node-role.kubernetes.io/master
@@ -137,3 +162,11 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/lib/kubelet/csi-plugins/pxd.portworx.com
+            type: DirectoryOrCreate

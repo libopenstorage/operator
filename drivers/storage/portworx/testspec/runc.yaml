@@ -54,6 +54,8 @@ spec:
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
+            - name: "CSI_ENDPOINT"
+              value: "unix:///var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock"
             - name: "TEST_KEY"
               value: "TEST_VALUE"
           livenessProbe:
@@ -139,3 +141,11 @@ spec:
         - name: optpwx
           hostPath:
             path: /opt/pwx
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
+            type: DirectoryOrCreate

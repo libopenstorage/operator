@@ -72,13 +72,17 @@ func (c *csi) Initialize(
 }
 
 func (c *csi) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates)
+	return pxutil.IsCSIEnabled(cluster)
 }
 
 func (c *csi) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
+
+	if cluster.Status.DesiredImages == nil {
+		cluster.Status.DesiredImages = &corev1.ComponentImages{}
+	}
 
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -976,7 +980,7 @@ func (c *csi) getCSIConfiguration(
 	kubeletPath := pxutil.KubeletPath(cluster)
 	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion,
 		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
-	if pxutil.FeatureCSI.IsEnabled(cluster.Spec.FeatureGates) {
+	if pxutil.IsCSIEnabled(cluster) {
 		return csiGenerator.GetCSIConfiguration()
 	}
 	return csiGenerator.GetBasicCSIConfiguration()
