@@ -135,6 +135,9 @@ func (t *telemetry) createConfigMap(
         "product_name": "portworx",
         "appliance_id_path": "/etc/pwx/cluster_uuid"
       },
+      "subscription": {
+        "use_appliance_id": "true",
+      },
       "proxy": {
         "path": "/dev/null"
       }
