@@ -85,6 +85,8 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
+            - name: osddriver
+              mountPath: /var/lib/osd/driver
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -124,6 +126,9 @@ spec:
         - name: optpwx
           hostPath:
             path: /var/vcap/store/opt/pwx
+        - name: osddriver
+          hostPath:
+            path: /var/vcap/store/lib/osd/driver            
         - name: procmount
           hostPath:
             path: /proc
