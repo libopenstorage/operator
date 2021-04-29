@@ -77,6 +77,8 @@ const (
 	crdBasePath                         = "/crds"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
+	// portworxDaemonSetName is the name of DaemonSet when portworx is installed by DaemonSet.
+	portworxDaemonSetName = "portworx"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -308,6 +310,22 @@ func (c *Controller) RegisterCRD() error {
 	return nil
 }
 
+func (c *Controller) isDaemonSetPresent(name string) (bool, error) {
+	daemonSetList := &apps.DaemonSetList{}
+	if err := c.client.List(context.TODO(), daemonSetList, &client.ListOptions{}); err != nil {
+		logrus.Errorf("Failed to list DaemonSet: %v", err)
+		return false, err
+	}
+
+	for _, daemonSet := range daemonSetList.Items {
+		if daemonSet.Name == name {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (c *Controller) syncStorageCluster(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -315,6 +333,19 @@ func (c *Controller) syncStorageCluster(
 		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
 			cluster.Namespace, cluster.Name)
 		return c.deleteStorageCluster(cluster)
+	}
+
+	// If portworx has been installed by daemonset, before it's uninstalled, operator
+	// should not proceed with installation.
+	if exists, err := c.isDaemonSetPresent(portworxDaemonSetName); err != nil || exists {
+		if err != nil {
+			return err
+		}
+
+		if exists {
+			return fmt.Errorf("daemonset %s exists, please delete it first. Operator will not proceed with installation",
+				portworxDaemonSetName)
+		}
 	}
 
 	// Set defaults in the storage cluster object if not set
