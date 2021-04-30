@@ -1455,6 +1455,14 @@ func getDefaultVolumeInfoList() []volumeInfo {
 			},
 		},
 		{
+			name:      "osddriver",
+			hostPath:  "/var/lib/osd/driver",
+			mountPath: "/var/lib/osd/driver",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/lib/osd/driver",
+			},
+		},
+		{
 			name:      "procmount",
 			hostPath:  "/proc",
 			mountPath: "/host_proc",
