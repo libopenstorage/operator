@@ -497,6 +497,37 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	require.Equal(t, "1.2.3", cluster.Status.Version)
 }
 
+// When DaemonSet is present (old installation method), the reconcile loop should not proceed with installation.
+func TestReconcileWithDaemonSet(t *testing.T) {
+	recorder := record.NewFakeRecorder(10)
+	cluster := createStorageCluster()
+	daemonSet := appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: portworxDaemonSetName,
+		},
+	}
+	daemonSetList := &appsv1.DaemonSetList{Items: []appsv1.DaemonSet{daemonSet}}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	controller := Controller{
+		client:            testutil.FakeK8sClient(cluster, daemonSetList),
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	logrus.WithError(err).Info("Reconcile finished")
+	require.NotNil(t, err)
+	require.Empty(t, result)
+	require.NotEmpty(t, recorder.Events)
+}
+
 func TestReconcileForNonExistingCluster(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
@@ -512,7 +543,6 @@ func TestReconcileForNonExistingCluster(t *testing.T) {
 	}
 	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
-
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 }
