@@ -337,6 +337,8 @@ type StorageSpec struct {
 	ForceUseDisks *bool `json:"forceUseDisks,omitempty"`
 	// Devices list of devices to be used by storage driver
 	Devices *[]string `json:"devices,omitempty"`
+	// CacheDevices is list of cache devices
+	CacheDevices *[]string `json:"cacheDevices,omitempty"`
 	// JournalDevice device for journaling
 	JournalDevice *string `json:"journalDevice,omitempty"`
 	// SystemMdDevice device that will be used to store system metadata
