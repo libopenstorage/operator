@@ -6249,125 +6249,125 @@ func TestDoesTelemetryMatch(t *testing.T) {
 			new:   &corev1.StorageClusterSpec{},
 			match: true,
 		},
-		//{
-		//	old: &corev1.StorageClusterSpec{},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	match: true,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	new:   &corev1.StorageClusterSpec{},
-		//	match: true,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: false,
-		//			}},
-		//	},
-		//	match: true,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: false,
-		//			}},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	match: true,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	match: false,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	match: false,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	match: false,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: false,
-		//			}},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	match: false,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//			}},
-		//	},
-		//	match: true,
-		//},
-		//{
-		//	old: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//				Image:   "foo",
-		//			}},
-		//	},
-		//	new: &corev1.StorageClusterSpec{
-		//		Monitoring: &corev1.MonitoringSpec{
-		//			Telemetry: &corev1.TelemetrySpec{
-		//				Enabled: true,
-		//				Image:   "bar",
-		//			}},
-		//	},
-		//	match: false,
-		//},
+		{
+			old: &corev1.StorageClusterSpec{},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new:   &corev1.StorageClusterSpec{},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+						Image:   "foo",
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+						Image:   "bar",
+					}},
+			},
+			match: false,
+		},
 	}
 
 	// UT test for match function
