@@ -595,10 +595,26 @@ func matchSelectedFields(
 		return false, nil
 	} else if !elementsMatch(oldSpec.Volumes, currentSpec.Volumes) {
 		return false, nil
+	} else if !doesTelemetryMatch(oldSpec, currentSpec) {
+		return false, nil
 	} else if isBounceRequired(oldSpec, currentSpec) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func doesTelemetryMatch(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
+	// not enabled in both (covers nil cases)
+	if !util.IsTelemetryEnabled(*oldSpec) && !util.IsTelemetryEnabled(*currentSpec) {
+		return true
+	}
+
+	if !util.IsTelemetryEnabled(*oldSpec) && util.IsTelemetryEnabled(*currentSpec) ||
+		util.IsTelemetryEnabled(*oldSpec) && !util.IsTelemetryEnabled(*currentSpec) {
+		return false
+	}
+
+	return reflect.DeepEqual(oldSpec.Monitoring.Telemetry, currentSpec.Monitoring.Telemetry)
 }
 
 // isBounceRequired handles miscellaneous fields that requrie a pod bounce

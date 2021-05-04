@@ -2197,6 +2197,16 @@ func TestPodWithTelemetry(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// Now disable telemetry
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	driver = portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
 }
 
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {

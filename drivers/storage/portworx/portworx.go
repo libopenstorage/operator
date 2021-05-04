@@ -824,7 +824,7 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 }
 
 func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
-	return pxutil.IsTelemetryEnabled(cluster) &&
+	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
 		cluster.Spec.Monitoring.Telemetry.Image == ""
 }
 
