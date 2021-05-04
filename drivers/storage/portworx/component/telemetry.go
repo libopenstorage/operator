@@ -42,7 +42,7 @@ func (t *telemetry) Initialize(k8sClient client.Client, _ version.Version, _ *ru
 }
 
 func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.IsTelemetryEnabled(cluster)
+	return pxutil.IsTelemetryEnabled(cluster.Spec)
 }
 
 func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {

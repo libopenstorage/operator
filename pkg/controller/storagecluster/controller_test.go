@@ -6110,6 +6110,145 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	require.True(t, shouldContinueRunning)
 }
 
+func TestDoesTelemetryMatch(t *testing.T) {
+	cases := []struct {
+		match bool
+		old   *corev1.StorageClusterSpec
+		new   *corev1.StorageClusterSpec
+	}{
+		{
+			old:   &corev1.StorageClusterSpec{},
+			new:   &corev1.StorageClusterSpec{},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new:   &corev1.StorageClusterSpec{},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: false,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: false,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					}},
+			},
+			match: true,
+		},
+		{
+			old: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+						Image:   "foo",
+					}},
+			},
+			new: &corev1.StorageClusterSpec{
+				Monitoring: &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+						Image:   "bar",
+					}},
+			},
+			match: false,
+		},
+	}
+
+	for _, tc := range cases {
+		actual := doesTelemetryMatch(tc.old, tc.new)
+		require.Equal(t, tc.match, actual)
+	}
+
+}
+
 func replaceOldPod(
 	oldPod *v1.Pod,
 	cluster *corev1.StorageCluster,
