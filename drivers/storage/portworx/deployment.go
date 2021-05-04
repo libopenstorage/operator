@@ -309,7 +309,7 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
-	if pxutil.IsTelemetryEnabled(cluster) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) {
 		telemetryContainer := t.telemetryContainer()
 		if telemetryContainer != nil {
 			if len(telemetryContainer.Image) == 0 {
@@ -1192,7 +1192,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 }
 
 func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
-	if pxutil.IsTelemetryEnabled(t.cluster) {
+	if pxutil.IsTelemetryEnabled(t.cluster.Spec) {
 		configVolume := volumeInfo{
 			name:      "ccm-config",
 			mountPath: "/etc/ccm",
@@ -1294,7 +1294,7 @@ func (t *template) loadKvdbAuth() map[string]string {
 }
 
 func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) string {
-	if pxutil.IsTelemetryEnabled(cluster) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) {
 		if cluster.Spec.Monitoring.Telemetry.Image != "" {
 			return cluster.Spec.Monitoring.Telemetry.Image
 		}
