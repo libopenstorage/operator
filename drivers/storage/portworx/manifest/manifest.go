@@ -24,9 +24,9 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion                = "2.5.7"
-	defaultStorkImage                     = "openstorage/stork:2.4.4"
-	defaultAutopilotImage                 = "portworx/autopilot:1.2.1"
+	DefaultPortworxVersion                = "2.6.3"
+	defaultStorkImage                     = "openstorage/stork:2.6.2"
+	defaultAutopilotImage                 = "portworx/autopilot:1.3.0"
 	defaultLighthouseImage                = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage                 = "portworx/px-node-wiper:2.5.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
