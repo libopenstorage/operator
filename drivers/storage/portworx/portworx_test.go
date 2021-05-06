@@ -1292,6 +1292,12 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	require.Equal(t, "type=kvdb", *cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
 	require.Equal(t, maxStorageNodes, *cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
 
+	// Test cloud provider from cluster level
+	cloudProvider := "AWS"
+	cluster.Spec.CloudStorage.CloudProviderSpec = &cloudProvider
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, cloudProvider, *cluster.Spec.Nodes[0].CloudStorage.CloudProviderSpec)
+
 	// Should not overwrite storage spec from cluster level, if present at node level
 	nodeDeviceSpecs := []string{"type=node-dev1", "type=node-dev2"}
 	maxStorageNodesForNodeGroup := uint32(3)

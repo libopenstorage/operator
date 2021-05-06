@@ -319,6 +319,9 @@ spec:
               type: object
               description: Details of storage used in cloud environment.
               properties:
+                cloudProviderSpec:
+                  type: string
+                  description: cloud provider name.
                 maxStorageNodes:
                   type: integer
                   format: int32

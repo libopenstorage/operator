@@ -651,6 +651,10 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 					CloudStorageCommon: *(toUpdate.Spec.CloudStorage.CloudStorageCommon.DeepCopy()),
 				}
 			} else {
+				if nodeSpecCopy.CloudStorage.CloudStorageCommon.CloudProviderSpec == nil &&
+					toUpdate.Spec.CloudStorage.CloudStorageCommon.CloudProviderSpec != nil {
+					nodeSpecCopy.CloudStorage.CloudStorageCommon.CloudProviderSpec = toUpdate.Spec.CloudStorage.CloudStorageCommon.CloudProviderSpec
+				}
 				if nodeSpecCopy.CloudStorage.DeviceSpecs == nil &&
 					toUpdate.Spec.CloudStorage.DeviceSpecs != nil {
 					deviceSpecs := append(make([]string, 0), *toUpdate.Spec.CloudStorage.DeviceSpecs...)

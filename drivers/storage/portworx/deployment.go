@@ -652,6 +652,23 @@ func (t *template) getCloudStorageArguments(cloudDeviceSpec cloudstorage.CloudDr
 
 }
 
+func (t *template) getCloudProvider() string {
+	if t.cluster.Spec.CloudStorage.CloudProviderSpec != nil &&
+		len(*t.cluster.Spec.CloudStorage.CloudProviderSpec) > 0 {
+		return *t.cluster.Spec.CloudStorage.CloudProviderSpec
+	} else if pxutil.IsAKS(t.cluster) {
+		return cloudops.Azure
+	} else if pxutil.IsEKS(t.cluster) {
+		return string(cloudops.AWS)
+	} else if pxutil.IsGKE(t.cluster) {
+		return cloudops.GCE
+	} else if pxutil.IsPKS(t.cluster) {
+		return cloudops.Vsphere
+	}
+
+	return ""
+}
+
 func (t *template) getArguments() []string {
 	args := []string{
 		"-c", t.cluster.Name,
@@ -726,6 +743,11 @@ func (t *template) getArguments() []string {
 		}
 
 	} else if t.cluster.Spec.CloudStorage != nil {
+		cloudProvider := t.getCloudProvider()
+		if len(cloudProvider) > 0 {
+			args = append(args, "-cloud_provider", *t.cluster.Spec.CloudStorage.CloudProviderSpec)
+		}
+
 		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
 			// CapacitySpecs have higher preference over DeviceSpecs
 			for _, cloudDriveSpec := range t.cloudConfig.CloudStorage {

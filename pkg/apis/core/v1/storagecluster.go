@@ -387,6 +387,8 @@ type CloudStorageNodeSpec struct {
 
 // CloudStorageCommon details of storage in cloud environment
 type CloudStorageCommon struct {
+	// CloudProviderSpec spec for the cloud provider, such as GKE, AWS etc
+	CloudProviderSpec *string `json:"cloudProviderSpec,omitempty"`
 	// DeviceSpecs list of storage device specs. A cloud storage device will
 	// be created for every spec in the DeviceSpecs list.
 	// DeviceSpecs may be removed from StorageCluster eventually,
