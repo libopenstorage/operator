@@ -715,8 +715,7 @@ func (c *Controller) podTemplatesForNodes(
 }
 
 // createPodTemplateForNodeGroup creates pod templates for the given list of nodes.
-// It creates a single pod template and makes a deep copy for each node so it is easier
-// during pod creation.
+// It makes a deep copy for each pod so it is easier during pod creation.
 func (c *Controller) createPodTemplateForNodeGroup(
 	cluster *corev1.StorageCluster,
 	nodeGroup []*v1.Node,
@@ -725,12 +724,11 @@ func (c *Controller) createPodTemplateForNodeGroup(
 	remainingNodes map[string]*v1.Node,
 	hash string,
 ) error {
-	podTemplate, err := c.createPodTemplate(cluster, nodeGroup[0], hash)
-	if err != nil {
-		return err
-	}
-
 	for _, node := range nodeGroup {
+		podTemplate, err := c.createPodTemplate(cluster, node, hash)
+		if err != nil {
+			return err
+		}
 		*nodesNeedingStoragePods = append(*nodesNeedingStoragePods, node.Name)
 		*podTemplates = append(*podTemplates, podTemplate.DeepCopy())
 		delete(remainingNodes, node.Name)

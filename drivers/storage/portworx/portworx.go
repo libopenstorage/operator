@@ -521,7 +521,7 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cl
 }
 
 func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
-	t, err := newTemplate(toUpdate)
+	t, err := newTemplate(toUpdate, "")
 	if err != nil {
 		return
 	}
