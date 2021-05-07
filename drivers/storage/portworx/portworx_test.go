@@ -78,6 +78,29 @@ func TestInit(t *testing.T) {
 	require.Equal(t, k8sClient, driver.k8sClient)
 }
 
+func TestValidate(t *testing.T) {
+	driver := portworx{}
+	k8sClient := testutil.FakeK8sClient()
+	scheme := runtime.NewScheme()
+	recorder := record.NewFakeRecorder(0)
+
+	err := driver.Init(k8sClient, scheme, recorder)
+	require.NoError(t, err)
+
+	err = driver.Validate()
+	require.NoError(t, err)
+
+	// Create portworx daemonset
+	daemonSet := appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "portworx",
+		},
+	}
+	k8sClient.Create(context.TODO(), &daemonSet)
+	err = driver.Validate()
+	require.NotNil(t, err)
+}
+
 func TestGetSelectorLabels(t *testing.T) {
 	driver := portworx{}
 	expectedLabels := map[string]string{"name": pxutil.DriverName}
