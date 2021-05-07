@@ -126,14 +126,20 @@ func (c *portworxAPI) createService(
 					Port:       int32(9021),
 					TargetPort: intstr.FromInt(restGatewayTargetPort),
 				},
-				{
-					Name:       pxutil.PortworxRESTTLSPortName,
-					Protocol:   v1.ProtocolTCP,
-					Port:       int32(9023),
-					TargetPort: intstr.FromInt(pxAPITLSPort),
-				},
 			},
 		},
+	}
+
+	// TLS secured port 9023 added in PX 2.9.0, only add it is 2.9.0 or later
+	pxAPITLSVersion, _ := version.NewVersion("2.9.0")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxAPITLSVersion) {
+		newService.Spec.Ports = append(newService.Spec.Ports,
+			v1.ServicePort{
+				Name:       pxutil.PortworxRESTTLSPortName,
+				Protocol:   v1.ProtocolTCP,
+				Port:       int32(9023),
+				TargetPort: intstr.FromInt(pxAPITLSPort),
+			})
 	}
 
 	serviceType := pxutil.ServiceType(cluster)

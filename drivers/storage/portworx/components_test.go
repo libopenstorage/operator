@@ -90,7 +90,97 @@ func TestOrderOfComponents(t *testing.T) {
 	}
 }
 
+// TestBasicComponentsInstallWithPreTLSPx validates that for px versions before 2.9,
+//   the TLS secured port 9023 is not exposed
+func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	legacyImage := "portworx/oci-monitor:2.8.0"
+	cluster.Spec.Image = legacyImage
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx Service with legacy px (pre 2.9) should not expose 9023 TSL secured port
+	// s, _ := json.MarshalIndent(cluster.Spec, "", "\t")
+	// t.Logf("cluster spec under validation for legacy portworxService.yaml: %+v", string(s))
+	expectedPXService := testutil.GetExpectedService(t, "portworxService_pre_29.yaml")
+	pxService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXService.Name, pxService.Name)
+	require.Equal(t, expectedPXService.Namespace, pxService.Namespace)
+	require.Len(t, pxService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPXService.Labels, pxService.Labels)
+	require.Equal(t, expectedPXService.Spec, pxService.Spec)
+
+	// Portworx API Service with legacy px (pre 2.9) should not expose 9023 TSL secured port
+	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService_pre_29.yaml")
+	pxAPIService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Name, pxAPIService.Name)
+	require.Equal(t, expectedPxAPIService.Namespace, pxAPIService.Namespace)
+	require.Len(t, pxAPIService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxAPIService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Portworx Proxy Service
+	expectedPxProxyService := testutil.GetExpectedService(t, "pxProxyService_pre_29.yaml")
+	pxProxyService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxProxyService.Name, pxProxyService.Name)
+	require.Equal(t, expectedPxProxyService.Namespace, pxProxyService.Namespace)
+	require.Empty(t, pxProxyService.OwnerReferences)
+	require.Equal(t, expectedPxProxyService.Labels, pxProxyService.Labels)
+	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
+}
+
 func TestBasicComponentsInstall(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -184,6 +274,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
 	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+
+	s, _ := json.MarshalIndent(cluster.Spec, "", "\t")
+	t.Logf("cluster spec under validation for portworxService.yaml: %+v", string(s))
 
 	// Portworx Service
 	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
