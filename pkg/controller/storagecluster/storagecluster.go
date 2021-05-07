@@ -221,6 +221,9 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateSingleCluster(cluster); err != nil {
 		return err
 	}
+	if err := c.Driver.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
