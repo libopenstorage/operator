@@ -550,6 +550,13 @@ func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
 		}
 	}
 
+	if toUpdate.Spec.Monitoring == nil || toUpdate.Spec.Monitoring.Telemetry == nil {
+		if toUpdate.Spec.Monitoring == nil {
+			toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
+		}
+		toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{Enabled: true}
+	}
+
 	setNodeSpecDefaults(toUpdate)
 
 	if toUpdate.Spec.Placement == nil {
