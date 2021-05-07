@@ -119,46 +119,6 @@ spec:
               mountPath: /csi
             - name: registration-dir
               mountPath: /registration
-        - env:
-            - name: configFile
-              value: /etc/ccm/ccm.properties
-            - name: PX_NAMESPACE
-              value: kube-system
-          image: portworx/px-telemetry:4.3.2
-          imagePullPolicy: Always
-          livenessProbe:
-            httpGet:
-              host: 127.0.0.1
-              path: /1.0/status
-              port: 1970
-          name: telemetry
-          readinessProbe:
-            httpGet:
-              host: 127.0.0.1
-              path: /1.0/status
-              port: 1970
-          securityContext:
-            privileged: true
-          terminationMessagePolicy: File
-          volumeMounts:
-            - mountPath: /var/cache
-              name: varcache
-            - mountPath: /etc/timezone
-              name: timezone
-            - mountPath: /etc/localtime
-              name: localtime
-            - mountPath: /etc/ccm
-              name: ccm-config
-            - mountPath: /var/cores
-              name: diagsdump
-            - mountPath: /etc/pwx
-              name: etcpwx
-            - mountPath: /var/run/log
-              name: journalmount1
-              readOnly: true
-            - mountPath: /var/log
-              name: journalmount2
-              readOnly: true
       restartPolicy: Always
       tolerations:
         - key: node-role.kubernetes.io/master
@@ -213,18 +173,3 @@ spec:
         - name: containerd-k3s
           hostPath:
             path: /run/k3s/containerd/containerd.sock
-        - hostPath:
-            path: /var/cache
-          name: varcache
-        - hostPath:
-            path: /etc/timezone
-          name: timezone
-        - hostPath:
-            path: /etc/localtime
-          name: localtime
-        - configMap:
-            items:
-              - key: ccm.properties
-                path: ccm.properties
-            name: px-telemetry-config
-          name: ccm-config
