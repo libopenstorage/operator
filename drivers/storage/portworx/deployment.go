@@ -106,6 +106,7 @@ var (
 
 type template struct {
 	cluster         *corev1.StorageCluster
+	nodeName        string
 	isPKS           bool
 	isIKS           bool
 	isOpenshift     bool
@@ -124,12 +125,12 @@ type template struct {
 
 func newTemplate(
 	cluster *corev1.StorageCluster,
-) (*template, error) {
+	nodeName string) (*template, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("storage cluster cannot be empty")
 	}
 
-	t := &template{cluster: cluster}
+	t := &template{cluster: cluster, nodeName: nodeName}
 
 	var err error
 	var ext string
@@ -222,7 +223,7 @@ func (p *portworx) getNodeByName(nodeName string) (*v1.Node, error) {
 func (p *portworx) GetKVDBPodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
-	t, err := newTemplate(cluster)
+	t, err := newTemplate(cluster, nodeName)
 	if err != nil {
 		return v1.PodSpec{}, err
 	}
@@ -260,7 +261,7 @@ func (p *portworx) GetKVDBPodSpec(
 func (p *portworx) GetStoragePodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
-	t, err := newTemplate(cluster)
+	t, err := newTemplate(cluster, nodeName)
 	if err != nil {
 		return v1.PodSpec{}, err
 	}
@@ -596,6 +597,12 @@ func (t *template) telemetryContainer() *v1.Container {
 			Privileged: boolPtr(true),
 		},
 		VolumeMounts: t.mountsFromVolInfo(t.getTelemetryVolumeInfoList()),
+	}
+
+	if len(t.nodeName) > 0 {
+		container.Args = []string{
+			fmt.Sprintf("-Dstandalone.controller_sn=%s", t.nodeName),
+		}
 	}
 	return &container
 }

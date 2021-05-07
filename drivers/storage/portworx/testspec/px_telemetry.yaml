@@ -106,6 +106,8 @@ spec:
               value: kube-system
           image: portworx/px-telemetry:2.1.2
           imagePullPolicy: Always
+          args:
+            - "-Dstandalone.controller_sn=testNode"
           livenessProbe:
             httpGet:
               host: 127.0.0.1
