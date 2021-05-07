@@ -25,6 +25,8 @@ type UpdateDriverInfo struct {
 type Driver interface {
 	// Init initializes the storage driver
 	Init(client.Client, *runtime.Scheme, record.EventRecorder) error
+	// Validate validates if the driver is correctly configured
+	Validate() error
 	// String returns the string name of the driver
 	String() string
 	// UpdateDriver updates the driver with the current cluster and node conditions.
