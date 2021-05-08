@@ -653,9 +653,9 @@ func (t *template) getCloudStorageArguments(cloudDeviceSpec cloudstorage.CloudDr
 }
 
 func (t *template) getCloudProvider() string {
-	if t.cluster.Spec.CloudStorage.CloudProviderSpec != nil &&
-		len(*t.cluster.Spec.CloudStorage.CloudProviderSpec) > 0 {
-		return *t.cluster.Spec.CloudStorage.CloudProviderSpec
+	if t.cluster.Spec.CloudStorage.Provider != nil &&
+		len(*t.cluster.Spec.CloudStorage.Provider) > 0 {
+		return *t.cluster.Spec.CloudStorage.Provider
 	} else if pxutil.IsAKS(t.cluster) {
 		return cloudops.Azure
 	} else if pxutil.IsEKS(t.cluster) {
@@ -663,6 +663,7 @@ func (t *template) getCloudProvider() string {
 	} else if pxutil.IsGKE(t.cluster) {
 		return cloudops.GCE
 	} else if pxutil.IsPKS(t.cluster) {
+		// PKS runs on non-vsphere too but we haven't seen any customers doing so.
 		return cloudops.Vsphere
 	}
 
@@ -745,7 +746,7 @@ func (t *template) getArguments() []string {
 	} else if t.cluster.Spec.CloudStorage != nil {
 		cloudProvider := t.getCloudProvider()
 		if len(cloudProvider) > 0 {
-			args = append(args, "-cloud_provider", *t.cluster.Spec.CloudStorage.CloudProviderSpec)
+			args = append(args, "-cloud_provider", cloudProvider)
 		}
 
 		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
