@@ -1083,6 +1083,15 @@ func (in *StorageSpec) DeepCopyInto(out *StorageSpec) {
 			copy(*out, *in)
 		}
 	}
+	if in.CacheDevices != nil {
+		in, out := &in.CacheDevices, &out.CacheDevices
+		*out = new([]string)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]string, len(*in))
+			copy(*out, *in)
+		}
+	}
 	if in.JournalDevice != nil {
 		in, out := &in.JournalDevice, &out.JournalDevice
 		*out = new(string)
