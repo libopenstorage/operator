@@ -700,6 +700,12 @@ func (t *template) getArguments() []string {
 	}
 
 	if t.cluster.Spec.Storage != nil {
+		if t.cluster.Spec.Storage.CacheDevices != nil {
+			for _, dev := range *t.cluster.Spec.Storage.CacheDevices {
+				args = append(args, "-cache", dev)
+			}
+		}
+
 		if t.cluster.Spec.Storage.Devices != nil {
 			for _, dev := range *t.cluster.Spec.Storage.Devices {
 				args = append(args, "-s", dev)
@@ -741,6 +747,7 @@ func (t *template) getArguments() []string {
 				args = append(args, "-s", dev)
 			}
 		}
+
 		if t.cluster.Spec.CloudStorage.JournalDeviceSpec != nil &&
 			len(*t.cluster.Spec.CloudStorage.JournalDeviceSpec) > 0 {
 			args = append(args, "-j", *t.cluster.Spec.CloudStorage.JournalDeviceSpec)

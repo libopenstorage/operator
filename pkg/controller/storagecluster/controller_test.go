@@ -3756,6 +3756,42 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
+	// TestCase: Add spec.storage.cachedevices
+	cacheDevices := []string{"/dev/sdc1", "/dev/sdc2"}
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		CacheDevices: &cacheDevices,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Update spec.storage.cachedevices
+	cacheDevices = []string{"/dev/sdc1"}
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		CacheDevices: &cacheDevices,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove spec.storage.cachedevices
+	cluster.Spec.Storage.CacheDevices = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
 	// TestCase: Change spec.storage.journalDevice
 	journalDevice := "journal-dev"
 	cluster.Spec.Storage.JournalDevice = &journalDevice

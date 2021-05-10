@@ -696,6 +696,24 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
+	// Cache devices
+	cacheDevices := []string{"/dev/one", "/dev/two", "/dev/three"}
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		CacheDevices: &cacheDevices,
+	}
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-cache", "/dev/one",
+		"-cache", "/dev/two",
+		"-cache", "/dev/three",
+	}
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
 	// Storage devices empty
 	devices = []string{}
 	cluster.Spec.Storage = &corev1.StorageSpec{

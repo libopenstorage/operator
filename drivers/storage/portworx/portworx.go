@@ -644,6 +644,10 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 				toUpdate.Spec.Storage.UseAll != nil {
 				nodeSpecCopy.Storage.UseAll = boolPtr(*toUpdate.Spec.Storage.UseAll)
 			}
+			if nodeSpecCopy.Storage.CacheDevices == nil && toUpdate.Spec.Storage.CacheDevices != nil {
+				cacheDevices := append(make([]string, 0), *toUpdate.Spec.Storage.CacheDevices...)
+				nodeSpecCopy.Storage.CacheDevices = &cacheDevices
+			}
 			if nodeSpecCopy.Storage.ForceUseDisks == nil && toUpdate.Spec.Storage.ForceUseDisks != nil {
 				nodeSpecCopy.Storage.ForceUseDisks = boolPtr(*toUpdate.Spec.Storage.ForceUseDisks)
 			}

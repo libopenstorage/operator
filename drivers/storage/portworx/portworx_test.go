@@ -1158,6 +1158,15 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.Devices)
 
+	// Cache devices are present at cluster level and not node level, node spec should
+	// use cluster level storage.
+	cacheDevices := []string{"/dev1", "/dev2"}
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		CacheDevices: &cacheDevices,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.ElementsMatch(t, cacheDevices, *cluster.Spec.Nodes[0].Storage.CacheDevices)
+
 	// Should not overwrite storage spec from cluster level, if present at node level
 	nodeDevices := []string{"node-dev1", "node-dev2"}
 	cluster.Spec.Nodes[0].Storage = &corev1.StorageSpec{
