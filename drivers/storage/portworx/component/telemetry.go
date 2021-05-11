@@ -110,6 +110,7 @@ func (t *telemetry) createConfigMap(
       "logupload": {
         "logfile_patterns": [
             "/var/cores/*diags*",
+            "/var/cores/auto/*diags*",
             "/var/cores/*px-cores*",
             "/var/cores/*.heap",
             "/var/cores/*.stack",
