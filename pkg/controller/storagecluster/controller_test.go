@@ -3685,6 +3685,41 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Add spec.cloudStorage.cloudProvider
+	cloudProvider := "AWS"
+	cluster.Spec.CloudStorage.Provider = &cloudProvider
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.cloudStorage.cloudProvider
+	cloudProvider = "GKE"
+	cluster.Spec.CloudStorage.Provider = &cloudProvider
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Remove spec.cloudStorage.cloudProvider
+	cluster.Spec.CloudStorage.Provider = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
 func TestUpdateStorageClusterStorageSpec(t *testing.T) {

@@ -1309,6 +1309,15 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	list, err = driver.storageNodesList(cluster)
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
 	assert.Equal(t, 1, len(list), "expected storage nodes in list")
+
+	// Test cloud provider is provided
+	cloudProvider := "AWS"
+	argsWithCloudProvider := append(expectedArgs, "-cloud_provider", cloudProvider)
+	cluster.Spec.CloudStorage.Provider = &cloudProvider
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, argsWithCloudProvider, actual.Containers[0].Args)
+
+	cluster.Spec.CloudStorage.Provider = nil
 }
 
 func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
