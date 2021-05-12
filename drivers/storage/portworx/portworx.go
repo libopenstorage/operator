@@ -16,6 +16,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,6 +37,8 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
+	// portworxDaemonSetName is the name of DaemonSet when portworx is installed by DaemonSet.
+	portworxDaemonSetName = "portworx"
 )
 
 type portworx struct {
@@ -77,6 +80,22 @@ func (p *portworx) Init(
 
 	manifest.Instance().Init(k8sClient, recorder, k8sVersion)
 	p.initializeComponents()
+	return nil
+}
+
+func (p *portworx) Validate() error {
+	daemonSetList := &apps.DaemonSetList{}
+	if err := p.k8sClient.List(context.TODO(), daemonSetList, &client.ListOptions{}); err != nil {
+		logrus.Errorf("Failed to list DaemonSet: %v", err)
+		return err
+	}
+
+	for _, daemonSet := range daemonSetList.Items {
+		if daemonSet.Name == portworxDaemonSetName {
+			return fmt.Errorf("daemonset %s is present, installation with daemonset and operator cannot coexist", portworxDaemonSetName)
+		}
+	}
+
 	return nil
 }
 
