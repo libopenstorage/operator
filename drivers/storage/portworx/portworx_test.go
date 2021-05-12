@@ -195,6 +195,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.True(t, *cluster.Spec.Storage.UseAll)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
+	// By default monitoring is enabled since test uses image 3.0.0 (2.8+)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
 	// Use default image from release manifest when spec.image has empty string
 	cluster.Spec.Image = "  "
 	cluster.Spec.Version = "  "
@@ -303,9 +308,6 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Placement = &corev1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
-
-	// By default monitoring is not enabled
-	require.Nil(t, cluster.Spec.Monitoring)
 
 	// If metrics was enabled previosly, enable it in prometheus spec
 	// and remove the enableMetrics config
@@ -895,7 +897,6 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 
 	// Don't enable prometheus if monitoring spec is nil
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Empty(t, cluster.Spec.Monitoring)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if prometheus spec is nil
@@ -6338,15 +6339,24 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image: "px/image:2.1.5.1",
+			Image: "px/image:2.7.0",
 		},
 	}
 
-	// Don't enable telemetry by default
+	// Don't enable telemetry by default < 2.8.0
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Empty(t, cluster.Spec.Monitoring) // telemetry is under monitoring
+	require.Empty(t, cluster.Spec.Monitoring)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 
+	// Enable telemetry by default for 2.8.0
+	cluster.Spec.Image = "px/image:2.8.0"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.NotEmpty(t, cluster.Spec.Monitoring) // telemetry is under monitoring
+	require.NotEmpty(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
+
+	// disable it
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{
 			Enabled: false,
@@ -6355,6 +6365,7 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 
 	// enabled
 	cluster.Spec.Monitoring.Telemetry.Enabled = true
