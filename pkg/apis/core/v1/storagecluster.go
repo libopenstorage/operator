@@ -330,6 +330,8 @@ type CloudStorageCapacitySpec struct {
 
 // CloudStorageSpec details of storage in cloud environment for entire cluster
 type CloudStorageSpec struct {
+	// Provider spec for the cloud provider, such as GKE, AWS etc
+	Provider *string `json:"provider,omitempty"`
 	// CloudStorageCommon common cloud storage configuration
 	CloudStorageCommon
 	// CapacitySpecs list of cluster wide storage types and their capacities.
