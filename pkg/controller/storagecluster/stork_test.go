@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,12 +24,20 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 )
 
 func TestStorkInstallation(t *testing.T) {
+	testStorkInstallation(t, minSupportedK8sVersion)
+	testStorkInstallation(t, policyDecoderChangeVersion)
+	testStorkInstallation(t, "1.18.0")
+}
+
+func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -62,7 +72,7 @@ func TestStorkInstallation(t *testing.T) {
 	}
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	k8sVersion, _ := version.NewVersion(k8sVersionStr)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
@@ -87,7 +97,7 @@ func TestStorkInstallation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Stork ConfigMap
-	expectedPolicy, _ := json.Marshal(schedulerv1.Policy{
+	expectedPolicy := schedulerv1.Policy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Policy",
 			APIVersion: "v1",
@@ -101,7 +111,8 @@ func TestStorkInstallation(t *testing.T) {
 				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
 			},
 		},
-	})
+	}
+	var actualPolicy schedulerv1.Policy
 	storkConfigMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
@@ -109,7 +120,24 @@ func TestStorkInstallation(t *testing.T) {
 	require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
 	require.Len(t, storkConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
-	require.Equal(t, string(expectedPolicy), storkConfigMap.Data["policy.cfg"])
+
+	decoderChangeVersion, _ := version.NewVersion(policyDecoderChangeVersion)
+	if k8sVersion.LessThan(decoderChangeVersion) {
+		err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
+	} else {
+		err = runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), []byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
+	}
+
+	require.NoError(t, err)
+
+	// Surprisingly the decoded object does not have kind and API version, both fields are empty. The encoded string
+	// does have both. There is no functionality issue so far however we need to keep an eye on it.
+	// The decoder and encoder are both following official k8s code and test code.
+	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
+	// https://github.com/kubernetes/kubernetes/blob/release-1.21/test/integration/util/util.go#L432
+	//
+	// As a result of above, we only verify the extender instead of entire policy object here.
+	require.True(t, reflect.DeepEqual(expectedPolicy.Extenders[0], actualPolicy.Extenders[0]))
 
 	// ServiceAccounts
 	serviceAccountList := &v1.ServiceAccountList{}
@@ -237,6 +265,8 @@ func TestStorkInstallation(t *testing.T) {
 	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minSupportedK8sVersion, k8sVersionStr, -1)
 	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 
 	// Stork Snapshot StorageClass
