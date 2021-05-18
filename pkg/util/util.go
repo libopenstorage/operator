@@ -1,13 +1,15 @@
 package util
 
 import (
+	"fmt"
 	"path"
 	"reflect"
 	"strings"
 
 	"github.com/hashicorp/go-version"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1 "k8s.io/api/core/v1"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 )
 
 // Reasons for controller events
@@ -185,4 +187,21 @@ func IsPartialSecretRef(sref *corev1.SecretRef) bool {
 	y := len(sref.SecretKey) > 0
 	// X xor Y -> (X || Y) && !(X && Y)
 	return (x || y) && !(x && y)
+}
+
+// GetCustomAnnotations returns custom annotations for different StorageCluster components from spec
+func GetCustomAnnotations(
+	cluster *corev1.StorageCluster,
+	k8sObjKind string,
+	componentName string,
+) map[string]string {
+	if cluster.Spec.Metadata == nil || cluster.Spec.Metadata.Annotations == nil {
+		return nil
+	}
+	// Use kind/component to locate the custom annotation, e.g. deployment/stork
+	key := fmt.Sprintf("%s/%s", k8sObjKind, componentName)
+	if annotations, ok := cluster.Spec.Metadata.Annotations[key]; ok && len(annotations) != 0 {
+		return annotations
+	}
+	return nil
 }

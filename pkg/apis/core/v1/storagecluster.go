@@ -35,8 +35,16 @@ type StorageClusterList struct {
 	Items         []StorageCluster `json:"items"`
 }
 
+// Metadata contains metadata of StorageCluster components
+type Metadata struct {
+	// Annotations that will be passed to different StorageCluster components
+	Annotations map[string]map[string]string `json:"annotations,omitempty"`
+}
+
 // StorageClusterSpec is the spec used to define a storage cluster
 type StorageClusterSpec struct {
+	// Metadata contains metadata of StorageCluster components
+	Metadata *Metadata `json:"metadata,omitempty"`
 	// An update strategy to replace existing StorageCluster pods with new pods.
 	// Default strategy is RollingUpdate
 	UpdateStrategy StorageClusterUpdateStrategy `json:"updateStrategy,omitempty"`
@@ -599,7 +607,7 @@ const (
 	ClusterOffline ClusterConditionStatus = "Offline"
 	// ClusterNotInQuorum means the cluster is out of quorum
 	ClusterNotInQuorum ClusterConditionStatus = "NotInQuorum"
-	// ClusterUnknown means the cluser status is not known
+	// ClusterUnknown means the cluster status is not known
 	ClusterUnknown ClusterConditionStatus = "Unknown"
 	// ClusterOperationInProgress means the cluster operation is in progress
 	ClusterOperationInProgress ClusterConditionStatus = "InProgress"

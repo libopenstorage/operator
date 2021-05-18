@@ -47,6 +47,17 @@ spec:
           type: object
           description: The desired behavior of the storage cluster.
           properties:
+            metadata:
+              type: object
+              description: Metadata contains metadata for different storage cluster components.
+              properties:
+                annotations:
+                  type: object
+                  description: >-
+                    The annotations section of spec is a map of map to pass custom annotations to different
+                    storage cluster components. The key specifies component in format of "kind/component",
+                    e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
+                    string that contains custom annotation key and value pairs.
             image:
               type: string
               description: Docker image of the storage driver.
