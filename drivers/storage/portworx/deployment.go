@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -563,6 +564,14 @@ func (t *template) telemetryContainer() *v1.Container {
 			t.getDesiredTelemetryImage(t.cluster),
 		),
 		ImagePullPolicy: t.imagePullPolicy,
+		Resources: v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
 		Env: []v1.EnvVar{
 			{
 				Name:  "configFile",
