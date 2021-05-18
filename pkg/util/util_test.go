@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 func TestGetImageURN(t *testing.T) {
@@ -94,4 +97,29 @@ func TestGetImageMajorVersion(t *testing.T) {
 
 	ver = GetImageMajorVersion("quay.io/a:v999.998.997")
 	require.Equal(t, 999, ver)
+}
+
+func TestGetCustomAnnotations(t *testing.T) {
+	// To avoid loop import, define the component name directly
+	componentName := "storage"
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{},
+	}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	cluster.Spec.Metadata = &corev1.Metadata{}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	cluster.Spec.Metadata.Annotations = make(map[string]map[string]string)
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	podPortworxAnnotations := map[string]string{
+		"portworx-pod-key": "portworx-pod-val",
+	}
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		"pod/storage": podPortworxAnnotations,
+	}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, "invalid-component"))
+	require.Nil(t, GetCustomAnnotations(cluster, "invalid-kind", componentName))
+	require.Equal(t, podPortworxAnnotations, GetCustomAnnotations(cluster, k8s.Pod, componentName))
 }

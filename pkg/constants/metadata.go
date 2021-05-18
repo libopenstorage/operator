@@ -13,6 +13,8 @@ const (
 	LabelKeyKVDBPod = "kvdb"
 	// LabelValueTrue is the constant for a "true" label value
 	LabelValueTrue = "true"
+	// AnnotationNodeLabels is the storage pod annotation that contains node labels
+	AnnotationNodeLabels = OperatorPrefix + "/node-labels"
 	// AnnotationDisableStorage annotation to disable the storage pods from running (default: false)
 	AnnotationDisableStorage = OperatorPrefix + "/disable-storage"
 	// AnnotationReconcileObject annotation to toggle reconciliation of operator created objects
@@ -34,4 +36,12 @@ const (
 	// RestrictedPSPName is a pod security policy used by portworx deployments which require no special privileges and
 	// capabilities.
 	RestrictedPSPName = "px-restricted"
+)
+
+var (
+	// KnownStoragePodAnnotations contains annotations that will be retained when adding custom storage pod annotations
+	KnownStoragePodAnnotations = []string{
+		AnnotationNodeLabels,
+		AnnotationPodSafeToEvict,
+	}
 )
