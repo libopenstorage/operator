@@ -31,6 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// Constants for k8s object kinds
+const (
+	Pod = "pod"
+)
+
 var (
 	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
 )

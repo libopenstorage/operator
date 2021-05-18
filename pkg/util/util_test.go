@@ -3,9 +3,10 @@ package util
 import (
 	"testing"
 
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 func TestGetImageURN(t *testing.T) {
@@ -104,42 +105,67 @@ func TestPartialSecretRef(t *testing.T) {
 		SecretName: "a",
 		SecretKey:  "b",
 	}
-	assert.False(t, IsPartialSecretRef(obj))
+	require.False(t, IsPartialSecretRef(obj))
 
 	// no valid secret key
 	obj = &corev1.SecretRef{
 		SecretName: "a",
 		SecretKey:  "",
 	}
-	assert.True(t, IsPartialSecretRef(obj))
+	require.True(t, IsPartialSecretRef(obj))
 
 	obj = &corev1.SecretRef{
 		SecretName: "a",
 	}
-	assert.True(t, IsPartialSecretRef(obj))
+	require.True(t, IsPartialSecretRef(obj))
 
 	// no valid secret name
 	obj = &corev1.SecretRef{
 		SecretName: "",
 		SecretKey:  "b",
 	}
-	assert.True(t, IsPartialSecretRef(obj))
+	require.True(t, IsPartialSecretRef(obj))
 
 	obj = &corev1.SecretRef{
 		SecretKey: "b",
 	}
-	assert.True(t, IsPartialSecretRef(obj))
+	require.True(t, IsPartialSecretRef(obj))
 
 	// no valid secret key or name. Return false because it's empty, not partial
 	obj = &corev1.SecretRef{
 		SecretName: "",
 		SecretKey:  "",
 	}
-	assert.False(t, IsPartialSecretRef(obj))
+	require.False(t, IsPartialSecretRef(obj))
 
 	obj = &corev1.SecretRef{}
-	assert.False(t, IsPartialSecretRef(obj))
+	require.False(t, IsPartialSecretRef(obj))
 
 	obj = nil
-	assert.False(t, IsPartialSecretRef(obj))
+	require.False(t, IsPartialSecretRef(obj))
+}
+
+func TestGetCustomAnnotations(t *testing.T) {
+	// To avoid loop import, define the component name directly
+	componentName := "storage"
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{},
+	}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	cluster.Spec.Metadata = &corev1.Metadata{}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	cluster.Spec.Metadata.Annotations = make(map[string]map[string]string)
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	podPortworxAnnotations := map[string]string{
+		"portworx-pod-key": "portworx-pod-val",
+	}
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		"pod/storage": podPortworxAnnotations,
+	}
+	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, "invalid-component"))
+	require.Nil(t, GetCustomAnnotations(cluster, "invalid-kind", componentName))
+	require.Equal(t, podPortworxAnnotations, GetCustomAnnotations(cluster, k8s.Pod, componentName))
 }

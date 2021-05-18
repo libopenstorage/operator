@@ -27,6 +27,9 @@ import (
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	operatorutil "github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -51,7 +54,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 			cluster.Name, err)
 	}
 
-	_, oldPods := c.getAllStorageClusterPods(cluster, nodeToStoragePods, hash)
+	_, oldPods := c.groupStorageClusterPods(cluster, nodeToStoragePods, hash)
 	maxUnavailable, numUnavailable, err := c.getUnavailableNumbers(cluster, nodeToStoragePods)
 	if err != nil {
 		return fmt.Errorf("couldn't get unavailable numbers: %v", err)
@@ -82,6 +85,32 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		numUnavailable++
 	}
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
+}
+
+// annotateStoragePod annotate storage pods with custom annotations along with known annotations,
+// if no custom annotations created, only known annotations will be retained.
+// this function will not update the pod right away, actual update will be handled outside
+func (c *Controller) annotateStoragePod(
+	cluster *corev1.StorageCluster,
+	pod *v1.Pod,
+) {
+	annotations := make(map[string]string)
+	// Keep only known storage pod annotations
+	if podAnnotations := pod.GetAnnotations(); podAnnotations != nil {
+		for _, knownKeys := range constants.KnownStoragePodAnnotations {
+			if v, ok := podAnnotations[knownKeys]; ok {
+				annotations[knownKeys] = v
+			}
+		}
+	}
+	// Add custom annotations if exist
+	if customAnnotations := operatorutil.GetCustomAnnotations(cluster, k8s.Pod, ComponentName); customAnnotations != nil {
+		for k, v := range customAnnotations {
+			annotations[k] = v
+		}
+	}
+
+	pod.SetAnnotations(annotations)
 }
 
 // constructHistory finds all histories controlled by the given StorageCluster, and
@@ -328,7 +357,9 @@ func (c *Controller) dedupCurHistories(
 	return keepCur, nil
 }
 
-func (c *Controller) getAllStorageClusterPods(
+// groupStorageClusterPods divides all pods into 2 groups,
+// new pods will be retained while old pods will be deleted
+func (c *Controller) groupStorageClusterPods(
 	cluster *corev1.StorageCluster,
 	nodeToStoragePods map[string][]*v1.Pod,
 	hash string,
@@ -340,7 +371,7 @@ func (c *Controller) getAllStorageClusterPods(
 		for _, pod := range pods {
 			// If the returned error is not nil we have a parse error.
 			// The controller handles this via the hash.
-			if c.isPodUpdated(cluster, pod, hash) {
+			if c.syncStoragePod(cluster, pod, hash) {
 				newPods = append(newPods, pod)
 			} else {
 				oldPods = append(oldPods, pod)
@@ -458,10 +489,12 @@ func (c *Controller) cleanupHistory(
 	return nil
 }
 
-// isPodUpdated checks if pod contains label value that matches the hash.
-// We consider the pod to be really updated if certain fields (that need
-// pod restart) have changed, else we consider the pod to be updated.
-func (c *Controller) isPodUpdated(
+// syncStoragePod checks if pod contains label value that matches the hash,
+// and returns whether the pod will be retained.
+// We return true to retain the pod if certain fields (that need pod restart) have not changed,
+// and synchronize pod's hash with the storage cluster to ensure consistency if they are different,
+// else we return false to restart the pod.
+func (c *Controller) syncStoragePod(
 	cluster *corev1.StorageCluster,
 	pod *v1.Pod,
 	hash string,
@@ -488,7 +521,7 @@ func (c *Controller) isPodUpdated(
 	}
 
 	var oldNodeLabels map[string]string
-	if encodedLabels, exists := pod.Annotations[annotationNodeLabels]; exists {
+	if encodedLabels, exists := pod.Annotations[constants.AnnotationNodeLabels]; exists {
 		if err := json.Unmarshal([]byte(encodedLabels), &oldNodeLabels); err != nil {
 			logrus.Warnf("Unable to decode old node labels stored on the pod. %v", err)
 		}
@@ -529,6 +562,20 @@ func (c *Controller) isPodUpdated(
 		logrus.Warnf("Could not check the diff between current pod and latest spec. %v", err)
 		return false
 	}
+
+	if matched {
+		// Updating custom annotation will change the cluster hash,
+		// pod is treated as updated here but its hash is not consistent with the storage cluster,
+		// so update the custom annotations here first if necessary, then set the storage cluster hash
+		// to the pod to avoid checking selected fields or set annotations over and over again
+		c.annotateStoragePod(cluster, pod)
+		pod.Labels[defaultStorageClusterUniqueLabelKey] = hash
+		if err := c.client.Update(context.TODO(), pod); err != nil {
+			errMsg := fmt.Sprintf("Unable to update storage pod: %v", err)
+			k8s.WarningEvent(c.recorder, cluster, operatorutil.FailedStoragePodReason, errMsg)
+		}
+	}
+
 	return matched
 }
 

@@ -1168,7 +1168,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 				}
 				require.ElementsMatch(t, expectedEnv, c.Spec.Env)
 				nodeLabels, _ := json.Marshal(k8sNode1.Labels)
-				expectedPodTemplates[0].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
+				expectedPodTemplates[0].Annotations = map[string]string{constants.AnnotationNodeLabels: string(nodeLabels)}
 				return expectedPodSpec, nil
 			}).
 			Times(1),
@@ -1176,7 +1176,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Empty(t, cluster.Spec.Nodes[1].CommonConfig, c.Spec.CommonConfig)
 				nodeLabels, _ := json.Marshal(k8sNode2.Labels)
-				expectedPodTemplates[1].Annotations = map[string]string{annotationNodeLabels: string(nodeLabels)}
+				expectedPodTemplates[1].Annotations = map[string]string{constants.AnnotationNodeLabels: string(nodeLabels)}
 				return expectedPodSpec, nil
 			}).
 			Times(1),
@@ -5043,13 +5043,6 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
-	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
-	revs = &appsv1.ControllerRevisionList{}
-	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
-	err = k8sClient.Update(context.TODO(), oldPod)
-	require.NoError(t, err)
-
 	podControl.DeletePodName = nil
 
 	result, err = controller.Reconcile(context.TODO(), request)
@@ -5076,13 +5069,6 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Spec.Nodes = nil
 	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
-
-	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
-	revs = &appsv1.ControllerRevisionList{}
-	k8sClient.List(context.TODO(), revs, &client.ListOptions{})
-	oldPod.Labels[defaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[defaultStorageClusterUniqueLabelKey]
-	err = k8sClient.Update(context.TODO(), oldPod)
 	require.NoError(t, err)
 
 	podControl.DeletePodName = nil
@@ -5165,7 +5151,7 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 		},
 	}
 	encodedNodeLabels, _ := json.Marshal(k8sNode.Labels)
-	oldPod.Annotations = map[string]string{annotationNodeLabels: string(encodedNodeLabels)}
+	oldPod.Annotations = map[string]string{constants.AnnotationNodeLabels: string(encodedNodeLabels)}
 	k8sClient.Create(context.TODO(), oldPod)
 
 	// TestCase: Change node labels so that existing spec block does not match.
@@ -5724,6 +5710,185 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageCustomAnnotations(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+
+	// Kubernetes node with enough resources to create new pods
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	// Pods that are already running on the k8s nodes with same hash
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
+	knownAnnotationKey := constants.AnnotationPodSafeToEvict
+	oldPod.Annotations = map[string]string{
+		knownAnnotationKey: "false",
+	}
+	k8sClient.Create(context.TODO(), oldPod)
+
+	locator := fmt.Sprintf("%s/%s", k8s.Pod, ComponentName)
+	customAnnotationKey := "custom-domain/custom-key"
+	customAnnotationVal1 := "custom-val-1"
+	customAnnotationVal2 := "custom-val-2"
+	podPortworxAnnotation := map[string]string{
+		customAnnotationKey: customAnnotationVal1,
+	}
+
+	// TestCase: Add portworx pod annotations to existing pod
+	cluster.Spec.Metadata = &corev1.Metadata{}
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		locator: podPortworxAnnotation,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	oldPod = &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: oldPod.Name, Namespace: oldPod.Namespace}}
+	testutil.Get(k8sClient, oldPod, oldPod.Name, oldPod.Namespace)
+	require.NotEmpty(t, oldPod.Annotations)
+	val, ok := oldPod.Annotations[customAnnotationKey]
+	require.True(t, ok)
+	require.Equal(t, customAnnotationVal1, val)
+	_, ok = oldPod.Annotations[knownAnnotationKey]
+	require.True(t, ok)
+
+	// TestCase: Update existing custom annotations
+	testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	podPortworxAnnotation = map[string]string{
+		customAnnotationKey: customAnnotationVal2,
+	}
+	cluster.Spec.Metadata.Annotations[locator] = podPortworxAnnotation
+	k8sClient.Update(context.TODO(), cluster)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	oldPod = &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: oldPod.Name, Namespace: oldPod.Namespace}}
+	testutil.Get(k8sClient, oldPod, oldPod.Name, oldPod.Namespace)
+	require.NotEmpty(t, oldPod.Annotations)
+	val, ok = oldPod.Annotations[customAnnotationKey]
+	require.True(t, ok)
+	require.Equal(t, customAnnotationVal2, val)
+	_, ok = oldPod.Annotations[knownAnnotationKey]
+	require.True(t, ok)
+
+	// TestCase: Add malformed custom annotation key
+	testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		"invalidkey": podPortworxAnnotation,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "malformed custom annotation locator")
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	oldPod = &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: oldPod.Name, Namespace: oldPod.Namespace}}
+	testutil.Get(k8sClient, oldPod, oldPod.Name, oldPod.Namespace)
+	require.NotEmpty(t, oldPod.Annotations)
+	_, ok = oldPod.Annotations[knownAnnotationKey]
+	require.True(t, ok)
+
+	// TestCase: Add unsupported custom annotation key and remove previous one
+	testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		"service/storage": podPortworxAnnotation,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	oldPod = &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: oldPod.Name, Namespace: oldPod.Namespace}}
+	testutil.Get(k8sClient, oldPod, oldPod.Name, oldPod.Namespace)
+	require.NotEmpty(t, oldPod.Annotations)
+	_, ok = oldPod.Annotations[customAnnotationKey]
+	require.False(t, ok)
+	_, ok = oldPod.Annotations[knownAnnotationKey]
+	require.True(t, ok)
+
+	// TestCase: Newly created pod will pick up custom annotations
+	testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	podPortworxAnnotation = map[string]string{
+		customAnnotationKey: customAnnotationVal1,
+	}
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		locator: podPortworxAnnotation,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	newPod := replaceOldPod(oldPod, cluster, &controller, podControl)
+	testutil.Get(k8sClient, newPod, newPod.Name, newPod.Namespace)
+	require.NotEmpty(t, newPod.Annotations)
+	val, ok = newPod.Annotations[customAnnotationKey]
+	require.True(t, ok)
+	require.Equal(t, customAnnotationVal1, val)
+	_, ok = oldPod.Annotations[knownAnnotationKey]
+	require.True(t, ok)
+}
+
 func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -6269,7 +6434,7 @@ func TestHistoryCleanup(t *testing.T) {
 
 	runningPod2, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
 	require.NoError(t, err)
-	require.Equal(t, revisions.Items[0].Labels[defaultStorageClusterUniqueLabelKey],
+	require.Equal(t, latestRevision(revisions).Labels[defaultStorageClusterUniqueLabelKey],
 		runningPod2.Labels[defaultStorageClusterUniqueLabelKey])
 	runningPod2.Name = runningPod2.GenerateName + "2"
 	runningPod2.Namespace = cluster.Namespace
