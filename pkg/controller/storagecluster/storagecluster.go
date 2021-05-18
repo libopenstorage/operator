@@ -63,11 +63,12 @@ import (
 
 const (
 	// ControllerName is the name of the controller
-	ControllerName                      = "storagecluster-controller"
+	ControllerName = "storagecluster-controller"
+	// ComponentName is the component name of the storage cluster
+	ComponentName                       = "storage"
 	slowStartInitialBatchSize           = 1
 	validateCRDInterval                 = 5 * time.Second
 	validateCRDTimeout                  = 1 * time.Minute
-	annotationNodeLabels                = constants.OperatorPrefix + "/node-labels"
 	deleteFinalizerName                 = constants.OperatorPrefix + "/delete"
 	nodeNameIndex                       = "nodeName"
 	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
@@ -221,6 +222,9 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateSingleCluster(cluster); err != nil {
 		return err
 	}
+	if err := c.validateCustomAnnotations(cluster); err != nil {
+		return err
+	}
 	if err := c.Driver.Validate(); err != nil {
 		return err
 	}
@@ -272,6 +276,21 @@ func (c *Controller) validateSingleCluster(current *corev1.StorageCluster) error
 				return fmt.Errorf("only one StorageCluster is allowed in a Kubernetes cluster. "+
 					"StorageCluster %s/%s already exists", cluster.Namespace, cluster.Name)
 			}
+		}
+	}
+
+	return nil
+}
+
+// validateCustomAnnotations validate all custom annotations in the spec
+func (c *Controller) validateCustomAnnotations(current *corev1.StorageCluster) error {
+	if current.Spec.Metadata == nil || current.Spec.Metadata.Annotations == nil {
+		return nil
+	}
+	for mapKey := range current.Spec.Metadata.Annotations {
+		split := strings.Split(mapKey, "/")
+		if len(split) != 2 {
+			return fmt.Errorf("malformed custom annotation locator: %s", mapKey)
 		}
 	}
 
@@ -867,7 +886,15 @@ func (c *Controller) createPodTemplate(
 		if err != nil {
 			return v1.PodTemplateSpec{}, fmt.Errorf("failed to encode node labels")
 		}
-		newTemplate.Annotations = map[string]string{annotationNodeLabels: string(encodedNodeLabels)}
+		newTemplate.Annotations = map[string]string{constants.AnnotationNodeLabels: string(encodedNodeLabels)}
+	}
+	if customAnnotations := util.GetCustomAnnotations(cluster, k8s.Pod, ComponentName); customAnnotations != nil {
+		if newTemplate.Annotations == nil {
+			newTemplate.Annotations = make(map[string]string)
+		}
+		for k, v := range customAnnotations {
+			newTemplate.Annotations[k] = v
+		}
 	}
 	if len(hash) > 0 {
 		newTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
