@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/go-version"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
+	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
 	"reflect"
 	"sort"
 	"strings"
@@ -41,6 +45,9 @@ const (
 	storkSchedDeploymentName         = "stork-scheduler"
 	storkSchedContainerName          = "stork-scheduler"
 	storkServicePort                 = 8099
+	// K8S scheduler policy decoder changed in this version.
+	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
+	policyDecoderChangeVersion = "1.17.0"
 )
 
 const (
@@ -186,9 +193,35 @@ func (c *Controller) createStorkConfigMap(
 			},
 		},
 	}
-	policyConfig, err := json.Marshal(policy)
+
+	var policyConfig []byte
+
+	changeVersion, err := version.NewVersion(policyDecoderChangeVersion)
 	if err != nil {
+		logrus.WithError(err).Errorf("Could not parse version %s", policyDecoderChangeVersion)
 		return err
+	}
+
+	useOldEncoder := c.kubernetesVersion.LessThan(changeVersion)
+	logrus.Debugf("Kubernetes version is %v, use legacy encoder %t", *c.kubernetesVersion, useOldEncoder)
+
+	if useOldEncoder {
+		policyConfig, err = json.Marshal(policy)
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not encode policy object")
+			return err
+		}
+	} else {
+		info, ok := runtime.SerializerInfoForMediaType(scheme.Codecs.SupportedMediaTypes(), runtime.ContentTypeJSON)
+		if !ok {
+			return fmt.Errorf("could not find json serializer")
+		}
+		encoder := scheme.Codecs.EncoderForVersion(info.Serializer, schedulerapiv1.SchemeGroupVersion)
+		policyConfig, err = runtime.Encode(encoder, &policy)
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not encode policy object")
+			return err
+		}
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
