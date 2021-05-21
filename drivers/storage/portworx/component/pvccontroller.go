@@ -275,7 +275,7 @@ func (c *pvcController) createDeployment(
 		kubeControllerImage = "k8s.gcr.io/kube-controller-manager-amd64"
 	}
 	imageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		kubeControllerImage+":v"+c.k8sVersion.String(),
 	)
 

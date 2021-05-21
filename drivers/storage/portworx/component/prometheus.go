@@ -390,7 +390,7 @@ func (c *prometheus) createOperatorDeployment(
 	}
 
 	imageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.PrometheusOperator,
 	)
 
@@ -421,11 +421,11 @@ func getPrometheusOperatorDeploymentSpec(
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
 	configReloaderImageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.PrometheusConfigMapReload,
 	)
 	prometheusConfigReloaderImageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.PrometheusConfigReloader,
 	)
 	args := make([]string, 0)
@@ -540,7 +540,7 @@ func (c *prometheus) createPrometheusInstance(
 ) error {
 	replicas := int32(1)
 	prometheusImageName := util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.Prometheus,
 	)
 

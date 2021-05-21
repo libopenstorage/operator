@@ -28,6 +28,12 @@ const (
 	// AnnotationPodSafeToEvict annotation tells cluster autoscaler whether the
 	// pod is safe to be evicted when scaling down a node
 	AnnotationPodSafeToEvict = "cluster-autoscaler.kubernetes.io/safe-to-evict"
+
+	// AnnotationCommonImageRegistries annotation contains the common image registries, separated by comma.
+	// When custom image registry is provided, we will replace any image with common registry with
+	// the custom registry, there is a list of hardcoded common registries, however the list
+	// may not be complete, users can use this annotation to add more.
+	AnnotationCommonImageRegistries = OperatorPrefix + "/common-image-registries"
 )
 
 const (
