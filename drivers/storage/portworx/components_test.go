@@ -4457,9 +4457,10 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// CSIDriver object should be created for k8s 1.20
-	csiDriver := &storagev1beta1.CSIDriver{}
+	csiDriver := &storagev1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.False(t, errors.IsNotFound(err))
+	require.Equal(t, "storage.k8s.io/v1", csiDriver.TypeMeta.APIVersion)
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
@@ -4495,15 +4496,15 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	csiDriver := &storagev1beta1.CSIDriver{}
+	csiDriver := &storagev1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.NoError(t, err)
 	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
 	require.True(t, *csiDriver.Spec.PodInfoOnMount)
 	require.Equal(t, len(csiDriver.Spec.VolumeLifecycleModes), 2)
-	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1beta1.VolumeLifecyclePersistent)
-	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1beta1.VolumeLifecycleEphemeral)
+	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1.VolumeLifecyclePersistent)
+	require.Contains(t, csiDriver.Spec.VolumeLifecycleModes, storagev1.VolumeLifecycleEphemeral)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
 	deployment := &appsv1.Deployment{}

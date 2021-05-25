@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -44,6 +45,10 @@ const (
 	csiAttacherContainerName    = "csi-attacher"
 	csiSnapshotterContainerName = "csi-snapshotter"
 	csiResizerContainerName     = "csi-resizer"
+)
+
+var (
+	k8sVer1_18, _ = version.NewVersion("1.18")
 )
 
 type csi struct {
@@ -149,9 +154,16 @@ func (c *csi) Delete(cluster *corev1.StorageCluster) error {
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
 	if csiConfig.IncludeCsiDriverInfo {
-		if err := k8sutil.DeleteCSIDriver(c.k8sClient, csiConfig.DriverName); err != nil {
-			return err
+		if c.k8sVersion.GreaterThanOrEqual(k8sVer1_18) {
+			if err := k8sutil.DeleteCSIDriver(c.k8sClient, csiConfig.DriverName); err != nil {
+				return err
+			}
+		} else {
+			if err := k8sutil.DeleteCSIDriverBeta(c.k8sClient, csiConfig.DriverName); err != nil {
+				return err
+			}
 		}
+
 	}
 
 	c.MarkDeleted()
@@ -849,6 +861,30 @@ func getCSIStatefulSetSpec(
 func (c *csi) createCSIDriver(
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
+	// For k8s 1.18 and later, use the GA CSI Driver
+	if c.k8sVersion.GreaterThanOrEqual(k8sVer1_18) {
+		volumeLifecycleModes := []storagev1.VolumeLifecycleMode{
+			storagev1.VolumeLifecyclePersistent,
+		}
+		if csiConfig.IncludeEphemeralSupport {
+			volumeLifecycleModes = append(volumeLifecycleModes, storagev1.VolumeLifecycleEphemeral)
+		}
+
+		return k8sutil.CreateOrUpdateCSIDriver(
+			c.k8sClient,
+			&storagev1.CSIDriver{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: csiConfig.DriverName,
+				},
+				Spec: storagev1.CSIDriverSpec{
+					AttachRequired:       boolPtr(false),
+					PodInfoOnMount:       boolPtr(true),
+					VolumeLifecycleModes: volumeLifecycleModes,
+				},
+			},
+		)
+	}
+
 	volumeLifecycleModes := []storagev1beta1.VolumeLifecycleMode{
 		storagev1beta1.VolumeLifecyclePersistent,
 	}
@@ -856,7 +892,7 @@ func (c *csi) createCSIDriver(
 		volumeLifecycleModes = append(volumeLifecycleModes, storagev1beta1.VolumeLifecycleEphemeral)
 	}
 
-	return k8sutil.CreateOrUpdateCSIDriver(
+	return k8sutil.CreateOrUpdateCSIDriverBeta(
 		c.k8sClient,
 		&storagev1beta1.CSIDriver{
 			ObjectMeta: metav1.ObjectMeta{
