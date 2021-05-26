@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -197,6 +198,7 @@ func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error)
 		managerOpts.LeaderElection = true
 		managerOpts.LeaderElectionID = c.String(flagLeaderElectLockName)
 		managerOpts.LeaderElectionNamespace = c.String(flagLeaderElectLockNamespace)
+		managerOpts.LeaderElectionResourceLock = resourcelock.ConfigMapsResourceLock
 	}
 	return manager.New(config, managerOpts)
 }
