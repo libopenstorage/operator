@@ -403,24 +403,24 @@ func (c *csi) createDeployment(
 	)
 
 	provisionerImage = util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.CSIProvisioner,
 	)
 	if csiConfig.IncludeAttacher && cluster.Status.DesiredImages.CSIAttacher != "" {
 		attacherImage = util.GetImageURN(
-			cluster.Spec.CustomImageRegistry,
+			cluster,
 			cluster.Status.DesiredImages.CSIAttacher,
 		)
 	}
 	if csiConfig.IncludeSnapshotter && cluster.Status.DesiredImages.CSISnapshotter != "" {
 		snapshotterImage = util.GetImageURN(
-			cluster.Spec.CustomImageRegistry,
+			cluster,
 			cluster.Status.DesiredImages.CSISnapshotter,
 		)
 	}
 	if csiConfig.IncludeResizer && cluster.Status.DesiredImages.CSIResizer != "" {
 		resizerImage = util.GetImageURN(
-			cluster.Spec.CustomImageRegistry,
+			cluster,
 			cluster.Status.DesiredImages.CSIResizer,
 		)
 	}
@@ -695,11 +695,11 @@ func (c *csi) createStatefulSet(
 	)
 
 	provisionerImage = util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.CSIProvisioner,
 	)
 	attacherImage = util.GetImageURN(
-		cluster.Spec.CustomImageRegistry,
+		cluster,
 		cluster.Status.DesiredImages.CSIAttacher,
 	)
 

@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"path"
 	"reflect"
 	"strings"
@@ -39,11 +40,34 @@ var (
 	}
 )
 
+func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
+	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
+
+	if !ok {
+		return commonDockerRegistries
+	}
+
+	mergedCommonRegistries := make(map[string]bool)
+
+	for _, v := range strings.Split(strings.TrimSpace(val), ",") {
+		mergedCommonRegistries[v] = true
+	}
+
+	for k, v := range commonDockerRegistries {
+		mergedCommonRegistries[k] = v
+	}
+
+	return mergedCommonRegistries
+}
+
 // GetImageURN returns the complete image name based on the registry and repo
-func GetImageURN(registryAndRepo, image string) string {
+func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 	if image == "" {
 		return ""
 	}
+
+	registryAndRepo := cluster.Spec.CustomImageRegistry
+	mergedCommonRegistries := getMergedCommonRegistries(cluster)
 
 	omitRepo := false
 	if strings.HasSuffix(registryAndRepo, "//") {
@@ -59,7 +83,7 @@ func GetImageURN(registryAndRepo, image string) string {
 	imgParts := strings.Split(image, "/")
 	if len(imgParts) > 1 {
 		// advance imgParts to swallow the common registry
-		if _, present := commonDockerRegistries[imgParts[0]]; present {
+		if _, present := mergedCommonRegistries[imgParts[0]]; present {
 			imgParts = imgParts[1:]
 		}
 	}

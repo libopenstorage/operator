@@ -328,10 +328,9 @@ func (c *lighthouse) createDeployment(
 		}
 	}
 
-	imageRegistry := cluster.Spec.CustomImageRegistry
-	lhImage = util.GetImageURN(imageRegistry, lhImage)
-	configSyncImage = util.GetImageURN(imageRegistry, configSyncImage)
-	storkConnectorImage = util.GetImageURN(imageRegistry, storkConnectorImage)
+	lhImage = util.GetImageURN(cluster, lhImage)
+	configSyncImage = util.GetImageURN(cluster, configSyncImage)
+	storkConnectorImage = util.GetImageURN(cluster, storkConnectorImage)
 
 	modified := lhImage != existingLhImage ||
 		configSyncImage != existingConfigInitImage ||

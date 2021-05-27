@@ -158,7 +158,7 @@ func (c *portworxAPI) createDaemonSet(
 		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
 	}
 
-	imageName := util.GetImageURN(cluster.Spec.CustomImageRegistry, pxutil.ImageNamePause)
+	imageName := util.GetImageURN(cluster, pxutil.ImageNamePause)
 	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
 	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
