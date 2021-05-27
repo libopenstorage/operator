@@ -425,7 +425,7 @@ func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Con
 }
 
 func (t *template) portworxContainer() v1.Container {
-	pxImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, t.cluster.Spec.Image)
+	pxImage := util.GetImageURN(t.cluster, t.cluster.Spec.Image)
 	return v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
@@ -462,7 +462,7 @@ func (t *template) portworxContainer() v1.Container {
 }
 
 func (t *template) kvdbContainer() v1.Container {
-	kvdbProxyImage := util.GetImageURN(t.cluster.Spec.CustomImageRegistry, pxutil.ImageNamePause)
+	kvdbProxyImage := util.GetImageURN(t.cluster, pxutil.ImageNamePause)
 	kvdbTargetPort := 9019
 	if t.startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = t.startPort + 15
@@ -528,7 +528,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
 		container.Name = "csi-node-driver-registrar"
 		container.Image = util.GetImageURN(
-			t.cluster.Spec.CustomImageRegistry,
+			t.cluster,
 			t.cluster.Status.DesiredImages.CSINodeDriverRegistrar,
 		)
 		container.Args = []string{
@@ -539,7 +539,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 	} else if t.cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
 		container.Name = "csi-driver-registrar"
 		container.Image = util.GetImageURN(
-			t.cluster.Spec.CustomImageRegistry,
+			t.cluster,
 			t.cluster.Status.DesiredImages.CSIDriverRegistrar,
 		)
 		container.Args = []string{
@@ -560,7 +560,7 @@ func (t *template) telemetryContainer() *v1.Container {
 	container := v1.Container{
 		Name: "telemetry",
 		Image: util.GetImageURN(
-			t.cluster.Spec.CustomImageRegistry,
+			t.cluster,
 			t.getDesiredTelemetryImage(t.cluster),
 		),
 		ImagePullPolicy: t.imagePullPolicy,

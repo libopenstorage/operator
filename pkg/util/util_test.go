@@ -1,6 +1,7 @@
 package util
 
 import (
+	"github.com/libopenstorage/operator/pkg/constants"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,74 +10,104 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
-func TestGetImageURN(t *testing.T) {
+func TestImageURN(t *testing.T) {
 	// TestCase: Empty image
-	out := GetImageURN("registry.io", "")
+	out := getImageURN("", "registry.io", "")
 	require.Equal(t, "", out)
 
 	// TestCase: Empty repo and registry
-	out = GetImageURN("", "test/image")
+	out = getImageURN("", "", "test/image")
 	require.Equal(t, "test/image", out)
 
 	// TestCase: Registry without repo but image with repo
-	out = GetImageURN("registry.io", "test/image")
+	out = getImageURN("", "registry.io", "test/image")
 	require.Equal(t, "registry.io/test/image", out)
 
-	out = GetImageURN("registry.io/", "test/image")
+	out = getImageURN("", "registry.io/", "test/image")
 	require.Equal(t, "registry.io/test/image", out)
 
-	out = GetImageURN("registry.io", "test/this/image")
+	out = getImageURN("", "registry.io", "test/this/image")
 	require.Equal(t, "registry.io/test/this/image", out)
 
 	// TestCase: Registry and image without repo
-	out = GetImageURN("registry.io", "image")
+	out = getImageURN("", "registry.io", "image")
 	require.Equal(t, "registry.io/image", out)
 
 	// TestCase: Image with common docker registries
-	out = GetImageURN("registry.io", "docker.io/test/image")
+	out = getImageURN("", "registry.io", "docker.io/test/image")
 	require.Equal(t, "registry.io/test/image", out)
 
-	out = GetImageURN("registry.io", "quay.io/test/this/image")
+	out = getImageURN("", "registry.io", "quay.io/test/this/image")
 	require.Equal(t, "registry.io/test/this/image", out)
 
-	out = GetImageURN("registry.io/", "index.docker.io/test/this/image")
+	out = getImageURN("", "registry.io/", "index.docker.io/test/this/image")
 	require.Equal(t, "registry.io/test/this/image", out)
 
-	out = GetImageURN("registry.io", "registry-1.docker.io/image")
+	out = getImageURN("", "registry.io", "registry-1.docker.io/image")
 	require.Equal(t, "registry.io/image", out)
 
-	out = GetImageURN("registry.io/", "registry.connect.redhat.com/image")
+	out = getImageURN("", "registry.io/", "registry.connect.redhat.com/image")
 	require.Equal(t, "registry.io/image", out)
 
 	// TestCase: Regsitry and image both with repo
-	out = GetImageURN("registry.io/repo", "test/image")
+	out = getImageURN("", "registry.io/repo", "test/image")
 	require.Equal(t, "registry.io/repo/image", out)
 
-	out = GetImageURN("registry.io/repo", "test/this/image")
+	out = getImageURN("", "registry.io/repo", "test/this/image")
 	require.Equal(t, "registry.io/repo/image", out)
 
-	out = GetImageURN("registry.io/repo/", "test/image")
+	out = getImageURN("", "registry.io/repo/", "test/image")
 	require.Equal(t, "registry.io/repo/image", out)
 
-	out = GetImageURN("registry.io/repo//", "test/this/image")
+	out = getImageURN("", "registry.io/repo//", "test/this/image")
 	require.Equal(t, "registry.io/repo/image", out)
 
 	// TestCase: Regsitry with repo but image without repo
-	out = GetImageURN("registry.io/repo", "image")
+	out = getImageURN("", "registry.io/repo", "image")
 	require.Equal(t, "registry.io/repo/image", out)
 
-	out = GetImageURN("registry.io/repo/subdir", "image")
+	out = getImageURN("", "registry.io/repo/subdir", "image")
 	require.Equal(t, "registry.io/repo/subdir/image", out)
 
 	// TestCase: Registry with empty root repo
-	out = GetImageURN("registry.io//", "image")
+	out = getImageURN("", "registry.io//", "image")
 	require.Equal(t, "registry.io/image", out)
 
-	out = GetImageURN("registry.io//", "test/image")
+	out = getImageURN("", "registry.io//", "test/image")
 	require.Equal(t, "registry.io/image", out)
 
-	out = GetImageURN("registry.io//", "test/this/image")
+	out = getImageURN("", "registry.io//", "test/this/image")
 	require.Equal(t, "registry.io/image", out)
+
+	out = getImageURN("k8s.gcr.io", "registry.io//", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	// Update it again, now k8s.gcr.io should be deleted from common registries.
+	out = getImageURN("gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/k8s.gcr.io/pause:3.1", out)
+
+	out = getImageURN("", "registry.io//", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURN("", "registry.io//", "gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
+	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
+}
+
+func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := corev1.StorageCluster{}
+	cluster.Annotations = make(map[string]string)
+	cluster.Annotations[constants.AnnotationCommonImageRegistries] = commonRegistries
+	cluster.Spec.CustomImageRegistry = customImageRegistry
+	return GetImageURN(&cluster, image)
 }
 
 func TestGetImageMajorVersion(t *testing.T) {
