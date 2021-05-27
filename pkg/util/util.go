@@ -40,9 +40,7 @@ var (
 	}
 )
 
-// UpdateCommonRegistries add additional registries to common registries.
 func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
-
 	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
 
 	if !ok {
