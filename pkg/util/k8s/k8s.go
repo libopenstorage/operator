@@ -595,6 +595,47 @@ func DeleteStorageClass(
 // else updates it if it has changed
 func CreateOrUpdateCSIDriver(
 	k8sClient client.Client,
+	driver *storagev1.CSIDriver,
+) error {
+	existingDriver := &storagev1.CSIDriver{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{Name: driver.Name},
+		existingDriver,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating %s CSIDriver", driver.Name)
+		return k8sClient.Create(context.TODO(), driver)
+	} else if err != nil {
+		return err
+	}
+
+	// Cluster scoped objects should not have owner references
+	if !reflect.DeepEqual(driver.Spec, existingDriver.Spec) ||
+		len(existingDriver.OwnerReferences) > 0 {
+		existingDriver.Spec = *driver.Spec.DeepCopy()
+		existingDriver.OwnerReferences = nil
+
+		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
+		err := k8sClient.Update(context.TODO(), existingDriver, &client.UpdateOptions{})
+		if err != nil {
+			logrus.Debugf("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
+			err = k8sClient.Delete(context.TODO(), existingDriver)
+			if err != nil {
+				return err
+			}
+
+			driver.ResourceVersion = ""
+			return k8sClient.Create(context.TODO(), driver)
+		}
+	}
+	return nil
+}
+
+// CreateOrUpdateCSIDriverBeta creates a CSIDriver if not present,
+// else updates it if it has changed
+func CreateOrUpdateCSIDriverBeta(
+	k8sClient client.Client,
 	driver *storagev1beta1.CSIDriver,
 ) error {
 	existingDriver := &storagev1beta1.CSIDriver{}
@@ -615,13 +656,24 @@ func CreateOrUpdateCSIDriver(
 		len(existingDriver.OwnerReferences) > 0 {
 		existingDriver.Spec = *driver.Spec.DeepCopy()
 		existingDriver.OwnerReferences = nil
+
 		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
-		return k8sClient.Update(context.TODO(), existingDriver)
+		err := k8sClient.Update(context.TODO(), existingDriver, &client.UpdateOptions{})
+		if err != nil {
+			logrus.Debugf("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
+			err = k8sClient.Delete(context.TODO(), existingDriver)
+			if err != nil {
+				return err
+			}
+
+			driver.ResourceVersion = ""
+			return k8sClient.Create(context.TODO(), driver)
+		}
 	}
 	return nil
 }
 
-// DeleteCSIDriver deletes the CSIDriver object if present
+// DeleteCSIDriver deletes the CSIDriver beta object if present
 func DeleteCSIDriver(
 	k8sClient client.Client,
 	name string,
@@ -629,6 +681,34 @@ func DeleteCSIDriver(
 	resource := types.NamespacedName{
 		Name: name,
 	}
+
+	csiDriver := &storagev1.CSIDriver{}
+	err := k8sClient.Get(context.TODO(), resource, csiDriver)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	// Do not delete the object if it has an owner
+	if len(csiDriver.OwnerReferences) > 0 {
+		logrus.Debugf("Cannot delete CSIDriver %s as it is owned", name)
+		return nil
+	}
+
+	logrus.Debugf("Deleting %s CSIDriver", name)
+	return k8sClient.Delete(context.TODO(), csiDriver)
+}
+
+// DeleteCSIDriverBeta deletes the CSIDriver beta object if present
+func DeleteCSIDriverBeta(
+	k8sClient client.Client,
+	name string,
+) error {
+	resource := types.NamespacedName{
+		Name: name,
+	}
+
 	csiDriver := &storagev1beta1.CSIDriver{}
 	err := k8sClient.Get(context.TODO(), resource, csiDriver)
 	if errors.IsNotFound(err) {
