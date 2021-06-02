@@ -76,7 +76,7 @@ func (t *telemetry) createConfigMap(
 	config := fmt.Sprintf(`{
       "product_name": "portworx",
        "logging": {
-         "array_info_path": "/var/cores/array_info.json"
+         "array_info_path": "/dev/null"
        },
        "features": {
          "appliance_info": "config",
