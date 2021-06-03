@@ -38,10 +38,11 @@ func IsNodeBeingDeleted(node *v1.Node, cl client.Client) (bool, error) {
 	return false, nil
 }
 
-// IsNodeRecentlyCordoned returns true if the given node is cordoned within the
-// default delay or the user provided delay in given StorageCluster object
-func IsNodeRecentlyCordoned(
+// IsPodRecentlyCreatedAfterNodeCordoned returns true if the given node is cordoned and the pod has been created
+// within the default delay.
+func IsPodRecentlyCreatedAfterNodeCordoned(
 	node *v1.Node,
+	lastCreationTimeOnNode map[string]time.Time,
 	cluster *corev1.StorageCluster,
 ) bool {
 	cordoned, startTime := IsNodeCordoned(node)
@@ -55,7 +56,22 @@ func IsNodeRecentlyCordoned(
 	} else {
 		waitDuration = constants.DefaultCordonedRestartDelay
 	}
-	return time.Now().Add(-waitDuration).Before(startTime)
+
+	cutOffTime := time.Now().Add(-waitDuration)
+
+	// If node recently cordoned, return true.
+	if cutOffTime.Before(startTime) {
+		return true
+	}
+
+	lastCreationTime, ok := lastCreationTimeOnNode[node.Name]
+	// If the pod has never been created, no timestamp.
+	if !ok {
+		return false
+	}
+
+	// If pod has been recently created, return true.
+	return cutOffTime.Before(lastCreationTime)
 }
 
 // IsNodeCordoned returns true if the given noode is marked unschedulable. It

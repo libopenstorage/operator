@@ -58,8 +58,9 @@ func TestInit(t *testing.T) {
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
 
 	controller := Controller{
-		client:   k8sClient,
-		recorder: recorder,
+		client:              k8sClient,
+		recorder:            recorder,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	err := controller.Init(mgr)
 	require.NoError(t, err)
@@ -287,9 +288,10 @@ func TestReconcile(t *testing.T) {
 	k8sClient.Create(context.TODO(), podNode2)
 
 	controller := Controller{
-		client:   k8sClient,
-		recorder: recorder,
-		Driver:   driver,
+		client:              k8sClient,
+		recorder:            recorder,
+		Driver:              driver,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	request := reconcile.Request{
@@ -407,9 +409,10 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
-		client:   k8sClient,
-		recorder: recorder,
-		Driver:   driver,
+		client:              k8sClient,
+		recorder:            recorder,
+		Driver:              driver,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -578,9 +581,10 @@ func TestReconcileKVDB(t *testing.T) {
 	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	controller := Controller{
-		client:   k8sClient,
-		recorder: recorder,
-		Driver:   driver,
+		client:              k8sClient,
+		recorder:            recorder,
+		Driver:              driver,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	request := reconcile.Request{
@@ -687,8 +691,9 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(cluster, kvdbNode, k8sNode, machine)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:              k8sClient,
+		Driver:              driver,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -762,7 +767,10 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, podList.Items)
 
-	// TestCase: Create kvdb pod if node was cordoned long time ago
+	// TestCase: Create kvdb pod if node was cordoned long time ago, and pod was created long time ago.
+	for k, v := range controller.lastPodCreationTime {
+		controller.lastPodCreationTime[k] = v.Add(-time.Hour)
+	}
 	timeAdded = metav1.NewTime(
 		metav1.Now().
 			Add(-constants.DefaultCordonedRestartDelay).
@@ -820,9 +828,10 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	controller := Controller{
-		client:   k8sClient,
-		recorder: recorder,
-		Driver:   driver,
+		client:              k8sClient,
+		recorder:            recorder,
+		Driver:              driver,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	// no owner refs

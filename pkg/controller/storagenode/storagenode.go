@@ -51,6 +51,8 @@ type Controller struct {
 	scheme   *runtime.Scheme
 	recorder record.EventRecorder
 	ctrl     controller.Controller
+	// Node to pod creation time map.
+	lastPodCreationTime map[string]time.Time
 }
 
 // Init initialize the storage storagenode controller
@@ -58,6 +60,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
+	c.lastPodCreationTime = make(map[string]time.Time)
 
 	var err error
 	// Create a new controller
@@ -207,7 +210,7 @@ func (c *Controller) syncKVDB(
 	if isNodeRunningKVDB(storageNode) { // create kvdb pod if not present
 		node := &v1.Node{}
 		isBeingDeleted := false
-		isRecentlyCordoned := false
+		isRecentlyCreatedAfterNodeCordoned := false
 		err = c.client.Get(context.TODO(), client.ObjectKey{Name: storageNode.Name}, node)
 		if err != nil {
 			if errors.IsNotFound(err) {
@@ -221,10 +224,10 @@ func (c *Controller) syncKVDB(
 			if err != nil {
 				c.log(storageNode).Warnf("failed to check if node: %s is being deleted due to: %v", node.Name, err)
 			}
-			isRecentlyCordoned = k8s.IsNodeRecentlyCordoned(node, cluster)
+			isRecentlyCreatedAfterNodeCordoned = k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.lastPodCreationTime, cluster)
 		}
 
-		if !isBeingDeleted && !isRecentlyCordoned && len(kvdbPodList.Items) == 0 {
+		if !isBeingDeleted && !isRecentlyCreatedAfterNodeCordoned && len(kvdbPodList.Items) == 0 {
 			pod, err := c.createKVDBPod(cluster, storageNode)
 			if err != nil {
 				return err
@@ -235,6 +238,8 @@ func (c *Controller) syncKVDB(
 			if err != nil {
 				return err
 			}
+
+			c.lastPodCreationTime[storageNode.Name] = time.Now()
 		}
 	} else { // delete pods if present
 		for _, p := range kvdbPodList.Items {

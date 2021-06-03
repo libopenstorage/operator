@@ -76,9 +76,10 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -299,10 +300,11 @@ func TestStorkWithoutImage(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            testutil.FakeK8sClient(cluster),
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
-		recorder:          recorder,
+		client:              testutil.FakeK8sClient(cluster),
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		recorder:            recorder,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -350,9 +352,10 @@ func TestStorkWithDesiredImage(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -407,9 +410,10 @@ func TestStorkImageChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -467,9 +471,10 @@ func TestStorkArgumentsChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -543,9 +548,10 @@ func TestStorkEnvVarsChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -631,9 +637,10 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -762,9 +769,10 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -892,9 +900,10 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1031,9 +1040,10 @@ func TestStorkTolerationsChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1211,9 +1221,10 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1348,9 +1359,10 @@ func TestStorkVolumesChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1500,9 +1512,10 @@ func TestStorkCPUChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1563,9 +1576,10 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1629,10 +1643,11 @@ func TestStorkInvalidCPU(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(cluster)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1673,10 +1688,11 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(cluster)
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1723,9 +1739,10 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1788,9 +1805,10 @@ func TestStorkSchedulerImageWithNewerK8sVersion(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1908,9 +1926,10 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1971,9 +1990,10 @@ func TestStorkInstallWithImagePullPolicy(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2032,9 +2052,10 @@ func TestStorkInstallWithHostNetwork(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2112,9 +2133,10 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2217,9 +2239,10 @@ func TestDisableStork(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2353,9 +2376,10 @@ func TestRemoveStork(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2489,9 +2513,10 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("", fmt.Errorf("not supported"))
