@@ -101,6 +101,8 @@ type Controller struct {
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
+	// Node to pod creation time map.
+	lastPodCreationTime map[string]time.Time
 }
 
 // Init initialize the storage cluster controller
@@ -109,6 +111,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
+	c.lastPodCreationTime = make(map[string]time.Time)
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -595,12 +598,14 @@ func (c *Controller) syncNodes(
 					// informer. If the initialization fails, or if the pod keeps uninitialized
 					// for a long time, the informer will not receive any update, and the controller
 					// will create a new pod.
+					c.lastPodCreationTime[nodesNeedingStoragePods[idx]] = time.Now()
 					return
 				}
 				if err != nil {
 					logrus.Warnf("Failed creation of storage pod on node %v: %v", nodesNeedingStoragePods[idx], err)
 					errCh <- err
 				} else {
+					c.lastPodCreationTime[nodesNeedingStoragePods[idx]] = time.Now()
 					c.createStorageNode(cluster, nodesNeedingStoragePods[idx])
 				}
 			}(i)
@@ -835,7 +840,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 		return false, true, nil
 	}
 
-	if k8s.IsNodeRecentlyCordoned(node, cluster) {
+	if k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.lastPodCreationTime, cluster) {
 		return false, true, nil
 	}
 
