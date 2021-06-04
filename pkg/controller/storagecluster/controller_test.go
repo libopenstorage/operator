@@ -571,11 +571,12 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -617,11 +618,12 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -668,11 +670,12 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -725,11 +728,12 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	expectedPodSpec := v1.PodSpec{
@@ -808,11 +812,12 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
@@ -1103,11 +1108,12 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	expectedPodSpec := v1.PodSpec{
@@ -1233,11 +1239,12 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1328,11 +1335,12 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1448,11 +1456,12 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1529,11 +1538,12 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1620,11 +1630,12 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1751,11 +1762,12 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1830,11 +1842,12 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1900,11 +1913,12 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 		Err: errors.NewTimeoutError("timeout error", 0),
 	}
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1948,11 +1962,12 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -1999,11 +2014,12 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2052,11 +2068,12 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2102,11 +2119,12 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2181,11 +2199,12 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2255,11 +2274,12 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2402,9 +2422,10 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -2523,11 +2544,12 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -2669,11 +2691,12 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -2864,11 +2887,12 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -3016,11 +3040,12 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3074,11 +3099,12 @@ func TestUpdateStorageClusterWhenDriverReportsPodNotUpdated(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := &Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3138,11 +3164,12 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3196,11 +3223,12 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := &Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3301,11 +3329,12 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := &Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3403,11 +3432,12 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3509,11 +3539,12 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3738,11 +3769,12 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -3929,11 +3961,12 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4014,11 +4047,12 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4101,11 +4135,12 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4185,11 +4220,12 @@ func TestUpdateStorageClusterVolumes(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4407,11 +4443,12 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4490,11 +4527,12 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4573,11 +4611,12 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -4667,11 +4706,12 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5112,11 +5152,12 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5201,11 +5242,12 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5346,11 +5388,12 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5425,11 +5468,12 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5726,11 +5770,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
@@ -5902,11 +5947,12 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -6048,11 +6094,12 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	fakeClient := fake.NewSimpleClientset()
@@ -6205,11 +6252,12 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -6349,11 +6397,12 @@ func TestHistoryCleanup(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -6504,10 +6553,11 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	driver.EXPECT().String().Return("mock-storage").AnyTimes()
 
 	controller := Controller{
-		Driver:     driver,
-		client:     k8sClient,
-		podControl: podControl,
-		recorder:   recorder,
+		Driver:              driver,
+		client:              k8sClient,
+		podControl:          podControl,
+		recorder:            recorder,
+		lastPodCreationTime: make(map[string]time.Time),
 	}
 
 	// TestCase: machine for node is being deleted
@@ -6718,11 +6768,12 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		podControl := &k8scontroller.FakePodControl{}
 		recorder := record.NewFakeRecorder(10)
 		controller := Controller{
-			client:            k8sClient,
-			Driver:            driver,
-			podControl:        podControl,
-			recorder:          recorder,
-			kubernetesVersion: k8sVersion,
+			client:              k8sClient,
+			Driver:              driver,
+			podControl:          podControl,
+			recorder:            recorder,
+			kubernetesVersion:   k8sVersion,
+			lastPodCreationTime: make(map[string]time.Time),
 		}
 
 		driver.EXPECT().Validate().Return(nil).AnyTimes()
