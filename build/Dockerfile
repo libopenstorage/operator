@@ -1,5 +1,9 @@
 FROM registry.access.redhat.com/ubi8-minimal:latest
 
+RUN microdnf --enablerepo=rhel-7-server-rpms \
+-y update-minimal --security --sec-severity=Important --sec-severity=Critical;\
+microdnf clean all
+
 LABEL name="OpenStorage Operator" \
       vendor="openstorage.org" \
       version="v1.0.0" \
