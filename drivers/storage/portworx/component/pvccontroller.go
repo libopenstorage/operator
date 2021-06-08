@@ -36,9 +36,12 @@ const (
 	// PVCDeploymentName name of the PVC controller deployment
 	PVCDeploymentName = "portworx-pvc-controller"
 
-	pvcContainerName                 = "portworx-pvc-controller-manager"
-	defaultPVCControllerCPU          = "200m"
+	pvcContainerName        = "portworx-pvc-controller-manager"
+	defaultPVCControllerCPU = "200m"
+
 	defaultPVCControllerInsecurePort = "10252"
+	aksPVCControllerInsecurePort     = "10260"
+	aksPVCControllerSecurePort       = "10261"
 )
 
 type pvcController struct {
@@ -293,9 +296,14 @@ func (c *pvcController) createDeployment(
 	}
 	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		command = append(command, "--port="+port)
+	} else if pxutil.IsAKS(cluster) {
+		command = append(command, "--port="+aksPVCControllerInsecurePort)
 	}
+
 	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
 		command = append(command, "--secure-port="+securePort)
+	} else if pxutil.IsAKS(cluster) {
+		command = append(command, "--secure-port="+aksPVCControllerSecurePort)
 	}
 
 	existingDeployment := &appsv1.Deployment{}
@@ -353,6 +361,8 @@ func getPVCControllerDeploymentSpec(
 	healthCheckPort := defaultPVCControllerInsecurePort
 	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		healthCheckPort = port
+	} else if pxutil.IsAKS(cluster) {
+		healthCheckPort = aksPVCControllerInsecurePort
 	}
 
 	labels := map[string]string{
