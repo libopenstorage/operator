@@ -10241,7 +10241,7 @@ func TestTelemetryEnable(t *testing.T) {
 
 	// without location
 	delete(cluster.Annotations, "portworx.io/arcus-location")
-	delete(expectedConfigMap.Data, "location")
+	expectedConfigMap.Data["location"] = "external"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
