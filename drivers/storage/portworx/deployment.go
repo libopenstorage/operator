@@ -592,6 +592,7 @@ func (t *template) telemetryContainer() *v1.Container {
 					Port: intstr.FromInt(1970),
 				},
 			},
+			PeriodSeconds: 30,
 		},
 		ReadinessProbe: &v1.Probe{
 			Handler: v1.Handler{
@@ -601,6 +602,7 @@ func (t *template) telemetryContainer() *v1.Container {
 					Port: intstr.FromInt(1970),
 				},
 			},
+			PeriodSeconds: 30,
 		},
 		SecurityContext: &v1.SecurityContext{
 			Privileged: boolPtr(true),

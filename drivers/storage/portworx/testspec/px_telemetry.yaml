@@ -109,6 +109,7 @@ spec:
           args:
             - "-Dstandalone.controller_sn=testNode"
           livenessProbe:
+            periodSeconds: 30
             httpGet:
               host: 127.0.0.1
               path: /1.0/status
@@ -120,6 +121,7 @@ spec:
             limits:
               memory: "512Mi"
           readinessProbe:
+            periodSeconds: 30
             httpGet:
               host: 127.0.0.1
               path: /1.0/status
