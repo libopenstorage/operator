@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
@@ -1371,7 +1372,16 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
-	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	specFileName := "pvcControllerDeployment.yaml"
+	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
+	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
+	command = append(command, "--port="+component.AksPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.AksPVCControllerSecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port = intstr.Parse(component.AksPVCControllerInsecurePort)
+
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 
 	// Despite invalid pvc controller annotation, install for AKS
 	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
@@ -1380,7 +1390,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
-	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
 
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
@@ -1522,13 +1532,25 @@ func verifyPVCControllerDeployment(
 	k8sClient client.Client,
 	specFileName string,
 ) {
+	verifyPVCControllerDeploymentObject(
+		t, cluster,
+		k8sClient,
+		testutil.GetExpectedDeployment(t, specFileName))
+
+}
+
+func verifyPVCControllerDeploymentObject(
+	t *testing.T,
+	cluster *corev1.StorageCluster,
+	k8sClient client.Client,
+	expectedDeployment *appsv1.Deployment,
+) {
 	// PVC Controller Deployment
 	deploymentList := &appsv1.DeploymentList{}
 	err := testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
 	require.Len(t, deploymentList.Items, 1)
 
-	expectedDeployment := testutil.GetExpectedDeployment(t, specFileName)
 	actualDeployment := deploymentList.Items[0]
 	require.Equal(t, expectedDeployment.Name, actualDeployment.Name)
 	require.Equal(t, expectedDeployment.Namespace, actualDeployment.Namespace)
