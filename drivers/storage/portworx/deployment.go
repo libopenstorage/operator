@@ -769,9 +769,13 @@ func (t *template) getArguments() []string {
 		}
 
 	} else if t.cluster.Spec.CloudStorage != nil {
-		cloudProvider := t.getCloudProvider()
-		if len(cloudProvider) > 0 {
-			args = append(args, "-cloud_provider", cloudProvider)
+		pxVer, _ := version.NewVersion("2.8")
+		// Cloud provider parameter was added in newer version.
+		if t.pxVersion.GreaterThanOrEqual(pxVer) {
+			cloudProvider := t.getCloudProvider()
+			if len(cloudProvider) > 0 {
+				args = append(args, "-cloud_provider", cloudProvider)
+			}
 		}
 
 		if t.cloudConfig != nil && len(t.cloudConfig.CloudStorage) > 0 {
