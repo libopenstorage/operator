@@ -107,6 +107,7 @@ spec:
           image: portworx/px-telemetry:2.1.2
           imagePullPolicy: Always
           args:
+            - "-Dserver.rest_server.core_pool_size=2"
             - "-Dstandalone.controller_sn=testNode"
           livenessProbe:
             periodSeconds: 30
