@@ -608,10 +608,11 @@ func (t *template) telemetryContainer() *v1.Container {
 		VolumeMounts: t.mountsFromVolInfo(t.getTelemetryVolumeInfoList()),
 	}
 
+	container.Args = []string{
+		"-Dserver.rest_server.core_pool_size=2",
+	}
 	if len(t.nodeName) > 0 {
-		container.Args = []string{
-			fmt.Sprintf("-Dstandalone.controller_sn=%s", t.nodeName),
-		}
+		container.Args = append(container.Args, fmt.Sprintf("-Dstandalone.controller_sn=%s", t.nodeName))
 	}
 	return &container
 }
