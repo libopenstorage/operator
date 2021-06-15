@@ -1179,12 +1179,18 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
 	assert.Equal(t, 1, len(list), "expected storage nodes in list")
 
-	// Test cloud provider is provided
+	// Test cloud provider is provided, px version is less than 2.8.0, cloud provider parameter should not be specified.
+	cluster.Spec.Image = "portworx/oci-monitor:2.7.0"
 	cloudProvider := "AWS"
-	argsWithCloudProvider := append(expectedArgs, "-cloud_provider", cloudProvider)
 	cluster.Spec.CloudStorage.Provider = &cloudProvider
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
-	assert.ElementsMatch(t, argsWithCloudProvider, actual.Containers[0].Args)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Test cloud provider is provided, px version is 2.8.0, cloud provider parameter should be specified.
+	cluster.Spec.Image = "portworx/oci-monitor:2.8.0"
+	expectedArgs = append(expectedArgs, "-cloud_provider", cloudProvider)
+	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	cluster.Spec.CloudStorage.Provider = nil
 }
