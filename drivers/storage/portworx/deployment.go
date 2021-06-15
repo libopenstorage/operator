@@ -350,6 +350,17 @@ func (p *portworx) GetStoragePodSpec(
 		)
 	}
 
+	if t.isBottleRocketOS() {
+		podSpec.SecurityContext = &v1.PodSecurityContext{
+			SELinuxOptions: &v1.SELinuxOptions{
+				User:  "system_u",
+				Role:  "system_r",
+				Type:  "super_t",
+				Level: "s0",
+			},
+		}
+	}
+
 	return podSpec, nil
 }
 
@@ -428,6 +439,17 @@ func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Con
 
 func (t *template) portworxContainer() v1.Container {
 	pxImage := util.GetImageURN(t.cluster, t.cluster.Spec.Image)
+	sc := &v1.SecurityContext{
+		Privileged: boolPtr(true),
+	}
+	if t.isBottleRocketOS() {
+		sc.Privileged = boolPtr(false)
+		sc.Capabilities = &v1.Capabilities{
+			Add: []v1.Capability{
+				"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+			},
+		}
+	}
 	return v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
@@ -456,10 +478,8 @@ func (t *template) portworxContainer() v1.Container {
 			},
 		},
 		TerminationMessagePath: "/tmp/px-termination-log",
-		SecurityContext: &v1.SecurityContext{
-			Privileged: boolPtr(true),
-		},
-		VolumeMounts: t.getVolumeMounts(),
+		SecurityContext:        sc,
+		VolumeMounts:           t.getVolumeMounts(),
 	}
 }
 
