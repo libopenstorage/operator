@@ -151,6 +151,8 @@ func (t *telemetry) createConfigMap(
 
 	if location, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]; present && len(location) > 0 {
 		data[TelemetryArcusLocationFilename] = location
+	} else {
+		data[TelemetryArcusLocationFilename] = "external"
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
