@@ -1258,17 +1258,14 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 						Key:  component.TelemetryPropertiesFilename,
 						Path: component.TelemetryPropertiesFilename,
 					},
+					{
+						Key:  component.TelemetryArcusLocationFilename,
+						Path: component.TelemetryArcusLocationFilename,
+					},
 				},
 			},
 		}
 
-		// reference location from config map only if the default was overridden using annotations
-		if location, present := t.cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]; present && len(location) > 0 {
-			configVolume.configMapType.Items = append(configVolume.configMapType.Items, v1.KeyToPath{
-				Key:  component.TelemetryArcusLocationFilename,
-				Path: component.TelemetryArcusLocationFilename,
-			})
-		}
 		volumeInfoList := []volumeInfo{
 			{
 				name:      "varcache",
