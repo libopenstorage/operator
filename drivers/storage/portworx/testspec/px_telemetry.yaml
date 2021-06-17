@@ -205,5 +205,7 @@ spec:
             items:
               - key: ccm.properties
                 path: ccm.properties
+              - key: location
+                path: location
             name: px-telemetry-config
           name: ccm-config
