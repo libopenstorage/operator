@@ -147,11 +147,3 @@ spec:
         - name: pxlogs
           hostPath:
             path: /var/vcap/store/lib/osd/log
-        - name: registration-dir
-          hostPath:
-            path: /var/vcap/data/kubelet/plugins
-            type: DirectoryOrCreate
-        - name: csi-driver-path
-          hostPath:
-            path: /var/vcap/data/kubelet/csi-plugins/com.openstorage.pxd
-            type: DirectoryOrCreate

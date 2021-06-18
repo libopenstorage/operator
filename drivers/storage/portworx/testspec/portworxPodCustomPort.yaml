@@ -132,11 +132,3 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins
-            type: DirectoryOrCreate
-        - name: csi-driver-path
-          hostPath:
-            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
-            type: DirectoryOrCreate
