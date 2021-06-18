@@ -202,7 +202,7 @@ func CreateOrUpdateRole(
 		existingRole,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s Role", role.Name)
+		logrus.Debugf("Creating %s/%s Role", role.Namespace, role.Name)
 		return k8sClient.Create(context.TODO(), role)
 	} else if err != nil {
 		return err
@@ -211,13 +211,13 @@ func CreateOrUpdateRole(
 	modified := !reflect.DeepEqual(role.Rules, existingRole.Rules)
 
 	for _, o := range existingRole.OwnerReferences {
-		if o.UID != ownerRef.UID {
+		if ownerRef != nil && o.UID != ownerRef.UID {
 			role.OwnerReferences = append(role.OwnerReferences, o)
 		}
 	}
 
 	if modified || len(role.OwnerReferences) > len(existingRole.OwnerReferences) {
-		logrus.Debugf("Updating %s Role", role.Name)
+		logrus.Debugf("Updating %s/%s Role", role.Namespace, role.Name)
 		return k8sClient.Update(context.TODO(), role)
 	}
 	return nil
@@ -279,7 +279,7 @@ func CreateOrUpdateRoleBinding(
 		existingRB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s RoleBinding", rb.Name)
+		logrus.Debugf("Creating %s/%s RoleBinding", rb.Namespace, rb.Name)
 		return k8sClient.Create(context.TODO(), rb)
 	} else if err != nil {
 		return err
@@ -289,14 +289,14 @@ func CreateOrUpdateRoleBinding(
 		!reflect.DeepEqual(rb.RoleRef, existingRB.RoleRef)
 
 	for _, o := range existingRB.OwnerReferences {
-		if o.UID != ownerRef.UID {
+		if ownerRef != nil && o.UID != ownerRef.UID {
 			rb.OwnerReferences = append(rb.OwnerReferences, o)
 		}
 	}
 
 	if modified || len(rb.OwnerReferences) > len(existingRB.OwnerReferences) {
 		rb.ResourceVersion = existingRB.ResourceVersion
-		logrus.Debugf("Updating %s RoleBinding", rb.Name)
+		logrus.Debugf("Updating %s/%s RoleBinding", rb.Namespace, rb.Name)
 		return k8sClient.Update(context.TODO(), rb)
 	}
 	return nil
