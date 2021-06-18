@@ -367,8 +367,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	err = testutil.Get(k8sClient, actualRole, component.PxRoleName, secretsNamespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedRole.Name, actualRole.Name)
-	require.Len(t, actualRole.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualRole.OwnerReferences[0].Name)
+	require.Empty(t, actualRole.OwnerReferences)
 	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
 
 	// Portworx Secrets RoleBinding
@@ -377,10 +376,27 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	err = testutil.Get(k8sClient, actualRB, component.PxRoleBindingName, secretsNamespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedRB.Name, actualRB.Name)
-	require.Len(t, actualRB.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
+	require.Empty(t, actualRB.OwnerReferences)
 	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
 	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+
+	// Disable storage should result in deleting objects even from secrets namespace
+	cluster.Annotations = map[string]string{
+		constants.AnnotationDisableStorage: "true",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	roleList := &rbacv1.RoleList{}
+	err = testutil.List(k8sClient, roleList)
+	require.NoError(t, err)
+	require.Empty(t, roleList.Items)
+
+	rbList := &rbacv1.RoleBindingList{}
+	err = testutil.List(k8sClient, rbList)
+	require.NoError(t, err)
+	require.Empty(t, rbList.Items)
 }
 
 func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {

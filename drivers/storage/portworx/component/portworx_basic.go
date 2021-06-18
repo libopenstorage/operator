@@ -92,15 +92,27 @@ func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxClusterRoleBindingName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteRole(c.k8sClient, PxRoleName, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRoleBinding(c.k8sClient, PxRoleBindingName, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
 	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+
+	secretsNamespace := getSecretsNamespace(cluster)
+	if secretsNamespace == cluster.Namespace {
+		if err := k8sutil.DeleteRole(c.k8sClient, PxRoleName, secretsNamespace, *ownerRef); err != nil {
+			return err
+		}
+		if err := k8sutil.DeleteRoleBinding(c.k8sClient, PxRoleBindingName, secretsNamespace, *ownerRef); err != nil {
+			return err
+		}
+	} else {
+		if err := k8sutil.DeleteRole(c.k8sClient, PxRoleName, secretsNamespace); err != nil {
+			return err
+		}
+		if err := k8sutil.DeleteRoleBinding(c.k8sClient, PxRoleBindingName, secretsNamespace); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -128,23 +140,17 @@ func (c *portworxBasic) prepareForSecrets(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	secretsNamespace := cluster.Namespace
-	for _, env := range cluster.Spec.Env {
-		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
-			secretsNamespace = env.Value
-			break
-		}
-	}
+	secretsNamespace := getSecretsNamespace(cluster)
 
 	if secretsNamespace != cluster.Namespace {
 		if err := c.createNamespace(secretsNamespace); err != nil {
 			return err
 		}
 	}
-	if err := c.createRole(secretsNamespace, ownerRef); err != nil {
+	if err := c.createRole(cluster, secretsNamespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createRoleBinding(saName, secretsNamespace, cluster.Namespace, ownerRef); err != nil {
+	if err := c.createRoleBinding(cluster, saName, secretsNamespace, ownerRef); err != nil {
 		return err
 	}
 	return nil
@@ -173,56 +179,106 @@ func (c *portworxBasic) createNamespace(namespace string) error {
 	return nil
 }
 
-func (c *portworxBasic) createRole(namespace string, ownerRef *metav1.OwnerReference) error {
-	return k8sutil.CreateOrUpdateRole(
-		c.k8sClient,
-		&rbacv1.Role{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxRoleName,
-				Namespace:       namespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{""},
-					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
-				},
+func (c *portworxBasic) createRole(
+	cluster *corev1.StorageCluster,
+	namespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PxRoleName,
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
 			},
 		},
-		ownerRef,
+	}
+
+	if cluster.Namespace == namespace {
+		role.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+		return k8sutil.CreateOrUpdateRole(c.k8sClient, role, ownerRef)
+	}
+
+	// Remove ownership information from the object as Kubernetes
+	// does not handle cross-namespace ownership. This code should
+	// be removed eventually when existing customers are upgraded.
+	existingRole := &rbacv1.Role{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      role.Name,
+			Namespace: role.Namespace,
+		},
+		existingRole,
 	)
+	if err == nil && len(existingRole.OwnerReferences) > 0 {
+		existingRole.OwnerReferences = nil
+		logrus.Debugf("Removing ownership from %s/%s Role", role.Namespace, role.Name)
+		if err := c.k8sClient.Update(context.TODO(), existingRole); err != nil {
+			return err
+		}
+		role.ResourceVersion = existingRole.ResourceVersion
+	}
+
+	return k8sutil.CreateOrUpdateRole(c.k8sClient, role, nil)
 }
 
 func (c *portworxBasic) createRoleBinding(
+	cluster *corev1.StorageCluster,
 	saName string,
 	bindingNamespace string,
-	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	return k8sutil.CreateOrUpdateRoleBinding(
-		c.k8sClient,
-		&rbacv1.RoleBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            PxRoleBindingName,
-				Namespace:       bindingNamespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      saName,
-					Namespace: clusterNamespace,
-				},
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "Role",
-				Name:     PxRoleName,
-				APIGroup: "rbac.authorization.k8s.io",
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PxRoleBindingName,
+			Namespace: bindingNamespace,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      saName,
+				Namespace: cluster.Namespace,
 			},
 		},
-		ownerRef,
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     PxRoleName,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+
+	if cluster.Namespace == bindingNamespace {
+		roleBinding.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+		return k8sutil.CreateOrUpdateRoleBinding(c.k8sClient, roleBinding, ownerRef)
+	}
+
+	// Remove ownership information from the object as Kubernetes
+	// does not handle cross-namespace ownership. This code should
+	// be removed eventually when existing customers are upgraded.
+	existingRoleBinding := &rbacv1.RoleBinding{}
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      roleBinding.Name,
+			Namespace: roleBinding.Namespace,
+		},
+		existingRoleBinding,
 	)
+	if err == nil && len(existingRoleBinding.OwnerReferences) > 0 {
+		existingRoleBinding.OwnerReferences = nil
+		logrus.Debugf("Removing ownership from %s/%s RoleBinding", roleBinding.Namespace, roleBinding.Name)
+		if err := c.k8sClient.Update(context.TODO(), existingRoleBinding); err != nil {
+			return err
+		}
+		roleBinding.ResourceVersion = existingRoleBinding.ResourceVersion
+	}
+
+	return k8sutil.CreateOrUpdateRoleBinding(c.k8sClient, roleBinding, nil)
 }
 
 func (c *portworxBasic) createClusterRole() error {
@@ -416,6 +472,15 @@ func getPortworxServiceSpec(
 	}
 
 	return newService
+}
+
+func getSecretsNamespace(cluster *corev1.StorageCluster) string {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
+			return env.Value
+		}
+	}
+	return cluster.Namespace
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component
