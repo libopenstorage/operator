@@ -3347,6 +3347,83 @@ func TestIKSEnvVariables(t *testing.T) {
 	assert.Nil(t, podIPEnv)
 }
 
+func TestPruneVolumes(t *testing.T) {
+	spec := v1.PodSpec{
+		Volumes: []v1.Volume{
+			{Name: "foo"},
+			{Name: "bar"},
+			{Name: "foo-override"},
+			{Name: "orphaned"},
+		},
+		Containers: []v1.Container{
+			{
+				Name: "containerA",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo",
+					},
+					{
+						Name:      "bar",
+						MountPath: "/mnt/bar",
+					},
+				},
+			},
+			{
+				Name: "containerB",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo",
+					},
+					{
+						Name:      "bar",
+						MountPath: "/mnt/bar",
+					},
+					{
+						Name:      "foo-override",
+						MountPath: "/mnt/foo",
+					},
+				},
+			},
+		},
+	}
+
+	testObj := &portworx{}
+	testObj.pruneVolumes(&spec)
+
+	expectedVolumes := []v1.Volume{
+		{Name: "foo"},
+		{Name: "bar"},
+		{Name: "foo-override"},
+	}
+	assert.Equal(t, expectedVolumes, spec.Volumes)
+
+	expectedMounts := []v1.VolumeMount{
+		{
+			Name:      "foo",
+			MountPath: "/mnt/foo",
+		},
+		{
+			Name:      "bar",
+			MountPath: "/mnt/bar",
+		},
+	}
+	assert.Equal(t, expectedMounts, spec.Containers[0].VolumeMounts)
+
+	expectedMounts = []v1.VolumeMount{
+		{
+			Name:      "bar",
+			MountPath: "/mnt/bar",
+		},
+		{
+			Name:      "foo-override",
+			MountPath: "/mnt/foo",
+		},
+	}
+	assert.Equal(t, expectedMounts, spec.Containers[1].VolumeMounts)
+}
+
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)

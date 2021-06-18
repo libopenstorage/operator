@@ -361,7 +361,41 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
+	p.pruneVolumes(&podSpec)
+
 	return podSpec, nil
+}
+
+func (p *portworx) pruneVolumes(spec *v1.PodSpec) {
+	seen := make(map[string]bool)
+	for ci, container := range spec.Containers {
+		seenDest := make(map[string]bool)
+		vm := container.VolumeMounts
+		for i := len(vm) - 1; i >= 0; i-- {
+			if seenDest[vm[i].MountPath] {
+				logrus.Warnf("Removed mount %s:%s for container %s due to non-unique destination",
+					vm[i].Name, vm[i].MountPath, container.Name)
+				copy(vm[i:], vm[i+1:])
+				spec.Containers[ci].VolumeMounts = vm[:len(vm)-1]
+			} else {
+				seen[vm[i].Name] = true
+				seenDest[vm[i].MountPath] = true
+			}
+		}
+	}
+	if len(seen) != len(spec.Volumes) {
+		for i := len(spec.Volumes) - 1; i >= 0; i-- {
+			if n := spec.Volumes[i].Name; !seen[n] {
+				hp := "???"
+				if spec.Volumes[i].VolumeSource.HostPath != nil {
+					hp = spec.Volumes[i].VolumeSource.HostPath.Path
+				}
+				logrus.Warnf("Removed unused Volume %s:%s from Spec", spec.Volumes[i].Name, hp)
+				copy(spec.Volumes[i:], spec.Volumes[i+1:])
+				spec.Volumes = spec.Volumes[:len(spec.Volumes)-1]
+			}
+		}
+	}
 }
 
 func (p *portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
