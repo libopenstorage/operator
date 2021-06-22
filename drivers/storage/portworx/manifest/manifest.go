@@ -33,7 +33,7 @@ const (
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	defaultTelemetryImage                 = "purestorage/ccm-service:3.0.0-rc3"
+	defaultTelemetryImage                 = "purestorage/ccm-service:3.0.0-rc4"
 	defaultManifestRefreshInterval        = 3 * time.Hour
 )
 
