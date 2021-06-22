@@ -3386,6 +3386,27 @@ func TestPruneVolumes(t *testing.T) {
 					},
 				},
 			},
+			{
+				Name: "containerC",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo/",
+					},
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo////",
+					},
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo/bar/..",
+					},
+					{
+						Name:      "foo",
+						MountPath: "/mnt/foo",
+					},
+				},
+			},
 		},
 	}
 
@@ -3409,6 +3430,7 @@ func TestPruneVolumes(t *testing.T) {
 			MountPath: "/mnt/bar",
 		},
 	}
+	require.Equal(t, "containerA", spec.Containers[0].Name)
 	assert.Equal(t, expectedMounts, spec.Containers[0].VolumeMounts)
 
 	expectedMounts = []v1.VolumeMount{
@@ -3421,7 +3443,17 @@ func TestPruneVolumes(t *testing.T) {
 			MountPath: "/mnt/foo",
 		},
 	}
+	require.Equal(t, "containerB", spec.Containers[1].Name)
 	assert.Equal(t, expectedMounts, spec.Containers[1].VolumeMounts)
+
+	expectedMounts = []v1.VolumeMount{
+		{
+			Name:      "foo",
+			MountPath: "/mnt/foo",
+		},
+	}
+	require.Equal(t, "containerC", spec.Containers[2].Name)
+	assert.Equal(t, expectedMounts, spec.Containers[2].VolumeMounts)
 }
 
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {

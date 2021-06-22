@@ -367,34 +367,47 @@ func (p *portworx) GetStoragePodSpec(
 }
 
 func (p *portworx) pruneVolumes(spec *v1.PodSpec) {
-	seen := make(map[string]bool)
+	seenName := make(map[string]bool)
+	updatedMounts := false
 	for ci, container := range spec.Containers {
 		seenDest := make(map[string]bool)
 		vm := container.VolumeMounts
+		vmNew := make([]v1.VolumeMount, 0, len(vm))
 		for i := len(vm) - 1; i >= 0; i-- {
-			if seenDest[vm[i].MountPath] {
+			mp := path.Clean(vm[i].MountPath)
+			if !seenDest[mp] {
+				vmNew = append(vmNew, vm[i])
+				seenName[vm[i].Name] = true
+				seenDest[mp] = true
+			} else {
 				logrus.Warnf("Removed mount %s:%s for container %s due to non-unique destination",
 					vm[i].Name, vm[i].MountPath, container.Name)
-				copy(vm[i:], vm[i+1:])
-				spec.Containers[ci].VolumeMounts = vm[:len(vm)-1]
-			} else {
-				seen[vm[i].Name] = true
-				seenDest[vm[i].MountPath] = true
+				updatedMounts = true
 			}
+		}
+		if updatedMounts {
+			// reverse the array (since mounts were appended in reverse order)
+			for i, j := 0, len(vmNew)-1; i < j; i, j = i+1, j-1 {
+				vmNew[i], vmNew[j] = vmNew[j], vmNew[i]
+			}
+			spec.Containers[ci].VolumeMounts = vmNew
 		}
 	}
-	if len(seen) != len(spec.Volumes) {
-		for i := len(spec.Volumes) - 1; i >= 0; i-- {
-			if n := spec.Volumes[i].Name; !seen[n] {
+
+	if updatedMounts {
+		newVols := make([]v1.Volume, 0, len(seenName))
+		for _, vol := range spec.Volumes {
+			if seenName[vol.Name] {
+				newVols = append(newVols, vol)
+			} else {
 				hp := "???"
-				if spec.Volumes[i].VolumeSource.HostPath != nil {
-					hp = spec.Volumes[i].VolumeSource.HostPath.Path
+				if vol.VolumeSource.HostPath != nil {
+					hp = vol.VolumeSource.HostPath.Path
 				}
-				logrus.Warnf("Removed unused Volume %s:%s from Spec", spec.Volumes[i].Name, hp)
-				copy(spec.Volumes[i:], spec.Volumes[i+1:])
-				spec.Volumes = spec.Volumes[:len(spec.Volumes)-1]
+				logrus.Warnf("Removed unused Volume %s:%s from Spec", vol.Name, hp)
 			}
 		}
+		spec.Volumes = newVols
 	}
 }
 
