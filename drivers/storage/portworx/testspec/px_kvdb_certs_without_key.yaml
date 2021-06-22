@@ -109,6 +109,14 @@ spec:
           hostPath:
             path: /etc/crictl.yaml
             type: FileOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
+            type: DirectoryOrCreate
         - name: etcpwx
           hostPath:
             path: /etc/pwx
