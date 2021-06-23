@@ -359,7 +359,54 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
+	p.pruneVolumes(&podSpec)
+
 	return podSpec, nil
+}
+
+func (p *portworx) pruneVolumes(spec *v1.PodSpec) {
+	seenName := make(map[string]bool)
+	updatedMounts := false
+	for ci, container := range spec.Containers {
+		seenDest := make(map[string]bool)
+		vm := container.VolumeMounts
+		vmNew := make([]v1.VolumeMount, 0, len(vm))
+		for i := len(vm) - 1; i >= 0; i-- {
+			mp := path.Clean(vm[i].MountPath)
+			if !seenDest[mp] {
+				vmNew = append(vmNew, vm[i])
+				seenName[vm[i].Name] = true
+				seenDest[mp] = true
+			} else {
+				logrus.Warnf("Removed mount %s:%s for container %s due to non-unique destination",
+					vm[i].Name, vm[i].MountPath, container.Name)
+				updatedMounts = true
+			}
+		}
+		if updatedMounts {
+			// reverse the array (since mounts were appended in reverse order)
+			for i, j := 0, len(vmNew)-1; i < j; i, j = i+1, j-1 {
+				vmNew[i], vmNew[j] = vmNew[j], vmNew[i]
+			}
+			spec.Containers[ci].VolumeMounts = vmNew
+		}
+	}
+
+	if updatedMounts {
+		newVols := make([]v1.Volume, 0, len(seenName))
+		for _, vol := range spec.Volumes {
+			if seenName[vol.Name] {
+				newVols = append(newVols, vol)
+			} else {
+				hp := "???"
+				if vol.VolumeSource.HostPath != nil {
+					hp = vol.VolumeSource.HostPath.Path
+				}
+				logrus.Warnf("Removed unused Volume %s:%s from Spec", vol.Name, hp)
+			}
+		}
+		spec.Volumes = newVols
+	}
 }
 
 func (p *portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
