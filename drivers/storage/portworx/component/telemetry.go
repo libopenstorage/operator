@@ -83,7 +83,7 @@ func (t *telemetry) createConfigMap(
          "cert_store": "k8s",
          "config_reload": "file",
          "env_info": "file",
-         "scheduled_log_uploader":"enabled",
+         "scheduled_log_uploader":"disabled",
          "upload": "enabled"
        },
       "cert": {
