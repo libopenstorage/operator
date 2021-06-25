@@ -2049,6 +2049,20 @@ func TestPodSpecForBottleRocketAMI(t *testing.T) {
 		Name:      "containerd-br",
 		MountPath: "/run/containerd/containerd.sock",
 	})
+
+	// double-check permissions
+	expectedCapabilities := []v1.Capability{
+		"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+	}
+	require.NotNil(t, actual.Containers[0].SecurityContext.Privileged)
+	assert.False(t, *actual.Containers[0].SecurityContext.Privileged)
+
+	require.NotNil(t, actual.Containers[0].SecurityContext.Capabilities)
+	assert.ElementsMatch(t, expectedCapabilities, actual.Containers[0].SecurityContext.Capabilities.Add)
+
+	require.NotNil(t, actual.SecurityContext)
+	require.NotNil(t, actual.SecurityContext.SELinuxOptions)
+	assert.Equal(t, "super_t", actual.SecurityContext.SELinuxOptions.Type)
 }
 
 func TestPodWithTelemetry(t *testing.T) {
