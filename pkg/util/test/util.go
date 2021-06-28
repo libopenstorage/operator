@@ -871,7 +871,7 @@ func validateMonitoring(cluster *corev1.StorageCluster, timeout, interval time.D
 
 			st := appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "px-prometheus-prometheus",
+					Name:      "prometheus-px-prometheus",
 					Namespace: cluster.Namespace,
 				},
 			}
