@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"reflect"
 	"strconv"
 	"testing"
@@ -24,6 +23,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -236,6 +236,11 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v invalid kubernetes version received",
 			v1.EventTypeWarning, util.FailedValidationReason))
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 }
 
 func TestSingleClusterValidation(t *testing.T) {
@@ -278,6 +283,11 @@ func TestSingleClusterValidation(t *testing.T) {
 		fmt.Sprintf("%v %v only one StorageCluster is allowed in a Kubernetes cluster. "+
 			"StorageCluster %s/%s already exists", v1.EventTypeWarning, util.FailedValidationReason,
 			existingCluster.Namespace, existingCluster.Name))
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 }
 
 func TestStorageClusterDefaults(t *testing.T) {
@@ -513,9 +523,10 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 	daemonSetList := &appsv1.DaemonSetList{Items: []appsv1.DaemonSet{daemonSet}}
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	k8sClient := testutil.FakeK8sClient(cluster, daemonSetList)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
-		client:            testutil.FakeK8sClient(cluster, daemonSetList),
+		client:            k8sClient,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
 		Driver:            driver,
@@ -534,6 +545,11 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 	require.NotNil(t, err)
 	require.Empty(t, result)
 	require.NotEmpty(t, recorder.Events)
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 }
 
 func TestReconcileForNonExistingCluster(t *testing.T) {
@@ -2656,10 +2672,6 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Len(t, podControl.ControllerRefs, 1)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 
-	s, _ := json.MarshalIndent(revisions.Items, "", "\t")
-	t.Logf(string(s))
-	s, _ = json.MarshalIndent(podControl.Templates, "", "\t")
-	t.Logf(string(s))
 	require.Len(t, podControl.Templates, 1)
 	// validate revision 1 and revision 2 exist
 	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
@@ -5889,6 +5901,11 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	require.NotEmpty(t, oldPod.Annotations)
 	_, ok = oldPod.Annotations[knownAnnotationKey]
 	require.True(t, ok)
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 
 	// TestCase: Add unsupported custom annotation key and remove previous one
 	testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
