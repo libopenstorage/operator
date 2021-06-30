@@ -610,6 +610,9 @@ func CreateOrUpdateCSIDriver(
 		return err
 	}
 
+	// Copy the fsGroupPolicy as it is automatically populated by k8s
+	driver.Spec.FSGroupPolicy = existingDriver.Spec.FSGroupPolicy
+
 	// Cluster scoped objects should not have owner references
 	if !reflect.DeepEqual(driver.Spec, existingDriver.Spec) ||
 		len(existingDriver.OwnerReferences) > 0 {
