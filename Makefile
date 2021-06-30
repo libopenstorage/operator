@@ -185,7 +185,7 @@ clean-release-manifest:
 
 get-release-manifest: clean-release-manifest
 	mkdir -p manifests
-	wget -q '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
+	wget -q --no-check-certificate '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
 mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
 	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer
