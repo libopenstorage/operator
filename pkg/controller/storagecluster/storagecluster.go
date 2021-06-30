@@ -208,7 +208,9 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		cluster.Status.Phase = string(corev1.ClusterOperationFailed)
-		k8s.UpdateStorageClusterStatus(c.client, cluster)
+		if updateErr := k8s.UpdateStorageClusterStatus(c.client, cluster); updateErr != nil {
+			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
+		}
 		return reconcile.Result{}, err
 	}
 
