@@ -891,7 +891,7 @@ spec:
                   properties:
                     enabled:
                       type: boolean
-                      description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage 
+                      description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage
                         cluster. If omited take the value of the parent flag (security.enabled)
                     guestAccess:
                       type: string
@@ -916,7 +916,7 @@ spec:
                   properties:
                     enabled:
                       type: boolean
-                      description: Flag indicating whether TLS features need to be enabled for the storage 
+                      description: Flag indicating whether TLS features need to be enabled for the storage
                         cluster. Must be supplied and enabled (true) for TLS to be enabled.
                     rootCA:
                       type: object
@@ -924,7 +924,7 @@ spec:
                       properties:
                         filename:
                           type: string
-                          description: If provided, Portworx will expect a certificate file installed in the same location 
+                          description: If provided, Portworx will expect a certificate file installed in the same location
                             on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/ca.crt
                         secretRef:
                           type: object
@@ -942,7 +942,7 @@ spec:
                       properties:
                         filename:
                           type: string
-                          description: If provided, Portworx will expect a certificate file installed in the same location 
+                          description: If provided, Portworx will expect a certificate file installed in the same location
                             on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.crt
                         secretRef:
                           type: object
@@ -960,7 +960,7 @@ spec:
                       properties:
                         filename:
                           type: string
-                          description: If provided, Portworx will expect a private key file installed in the same location 
+                          description: If provided, Portworx will expect a private key file installed in the same location
                             on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.key
                         secretRef:
                           type: object
