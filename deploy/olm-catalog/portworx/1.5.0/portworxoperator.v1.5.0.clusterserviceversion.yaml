@@ -383,6 +383,11 @@ spec:
         path: cloudStorage.nodePoolLabel
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:hidden'
+      - description: Cloud provider
+        displayName: Cloud provider
+        path: cloudStorage.provider
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:hidden'
       - description: The network configuration used by storage nodes
         displayName: Network Configuration
         path: network
