@@ -47,6 +47,17 @@ spec:
           type: object
           description: The desired behavior of the storage cluster.
           properties:
+            metadata:
+              type: object
+              description: Metadata contains metadata for different storage cluster components.
+              properties:
+                annotations:
+                  type: object
+                  description: >-
+                    The annotations section of spec is a map of map to pass custom annotations to different
+                    storage cluster components. The key specifies component in format of "kind/component",
+                    e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
+                    string that contains custom annotation key and value pairs.
             image:
               type: string
               description: Docker image of the storage driver.
@@ -306,6 +317,11 @@ spec:
                   description: List of devices to be used by the storage driver.
                   items:
                     type: string
+                cacheDevices:
+                  type: array
+                  description: List of cache devices to be used by the storage driver.
+                  items:
+                    type: string
                 journalDevice:
                   type: string
                   description: Device used for journaling.
@@ -319,6 +335,9 @@ spec:
               type: object
               description: Details of storage used in cloud environment.
               properties:
+                provider:
+                  type: string
+                  description: Cloud provider name.
                 maxStorageNodes:
                   type: integer
                   format: int32
@@ -870,6 +889,10 @@ spec:
                   type: object
                   description: Authorization configurations for a RBAC enabled storage cluster
                   properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage
+                        cluster. If omited take the value of the parent flag (security.enabled)
                     guestAccess:
                       type: string
                       description: Defines the access mode of a guest user
@@ -887,6 +910,68 @@ spec:
                           type: string
                           description: Shared secret is the name of the Kubernetes secret containing the shared key
                             used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
+                tls:
+                  type: object
+                  description: Security configurations for a TLS enabled storage cluster
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Flag indicating whether TLS features need to be enabled for the storage
+                        cluster. Must be supplied and enabled (true) for TLS to be enabled.
+                    rootCA:
+                      type: object
+                      description: The source of the CA certificate.
+                      properties:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a certificate file installed in the same location
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/ca.crt
+                        secretRef:
+                          type: object
+                          description: The k8s secret supplying the certificate
+                          properties:
+                            secretName:
+                              type: string
+                              description: The name of the secret holding the certificate
+                            secretKey:
+                              type: string
+                              description: The key that contains the certificate
+                    serverCert:
+                      type: object
+                      description: The source of the public key certificate used by the portworx service for TLS.
+                      properties:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a certificate file installed in the same location
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.crt
+                        secretRef:
+                          type: object
+                          description: The k8s secret supplying the certificate
+                          properties:
+                            secretName:
+                              type: string
+                              description: The name of the secret holding the certificate
+                            secretKey:
+                              type: string
+                              description: The secret key that contains the certificate
+                    serverKey:
+                      type: object
+                      description: Overrides the source of the private key certificate used by the portworx service for TLS.
+                      properties:
+                        filename:
+                          type: string
+                          description: If provided, Portworx will expect a private key file installed in the same location
+                            on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.key
+                        secretRef:
+                          type: object
+                          description: The k8s secret supplying the private key
+                          properties:
+                            secretName:
+                              type: string
+                              description: The name of the secret holding the private key
+                            secretKey:
+                              type: string
+                              description: The secret key that contains the private key
             env:
               type: array
               description: List of environment variables used by the driver. This is an array of Kubernetes
@@ -1110,6 +1195,11 @@ spec:
                       devices:
                         type: array
                         description: List of devices to be used by the storage driver.
+                        items:
+                          type: string
+                      cacheDevices:
+                        type: array
+                        description: List of cache devices to be used by the storage driver.
                         items:
                           type: string
                       journalDevice:
