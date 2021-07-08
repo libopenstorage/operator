@@ -2,12 +2,12 @@ kind: Service
 apiVersion: v1
 metadata:
   name: portworx-service
-  namespace: kube-test
+  namespace: kube-system
   labels:
-    name: portworx
+    name: portworx-proxy
 spec:
   selector:
-    name: portworx
+    name: portworx-proxy
   type: ClusterIP
   ports:
     - name: px-api
@@ -26,7 +26,3 @@ spec:
       protocol: TCP
       port: 9021
       targetPort: 10018
-    - name: px-api-tls
-      protocol: TCP
-      port: 9023
-      targetPort: 10020

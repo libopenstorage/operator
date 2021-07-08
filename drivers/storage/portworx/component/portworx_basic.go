@@ -418,10 +418,12 @@ func getPortworxServiceSpec(
 	kvdbTargetPort := 9019
 	sdkTargetPort := 9020
 	restGatewayTargetPort := 9021
+	pxAPITLSPort := 9023
 	if startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = startPort + 15
 		sdkTargetPort = startPort + 16
 		restGatewayTargetPort = startPort + 17
+		pxAPITLSPort = startPort + 19
 	}
 
 	newService := &v1.Service{
@@ -460,6 +462,18 @@ func getPortworxServiceSpec(
 				},
 			},
 		},
+	}
+
+	// TLS secured port 9023 added in PX 2.9.0, only add it is 2.9.0 or later
+	pxAPITLSVersion, _ := version.NewVersion("2.9.0")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxAPITLSVersion) {
+		newService.Spec.Ports = append(newService.Spec.Ports,
+			v1.ServicePort{
+				Name:       pxutil.PortworxRESTTLSPortName,
+				Protocol:   v1.ProtocolTCP,
+				Port:       int32(9023),
+				TargetPort: intstr.FromInt(pxAPITLSPort),
+			})
 	}
 
 	if ownerRef != nil {
