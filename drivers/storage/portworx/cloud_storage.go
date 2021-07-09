@@ -162,14 +162,14 @@ func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
 	instancesPerZone int,
 ) *cloudops.StorageDistributionRequest {
 	request := &cloudops.StorageDistributionRequest{
-		ZoneCount:        len(p.zoneToInstancesMap),
-		InstancesPerZone: instancesPerZone,
+		ZoneCount:        uint64(len(p.zoneToInstancesMap)),
+		InstancesPerZone: uint64(instancesPerZone),
 	}
 	for _, spec := range specs {
 		request.UserStorageSpec = append(
 			request.UserStorageSpec,
 			&cloudops.StorageSpec{
-				IOPS:        spec.MinIOPS,
+				IOPS:        uint64(spec.MinIOPS),
 				MinCapacity: spec.MinCapacityInGiB,
 				MaxCapacity: spec.MaxCapacityInGiB,
 			},
@@ -189,7 +189,7 @@ func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
 			driveConfig := cloudstorage.CloudDriveConfig{
 				Type:      instanceStorage.DriveType,
 				SizeInGiB: instanceStorage.DriveCapacityGiB,
-				IOPS:      instanceStorage.IOPS,
+				IOPS:      uint32(instanceStorage.IOPS),
 				Options:   specs[j].Options,
 			}
 			config.CloudStorage = append(config.CloudStorage, driveConfig)
@@ -197,8 +197,8 @@ func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
 			// from the list of InstanceStorage. Ideally each InstanceStorage which
 			// maps to a StoragePool can have its own instances per zone value, but until
 			// support is added in Portworx we will have to choose the max value.
-			if instanceStorage.InstancesPerZone > maxInstancesPerZone {
-				maxInstancesPerZone = instanceStorage.InstancesPerZone
+			if instanceStorage.InstancesPerZone > uint64(maxInstancesPerZone) {
+				maxInstancesPerZone = int(instanceStorage.InstancesPerZone)
 			}
 		}
 	}

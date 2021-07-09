@@ -12,6 +12,50 @@ import (
 
 func TestBasic(t *testing.T) {
 	t.Run("testBasicInstallWithAllDefaults", testBasicInstallWithAllDefaults)
+	t.Run("testBasicInstallWithTorpedo", testBasicInstallWithTorpedo)
+}
+
+func testBasicInstallWithTorpedo(t *testing.T) {
+	// Get versions from URL
+	logrus.Infof("Get component images from versions URL")
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
+	require.NoError(t, err)
+
+	// Construct Portworx StorageCluster object
+	cluster, err := constructStorageCluster(pxSpecGenURL, imageListMap)
+	require.NoError(t, err)
+
+	cluster.Name = "simple-install-torpedo"
+
+	// Deploy cluster
+	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+	cluster, err = createStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Validate cluster deployment
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, "")
+	require.NoError(t, err)
+
+	// TODO: KOKADBG: START
+	// Create Apps
+	ctx, err := setupApp()
+	require.NoError(t, err)
+
+	// Delete Apps
+	teardownApp(ctx)
+	require.NoError(t, err)
+	// TODO: KOKADBG: END
+
+	// Delete cluster
+	logrus.Infof("Delete StorageCluster %s", cluster.Name)
+	err = testutil.UninstallStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Validate cluster deletion
+	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	require.NoError(t, err)
 }
 
 func testBasicInstallWithAllDefaults(t *testing.T) {

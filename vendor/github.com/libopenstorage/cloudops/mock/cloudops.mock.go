@@ -184,6 +184,19 @@ func (mr *MockOpsMockRecorder) Enumerate(arg0, arg1, arg2 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enumerate", reflect.TypeOf((*MockOps)(nil).Enumerate), arg0, arg1, arg2)
 }
 
+// Expand mocks base method
+func (m *MockOps) Expand(arg0 string, arg1 uint64) (uint64, error) {
+	ret := m.ctrl.Call(m, "Expand", arg0, arg1)
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Expand indicates an expected call of Expand
+func (mr *MockOpsMockRecorder) Expand(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Expand", reflect.TypeOf((*MockOps)(nil).Expand), arg0, arg1)
+}
+
 // FreeDevices mocks base method
 func (m *MockOps) FreeDevices(arg0 []interface{}, arg1 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "FreeDevices", arg0, arg1)
