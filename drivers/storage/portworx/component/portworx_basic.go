@@ -320,6 +320,11 @@ func (c *portworxBasic) createClusterRole() error {
 					Verbs:     []string{"get", "list", "create", "update"},
 				},
 				{
+					APIGroups: []string{"apps"},
+					Resources: []string{"deployments"},
+					Verbs:     []string{"get", "list", "create", "update", "delete"},
+				},
+				{
 					APIGroups: []string{""},
 					Resources: []string{"services"},
 					Verbs:     []string{"get", "list", "create", "update", "delete"},
