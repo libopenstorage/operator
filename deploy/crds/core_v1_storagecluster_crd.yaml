@@ -279,6 +279,19 @@ spec:
                           the taint. By default, it is not set, which means tolerate the taint forever
                           (do not evict). Zero and negative values will be treated as 0 (evict
                           immediately) by the system.
+            pxRepo:
+              type: object
+              description: Details of PX repo service for installing dependency modules.
+              properties:
+                enabled:
+                  type: boolean
+                  description: Flag indicating whether PX repo needs to be enabled.
+                image:
+                  type: string
+                  description: Docker image of the PX repo container.
+                imagePullPolicy:
+                  type: string
+                  description: Docker image pull policy of the PX repo container.
             kvdb:
               type: object
               description: Details of KVDB that the storage driver will use.
