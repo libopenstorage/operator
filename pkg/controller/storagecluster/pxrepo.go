@@ -1,6 +1,7 @@
 package storagecluster
 
 import (
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
@@ -11,12 +12,11 @@ import (
 )
 
 const (
-	pxRepoServiceName            = "px-repo"
-	pxRepoServicePort            = 8080
-	pxRepoDeploymentName         = "px-repo"
-	pxRepoReplicas               = int32(1)
-	pxRepoContainerName          = "px-repo"
-	pxRepoDefaultImagePullPolicy = v1.PullIfNotPresent
+	pxRepoServiceName    = "px-repo"
+	pxRepoServicePort    = 8080
+	pxRepoDeploymentName = "px-repo"
+	pxRepoReplicas       = int32(1)
+	pxRepoContainerName  = "px-repo"
 )
 
 func (c *Controller) syncPxRepo(
@@ -87,10 +87,6 @@ func (c *Controller) createPxRepoDeployment(
 ) error {
 	replicas := pxRepoReplicas
 	labels := getPxRepoDeploymentLabels()
-	imagePullPolicy := pxRepoDefaultImagePullPolicy
-	if len(cluster.Spec.PxRepo.ImagePullPolicy) == 0 {
-		imagePullPolicy = v1.PullPolicy(cluster.Spec.PxRepo.ImagePullPolicy)
-	}
 
 	deployment := apps.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,7 +109,7 @@ func (c *Controller) createPxRepoDeployment(
 						{
 							Name:            pxRepoContainerName,
 							Image:           cluster.Spec.PxRepo.Image,
-							ImagePullPolicy: imagePullPolicy,
+							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
 						},
 					},
 				},

@@ -289,9 +289,6 @@ spec:
                 image:
                   type: string
                   description: Docker image of the PX repo container.
-                imagePullPolicy:
-                  type: string
-                  description: Docker image pull policy of the PX repo container.
             kvdb:
               type: object
               description: Details of KVDB that the storage driver will use.

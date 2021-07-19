@@ -90,7 +90,7 @@ type StorageClusterSpec struct {
 	// UserInterface contains details of a user interface for the storage driver
 	UserInterface *UserInterfaceSpec `json:"userInterface,omitempty"`
 	// PxRepo contains configuration for apt repository. Portworx uses it to install dependency modules.
-	PxRepo *PxRepoSpec `json:"pxRepo,omitempty"`
+	PxRepo *PxRepoSpec `json:"pxrepo,omitempty"`
 	// Stork contains STORK related parameters. For more information about STORK,
 	// check https://github.com/libopenstorage/stork
 	Stork *StorkSpec `json:"stork,omitempty"`
@@ -449,8 +449,6 @@ type PxRepoSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Image is docker image of repository container.
 	Image string `json:"image,omitempty"`
-	// ImagePullPolicy is the Kubernetes image pull policy for repository container.
-	ImagePullPolicy string `json:"imagepullpolicy,omitempty"`
 }
 
 // StorkSpec contains STORK related spec
