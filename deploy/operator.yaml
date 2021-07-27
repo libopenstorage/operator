@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: portworx-operator
-        image: portworx/px-operator:1.5.0-dev
+        image: portworx/px-operator:1.5.0
         imagePullPolicy: Always
         command:
         - /operator
