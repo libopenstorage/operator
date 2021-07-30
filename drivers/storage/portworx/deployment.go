@@ -579,9 +579,6 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 				},
 			},
 		},
-		SecurityContext: &v1.SecurityContext{
-			Privileged: boolPtr(true),
-		},
 		VolumeMounts: []v1.VolumeMount{
 			{
 				Name:      "csi-driver-path",
