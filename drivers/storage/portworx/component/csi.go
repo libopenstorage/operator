@@ -523,9 +523,6 @@ func getCSIDeploymentSpec(
 									Value: "/csi/csi.sock",
 								},
 							},
-							SecurityContext: &v1.SecurityContext{
-								Privileged: boolPtr(true),
-							},
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "socket-dir",
@@ -569,9 +566,6 @@ func getCSIDeploymentSpec(
 						Value: "/csi/csi.sock",
 					},
 				},
-				SecurityContext: &v1.SecurityContext{
-					Privileged: boolPtr(true),
-				},
 				VolumeMounts: []v1.VolumeMount{
 					{
 						Name:      "socket-dir",
@@ -597,9 +591,6 @@ func getCSIDeploymentSpec(
 					Name:  "ADDRESS",
 					Value: "/csi/csi.sock",
 				},
-			},
-			SecurityContext: &v1.SecurityContext{
-				Privileged: boolPtr(true),
 			},
 			VolumeMounts: []v1.VolumeMount{
 				{
@@ -637,9 +628,6 @@ func getCSIDeploymentSpec(
 						Name:  "ADDRESS",
 						Value: "/csi/csi.sock",
 					},
-				},
-				SecurityContext: &v1.SecurityContext{
-					Privileged: boolPtr(true),
 				},
 				VolumeMounts: []v1.VolumeMount{
 					{
@@ -777,9 +765,6 @@ func getCSIStatefulSetSpec(
 									Value: "/csi/csi.sock",
 								},
 							},
-							SecurityContext: &v1.SecurityContext{
-								Privileged: boolPtr(true),
-							},
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      "socket-dir",
@@ -800,9 +785,6 @@ func getCSIStatefulSetSpec(
 									Name:  "ADDRESS",
 									Value: "/csi/csi.sock",
 								},
-							},
-							SecurityContext: &v1.SecurityContext{
-								Privileged: boolPtr(true),
 							},
 							VolumeMounts: []v1.VolumeMount{
 								{
