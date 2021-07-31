@@ -38,8 +38,6 @@ spec:
           env:
             - name: ADDRESS
               value: /csi/csi.sock
-          securityContext:
-            privileged: true
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
@@ -53,8 +51,6 @@ spec:
           env:
             - name: ADDRESS
               value: /csi/csi.sock
-          securityContext:
-            privileged: true
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
@@ -68,8 +64,6 @@ spec:
           env:
             - name: ADDRESS
               value: /csi/csi.sock
-          securityContext:
-            privileged: true
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
