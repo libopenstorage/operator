@@ -10051,7 +10051,7 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 		},
 		{
 			clusterRoleName: component.CSIClusterRoleName,
-			pspName:         constants.PrivilegedPSPName,
+			pspName:         constants.RestrictedPSPName,
 		},
 		{
 			clusterRoleName: component.PVCClusterRoleName,

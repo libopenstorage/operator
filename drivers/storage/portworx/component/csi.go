@@ -296,7 +296,7 @@ func (c *csi) createClusterRole(
 			{
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
-				ResourceNames: []string{constants.PrivilegedPSPName},
+				ResourceNames: []string{constants.RestrictedPSPName},
 				Verbs:         []string{"use"},
 			},
 		},
