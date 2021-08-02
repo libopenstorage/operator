@@ -29,19 +29,6 @@ spec:
       labels:
         issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
         severity: warning
-    - alert: PortworxVolumeWillFill
-      annotations:
-        description: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and has
-          been predicted to fill within 2 weeks.
-        summary: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and is
-          predicted to fill within 2 weeks.
-      expr: (px_volume_usage_bytes / px_volume_capacity_bytes) > 0.7 and predict_linear(px_cluster_disk_available_bytes[1h],
-        14 * 86400) < 0
-      for: 10m
-      labels:
-        issue: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is predicted to fill within
-          2 weeks.
-        severity: warning
     - alert: PortworxVolumeNotInQuorum
       annotations:
         description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum. Please check all nodes with that volume replicas are online.
@@ -71,8 +58,8 @@ spec:
         description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 80% used
           for more than 10 minutes.
         summary: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.
-      expr: 100 * (1 - px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
-        < 20
+      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
+        > 80
       for: 5m
       labels:
         issue: Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
@@ -82,8 +69,8 @@ spec:
         description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% used
           for more than 10 minutes.
         summary: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.
-      expr: 100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes))
-        < 30
+      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
+        > 70
       for: 5m
       labels:
         issue: Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
@@ -135,7 +122,7 @@ spec:
       annotations:
         description: Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.
         summary: Failed to take backup for volume {{$labels.volumename}}.
-      expr: px_backup_stats_status == 2
+      expr: px_backup_stats_backup_status == 2
       labels:
         issue: Cloudsnap backup error.
         severity: warning
