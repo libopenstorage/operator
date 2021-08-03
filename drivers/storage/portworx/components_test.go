@@ -54,7 +54,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 16)
+	require.Len(t, components, 17)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -62,10 +62,11 @@ func TestOrderOfComponents(t *testing.T) {
 			component.AuthComponentName,
 			component.TLSComponentName,
 		},
-		[]string{componentNames[0], componentNames[1], componentNames[2]},
+		componentNames[:3],
 	)
 	require.ElementsMatch(t,
 		[]string{
+			component.PxRepoComponentName,
 			component.AutopilotComponentName,
 			component.CSIComponentName,
 			component.DisruptionBudgetComponentName,
@@ -263,6 +264,71 @@ func TestBasicComponentsInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulset, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(statefulset.Spec.Template.Spec.Containers))
+}
+
+func TestPxRepoInstallUninstall(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: false,
+				Image:   "testImage",
+			},
+		},
+	}
+
+	// Disabled first
+	cluster.Spec.PxRepo.Enabled = false
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	service := &v1.Service{}
+	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Enable the service
+	cluster.Spec.PxRepo.Enabled = true
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	require.NoError(t, err)
+
+	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Change the deployment
+	cluster.Spec.ImagePullPolicy = v1.PullNever
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, v1.PullNever)
+
+	// Disable the service
+	cluster.Spec.PxRepo.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestBasicInstallWithPortworxDisabled(t *testing.T) {
@@ -10382,4 +10448,5 @@ func reregisterComponents() {
 	component.RegisterTLSComponent()
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
+	component.RegisterPxRepoComponent()
 }

@@ -354,11 +354,6 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
-	// Ensure px repo is deployed.
-	if err := c.syncPxRepo(cluster); err != nil {
-		return err
-	}
-
 	// Ensure Stork is deployed with right configuration
 	if err := c.syncStork(cluster); err != nil {
 		return err
