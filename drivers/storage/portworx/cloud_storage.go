@@ -30,7 +30,7 @@ const (
 )
 
 type portworxCloudStorage struct {
-	zoneToInstancesMap map[string]int
+	zoneToInstancesMap map[string]uint64
 	cloudProvider      cloudops.ProviderType
 	namespace          string
 	k8sClient          client.Client
@@ -39,7 +39,7 @@ type portworxCloudStorage struct {
 
 func (p *portworxCloudStorage) GetStorageNodeConfig(
 	specs []corev1.CloudStorageCapacitySpec,
-	instancesPerZone int,
+	instancesPerZone uint64,
 ) (*cloudstorage.Config, error) {
 	// Get the decision matrix config map
 	cm := &v1.ConfigMap{}
@@ -98,14 +98,14 @@ func (p *portworxCloudStorage) GetStorageNodeConfig(
 	), nil
 }
 
-func (p *portworxCloudStorage) GetInstancesPerZoneNum(instancesPerZone int) int {
+func (p *portworxCloudStorage) GetInstancesPerZoneNum(instancesPerZone uint64) uint64 {
 	return p.getInstancesPerZone(instancesPerZone)
 }
 
-func (p *portworxCloudStorage) getInstancesPerZone(instancesPerZone int) int {
+func (p *portworxCloudStorage) getInstancesPerZone(instancesPerZone uint64) uint64 {
 	if instancesPerZone == 0 && len(p.zoneToInstancesMap) > 0 {
 		// Find out the minimum no. of instances out of all zones
-		minInstances := math.MaxInt32
+		minInstances := uint64(math.MaxUint64)
 		for _, instances := range p.zoneToInstancesMap {
 			if minInstances > instances {
 				minInstances = instances
@@ -159,10 +159,10 @@ func (p *portworxCloudStorage) CreateStorageDistributionMatrix() error {
 
 func (p *portworxCloudStorage) capacitySpecToStorageDistributionRequest(
 	specs []corev1.CloudStorageCapacitySpec,
-	instancesPerZone int,
+	instancesPerZone uint64,
 ) *cloudops.StorageDistributionRequest {
 	request := &cloudops.StorageDistributionRequest{
-		ZoneCount:        len(p.zoneToInstancesMap),
+		ZoneCount:        uint64(len(p.zoneToInstancesMap)),
 		InstancesPerZone: instancesPerZone,
 	}
 	for _, spec := range specs {
@@ -183,7 +183,7 @@ func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
 	response *cloudops.StorageDistributionResponse,
 ) *cloudstorage.Config {
 	config := &cloudstorage.Config{}
-	maxInstancesPerZone := 0
+	maxInstancesPerZone := uint64(0)
 	for j, instanceStorage := range response.InstanceStorage {
 		for i := 0; i < int(instanceStorage.DriveCount); i++ {
 			driveConfig := cloudstorage.CloudDriveConfig{
@@ -202,6 +202,6 @@ func (p *portworxCloudStorage) storageDistributionResponseToCloudConfig(
 			}
 		}
 	}
-	config.StorageInstancesPerZone = int32(maxInstancesPerZone)
+	config.StorageInstancesPerZone = maxInstancesPerZone
 	return config
 }

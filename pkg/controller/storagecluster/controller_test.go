@@ -2152,7 +2152,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	expectedDriverInfo := &storage.UpdateDriverInfo{
-		ZoneToInstancesMap: map[string]int{
+		ZoneToInstancesMap: map[string]uint64{
 			"z1": 2,
 			"z2": 1,
 		},
@@ -3623,7 +3623,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Add spec.cloudStorage.capacitySpecs
-	cluster.Spec.CloudStorage.CapacitySpecs = []corev1.CloudStorageCapacitySpec{{MinIOPS: uint32(1000)}}
+	cluster.Spec.CloudStorage.CapacitySpecs = []corev1.CloudStorageCapacitySpec{{MinIOPS: uint64(1000)}}
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -3636,7 +3636,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 	// TestCase: Change spec.cloudStorage.deviceSpecs
 	cluster.Spec.CloudStorage.CapacitySpecs = append(
 		cluster.Spec.CloudStorage.CapacitySpecs,
-		corev1.CloudStorageCapacitySpec{MinIOPS: uint32(2000)},
+		corev1.CloudStorageCapacitySpec{MinIOPS: uint64(2000)},
 	)
 	k8sClient.Update(context.TODO(), cluster)
 

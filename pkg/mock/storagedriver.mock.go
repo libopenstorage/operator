@@ -141,20 +141,6 @@ func (mr *MockDriverMockRecorder) Init(arg0, arg1, arg2 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockDriver)(nil).Init), arg0, arg1, arg2)
 }
 
-// Validate mocks driver validation.
-func (m *MockDriver) Validate() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validate")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Validate indicates an expected call of Validate.
-func (mr *MockDriverMockRecorder) Validate() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockDriver)(nil).Validate))
-}
-
 // IsPodUpdated mocks base method.
 func (m *MockDriver) IsPodUpdated(arg0 *v1.StorageCluster, arg1 *v10.Pod) bool {
 	m.ctrl.T.Helper()
@@ -235,4 +221,18 @@ func (m *MockDriver) UpdateStorageClusterStatus(arg0 *v1.StorageCluster) error {
 func (mr *MockDriverMockRecorder) UpdateStorageClusterStatus(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStorageClusterStatus", reflect.TypeOf((*MockDriver)(nil).UpdateStorageClusterStatus), arg0)
+}
+
+// Validate mocks base method.
+func (m *MockDriver) Validate() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validate")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Validate indicates an expected call of Validate.
+func (mr *MockDriverMockRecorder) Validate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockDriver)(nil).Validate))
 }

@@ -506,7 +506,7 @@ func (c *Controller) manage(
 		nodesNeedingStoragePods, podsToDelete []string
 		cloudProviderName                     string
 	)
-	zoneMap := make(map[string]int)
+	zoneMap := make(map[string]uint64)
 
 	for _, node := range nodeList.Items {
 		// Get the cloud provider
