@@ -5,25 +5,27 @@ go 1.15
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-logr/logr v0.3.0
-	github.com/golang/mock v1.5.0
+	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
 	github.com/hashicorp/go-version v1.2.1
-	github.com/libopenstorage/cloudops v0.0.0-20190815012442-6e0d676b6c3e
-	github.com/libopenstorage/openstorage v8.0.1-0.20200730032300-bef55ec5700c+incompatible
+	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
+	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
-	github.com/portworx/sched-ops v1.20.4-rc1
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20210805192436-d51186f75dc4
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
+	golang.org/x/tools v0.1.5 // indirect
 	google.golang.org/grpc v1.33.2
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver v0.20.4
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/code-generator v0.20.4
+	k8s.io/code-generator v0.21.0
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.20.4
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
@@ -36,7 +38,7 @@ replace (
 	github.com/hashicorp/consul => github.com/hashicorp/consul v1.5.1
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
 	github.com/kubernetes-incubator/external-storage v0.0.0-00010101000000-000000000000 => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.0.0-20210305040349-378cc5ec89d1
+	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20210805192436-d51186f75dc4
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
 	gopkg.in/fsnotify.v1 v1.4.7 => github.com/fsnotify/fsnotify v1.4.7
