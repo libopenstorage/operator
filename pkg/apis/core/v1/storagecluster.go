@@ -327,7 +327,7 @@ type StorageSpec struct {
 // that will be provisioned in the cluster for a particular set of minimum IOPS.
 type CloudStorageCapacitySpec struct {
 	// MinIOPS minimum IOPS expected from the cloud drive
-	MinIOPS uint32 `json:"minIOPS,omitempty"`
+	MinIOPS uint64 `json:"minIOPS,omitempty"`
 	// MinCapacityInGiB minimum capacity for this cloud device spec
 	MinCapacityInGiB uint64 `json:"minCapacityInGiB,omitempty"`
 	// MaxCapacityInGiB capacity for this cloud device spec should not go above this threshold
@@ -536,7 +536,7 @@ type ComponentImages struct {
 // Storage represents cluster storage details
 type Storage struct {
 	// StorageNodesPerZone describes the amount of instances per zone
-	StorageNodesPerZone int32 `json:"storageNodesPerZone,omitempty"`
+	StorageNodesPerZone uint64 `json:"storageNodesPerZone,omitempty"`
 }
 
 // ClusterCondition contains condition information for the cluster

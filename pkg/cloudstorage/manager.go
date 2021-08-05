@@ -11,7 +11,7 @@ type CloudDriveConfig struct {
 	// Size of cloud storage
 	SizeInGiB uint64 `json:"sizeInGiB,omitempty"`
 	// IOPS provided by cloud storage
-	IOPS uint32 `json:"iops,omitempty"`
+	IOPS uint64 `json:"iops,omitempty"`
 	// Options are additional options to the storage
 	Options map[string]string `json:"options,omitempty"`
 }
@@ -22,7 +22,7 @@ type Config struct {
 	// CloudStorage is the current cloud configuration
 	CloudStorage []CloudDriveConfig `json:"cloudStorage,omitempty"`
 	// StorageNodesPerZone is the number of storage instances per zone
-	StorageInstancesPerZone int32 `json:"storageInstancesPerZone,omitempty"`
+	StorageInstancesPerZone uint64 `json:"storageInstancesPerZone,omitempty"`
 }
 
 // Manager provides an interface to interact with cloud storage
@@ -34,7 +34,7 @@ type Manager interface {
 	CreateStorageDistributionMatrix() error
 	// GetStorageNodeConfig based on the cloud provider will return
 	// the storage configuration for a single node
-	GetStorageNodeConfig([]corev1.CloudStorageCapacitySpec, int) (*Config, error)
+	GetStorageNodeConfig([]corev1.CloudStorageCapacitySpec, uint64) (*Config, error)
 	// GetInstancesPerZoneNum calculates an amount of StorageNode instances per zone
-	GetInstancesPerZoneNum(int) int
+	GetInstancesPerZoneNum(int) uint64
 }

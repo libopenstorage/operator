@@ -830,7 +830,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	)
 	nodeName := "testNode"
 
-	zoneToInstancesMap := map[string]int{"a": 3, "b": 3, "c": 2}
+	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
@@ -991,13 +991,13 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 		CapacitySpecs: []corev1.CloudStorageCapacitySpec{
 			{
-				MinIOPS:          uint32(100),
+				MinIOPS:          uint64(100),
 				MinCapacityInGiB: uint64(100),
 				MaxCapacityInGiB: uint64(200),
 				Options:          map[string]string{"foo1": "bar1"},
 			},
 			{
-				MinIOPS:          uint32(200),
+				MinIOPS:          uint64(200),
 				MinCapacityInGiB: uint64(200),
 				MaxCapacityInGiB: uint64(500),
 				Options:          map[string]string{"foo3": "bar3"},
@@ -1009,13 +1009,13 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		{
 			Type:      "foo",
 			SizeInGiB: uint64(120),
-			IOPS:      uint32(110),
+			IOPS:      uint64(110),
 			Options:   map[string]string{"foo1": "bar1"},
 		},
 		{
 			Type:      "bar",
 			SizeInGiB: uint64(220),
-			IOPS:      uint32(210),
+			IOPS:      uint64(210),
 			Options: map[string]string{
 				"foo3": "bar3",
 			}},
@@ -1029,19 +1029,19 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 		"-max_storage_nodes_per_zone", "2",
 	}
 
-	inputInstancesPerZone := 2
+	inputInstancesPerZone := uint64(2)
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(zoneToInstancesMap),
+			ZoneCount:        uint64(len(zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -1054,14 +1054,14 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
@@ -1082,13 +1082,13 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 		CapacitySpecs: []corev1.CloudStorageCapacitySpec{
 			{
-				MinIOPS:          uint32(100),
+				MinIOPS:          uint64(100),
 				MinCapacityInGiB: uint64(100),
 				MaxCapacityInGiB: uint64(200),
 				Options:          map[string]string{"foo1": "bar1"},
 			},
 			{
-				MinIOPS:          uint32(200),
+				MinIOPS:          uint64(200),
 				MinCapacityInGiB: uint64(200),
 				MaxCapacityInGiB: uint64(500),
 				Options:          map[string]string{"foo3": "bar3"},
@@ -1249,13 +1249,13 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 		},
 		CapacitySpecs: []corev1.CloudStorageCapacitySpec{
 			{
-				MinIOPS:          uint32(100),
+				MinIOPS:          uint64(100),
 				MinCapacityInGiB: uint64(100),
 				MaxCapacityInGiB: uint64(200),
 				Options:          map[string]string{"foo1": "bar1"},
 			},
 			{
-				MinIOPS:          uint32(200),
+				MinIOPS:          uint64(200),
 				MinCapacityInGiB: uint64(200),
 				MaxCapacityInGiB: uint64(500),
 				Options:          map[string]string{"foo3": "bar3"},
@@ -1263,7 +1263,7 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 		},
 	}
 
-	zoneToInstancesMap := map[string]int{"a": 3, "b": 3, "c": 2}
+	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
@@ -1271,19 +1271,19 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 		cloudProvider:      "mock",
 	}
 
-	inputInstancesPerZone := 2
+	inputInstancesPerZone := uint64(2)
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(zoneToInstancesMap),
+			ZoneCount:        uint64(len(zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -1296,14 +1296,14 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
@@ -2793,7 +2793,7 @@ func TestStorageNodeConfig(t *testing.T) {
 	nodeName2 := "testNode2"
 	nodeName3 := "testNode3"
 
-	zoneToInstancesMap := map[string]int{"a": 3, "b": 3, "c": 2}
+	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
@@ -2823,13 +2823,13 @@ func TestStorageNodeConfig(t *testing.T) {
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 		CapacitySpecs: []corev1.CloudStorageCapacitySpec{
 			{
-				MinIOPS:          uint32(100),
+				MinIOPS:          uint64(100),
 				MinCapacityInGiB: uint64(100),
 				MaxCapacityInGiB: uint64(200),
 				Options:          map[string]string{"foo1": "bar1"},
 			},
 			{
-				MinIOPS:          uint32(200),
+				MinIOPS:          uint64(200),
 				MinCapacityInGiB: uint64(200),
 				MaxCapacityInGiB: uint64(500),
 				Options:          map[string]string{"foo3": "bar3"},
@@ -2845,19 +2845,19 @@ func TestStorageNodeConfig(t *testing.T) {
 		"-max_storage_nodes_per_zone", "2",
 	}
 
-	inputInstancesPerZone := 2
+	inputInstancesPerZone := uint64(2)
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(zoneToInstancesMap),
+			ZoneCount:        uint64(len(zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -2870,14 +2870,14 @@ func TestStorageNodeConfig(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
@@ -2885,7 +2885,7 @@ func TestStorageNodeConfig(t *testing.T) {
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
-	assert.Equal(t, int32(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
+	assert.Equal(t, uint64(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
 
 	list, err = driver.storageNodesList(cluster)
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
@@ -2895,13 +2895,13 @@ func TestStorageNodeConfig(t *testing.T) {
 		{
 			Type:      "foo",
 			SizeInGiB: uint64(120),
-			IOPS:      uint32(110),
+			IOPS:      uint64(110),
 			Options:   map[string]string{"foo1": "bar1"},
 		},
 		{
 			Type:      "bar",
 			SizeInGiB: uint64(220),
-			IOPS:      uint32(210),
+			IOPS:      uint64(210),
 			Options: map[string]string{
 				"foo3": "bar3",
 			}},
@@ -2920,12 +2920,12 @@ func TestStorageNodeConfig(t *testing.T) {
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName2)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
-	assert.Equal(t, int32(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
+	assert.Equal(t, uint64(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
 
 	list, err = driver.storageNodesList(cluster)
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
 	assert.Equal(t, 2, len(list), "expected storage nodes in list")
-	assert.Equal(t, int32(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
+	assert.Equal(t, uint64(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
 
 	for _, node := range list {
 		assert.ElementsMatch(t, node.Spec.CloudStorage.DriveConfigs, expectedCloudStorageSpec)
@@ -2936,7 +2936,7 @@ func TestStorageNodeConfig(t *testing.T) {
 	list, err = driver.storageNodesList(cluster)
 	assert.NoError(t, err, "Unexpected error on GetStorageNodeList")
 	assert.Equal(t, 3, len(list), "expected storage nodes in list")
-	assert.Equal(t, int32(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
+	assert.Equal(t, uint64(inputInstancesPerZone), cluster.Status.Storage.StorageNodesPerZone, "wrong number of instances per zone in a the cluster status")
 
 	for _, node := range list {
 		assert.ElementsMatch(t, node.Spec.CloudStorage.DriveConfigs, expectedCloudStorageSpec)

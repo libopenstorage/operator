@@ -47,7 +47,7 @@ type portworx struct {
 	scheme             *runtime.Scheme
 	recorder           record.EventRecorder
 	sdkConn            *grpc.ClientConn
-	zoneToInstancesMap map[string]int
+	zoneToInstancesMap map[string]uint64
 	cloudProvider      string
 }
 

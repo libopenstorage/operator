@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -124,38 +123,38 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 	p := &portworxCloudStorage{
 		cloudProvider:      testProviderType,
 		namespace:          testNamespace,
-		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		zoneToInstancesMap: map[string]uint64{"a": 3, "b": 3, "c": 3},
 		k8sClient:          k8sClient,
 	}
 
 	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
-			MinIOPS:          uint32(100),
+			MinIOPS:          uint64(100),
 			MinCapacityInGiB: uint64(100),
 			MaxCapacityInGiB: uint64(200),
 			Options:          map[string]string{"foo1": "bar1", "foo2": "bar2"},
 		},
 		{
-			MinIOPS:          uint32(200),
+			MinIOPS:          uint64(200),
 			MinCapacityInGiB: uint64(200),
 			MaxCapacityInGiB: uint64(500),
 			Options:          map[string]string{"foo3": "bar3", "foo4": "bar4"},
 		},
 	}
-	inputInstancesPerZone := 1
+	inputInstancesPerZone := uint64(1)
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(p.zoneToInstancesMap),
+			ZoneCount:        uint64(len(p.zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -168,31 +167,31 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: int32(inputInstancesPerZone),
+		StorageInstancesPerZone: uint64(inputInstancesPerZone),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",
 				SizeInGiB: uint64(120),
-				IOPS:      uint32(110),
+				IOPS:      uint64(110),
 				Options:   map[string]string{"foo1": "bar1", "foo2": "bar2"},
 			},
 			{
 				Type:      "bar",
 				SizeInGiB: uint64(220),
-				IOPS:      uint32(210),
+				IOPS:      uint64(210),
 				Options:   map[string]string{"foo3": "bar3", "foo4": "bar4"},
 			},
 		},
@@ -223,40 +222,40 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 	p := &portworxCloudStorage{
 		cloudProvider:      testProviderType,
 		namespace:          testNamespace,
-		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		zoneToInstancesMap: map[string]uint64{"a": 3, "b": 3, "c": 3},
 		k8sClient:          k8sClient,
 	}
 
 	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
-			MinIOPS:          uint32(100),
+			MinIOPS:          uint64(100),
 			MinCapacityInGiB: uint64(100),
 			MaxCapacityInGiB: uint64(200),
 			Options:          map[string]string{"foo1": "bar1", "foo2": "bar2"},
 		},
 		{
-			MinIOPS:          uint32(200),
+			MinIOPS:          uint64(200),
 			MinCapacityInGiB: uint64(200),
 			MaxCapacityInGiB: uint64(500),
 			Options:          map[string]string{"foo3": "bar3", "foo4": "bar4"},
 		},
 	}
-	inputInstancesPerZone := 3
-	outputInstancesPerZoneMin := 1
-	outputInstancesPerZoneMax := 2
+	inputInstancesPerZone := uint64(3)
+	outputInstancesPerZoneMin := uint64(1)
+	outputInstancesPerZoneMax := uint64(2)
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(p.zoneToInstancesMap),
+			ZoneCount:        uint64(len(p.zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -269,31 +268,31 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: outputInstancesPerZoneMax,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       1,
 					InstancesPerZone: outputInstancesPerZoneMin,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: int32(outputInstancesPerZoneMax),
+		StorageInstancesPerZone: uint64(outputInstancesPerZoneMax),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",
 				SizeInGiB: uint64(120),
-				IOPS:      uint32(110),
+				IOPS:      uint64(110),
 				Options:   map[string]string{"foo1": "bar1", "foo2": "bar2"},
 			},
 			{
 				Type:      "bar",
 				SizeInGiB: uint64(220),
-				IOPS:      uint32(210),
+				IOPS:      uint64(210),
 				Options:   map[string]string{"foo3": "bar3", "foo4": "bar4"},
 			},
 		},
@@ -325,38 +324,38 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 	p := &portworxCloudStorage{
 		cloudProvider:      testProviderType,
 		namespace:          testNamespace,
-		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		zoneToInstancesMap: map[string]uint64{"a": 3, "b": 3, "c": 3},
 		k8sClient:          k8sClient,
 	}
 
 	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
-			MinIOPS:          uint32(100),
+			MinIOPS:          uint64(100),
 			MinCapacityInGiB: uint64(100),
 			MaxCapacityInGiB: uint64(200),
 			Options:          map[string]string{"foo1": "bar1", "foo2": "bar2"},
 		},
 		{
-			MinIOPS:          uint32(200),
+			MinIOPS:          uint64(200),
 			MinCapacityInGiB: uint64(200),
 			MaxCapacityInGiB: uint64(500),
 			Options:          map[string]string{"foo3": "bar3", "foo4": "bar4"},
 		},
 	}
-	inputInstancesPerZone := 1
+	inputInstancesPerZone := uint64(1)
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(p.zoneToInstancesMap),
+			ZoneCount:        uint64(len(p.zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -369,49 +368,49 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       2,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 				{
 					DriveCapacityGiB: uint64(220),
 					DriveType:        "bar",
 					DriveCount:       3,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(210),
+					IOPS:             uint64(210),
 				},
 			},
 		}, nil)
 
 	expectedResponse := &cloudstorage.Config{
-		StorageInstancesPerZone: int32(inputInstancesPerZone),
+		StorageInstancesPerZone: uint64(inputInstancesPerZone),
 		CloudStorage: []cloudstorage.CloudDriveConfig{
 			{
 				Type:      "foo",
 				SizeInGiB: uint64(120),
-				IOPS:      uint32(110),
+				IOPS:      uint64(110),
 				Options:   map[string]string{"foo1": "bar1", "foo2": "bar2"},
 			},
 			{
 				Type:      "foo",
 				SizeInGiB: uint64(120),
-				IOPS:      uint32(110),
+				IOPS:      uint64(110),
 				Options:   map[string]string{"foo1": "bar1", "foo2": "bar2"},
 			},
 			{
 				Type:      "bar",
 				SizeInGiB: uint64(220),
-				IOPS:      uint32(210),
+				IOPS:      uint64(210),
 				Options:   map[string]string{"foo3": "bar3", "foo4": "bar4"},
 			},
 			{
 				Type:      "bar",
 				SizeInGiB: uint64(220),
-				IOPS:      uint32(210),
+				IOPS:      uint64(210),
 				Options:   map[string]string{"foo3": "bar3", "foo4": "bar4"},
 			},
 			{
 				Type:      "bar",
 				SizeInGiB: uint64(220),
-				IOPS:      uint32(210),
+				IOPS:      uint64(210),
 				Options:   map[string]string{"foo3": "bar3", "foo4": "bar4"},
 			},
 		},
@@ -443,38 +442,38 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 	p := &portworxCloudStorage{
 		cloudProvider:      testProviderType,
 		namespace:          testNamespace,
-		zoneToInstancesMap: map[string]int{"a": 3, "b": 3, "c": 3},
+		zoneToInstancesMap: map[string]uint64{"a": 3, "b": 3, "c": 3},
 		k8sClient:          k8sClient,
 	}
 
 	inputSpecs := []corev1.CloudStorageCapacitySpec{
 		{
-			MinIOPS:          uint32(100),
+			MinIOPS:          uint64(100),
 			MinCapacityInGiB: uint64(100),
 			MaxCapacityInGiB: uint64(200),
 			Options:          map[string]string{"foo1": "bar1", "foo2": "bar2"},
 		},
 		{
-			MinIOPS:          uint32(200),
+			MinIOPS:          uint64(200),
 			MinCapacityInGiB: uint64(200),
 			MaxCapacityInGiB: uint64(500),
 			Options:          map[string]string{"foo3": "bar3", "foo4": "bar4"},
 		},
 	}
-	inputInstancesPerZone := 1
+	inputInstancesPerZone := uint64(1)
 
 	mockStorageManager.EXPECT().
 		GetStorageDistribution(&cloudops.StorageDistributionRequest{
-			ZoneCount:        len(p.zoneToInstancesMap),
+			ZoneCount:        uint64(len(p.zoneToInstancesMap)),
 			InstancesPerZone: inputInstancesPerZone,
 			UserStorageSpec: []*cloudops.StorageSpec{
 				{
-					IOPS:        uint32(100),
+					IOPS:        uint64(100),
 					MinCapacity: uint64(100),
 					MaxCapacity: uint64(200),
 				},
 				{
-					IOPS:        uint32(200),
+					IOPS:        uint64(200),
 					MinCapacity: uint64(200),
 					MaxCapacity: uint64(500),
 				},
@@ -487,7 +486,7 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 					DriveType:        "foo",
 					DriveCount:       1,
 					InstancesPerZone: inputInstancesPerZone,
-					IOPS:             uint32(110),
+					IOPS:             uint64(110),
 				},
 			},
 		}, nil)
@@ -497,34 +496,11 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "got an incorrect storage distribution", "Expected a different error")
 }
 
-func TestCreateStorageDistributionMatrixNotSupportedProviders(t *testing.T) {
-	matrixSetup(t)
-	defer matrixCleanup(t)
-
-	k8sClient := testutil.FakeK8sClient()
-	p := &portworxCloudStorage{
-		cloudProvider: cloudops.AWS,
-		namespace:     testNamespace,
-		k8sClient:     k8sClient,
-	}
-	err := p.CreateStorageDistributionMatrix()
-	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
-
-	p.cloudProvider = cloudops.GCE
-
-	err = p.CreateStorageDistributionMatrix()
-	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
-
-	p.cloudProvider = cloudops.Vsphere
-
-	err = p.CreateStorageDistributionMatrix()
-	require.Error(t, err, "Expected an error on cloud provider: %v", p.cloudProvider)
-}
-
 func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
 	matrixSetup(t)
 	defer matrixCleanup(t)
 
+	// TestCase: Azure provider
 	k8sClient := testutil.FakeK8sClient()
 	p := &portworxCloudStorage{
 		cloudProvider: cloudops.Azure,
@@ -536,15 +512,48 @@ func TestCreateStorageDistributionMatrixSupportedProvider(t *testing.T) {
 	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
 
 	cm := &v1.ConfigMap{}
-	err = p.k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      storageDecisionMatrixCMName,
-			Namespace: p.namespace,
-		},
-		cm,
-	)
+	err = testutil.Get(k8sClient, cm, storageDecisionMatrixCMName, p.namespace)
 	require.NoError(t, err, "Expected config map to be created")
+	require.NotEmpty(t, cm.Data)
+
+	// TestCase: AWS provider
+	err = p.k8sClient.Delete(context.TODO(), cm)
+	require.NoError(t, err)
+
+	p.cloudProvider = cloudops.AWS
+	err = p.CreateStorageDistributionMatrix()
+	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
+
+	cm = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, storageDecisionMatrixCMName, p.namespace)
+	require.NoError(t, err, "Expected config map to be created")
+	require.NotEmpty(t, cm.Data)
+
+	// TestCase: GCE provider
+	err = p.k8sClient.Delete(context.TODO(), cm)
+	require.NoError(t, err)
+
+	p.cloudProvider = cloudops.GCE
+	err = p.CreateStorageDistributionMatrix()
+	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
+
+	cm = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, storageDecisionMatrixCMName, p.namespace)
+	require.NoError(t, err, "Expected config map to be created")
+	require.NotEmpty(t, cm.Data)
+
+	// TestCase: Vsphere provider
+	err = p.k8sClient.Delete(context.TODO(), cm)
+	require.NoError(t, err)
+
+	p.cloudProvider = cloudops.Vsphere
+	err = p.CreateStorageDistributionMatrix()
+	require.NoError(t, err, "Unexpected error on CreateStorageDistributionMatrix")
+
+	cm = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, storageDecisionMatrixCMName, p.namespace)
+	require.NoError(t, err, "Expected config map to be created")
+	require.NotEmpty(t, cm.Data)
 }
 
 func TestCreateStorageDistributionMatrixAlreadyExists(t *testing.T) {
@@ -583,13 +592,13 @@ func generateValidYamlData(t *testing.T) (cloudops.StorageDecisionMatrix, []byte
 	inputMatrix := cloudops.StorageDecisionMatrix{
 		Rows: []cloudops.StorageDecisionMatrixRow{
 			{
-				IOPS:         uint32(1000),
+				MinIOPS:      uint64(1000),
 				MinSize:      uint64(100),
 				MaxSize:      uint64(200),
 				InstanceType: "foo",
 			},
 			{
-				IOPS:         uint32(2000),
+				MinIOPS:      uint64(2000),
 				MinSize:      uint64(200),
 				MaxSize:      uint64(400),
 				InstanceType: "bar",
