@@ -45,3 +45,16 @@ func (m *MockStorageManager) GetStorageDistribution(arg0 *cloudops.StorageDistri
 func (mr *MockStorageManagerMockRecorder) GetStorageDistribution(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageDistribution", reflect.TypeOf((*MockStorageManager)(nil).GetStorageDistribution), arg0)
 }
+
+// RecommendStoragePoolUpdate mocks base method
+func (m *MockStorageManager) RecommendStoragePoolUpdate(arg0 *cloudops.StoragePoolUpdateRequest) (*cloudops.StoragePoolUpdateResponse, error) {
+	ret := m.ctrl.Call(m, "RecommendStoragePoolUpdate", arg0)
+	ret0, _ := ret[0].(*cloudops.StoragePoolUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecommendStoragePoolUpdate indicates an expected call of RecommendStoragePoolUpdate
+func (mr *MockStorageManagerMockRecorder) RecommendStoragePoolUpdate(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecommendStoragePoolUpdate", reflect.TypeOf((*MockStorageManager)(nil).RecommendStoragePoolUpdate), arg0)
+}

@@ -62,6 +62,13 @@ const (
 	SpecExportOptionsEmpty   = "empty_export_options"
 	SpecMountOptions         = "mount_options"
 	SpecSharedv4MountOptions = "sharedv4_mount_options"
+	SpecProxyProtocolS3      = "s3"
+	SpecProxyProtocolPXD     = "pxd"
+	SpecProxyProtocolNFS     = "nfs"
+	SpecProxyEndpoint        = "proxy_endpoint"
+	SpecProxyNFSSubPath      = "proxy_nfs_subpath"
+	SpecProxyNFSExportPath   = "proxy_nfs_exportpath"
+	SpecProxyS3Bucket        = "proxy_s3_bucket"
 	// SpecBestEffortLocationProvisioning default is false. If set provisioning request will succeed
 	// even if specified data location parameters could not be satisfied.
 	SpecBestEffortLocationProvisioning = "best_effort_location_provisioning"
@@ -79,6 +86,7 @@ const (
 	SpecDirectIo             = "direct_io"
 	SpecScanPolicyTrigger    = "scan_policy_trigger"
 	SpecScanPolicyAction     = "scan_policy_action"
+	SpecProxyWrite           = "proxy_write"
 )
 
 // OptionKey specifies a set of recognized query params.
@@ -1266,4 +1274,28 @@ type TokenSecretContext struct {
 	SecretNamespace string
 	PvcName         string
 	PvcNamespace    string
+}
+
+// ParseProxyEndpoint parses the proxy endpoint and returns the
+// proxy protocol and the endpoint
+func ParseProxyEndpoint(proxyEndpoint string) (ProxyProtocol, string) {
+	if len(proxyEndpoint) == 0 {
+		return ProxyProtocol_PROXY_PROTOCOL_INVALID, ""
+	}
+	tokens := strings.Split(proxyEndpoint, "://")
+	if len(tokens) == 1 {
+		return ProxyProtocol_PROXY_PROTOCOL_INVALID, tokens[0]
+	} else if len(tokens) == 2 {
+		switch tokens[0] {
+		case SpecProxyProtocolS3:
+			return ProxyProtocol_PROXY_PROTOCOL_S3, tokens[1]
+		case SpecProxyProtocolNFS:
+			return ProxyProtocol_PROXY_PROTOCOL_NFS, tokens[1]
+		case SpecProxyProtocolPXD:
+			return ProxyProtocol_PROXY_PROTOCOL_PXD, tokens[1]
+		default:
+			return ProxyProtocol_PROXY_PROTOCOL_INVALID, tokens[1]
+		}
+	}
+	return ProxyProtocol_PROXY_PROTOCOL_INVALID, ""
 }
