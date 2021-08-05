@@ -55,7 +55,7 @@ type StorageNodeCloudDriveConfig struct {
 	// Size of cloud storage
 	SizeInGiB uint64 `json:"sizeInGiB,omitempty"`
 	// IOPS provided by cloud storage
-	IOPS uint32 `json:"iops,omitempty"`
+	IOPS uint64 `json:"iops,omitempty"`
 	// Options are additional options to the storage
 	Options map[string]string `json:"options,omitempty"`
 }

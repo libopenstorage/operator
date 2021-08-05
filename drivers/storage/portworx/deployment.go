@@ -177,9 +177,9 @@ func (p *portworx) generateCloudStorageSpecs(
 	cloudConfig = p.storageNodeToCloudSpec(nodes, cluster)
 
 	if cloudConfig == nil {
-		instancesPerZone := 0
+		instancesPerZone := uint64(0)
 		if cluster.Spec.CloudStorage.MaxStorageNodesPerZone != nil {
-			instancesPerZone = int(*cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+			instancesPerZone = uint64(*cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 		}
 
 		cloudStorageManager := &portworxCloudStorage{

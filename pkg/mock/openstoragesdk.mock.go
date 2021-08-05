@@ -193,6 +193,21 @@ func (mr *MockOpenStorageNodeServerMockRecorder) InspectCurrent(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectCurrent", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).InspectCurrent), arg0, arg1)
 }
 
+// VolumeUsageByNode mocks base method.
+func (m *MockOpenStorageNodeServer) VolumeUsageByNode(arg0 context.Context, arg1 *api.SdkNodeVolumeUsageByNodeRequest) (*api.SdkNodeVolumeUsageByNodeResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VolumeUsageByNode", arg0, arg1)
+	ret0, _ := ret[0].(*api.SdkNodeVolumeUsageByNodeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VolumeUsageByNode indicates an expected call of VolumeUsageByNode.
+func (mr *MockOpenStorageNodeServerMockRecorder) VolumeUsageByNode(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VolumeUsageByNode", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).VolumeUsageByNode), arg0, arg1)
+}
+
 // MockOpenStorageClusterServer is a mock of OpenStorageClusterServer interface.
 type MockOpenStorageClusterServer struct {
 	ctrl     *gomock.Controller

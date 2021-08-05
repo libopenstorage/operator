@@ -14,7 +14,7 @@ import (
 // wants to convey to the Driver with regards to the cluster and node state.
 type UpdateDriverInfo struct {
 	// ZoneToInstancesMap is a map of zone to number of instances in that zone
-	ZoneToInstancesMap map[string]int
+	ZoneToInstancesMap map[string]uint64
 	// CloudProvider cloud provider where this cluster is running
 	CloudProvider string
 }
