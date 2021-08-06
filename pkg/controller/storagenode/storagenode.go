@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -29,17 +30,18 @@ import (
 
 const (
 	// ControllerName is the name of the controller
-	ControllerName          = "storagenode-controller"
-	storageNodeCRDFile      = "core_v1_storagenode_crd.yaml"
-	validateCRDInterval     = 5 * time.Second
-	validateCRDTimeout      = 1 * time.Minute
-	crdBasePath             = "/crds"
-	storageNodeStatusPlural = "storagenodestatuses"
+	ControllerName        = "storagenode-controller"
+	storageNodeCRDFile    = "core_v1_storagenode_crd.yaml"
+	validateCRDInterval   = 5 * time.Second
+	validateCRDTimeout    = 1 * time.Minute
+	crdBasePath           = "/crds"
+	deprecatedCRDBasePath = "/crds/deprecated"
 )
 
 var (
-	_          reconcile.Reconciler = &Controller{}
-	crdBaseDir                      = getCRDBasePath
+	_                    reconcile.Reconciler = &Controller{}
+	crdBaseDir                                = getCRDBasePath
+	deprecatedCRDBaseDir                      = getDeprecatedCRDBasePath
 )
 
 // Controller reconciles a StorageCluster object
@@ -113,6 +115,23 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 
 // RegisterCRD registers the storage node CRD
 func (c *Controller) RegisterCRD() error {
+	k8sVersion, err := k8s.GetVersion()
+	if err != nil {
+		return fmt.Errorf("error parsing Kubernetes version '%s'. %v", k8sVersion, err)
+	}
+
+	k8s1_16, err := version.NewVersion("1.16")
+	if err != nil {
+		return fmt.Errorf("error parsing version '1.16': %v", err)
+	}
+
+	if k8sVersion.GreaterThanOrEqual(k8s1_16) {
+		return c.createOrUpdateCRD()
+	}
+	return c.createOrUpdateDeprecatedCRD()
+}
+
+func (c *Controller) createOrUpdateCRD() error {
 	// Create and validate StorageNode CRD
 	crd, err := k8s.GetCRDFromFile(storageNodeCRDFile, crdBaseDir())
 	if err != nil {
@@ -133,24 +152,45 @@ func (c *Controller) RegisterCRD() error {
 		}
 	}
 
-	resource := apiextensionsops.CustomResource{
-		Plural: corev1.StorageNodeResourcePlural,
-		Group:  corev1.SchemeGroupVersion.Group,
-	}
+	resource := fmt.Sprintf("%s.%s", corev1.StorageNodeResourcePlural, corev1.SchemeGroupVersion.Group)
 	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
 		return err
 	}
 
-	// Delete StorageNodeStatus CRD as it is not longer used
-	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		storageNodeStatusPlural,
-		corev1.SchemeGroupVersion.Group,
-	)
-	err = apiextensionsops.Instance().DeleteCRD(nodeStatusCRDName)
-	if err != nil && !errors.IsNotFound(err) {
-		logrus.Warnf("Failed to delete CRD %s: %v", nodeStatusCRDName, err)
+	return nil
+}
+
+func (c *Controller) createOrUpdateDeprecatedCRD() error {
+	// Create and validate StorageNode CRD
+	crd, err := k8s.GetV1beta1CRDFromFile(storageNodeCRDFile, deprecatedCRDBaseDir())
+	if err != nil {
+		return err
 	}
+
+	latestCRD, err := apiextensionsops.Instance().GetCRDV1beta1(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRDV1beta1(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else {
+		crd.ResourceVersion = latestCRD.ResourceVersion
+		if _, err := apiextensionsops.Instance().UpdateCRDV1beta1(crd); err != nil {
+			return err
+		}
+	}
+
+	resource := apiextensionsops.CustomResource{
+		Plural: corev1.StorageNodeResourcePlural,
+		Group:  corev1.SchemeGroupVersion.Group,
+	}
+	err = apiextensionsops.Instance().ValidateCRDV1beta1(resource, validateCRDTimeout, validateCRDInterval)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -361,6 +401,10 @@ func (c *Controller) log(storageNode *corev1.StorageNode) *logrus.Entry {
 
 func getCRDBasePath() string {
 	return crdBasePath
+}
+
+func getDeprecatedCRDBasePath() string {
+	return deprecatedCRDBasePath
 }
 
 func canNodeServeStorage(storagenode *corev1.StorageNode) bool {

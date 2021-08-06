@@ -36,6 +36,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -265,6 +266,29 @@ func GetPullPolicyForContainer(
 // ActivateCRDWhenCreated activates the given CRD by updating it's status. It waits for
 // CRD to be created for 1 minute before returning an error
 func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
+	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		crd, err := fakeClient.ApiextensionsV1().
+			CustomResourceDefinitions().
+			Get(context.TODO(), crdName, metav1.GetOptions{})
+		if err == nil {
+			crd.Status.Conditions = []apiextensionsv1.CustomResourceDefinitionCondition{{
+				Type:   apiextensionsv1.Established,
+				Status: apiextensionsv1.ConditionTrue,
+			}}
+			fakeClient.ApiextensionsV1().
+				CustomResourceDefinitions().
+				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			return true, nil
+		} else if !errors.IsNotFound(err) {
+			return false, err
+		}
+		return false, nil
+	})
+}
+
+// ActivateV1beta1CRDWhenCreated activates the given CRD by updating it's status. It waits for
+// CRD to be created for 1 minute before returning an error
+func ActivateV1beta1CRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
 	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().

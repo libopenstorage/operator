@@ -2,7 +2,6 @@ package storagenode
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	kversion "k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -75,6 +77,9 @@ func TestInit(t *testing.T) {
 
 func TestRegisterCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "v1.16.0",
+	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
@@ -101,6 +106,102 @@ func TestRegisterCRD(t *testing.T) {
 	}
 	defer func() {
 		crdBaseDir = getCRDBasePath
+	}()
+
+	err = controller.RegisterCRD()
+	require.NoError(t, err)
+
+	crds, err := fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		List(context.TODO(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, crds.Items, 1)
+
+	subresource := &apiextensionsv1.CustomResourceSubresources{
+		Status: &apiextensionsv1.CustomResourceSubresourceStatus{},
+	}
+	snCRD, err := fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		Get(context.TODO(), storageNodeCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, storageNodeCRDName, snCRD.Name)
+	require.Equal(t, corev1.SchemeGroupVersion.Group, snCRD.Spec.Group)
+	require.Len(t, snCRD.Spec.Versions, 2)
+	require.Equal(t, corev1.SchemeGroupVersion.Version, snCRD.Spec.Versions[0].Name)
+	require.True(t, snCRD.Spec.Versions[0].Served)
+	require.True(t, snCRD.Spec.Versions[0].Storage)
+	require.Equal(t, subresource, snCRD.Spec.Versions[0].Subresources)
+	require.NotEmpty(t, snCRD.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties)
+	require.Equal(t, "v1alpha1", snCRD.Spec.Versions[1].Name)
+	require.True(t, snCRD.Spec.Versions[1].Served)
+	require.False(t, snCRD.Spec.Versions[1].Storage)
+	require.Equal(t, subresource, snCRD.Spec.Versions[1].Subresources)
+	require.NotEmpty(t, snCRD.Spec.Versions[1].Schema.OpenAPIV3Schema)
+	require.Empty(t, snCRD.Spec.Versions[1].Schema.OpenAPIV3Schema.Properties)
+	require.Equal(t, apiextensionsv1.NamespaceScoped, snCRD.Spec.Scope)
+	require.Equal(t, corev1.StorageNodeResourceName, snCRD.Spec.Names.Singular)
+	require.Equal(t, corev1.StorageNodeResourcePlural, snCRD.Spec.Names.Plural)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNode{}).Name(), snCRD.Spec.Names.Kind)
+	require.Equal(t, reflect.TypeOf(corev1.StorageNodeList{}).Name(), snCRD.Spec.Names.ListKind)
+	require.Equal(t, []string{corev1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
+
+	snCRD.ResourceVersion = "1000"
+	fakeExtClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
+
+	go func() {
+		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
+		require.NoError(t, err)
+	}()
+
+	// If CRDs are already present, then should not fail
+	err = controller.RegisterCRD()
+	require.NoError(t, err)
+
+	crds, err = fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		List(context.TODO(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, crds.Items, 1)
+	require.Equal(t, storageNodeCRDName, crds.Items[0].Name)
+
+	snCRD, err = fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		Get(context.TODO(), storageNodeCRDName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "1000", snCRD.ResourceVersion)
+}
+
+func TestRegisterDeprecatedCRD(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
+		GitVersion: "v1.15.99",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	group := corev1.SchemeGroupVersion.Group
+	storageNodeCRDName := corev1.StorageNodeResourcePlural + "." + group
+
+	// When the CRDs are created, just updated their status so the validation
+	// does not get stuck until timeout.
+
+	go func() {
+		err := testutil.ActivateV1beta1CRDWhenCreated(fakeExtClient, storageNodeCRDName)
+		require.NoError(t, err)
+	}()
+
+	controller := Controller{}
+
+	// Should fail if the CRD specs are not found
+	err := controller.RegisterCRD()
+	require.Error(t, err)
+
+	// Set the correct crd path
+	deprecatedCRDBaseDir = func() string {
+		return "../../../deploy/crds/deprecated"
+	}
+	defer func() {
+		deprecatedCRDBaseDir = getDeprecatedCRDBasePath
 	}()
 
 	err = controller.RegisterCRD()
@@ -141,7 +242,7 @@ func TestRegisterCRD(t *testing.T) {
 	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
 
 	go func() {
-		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
+		err := keepV1beta1CRDActivated(fakeExtClient, storageNodeCRDName)
 		require.NoError(t, err)
 	}()
 
@@ -161,57 +262,6 @@ func TestRegisterCRD(t *testing.T) {
 		Get(context.TODO(), storageNodeCRDName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "1000", snCRD.ResourceVersion)
-}
-
-func TestRegisterCRDShouldRemoveNodeStatusCRD(t *testing.T) {
-	nodeStatusCRDName := fmt.Sprintf("%s.%s",
-		storageNodeStatusPlural,
-		corev1.SchemeGroupVersion.Group,
-	)
-	nodeStatusCRD := &apiextensionsv1beta1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nodeStatusCRDName,
-		},
-	}
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	fakeExtClient := fakeextclient.NewSimpleClientset(nodeStatusCRD)
-	coreops.SetInstance(coreops.New(fakeClient))
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	crdBaseDir = func() string {
-		return "../../../deploy/crds"
-	}
-	defer func() {
-		crdBaseDir = getCRDBasePath
-	}()
-
-	group := corev1.SchemeGroupVersion.Group
-	storageClusterCRDName := corev1.StorageClusterResourcePlural + "." + group
-	storageNodeCRDName := corev1.StorageNodeResourcePlural + "." + group
-
-	// When the CRDs are created, just updated their status so the validation
-	// does not get stuck until timeout.
-	go func() {
-		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageClusterCRDName)
-		require.NoError(t, err)
-	}()
-	go func() {
-		err := testutil.ActivateCRDWhenCreated(fakeExtClient, storageNodeCRDName)
-		require.NoError(t, err)
-	}()
-
-	controller := Controller{}
-
-	err := controller.RegisterCRD()
-	require.NoError(t, err)
-
-	crds, err := fakeExtClient.ApiextensionsV1beta1().
-		CustomResourceDefinitions().
-		List(context.TODO(), metav1.ListOptions{})
-	require.NoError(t, err)
-	require.Len(t, crds.Items, 1)
-	for _, crd := range crds.Items {
-		require.NotEqual(t, nodeStatusCRDName, crd.Name)
-	}
 }
 
 func TestReconcile(t *testing.T) {
@@ -874,6 +924,26 @@ func createStoragePod(
 }
 
 func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
+	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		crd, err := fakeClient.ApiextensionsV1().
+			CustomResourceDefinitions().
+			Get(context.TODO(), crdName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if len(crd.Status.Conditions) == 0 {
+			crd.Status.Conditions = []apiextensionsv1.CustomResourceDefinitionCondition{{
+				Type:   apiextensionsv1.Established,
+				Status: apiextensionsv1.ConditionTrue,
+			}}
+			fakeClient.ApiextensionsV1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+func keepV1beta1CRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
 	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().

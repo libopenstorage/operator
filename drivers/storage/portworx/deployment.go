@@ -1497,7 +1497,7 @@ func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) stri
 }
 
 func (t *template) setOSImage(osImage string) {
-	logrus.Infof("Template OSImage set to %q", osImage)
+	logrus.Debugf("Template OSImage set to %q", osImage)
 	t.osImage = osImage
 }
 
