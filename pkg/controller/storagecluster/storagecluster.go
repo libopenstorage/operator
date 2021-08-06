@@ -76,6 +76,7 @@ const (
 	defaultMaxUnavailablePods           = 1
 	failureDomainZoneKey                = "failure-domain.beta.kubernetes.io/zone"
 	crdBasePath                         = "/crds"
+	deprecatedCRDBasePath               = "/crds/deprecated"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
 )
@@ -83,8 +84,9 @@ const (
 var _ reconcile.Reconciler = &Controller{}
 
 var (
-	controllerKind = corev1.SchemeGroupVersion.WithKind("StorageCluster")
-	crdBaseDir     = getCRDBasePath
+	controllerKind       = corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	crdBaseDir           = getCRDBasePath
+	deprecatedCRDBaseDir = getDeprecatedCRDBasePath
 )
 
 // Controller reconciles a StorageCluster object
@@ -306,6 +308,23 @@ func (c *Controller) validateCustomAnnotations(current *corev1.StorageCluster) e
 
 // RegisterCRD registers and validates CRDs
 func (c *Controller) RegisterCRD() error {
+	k8sVersion, err := k8s.GetVersion()
+	if err != nil {
+		return fmt.Errorf("error parsing Kubernetes version '%s'. %v", k8sVersion, err)
+	}
+
+	k8s1_16, err := version.NewVersion("1.16")
+	if err != nil {
+		return fmt.Errorf("error parsing version '1.16': %v", err)
+	}
+
+	if k8sVersion.GreaterThanOrEqual(k8s1_16) {
+		return c.createOrUpdateCRD()
+	}
+	return c.createOrUpdateDeprecatedCRD()
+}
+
+func (c *Controller) createOrUpdateCRD() error {
 	// Create and validate StorageCluster CRD
 	crd, err := k8s.GetCRDFromFile(storageClusterCRDFile, crdBaseDir())
 	if err != nil {
@@ -325,11 +344,40 @@ func (c *Controller) RegisterCRD() error {
 		}
 	}
 
+	resource := fmt.Sprintf("%s.%s", corev1.StorageClusterResourcePlural, corev1.SchemeGroupVersion.Group)
+	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Controller) createOrUpdateDeprecatedCRD() error {
+	// Create and validate StorageCluster CRD
+	crd, err := k8s.GetV1beta1CRDFromFile(storageClusterCRDFile, deprecatedCRDBaseDir())
+	if err != nil {
+		return err
+	}
+	latestCRD, err := apiextensionsops.Instance().GetCRDV1beta1(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRDV1beta1(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else {
+		crd.ResourceVersion = latestCRD.ResourceVersion
+		if _, err := apiextensionsops.Instance().UpdateCRDV1beta1(crd); err != nil {
+			return err
+		}
+	}
+
 	resource := apiextensionsops.CustomResource{
 		Plural: corev1.StorageClusterResourcePlural,
 		Group:  corev1.SchemeGroupVersion.Group,
 	}
-	err = apiextensionsops.Instance().ValidateCRD(resource, validateCRDTimeout, validateCRDInterval)
+	err = apiextensionsops.Instance().ValidateCRDV1beta1(resource, validateCRDTimeout, validateCRDInterval)
 	if err != nil {
 		return err
 	}
@@ -1133,6 +1181,10 @@ func storagePodsEnabled(
 
 func getCRDBasePath() string {
 	return crdBasePath
+}
+
+func getDeprecatedCRDBasePath() string {
+	return deprecatedCRDBasePath
 }
 
 type podByCreationTimestampAndPhase []*v1.Pod

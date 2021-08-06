@@ -98,7 +98,7 @@ func NewCSIGenerator(
 func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 	cv := new(CSIConfiguration)
 	cv.DriverName = g.driverName()
-	if g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14) {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_14) {
 		cv.IncludeCsiDriverInfo = true
 	}
 
@@ -109,7 +109,7 @@ func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 // for the specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	var cv *CSIConfiguration
-	if g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13) {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) {
 		cv = g.getDefaultConfigV1_0()
 	} else {
 		cv = g.getDefaultConfigV0_4()
@@ -117,35 +117,33 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 
 	// Check if configmaps are necessary for leader election.
 	// If it is  >=1.13.0 and and <1.14.0
-	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
-		g.kubeVersion.LessThan(k8sVer1_14) {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) && g.kubeVersion.LessThan(k8sVer1_14) {
 		cv.IncludeEndpointsAndConfigMapsForLeases = true
 	}
 
 	// Enable resizer sidecar when PX >= 2.2 and k8s >= 1.14.0
 	// Our CSI driver only supports resizing in PX 2.2.
 	// Resize support is Alpha starting k8s 1.14
-	if g.pxVersion.GreaterThan(pxVer2_2) || g.pxVersion.Equal(pxVer2_2) {
-		if g.kubeVersion.GreaterThan(k8sVer1_16) || g.kubeVersion.Equal(k8sVer1_16) {
+	if g.pxVersion.GreaterThanOrEqual(pxVer2_2) {
+		if g.kubeVersion.GreaterThanOrEqual(k8sVer1_16) {
 			cv.IncludeResizer = true
-		} else if (g.kubeVersion.GreaterThan(k8sVer1_14) || g.kubeVersion.Equal(k8sVer1_14)) && !g.disableAlpha {
+		} else if g.kubeVersion.GreaterThanOrEqual(k8sVer1_14) && !g.disableAlpha {
 			cv.IncludeResizer = true
 		}
 	}
 
 	// Snapshotter alpha support in k8s 1.16
-	if (g.kubeVersion.GreaterThan(k8sVer1_12) || g.kubeVersion.Equal(k8sVer1_12)) && !g.disableAlpha {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_12) && !g.disableAlpha {
 		// Snapshotter support is alpha starting k8s 1.12
 		cv.IncludeSnapshotter = true
-	} else if g.kubeVersion.GreaterThan(k8sVer1_17) || g.kubeVersion.Equal(k8sVer1_17) {
+	} else if g.kubeVersion.GreaterThanOrEqual(k8sVer1_17) {
 		// Snapshotter support is beta starting k8s 1.17
 		cv.IncludeSnapshotter = true
 	}
 
 	// Check if we need to setup the CsiNodeInfo CRD
 	// If 1.12.0 <= KubeVer < 1.14.0 create the CRD
-	if (g.kubeVersion.GreaterThan(k8sVer1_12) || g.kubeVersion.Equal(k8sVer1_12)) &&
-		g.kubeVersion.LessThan(k8sVer1_14) {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_12) && g.kubeVersion.LessThan(k8sVer1_14) {
 		cv.CreateCsiNodeCrd = true
 	}
 
@@ -190,13 +188,13 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 // specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIImages() *CSIImages {
 	var csiImages *CSIImages
-	if g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13) {
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) {
 		csiImages = g.getSidecarContainerVersionsV1_0()
 	} else {
 		csiImages = g.getSidecarContainerVersionsV0_4()
 	}
 
-	if (g.kubeVersion.GreaterThan(k8sVer1_13) || g.kubeVersion.Equal(k8sVer1_13)) &&
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) &&
 		g.kubeVersion.LessThan(k8sVer1_14) {
 		csiImages.Snapshotter = "quay.io/openstorage/csi-snapshotter:v1.2.2-1"
 	}
@@ -225,7 +223,7 @@ func (g *CSIGenerator) getDefaultConfigV0_4() *CSIConfiguration {
 	}
 
 	// Force CSI 0.3 for Portworx version 2.1
-	if g.pxVersion.GreaterThan(pxVer2_1) || g.pxVersion.Equal(pxVer2_1) {
+	if g.pxVersion.GreaterThanOrEqual(pxVer2_1) {
 		c.Version = "0.3"
 	}
 	return c
