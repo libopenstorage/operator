@@ -3318,11 +3318,10 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -4496,7 +4495,6 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -4576,7 +4574,6 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -4717,7 +4714,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	expectedCRD := testutil.GetExpectedCRD(t, "csiNodeInfoCrd.yaml")
 	go func() {
-		err := testutil.ActivateCRDWhenCreated(extensionsClient, expectedCRD.Name)
+		err := testutil.ActivateV1beta1CRDWhenCreated(extensionsClient, expectedCRD.Name)
 		require.NoError(t, err)
 	}()
 
@@ -4746,7 +4743,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	driver.initializeComponents()
 
 	go func() {
-		err := testutil.ActivateCRDWhenCreated(extensionsClient, expectedCRD.Name)
+		err := testutil.ActivateV1beta1CRDWhenCreated(extensionsClient, expectedCRD.Name)
 		require.NoError(t, err)
 	}()
 
@@ -5801,7 +5798,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
@@ -5937,11 +5934,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6007,7 +6003,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6073,11 +6069,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6117,7 +6113,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6183,11 +6179,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6220,7 +6216,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6286,11 +6282,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-attacher:v1.2.3",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6330,7 +6326,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		customRegistry+"/gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6396,11 +6392,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-attacher:v1.2.3",
+		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
+		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6702,11 +6698,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6766,7 +6761,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		customRepo+"/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6832,11 +6827,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.3",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.3",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6870,7 +6865,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		customRepo+"/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -6936,11 +6931,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.3",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.3",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -6974,7 +6969,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		customRepo+"/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7040,11 +7035,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.3",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.3",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -7077,7 +7072,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-controller-manager-amd64:v1.13.0",
+		"gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7143,11 +7138,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-attacher:v1.2.3",
+		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -7181,7 +7176,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRepo+"/kube-controller-manager-amd64:v1.13.0",
+		customRepo+"/kube-controller-manager-amd64:v1.18.0",
 		pvcDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7247,11 +7242,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-attacher:v1.2.3",
+		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 	require.Equal(t,
-		customRepo+"/csi-snapshotter:v1.2.3",
+		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
@@ -7609,11 +7604,10 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -7946,11 +7940,10 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -8376,11 +8369,10 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
+		GitVersion: "v1.18.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -10588,7 +10580,7 @@ func createFakeCRD(fakeClient *fakeextclient.Clientset, crdName string) error {
 	if err != nil {
 		return err
 	}
-	return testutil.ActivateCRDWhenCreated(fakeClient, crdName)
+	return testutil.ActivateV1beta1CRDWhenCreated(fakeClient, crdName)
 }
 
 func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClaims jwt.MapClaims) {

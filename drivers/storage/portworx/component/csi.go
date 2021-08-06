@@ -982,11 +982,11 @@ func createCSINodeInfoCRD() error {
 		},
 	}
 
-	err := apiextensionsops.Instance().RegisterCRD(crd)
+	err := apiextensionsops.Instance().RegisterCRDV1beta1(crd)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
-	return apiextensionsops.Instance().ValidateCRD(resource, 1*time.Minute, 5*time.Second)
+	return apiextensionsops.Instance().ValidateCRDV1beta1(resource, 1*time.Minute, 5*time.Second)
 }
 
 func (c *csi) getCSIConfiguration(

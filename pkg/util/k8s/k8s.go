@@ -21,6 +21,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1671,6 +1672,23 @@ func DeleteSecret(
 
 // GetCRDFromFile parses a CRD definition filename from crdBaseDir and returns the parsed object
 func GetCRDFromFile(
+	filename string,
+	crdBaseDir string,
+) (*apiextensionsv1.CustomResourceDefinition, error) {
+	filepath := path.Join(crdBaseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	crd := &apiextensionsv1.CustomResourceDefinition{}
+	if err := ParseObjectFromFile(filepath, scheme, crd); err != nil {
+		return nil, err
+	}
+	return crd, nil
+}
+
+// GetV1beta1CRDFromFile parses a CRD definition filename from crdBaseDir and returns the parsed object
+func GetV1beta1CRDFromFile(
 	filename string,
 	crdBaseDir string,
 ) (*v1beta1.CustomResourceDefinition, error) {
