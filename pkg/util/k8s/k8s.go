@@ -1523,7 +1523,7 @@ func GetImagePullPolicyFromDeployment(deployment *appsv1.Deployment, containerNa
 			return c.ImagePullPolicy
 		}
 	}
-	return v1.PullIfNotPresent
+	return ""
 }
 
 // GetValueFromEnv returns a value for the given key name in list of env vars

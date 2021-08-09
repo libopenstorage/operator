@@ -32,7 +32,10 @@ const (
 )
 
 type pxrepo struct {
-	k8sClient client.Client
+	// This flag tracks whether deployment is created since operator restarts, when operator starts we always
+	// update the deployment, after that we only update deployment when certain fields change.
+	isDeploymentCreated bool
+	k8sClient           client.Client
 }
 
 func (p *pxrepo) Name() string {
@@ -53,7 +56,7 @@ func (p *pxrepo) Initialize(
 }
 
 func (p *pxrepo) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.PxRepo != nil && cluster.Spec.PxRepo.Enabled
+	return pxutil.IsPortworxEnabled(cluster) && cluster.Spec.PxRepo != nil && cluster.Spec.PxRepo.Enabled
 }
 
 func (p *pxrepo) Reconcile(cluster *corev1.StorageCluster) error {
@@ -81,10 +84,13 @@ func (p *pxrepo) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	p.MarkDeleted()
+
 	return nil
 }
 
 func (p *pxrepo) MarkDeleted() {
+	p.isDeploymentCreated = false
 }
 
 func (p *pxrepo) createPxRepoService(
@@ -142,14 +148,15 @@ func (p *pxrepo) createPxRepoDeployment(
 	// If existingDeployment does not exist, modified will be true.
 	modified :=
 		k8sutil.GetImageFromDeployment(existingDeployment, pxRepoContainerName) != k8sutil.GetImageFromDeployment(deployment, pxRepoContainerName) ||
-			k8sutil.GetImagePullPolicyFromDeployment(existingDeployment, pxRepoContainerName) != k8sutil.GetImagePullPolicyFromDeployment(deployment, pxRepoContainerName) ||
 			util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 			util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 			util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
-	if modified {
-		return k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef)
+	if !p.isDeploymentCreated || modified {
+		k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef)
 	}
+
+	p.isDeploymentCreated = true
 
 	return nil
 }
@@ -188,6 +195,33 @@ func (p *pxrepo) getPxRepoDeployment(
 				},
 			},
 		},
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				deployment.Spec.Template.Spec.Tolerations = append(
+					deployment.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
 	}
 
 	return &deployment

@@ -317,7 +317,6 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 
 	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, v1.PullNever)
 
 	// Disable the service
 	cluster.Spec.PxRepo.Enabled = false
@@ -5976,6 +5975,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: true,
+				Image:   "testImage",
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -6076,6 +6079,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRegistry+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	// Case: Update registry should be added to the images
@@ -6179,6 +6191,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRegistry+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
 	// Case: If empty, remove custom registry from images
 	cluster.Spec.CustomImageRegistry = ""
 
@@ -6271,6 +6292,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		"quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	// Case: Custom registry should be added back in not present in images
@@ -6372,6 +6402,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/k8scsi/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		cluster.Spec.CustomImageRegistry+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
 
@@ -6701,6 +6740,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: true,
+				Image:   "pxRepoImage",
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -6795,6 +6838,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRepo+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	// Case: Updated repo-registry should be added to the images
@@ -6892,6 +6944,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRepo+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
 	// Case: Flat registry should be used for images
 	customRepo = "test-registry:1111"
 	cluster.Spec.CustomImageRegistry = customRepo + "//"
@@ -6985,6 +7046,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRepo+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
 	// Case: If empty, remove custom repo-registry from images
@@ -7081,6 +7151,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+
 	// Case: Custom repo-registry should be added back in not present in images
 	customRepo = "test-registry:1111/newest-repo"
 	cluster.Spec.CustomImageRegistry = customRepo
@@ -7174,6 +7253,15 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-snapshotter:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
+	require.Equal(t,
+		customRepo+"/"+cluster.Spec.PxRepo.Image,
+		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
 
@@ -7560,6 +7648,10 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: true,
+				Image:   "pxRepoImage",
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -7616,6 +7708,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
+	pxRepoDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
 	// Case: Updated image pull secet should be applied to the deployment
 	imagePullSecret = "new-secret"
 	k8sClient.Update(context.TODO(), cluster)
@@ -7671,6 +7769,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
 	// Case: If empty, remove image pull secret from the deployment
 	imagePullSecret = ""
 	k8sClient.Update(context.TODO(), cluster)
@@ -7718,6 +7822,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets)
+
 	// Case: If nil, remove image pull secret from the deployment
 	cluster.Spec.ImagePullSecret = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -7764,6 +7873,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets)
 
 	// Case: Image pull secret should be added back if not present in deployment
 	imagePullSecret = "pull-secret"
@@ -7820,6 +7934,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, pxRepoDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 }
 
 func TestCompleteInstallWithTolerationsChange(t *testing.T) {
@@ -7875,6 +7995,10 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: true,
+				Image:   "pxRepoImage",
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -7923,6 +8047,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	pxRepoDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: Updated tolerations should be applied to the deployment
 	tolerations[0].Value = "baz"
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -7970,6 +8099,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
 	// Case: New tolerations should be applied to the deployment
 	tolerations = append(tolerations, v1.Toleration{
@@ -8023,6 +8157,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -8071,6 +8210,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
 	k8sClient.Update(context.TODO(), cluster)
@@ -8117,6 +8261,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -8165,6 +8314,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -8211,6 +8365,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 }
 
 func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
@@ -8273,6 +8432,10 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			PxRepo: &corev1.PxRepoSpec{
+				Enabled: true,
+				Image:   "pxRepoImage",
+			},
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -8320,6 +8483,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	pxRepoDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxRepoDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 
 	// Case: Updated node affinity should be applied to the deployment
 	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
@@ -8372,6 +8540,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxRepoDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	// Case: If node affinity is removed, it should be removed from the deployment
 	cluster.Spec.Placement.NodeAffinity = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -8418,6 +8591,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Affinity)
 
 	// Case: Node affinity should be added back if not present in deployment
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
@@ -8466,6 +8644,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, pxRepoDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	// Case: If placement is nil, node affinity should be removed from the deployment
 	cluster.Spec.Placement = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -8512,6 +8695,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	pxRepoDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Affinity)
 }
 
 func TestRemovePVCController(t *testing.T) {
