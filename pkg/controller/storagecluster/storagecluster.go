@@ -89,6 +89,7 @@ var (
 
 // Controller reconciles a StorageCluster object
 type Controller struct {
+
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client                        client.Client
@@ -145,6 +146,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 
 // StartWatch starts the watch on the StorageCluster
 func (c *Controller) StartWatch() error {
+
 	err := c.ctrl.Watch(
 		&source.Kind{Type: &corev1.StorageCluster{}},
 		&handler.EnqueueRequestForObject{},

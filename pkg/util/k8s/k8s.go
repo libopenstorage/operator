@@ -1511,6 +1511,21 @@ func GetImageFromDeployment(deployment *appsv1.Deployment, containerName string)
 	return ""
 }
 
+// GetImagePullPolicyFromDeployment returns the image pull policy for given container in the deployment
+func GetImagePullPolicyFromDeployment(deployment *appsv1.Deployment, containerName string) v1.PullPolicy {
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
+			return c.ImagePullPolicy
+		}
+	}
+	for _, c := range deployment.Spec.Template.Spec.InitContainers {
+		if c.Name == containerName {
+			return c.ImagePullPolicy
+		}
+	}
+	return ""
+}
+
 // GetValueFromEnv returns a value for the given key name in list of env vars
 func GetValueFromEnv(imageKey string, envs []v1.EnvVar) string {
 	for _, env := range envs {
