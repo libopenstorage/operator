@@ -5,8 +5,8 @@ go:
   - 1.15.x
 script:
   - |
-    if [ "${TRAVIS_BRANCH}" == "px-rel-1.5.0" ]; then
-      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.5.0-dev
+    if [ "${TRAVIS_BRANCH}" == "px-rel-1.6.0" ]; then
+      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.6.0-dev
       export DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG=latest
       export BUILD_VER="${TRAVIS_BUILD_NUMBER}"
     else
@@ -18,7 +18,7 @@ script:
       docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
       make deploy;
       make integration-test-deploy;
-      if [ "${TRAVIS_BRANCH}" == "px-rel-1.5.0" ]; then
+      if [ "${TRAVIS_BRANCH}" == "px-rel-1.6.0" ]; then
         make deploy-catalog
       fi
     fi
