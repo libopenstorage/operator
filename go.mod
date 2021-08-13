@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
+	github.com/grpc-ecosystem/grpc-gateway v1.14.5 // indirect
 	github.com/hashicorp/go-version v1.2.1
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
 	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
