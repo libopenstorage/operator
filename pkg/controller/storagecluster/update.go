@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	storageapi "github.com/libopenstorage/openstorage/api"
 	"reflect"
 	"sort"
 
@@ -48,6 +49,7 @@ import (
 // rollingUpdate deletes old storage cluster pods making sure that no more than
 // cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable pods are unavailable
 func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) error {
+	logrus.Debug("Perform rolling update")
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
 	if err != nil {
 		return fmt.Errorf("couldn't get node to storage pod mapping for storage cluster %v: %v",
@@ -406,31 +408,67 @@ func (c *Controller) getUnavailableNumbers(
 			"update of storage cluster  %#v: %v", cluster, err)
 	}
 
+	storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+	if err != nil {
+		return -1, -1, fmt.Errorf("couldn't get list of storage nodes during rolling "+
+			"update of storage cluster  %#v: %v", cluster, err)
+	}
+	storageNodeMap := make(map[string]*storageapi.StorageNode)
+	for _, storageNode := range storageNodeList {
+		storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+	}
+
 	var numUnavailable, desiredNumberScheduled int
 	for _, node := range nodeList.Items {
+		// If the node has a storage node and it is not healthy.
+		storageNode, storageNodeExists := storageNodeMap[node.Name]
+		if storageNodeExists {
+			delete(storageNodeMap, node.Name)
+			if storageNode.Status != storageapi.Status_STATUS_OK {
+				logrus.WithField("StorageNode", storageNode).Info("Storage node is not healthy")
+				numUnavailable++
+				continue
+			}
+		}
+
 		wantToRun, _, err := c.nodeShouldRunStoragePod(&node, cluster)
+		logrus.WithFields(logrus.Fields{
+			"node":              node.Name,
+			"wantToRun":         wantToRun,
+			"storageNodeExists": storageNodeExists,
+		}).WithError(err).Debug("check node should run storage pod")
 		if err != nil {
 			return -1, -1, err
 		}
-		if !wantToRun {
-			continue
-		}
-		desiredNumberScheduled++
-		storagePods, exists := nodeToStoragePods[node.Name]
-		if !exists {
-			numUnavailable++
-			continue
-		}
-		available := false
-		for _, pod := range storagePods {
-			// for the purposes of update we ensure that the pod is
-			// both available and not terminating
-			if podutil.IsPodReady(pod) && pod.DeletionTimestamp == nil {
-				available = true
-				break
+
+		// During Openshift cluster upgrade, the node will be tainted hence wantToRun will be false,
+		// so we need to check if StorageNode exists to decide whether to check if the storage node is available.
+		if wantToRun || storageNodeExists {
+			desiredNumberScheduled++
+			storagePods, exists := nodeToStoragePods[node.Name]
+			if !exists {
+				numUnavailable++
+				continue
+			}
+			available := false
+			for _, pod := range storagePods {
+				// for the purposes of update we ensure that the pod is
+				// both available and not terminating
+				if podutil.IsPodReady(pod) && pod.DeletionTimestamp == nil {
+					available = true
+					break
+				}
+			}
+			if !available {
+				numUnavailable++
 			}
 		}
-		if !available {
+	}
+
+	// For the storage nodes that do not have a corresponding k8s node.
+	for _, storageNode := range storageNodeMap {
+		if storageNode.Status != storageapi.Status_STATUS_OK {
+			logrus.WithField("StorageNode", storageNode).Info("Storage node is not healthy")
 			numUnavailable++
 		}
 	}
