@@ -23,7 +23,6 @@ spec:
           args:
             ["-c", "px-cluster",
             "-k", "ep1,ep2,ep3",
-            "-cert", "/etc/pwx/kvdbcerts/kvdb.crt",
             "-ca", "/etc/pwx/kvdbcerts/kvdb-ca.crt",
             "-key", "/etc/pwx/kvdbcerts/kvdb.key",
             "-acltoken", "kvdb-acl-token",
@@ -90,8 +89,6 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-            - name: kvdbcerts
-              mountPath: /etc/pwx/kvdbcerts
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
@@ -136,8 +133,6 @@ spec:
           secret:
             secretName: kvdb-auth-secret
             items:
-            - key: kvdb.crt
-              path: kvdb.crt
             - key: kvdb-ca.crt
               path: kvdb-ca.crt
             - key: kvdb.key

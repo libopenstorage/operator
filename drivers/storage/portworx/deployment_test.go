@@ -2503,6 +2503,49 @@ func TestPodSpecForPKSWithCSI(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecForKvdbAuthCertsWithoutCert(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset(
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kvdb-auth-secret",
+				Namespace: "kube-test",
+			},
+			Data: map[string][]byte{
+				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
+				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				secretKeyKvdbUsername: []byte("kvdb-username"),
+				secretKeyKvdbPassword: []byte("kvdb-password"),
+			},
+		},
+	)
+	coreops.SetInstance(coreops.New(fakeClient))
+
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_kvdb_certs_without_cert.yaml")
+
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.1.1",
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints:  []string{"ep1", "ep2", "ep3"},
+				AuthSecret: "kvdb-auth-secret",
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+}
+
 func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset(
 		&v1.Secret{
@@ -2554,6 +2597,7 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
+				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
 				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
 				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
 				secretKeyKvdbUsername: []byte("kvdb-username"),
@@ -2597,8 +2641,6 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 			},
 			Data: map[string][]byte{
 				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
