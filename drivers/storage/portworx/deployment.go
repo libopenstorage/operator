@@ -789,15 +789,17 @@ func (t *template) getArguments() []string {
 		auth := t.loadKvdbAuth()
 		if auth[secretKeyKvdbCert] != "" {
 			args = append(args, "-cert", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCert))
-			if auth[secretKeyKvdbCA] != "" {
-				args = append(args, "-ca", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCA))
-			}
-			if auth[secretKeyKvdbCertKey] != "" {
-				args = append(args, "-key", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCertKey))
-			}
-		} else if auth[secretKeyKvdbACLToken] != "" {
+		}
+		if auth[secretKeyKvdbCA] != "" {
+			args = append(args, "-ca", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCA))
+		}
+		if auth[secretKeyKvdbCertKey] != "" {
+			args = append(args, "-key", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCertKey))
+		}
+		if auth[secretKeyKvdbACLToken] != "" {
 			args = append(args, "-acltoken", auth[secretKeyKvdbACLToken])
-		} else if auth[secretKeyKvdbUsername] != "" && auth[secretKeyKvdbPassword] != "" {
+		}
+		if auth[secretKeyKvdbUsername] != "" && auth[secretKeyKvdbPassword] != "" {
 			args = append(args, "-userpwd",
 				fmt.Sprintf("%s:%s", auth[secretKeyKvdbUsername], auth[secretKeyKvdbPassword]))
 		}
@@ -1300,20 +1302,24 @@ func (t *template) getVolumes() []v1.Volume {
 	}
 
 	kvdbAuth := t.loadKvdbAuth()
-	if kvdbAuth[secretKeyKvdbCert] != "" {
+	if kvdbAuth[secretKeyKvdbCert] != "" || kvdbAuth[secretKeyKvdbCA] != "" || kvdbAuth[secretKeyKvdbCertKey] != "" {
 		kvdbVolume := v1.Volume{
 			Name: kvdbVolumeInfo.name,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: t.cluster.Spec.Kvdb.AuthSecret,
-					Items: []v1.KeyToPath{
-						{
-							Key:  secretKeyKvdbCert,
-							Path: secretKeyKvdbCert,
-						},
-					},
+					Items:      []v1.KeyToPath{},
 				},
 			},
+		}
+		if kvdbAuth[secretKeyKvdbCert] != "" {
+			kvdbVolume.VolumeSource.Secret.Items = append(
+				kvdbVolume.VolumeSource.Secret.Items,
+				v1.KeyToPath{
+					Key:  secretKeyKvdbCert,
+					Path: secretKeyKvdbCert,
+				},
+			)
 		}
 		if kvdbAuth[secretKeyKvdbCA] != "" {
 			kvdbVolume.VolumeSource.Secret.Items = append(
