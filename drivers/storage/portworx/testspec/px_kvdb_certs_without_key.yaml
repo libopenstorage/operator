@@ -23,8 +23,11 @@ spec:
           args:
             ["-c", "px-cluster",
             "-k", "ep1,ep2,ep3",
+            "-ca", "/etc/pwx/kvdbcerts/kvdb-ca.crt",
             "-cert", "/etc/pwx/kvdbcerts/kvdb.crt",
-             "-x", "kubernetes"]
+            "-acltoken", "kvdb-acl-token",
+            "-userpwd", "kvdb-username:kvdb-password",
+            "-x", "kubernetes"]
           env:
             - name: "PX_NAMESPACE"
               value: "kube-test"
@@ -142,3 +145,5 @@ spec:
             items:
             - key: kvdb.crt
               path: kvdb.crt
+            - key: kvdb-ca.crt
+              path: kvdb-ca.crt

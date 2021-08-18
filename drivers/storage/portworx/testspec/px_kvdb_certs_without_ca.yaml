@@ -25,7 +25,9 @@ spec:
             "-k", "ep1,ep2,ep3",
             "-cert", "/etc/pwx/kvdbcerts/kvdb.crt",
             "-key", "/etc/pwx/kvdbcerts/kvdb.key",
-             "-x", "kubernetes"]
+            "-acltoken", "kvdb-acl-token",
+            "-userpwd", "kvdb-username:kvdb-password",
+            "-x", "kubernetes"]
           env:
             - name: "PX_NAMESPACE"
               value: "kube-test"
