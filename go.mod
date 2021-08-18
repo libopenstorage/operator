@@ -11,6 +11,7 @@ require (
 	github.com/hashicorp/go-version v1.2.1
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
 	github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
+	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20210805192436-d51186f75dc4
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
