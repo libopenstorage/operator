@@ -683,7 +683,7 @@ func (t *template) telemetryContainer() *v1.Container {
 	return &container
 }
 
-func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
+func (t *template) getSelectorTerms() []v1.NodeSelectorTerm {
 	selectorRequirements := []v1.NodeSelectorRequirement{
 		{
 			Key:      "px/enabled",
@@ -692,26 +692,68 @@ func (t *template) getSelectorRequirements() []v1.NodeSelectorRequirement {
 		},
 	}
 
-	if !t.runOnMaster {
-		if t.isOpenshift {
-			selectorRequirements = append(
-				selectorRequirements,
-				v1.NodeSelectorRequirement{
-					Key:      "node-role.kubernetes.io/infra",
-					Operator: v1.NodeSelectorOpDoesNotExist,
-				},
-			)
+	if t.runOnMaster {
+		return []v1.NodeSelectorTerm{
+			{
+				MatchExpressions: selectorRequirements,
+			},
 		}
+	}
+
+	if t.isOpenshift {
 		selectorRequirements = append(
 			selectorRequirements,
 			v1.NodeSelectorRequirement{
-				Key:      "node-role.kubernetes.io/master",
+				Key:      "node-role.kubernetes.io/infra",
 				Operator: v1.NodeSelectorOpDoesNotExist,
 			},
 		)
 	}
 
-	return selectorRequirements
+	// requirements1 defines it should not run on master.
+	requirements1 := t.copySelectorRequirements(selectorRequirements)
+	requirements1 = append(
+		requirements1,
+		v1.NodeSelectorRequirement{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: v1.NodeSelectorOpDoesNotExist,
+		},
+	)
+
+	// requirements2 defines it could run on a node that is master and worker.
+	// This is needed for IBM OCP cluster where all nodes are master and worker.
+	requirements2 := t.copySelectorRequirements(selectorRequirements)
+	requirements2 = append(
+		requirements2,
+		v1.NodeSelectorRequirement{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: v1.NodeSelectorOpExists,
+		},
+	)
+	requirements2 = append(
+		requirements2,
+		v1.NodeSelectorRequirement{
+			Key:      "node-role.kubernetes.io/worker",
+			Operator: v1.NodeSelectorOpExists,
+		},
+	)
+
+	return []v1.NodeSelectorTerm{
+		{
+			MatchExpressions: requirements1,
+		},
+		{
+			MatchExpressions: requirements2,
+		},
+	}
+}
+
+func (t *template) copySelectorRequirements(reqs []v1.NodeSelectorRequirement) []v1.NodeSelectorRequirement {
+	var reqsCopy []v1.NodeSelectorRequirement
+	for _, req := range reqs {
+		reqsCopy = append(reqsCopy, *req.DeepCopy())
+	}
+	return reqsCopy
 }
 
 func (t *template) getCloudStorageArguments(cloudDeviceSpec cloudstorage.CloudDriveConfig) string {
