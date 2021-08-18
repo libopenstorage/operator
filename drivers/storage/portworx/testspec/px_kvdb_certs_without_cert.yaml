@@ -24,7 +24,7 @@ spec:
             ["-c", "px-cluster",
             "-k", "ep1,ep2,ep3",
             "-ca", "/etc/pwx/kvdbcerts/kvdb-ca.crt",
-            "-cert", "/etc/pwx/kvdbcerts/kvdb.crt",
+            "-key", "/etc/pwx/kvdbcerts/kvdb.key",
             "-acltoken", "kvdb-acl-token",
             "-userpwd", "kvdb-username:kvdb-password",
             "-x", "kubernetes"]
@@ -91,8 +91,6 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-            - name: kvdbcerts
-              mountPath: /etc/pwx/kvdbcerts
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
@@ -112,14 +110,6 @@ spec:
           hostPath:
             path: /etc/crictl.yaml
             type: FileOrCreate
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins
-            type: DirectoryOrCreate
-        - name: csi-driver-path
-          hostPath:
-            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
-            type: DirectoryOrCreate
         - name: etcpwx
           hostPath:
             path: /etc/pwx
@@ -148,7 +138,15 @@ spec:
           secret:
             secretName: kvdb-auth-secret
             items:
-            - key: kvdb.crt
-              path: kvdb.crt
             - key: kvdb-ca.crt
               path: kvdb-ca.crt
+            - key: kvdb.key
+              path: kvdb.key
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: DirectoryOrCreate
+        - name: csi-driver-path
+          hostPath:
+            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
+            type: DirectoryOrCreate
