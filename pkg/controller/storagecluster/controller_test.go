@@ -20,6 +20,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	ocp_configv1 "github.com/openshift/api/config/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
@@ -2843,6 +2844,155 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	}
 	require.Equal(t, revision2.Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
+}
+
+func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cv := &ocp_configv1.ClusterVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "version",
+		},
+		Spec: ocp_configv1.ClusterVersionSpec{
+			DesiredUpdate: &ocp_configv1.Update{
+				Version: "1.2.3",
+			},
+		},
+		Status: ocp_configv1.ClusterVersionStatus{
+			History: []ocp_configv1.UpdateHistory{
+				{
+					Version: "1.2.3",
+					State:   ocp_configv1.PartialUpdate,
+				},
+			},
+		},
+	}
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, cv)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
+	}
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	k8sNode := createK8sNode("k8s-node", 10)
+	k8sClient.Create(context.TODO(), k8sNode)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+	require.Equal(t, int64(1), revisions.Items[0].Revision)
+
+	require.Len(t, podControl.ControllerRefs, 1)
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
+
+	// Verify that the revision hash matches that of the new pod
+	require.Len(t, podControl.Templates, 1)
+	require.Equal(t, revisions.Items[0].Labels[defaultStorageClusterUniqueLabelKey],
+		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
+
+	// TestCase: Changing the cluster spec -
+	// A new revision should be created for the new cluster spec
+	// But pod should not be changed as Openshift upgrade is in progress
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
+	require.NoError(t, err)
+	oldPod.Name = oldPod.GenerateName + "1"
+	oldPod.Namespace = cluster.Namespace
+	oldPod.Spec.NodeName = k8sNode.Name
+	oldPod.Status.Conditions = append(oldPod.Status.Conditions, v1.PodCondition{
+		Type:   v1.PodReady,
+		Status: v1.ConditionTrue,
+	})
+	k8sClient.Create(context.TODO(), oldPod)
+
+	// Reset the fake pod controller
+	podControl.Templates = nil
+	podControl.ControllerRefs = nil
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v", v1.EventTypeNormal, util.UpdatePausedReason))
+
+	// The old pod should NOT be marked for deletion as an OpenShift
+	// upgrade is in progress
+	require.Empty(t, podControl.DeletePodName)
+
+	// New revision should still be created for the updated cluster spec
+	revisions = &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 2)
+
+	// validate revision 1 and revision 2 exist
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
+
+	// TestCase: Continue upgrade if forced using annotation
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Annotations = map[string]string{
+		constants.AnnotationForceContinueUpdate: "true",
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	// Reset the fake pod controller
+	podControl.Templates = nil
+	podControl.ControllerRefs = nil
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Empty(t, recorder.Events)
+
+	// The old pod should be marked for deletion
+	require.Len(t, podControl.DeletePodName, 1)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+	require.Empty(t, podControl.Templates)
+	require.Empty(t, podControl.ControllerRefs)
 }
 
 func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {

@@ -7,6 +7,16 @@ import (
 	"k8s.io/client-go/tools/record"
 )
 
+// InfoEvent logs and records a info event for the given object on the given recorder
+func InfoEvent(
+	recorder record.EventRecorder,
+	object runtime.Object,
+	reason, message string,
+) {
+	logrus.Info(message)
+	recorder.Event(object, v1.EventTypeNormal, reason, message)
+}
+
 // WarningEvent logs and records a warning event for the given object on the given recorder
 func WarningEvent(
 	recorder record.EventRecorder,

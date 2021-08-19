@@ -14,6 +14,7 @@ import (
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
 	"github.com/libopenstorage/operator/pkg/version"
+	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -135,6 +136,10 @@ func run(c *cli.Context) {
 	}
 
 	if err := cluster_v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
+	}
+
+	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
