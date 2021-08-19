@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"reflect"
+	"strconv"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
@@ -123,4 +126,15 @@ func isEmpty(object interface{}) bool {
 		return objValue.Len() == 0
 	}
 	return false
+}
+
+func forceContinueUpgrade(
+	cluster *corev1.StorageCluster,
+) bool {
+	value, exists := cluster.Annotations[constants.AnnotationForceContinueUpdate]
+	force, err := strconv.ParseBool(value)
+	if err != nil && exists {
+		logrus.Warnf("Invalid value %s for annotation %s. %v", value, constants.AnnotationForceContinueUpdate, err)
+	}
+	return err == nil && force
 }
