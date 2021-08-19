@@ -84,6 +84,19 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 		numUnavailable++
 	}
+
+	if len(oldPodsToDelete) > 0 && !forceContinueUpgrade(cluster) {
+		isUpgrading, err := k8s.IsClusterBeingUpgraded(c.client)
+		if err != nil {
+			logrus.Warnf("Failed to detect Kubernetes cluster upgrade status. %v", err)
+		} else if isUpgrading {
+			k8s.InfoEvent(c.recorder, cluster, operatorutil.UpdatePausedReason,
+				"The rolling update of the storage cluster has been paused due to an ongoing OpenShift upgrade. "+
+					"Storage nodes will only be updated on pod deletion or after the OpenShift upgrade is completed.")
+			return nil
+		}
+	}
+
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
 }
 

@@ -21,6 +21,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
+	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
@@ -74,6 +75,7 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	corev1.AddToScheme(s)
 	monitoringv1.AddToScheme(s)
 	cluster_v1alpha1.AddToScheme(s)
+	ocp_configv1.AddToScheme(s)
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }
 
