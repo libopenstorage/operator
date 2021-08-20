@@ -244,6 +244,23 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 							},
 						},
 					},
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpExists,
+							},
+							{
+								Key:      "node-role.kubernetes.io/worker",
+								Operator: v1.NodeSelectorOpExists,
+							},
+						},
+					},
 				},
 			},
 		},
@@ -1622,6 +1639,27 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+						},
+					},
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/infra",
+								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpExists,
+							},
+							{
+								Key:      "node-role.kubernetes.io/worker",
+								Operator: v1.NodeSelectorOpExists,
 							},
 						},
 					},

@@ -729,9 +729,6 @@ func (t *template) getSelectorTerms() []v1.NodeSelectorTerm {
 			Key:      "node-role.kubernetes.io/master",
 			Operator: v1.NodeSelectorOpExists,
 		},
-	)
-	requirements2 = append(
-		requirements2,
 		v1.NodeSelectorRequirement{
 			Key:      "node-role.kubernetes.io/worker",
 			Operator: v1.NodeSelectorOpExists,
