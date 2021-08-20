@@ -49,6 +49,12 @@ func (m *MockDriver) GetStorageNodes(arg0 *v1.StorageCluster) ([]*storageapi.Sto
 	return ret0, ret1
 }
 
+// GetStorageNodes indicates an expected call of GetStorageNodes.
+func (mr *MockDriverMockRecorder) GetStorageNodes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockDriver)(nil).GetStorageNodes), arg0)
+}
+
 // DeleteStorage mocks base method.
 func (m *MockDriver) DeleteStorage(arg0 *v1.StorageCluster) (*v1.ClusterCondition, error) {
 	m.ctrl.T.Helper()
