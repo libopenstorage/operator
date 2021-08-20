@@ -1,6 +1,10 @@
 .idea/
 bin/
-manifests/
+/manifests/
+/deploy/olm-catalog/**/manifests
+/deploy/olm-catalog/**/metadata
+/deploy/olm-catalog/**/bundle_*
+bundle.Dockerfile
 *.swp
 *.test
 coverage.txt
