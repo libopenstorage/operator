@@ -12,6 +12,17 @@ metadata:
     createdAt: 2020-04-22T08:00:00Z
     support: Portworx, Inc
     certified: "true"
+    operatorframework.io/initialization-resource: |-
+      {
+        "apiVersion": "core.libopenstorage.org/v1",
+        "kind": "StorageCluster",
+        "metadata": {
+          "name": "portworx",
+          "annotations": {
+            "portworx.io/is-openshift": "true"
+          }
+        }
+      }
     alm-examples: |-
       [
         {
@@ -23,19 +34,6 @@ metadata:
             "annotations": {
               "portworx.io/is-openshift": "true"
             }
-          },
-          "spec": {
-            "autopilot": {
-              "enabled": false
-            }
-          }
-        },
-        {
-          "apiVersion": "core.libopenstorage.org/v1",
-          "kind": "StorageNode",
-          "metadata": {
-            "name": "example",
-            "namespace": "test-operator"
           }
         }
       ]
@@ -381,6 +379,11 @@ spec:
       - description: Node pool label.
         displayName: Node pool label
         path: cloudStorage.nodePoolLabel
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:hidden'
+      - description: Cloud provider
+        displayName: Cloud provider
+        path: cloudStorage.provider
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:hidden'
       - description: The network configuration used by storage nodes
