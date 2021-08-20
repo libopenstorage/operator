@@ -3,21 +3,34 @@ ifndef DOCKER_HUB_REPO
     DOCKER_HUB_REPO := portworx
     $(warning DOCKER_HUB_REPO not defined, using '$(DOCKER_HUB_REPO)' instead)
 endif
-ifndef DOCKER_HUB_STORAGE_OPERATOR_IMAGE
-    DOCKER_HUB_STORAGE_OPERATOR_IMAGE := px-operator
-    $(warning DOCKER_HUB_STORAGE_OPERATOR_IMAGE not defined, using '$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE)' instead)
+ifndef DOCKER_HUB_OPERATOR_IMG
+    DOCKER_HUB_OPERATOR_IMG := px-operator
+    $(warning DOCKER_HUB_OPERATOR_IMG not defined, using '$(DOCKER_HUB_OPERATOR_IMG)' instead)
 endif
-ifndef DOCKER_HUB_STORAGE_OPERATOR_TAG
-    DOCKER_HUB_STORAGE_OPERATOR_TAG := latest
-    $(warning DOCKER_HUB_STORAGE_OPERATOR_TAG not defined, using '$(DOCKER_HUB_STORAGE_OPERATOR_TAG)' instead)
+ifndef DOCKER_HUB_OPERATOR_TAG
+    DOCKER_HUB_OPERATOR_TAG := latest
+    $(warning DOCKER_HUB_OPERATOR_TAG not defined, using '$(DOCKER_HUB_OPERATOR_TAG)' instead)
 endif
-
-STORAGE_OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TAG)
-STORAGE_OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_TEST_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG)
-PX_DOC_HOST ?= https://docs.portworx.com
-PX_INSTALLER_HOST ?= https://install.portworx.com
-PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-19.0.1
-PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/prometheus-community/helm-charts/$(PROMETHEUS_OPERATOR_HELM_CHARTS_TAG)/charts/kube-prometheus-stack/crds
+ifndef DOCKER_HUB_OPERATOR_TEST_IMG
+    DOCKER_HUB_OPERATOR_TEST_IMG := px-operator-test
+    $(warning DOCKER_HUB_OPERATOR_TEST_IMG not defined, using '$(DOCKER_HUB_OPERATOR_TEST_IMG)' instead)
+endif
+ifndef DOCKER_HUB_OPERATOR_TEST_TAG
+    DOCKER_HUB_OPERATOR_TEST_TAG := latest
+    $(warning DOCKER_HUB_OPERATOR_TEST_TAG not defined, using '$(DOCKER_HUB_OPERATOR_TEST_TAG)' instead)
+endif
+ifndef DOCKER_HUB_BUNDLE_IMG
+    DOCKER_HUB_BUNDLE_IMG := portworx-certified-bundle
+    $(warning DOCKER_HUB_BUNDLE_IMG not defined, using '$(DOCKER_HUB_BUNDLE_IMG)' instead)
+endif
+ifndef DOCKER_HUB_REGISTRY_IMG
+    DOCKER_HUB_REGISTRY_IMG := px-operator-registry
+    $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
+endif
+ifndef BASE_REGISTRY_IMG
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.6.0
+    $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
+endif
 
 HAS_GOMODULES := $(shell go help mod why 2> /dev/null)
 
@@ -49,7 +62,19 @@ GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
 
 VERSION = $(RELEASE_VER)-$(GIT_SHA)
-OLM_VERSION = $(RELEASE_VER)-$(BUILD_VER)-$(GIT_SHA)
+
+OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_IMG):$(DOCKER_HUB_OPERATOR_TAG)
+OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_TEST_IMG):$(DOCKER_HUB_OPERATOR_TEST_TAG)
+BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(RELEASE_VER)
+REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(RELEASE_VER)
+PX_DOC_HOST ?= https://docs.portworx.com
+PX_INSTALLER_HOST ?= https://install.portworx.com
+PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-19.0.1
+PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/prometheus-community/helm-charts/$(PROMETHEUS_OPERATOR_HELM_CHARTS_TAG)/charts/kube-prometheus-stack/crds
+
+BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
+RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
+BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d )
 
 LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VERSION)"
 BUILD_OPTIONS := -ldflags=$(LDFLAGS)
@@ -57,7 +82,7 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test
 
-all: operator pretest
+all: operator pretest downloads
 
 vendor-update:
 	go mod download
@@ -140,11 +165,12 @@ integration-test:
 	@cd test/integration_test && go test -tags integrationtest -v -c -o operator.test
 
 integration-test-container:
-	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_TEST_IMG) -f Dockerfile ."
-	@cd test/integration_test && sudo docker build --tag $(STORAGE_OPERATOR_TEST_IMG) -f Dockerfile .
+	@echo "Building operator test container $(OPERATOR_TEST_IMG)"
+	@cd test/integration_test && docker build --tag $(OPERATOR_TEST_IMG) -f Dockerfile .
 
 integration-test-deploy:
-	sudo docker push $(STORAGE_OPERATOR_TEST_IMG)
+	@echo "Pushing operator test container $(OPERATOR_TEST_IMG)"
+	docker push $(OPERATOR_TEST_IMG)
 
 codegen:
 	@echo "Generating CRD"
@@ -155,24 +181,57 @@ operator:
 	@cd cmd && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 
 container:
-	@echo "Building container: docker build --tag $(STORAGE_OPERATOR_IMG) -f Dockerfile ."
-	sudo docker build --tag $(STORAGE_OPERATOR_IMG) -f build/Dockerfile .
+	@echo "Building operator image $(OPERATOR_IMG)"
+	docker build --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
 deploy:
-	docker push $(STORAGE_OPERATOR_IMG)
+	@echo "Pushing operator image $(OPERATOR_IMG)"
+	docker push $(OPERATOR_IMG)
 
-deploy-catalog:
-	@echo "Pushing operator catalog $(QUAY_STORAGE_OPERATOR_REPO)/$(QUAY_STORAGE_OPERATOR_APP):$(OLM_VERSION)"
-	docker run -it --rm \
-		-v $(BASE_DIR)/deploy:/deploy \
-	  -e QUAY_TOKEN="$$QUAY_TOKEN" \
-		python:3 bash -c "pip3 install operator-courier==2.1.11 && \
-			operator-courier --verbose push /deploy/olm-catalog/portworx $(QUAY_STORAGE_OPERATOR_REPO) $(QUAY_STORAGE_OPERATOR_APP) $(OLM_VERSION) \"$$QUAY_TOKEN\""
-
-verify-catalog:
+verify-bundle-dir:
 	docker run -it --rm \
 		-v $(BASE_DIR)/deploy:/deploy \
 		python:3 bash -c "pip3 install operator-courier==2.1.11 && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
+
+bundle: clean-bundle build-bundle deploy-bundle
+
+build-bundle:
+	@rm -rf $(RELEASE_BUNDLE_DIR)/manifests $(RELEASE_BUNDLE_DIR)/metadata $(RELEASE_BUNDLE_DIR)/bundle.Dockerfile
+	@rm -rf $(RELEASE_BUNDLE_DIR)/bundle_* $(RELEASE_BUNDLE_DIR)/bundle.Dockerfile
+	@echo "Building operator bundle image $(BUNDLE_IMG)"
+	opm alpha bundle build \
+		-d $(RELEASE_BUNDLE_DIR) -u $(RELEASE_BUNDLE_DIR) \
+		-b docker -t $(BUNDLE_IMG)
+
+deploy-bundle:
+	@echo "Pushing operator bundle image $(BUNDLE_IMG)"
+	docker push $(BUNDLE_IMG)
+
+validate-bundle:
+	opm alpha bundle validate -b docker -t $(BUNDLE_IMG)
+
+clean-bundle:
+	@rm -f bundle.Dockerfile
+	@for version_dir in $(BUNDLE_VERSIONS); do \
+		echo "Cleaning bundle directory $${version_dir}"; \
+		rm -rf $${version_dir}/manifests; \
+		rm -rf $${version_dir}/metadata; \
+		rm -rf $${version_dir}/bundle_*; \
+		rm -rf $${version_dir}/bundle.Dockerfile; \
+	done
+
+catalog: build-catalog deploy-catalog
+
+build-catalog:
+	@echo "Building operator registry image $(REGISTRY_IMG)"
+	opm index add -u docker -p docker \
+		--bundles docker.io/$(BUNDLE_IMG) \
+		--from-index $(BASE_REGISTRY_IMG) \
+		--tag $(REGISTRY_IMG)
+
+deploy-catalog:
+	@echo "Pushing operator registry image $(REGISTRY_IMG)"
+	docker push $(REGISTRY_IMG)
 
 downloads: getconfigs get-release-manifest
 
@@ -204,8 +263,9 @@ mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
 	mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
 
-clean: clean-release-manifest
-	-rm -rf $(BIN)
-	@echo "Deleting image "$(STORAGE_OPERATOR_IMG)
-	-sudo docker rmi -f $(STORAGE_OPERATOR_IMG)
-	go clean -i $(PKGS)
+clean: clean-release-manifest clean-bundle
+	@echo "Cleaning up binaries"
+	@rm -rf $(BIN)
+	@go clean -i $(PKGS)
+	@echo "Deleting image "$(OPERATOR_IMG)
+	@docker rmi -f $(OPERATOR_IMG)
