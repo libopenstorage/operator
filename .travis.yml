@@ -1,25 +1,28 @@
 sudo: required
-dist: trusty
+dist: focal
 language: go
 go:
   - 1.15.x
+before_install:
+  - sudo wget -O opm https://github.com/operator-framework/operator-registry/releases/latest/download/linux-amd64-opm
+  - sudo chmod +x opm
+  - sudo mv opm /usr/local/bin/opm
 script:
   - |
     if [ "${TRAVIS_BRANCH}" == "px-rel-1.7.0" ]; then
-      export DOCKER_HUB_STORAGE_OPERATOR_TAG=1.7.0-dev
-      export DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG=latest
-      export BUILD_VER="${TRAVIS_BUILD_NUMBER}"
+      export DOCKER_HUB_OPERATOR_TAG=1.7.0-dev
+      export DOCKER_HUB_OPERATOR_TEST_TAG=1.7.0-dev
     else
-      export DOCKER_HUB_STORAGE_OPERATOR_TAG=`git rev-parse --short HEAD`
-      export DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG=`git rev-parse --short HEAD`
+      export DOCKER_HUB_OPERATOR_TAG=`git rev-parse --short HEAD`
+      export DOCKER_HUB_OPERATOR_TEST_TAG=`git rev-parse --short HEAD`
     fi
-    make vendor-update && make && make downloads && make test && make verify-catalog && make container && make integration-test && make integration-test-container &&
+    make vendor-update all test verify-bundle-dir container integration-test integration-test-container &&
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
       docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
       make deploy;
       make integration-test-deploy;
       if [ "${TRAVIS_BRANCH}" == "px-rel-1.7.0" ]; then
-        make deploy-catalog
+        make bundle catalog
       fi
     fi
 notifications:

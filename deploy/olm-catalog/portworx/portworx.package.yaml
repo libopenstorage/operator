@@ -1,4 +1,4 @@
-packageName: portworx
+packageName: portworx-certified
 channels:
 - name: alpha
   currentCSV: portworx-operator.v1.7.0
