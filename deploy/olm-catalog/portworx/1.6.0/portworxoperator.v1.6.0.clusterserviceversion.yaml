@@ -12,6 +12,17 @@ metadata:
     createdAt: 2021-09-22T08:00:00Z
     support: Portworx, Inc
     certified: "true"
+    operatorframework.io/initialization-resource: |-
+      {
+        "apiVersion": "core.libopenstorage.org/v1",
+        "kind": "StorageCluster",
+        "metadata": {
+          "name": "portworx",
+          "annotations": {
+            "portworx.io/is-openshift": "true"
+          }
+        }
+      }
     alm-examples: |-
       [
         {
@@ -23,19 +34,6 @@ metadata:
             "annotations": {
               "portworx.io/is-openshift": "true"
             }
-          },
-          "spec": {
-            "autopilot": {
-              "enabled": false
-            }
-          }
-        },
-        {
-          "apiVersion": "core.libopenstorage.org/v1",
-          "kind": "StorageNode",
-          "metadata": {
-            "name": "example",
-            "namespace": "test-operator"
           }
         }
       ]
