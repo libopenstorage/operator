@@ -829,21 +829,70 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 }
 
+func getDefaultNodeAffinity() *v1.NodeAffinity {
+	return &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      "node-role.kubernetes.io/master",
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
+					},
+				},
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      "node-role.kubernetes.io/master",
+							Operator: v1.NodeSelectorOpExists,
+						},
+						{
+							Key:      "node-role.kubernetes.io/worker",
+							Operator: v1.NodeSelectorOpExists,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestStoragePodGetsScheduled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	cluster.Spec.Placement.NodeAffinity = getDefaultNodeAffinity()
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
 	// Kubernetes node with resources to create a pod
 	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode1.Labels["node-role.kubernetes.io/worker"] = ""
+
+	// This node is labeled as master and worker, storage pod will be scheduled on it.
 	k8sNode2 := createK8sNode("k8s-node-2", 1)
+	k8sNode2.Labels["node-role.kubernetes.io/master"] = ""
+	k8sNode2.Labels["node-role.kubernetes.io/worker"] = ""
+
+	// This node is labled as master, storage pod will not be scheduled on it.
+	k8sNode3 := createK8sNode("k8s-node-3", 1)
+	k8sNode3.Labels["node-role.kubernetes.io/master"] = ""
 
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3)
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
@@ -859,6 +908,9 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		Containers: []v1.Container{{Name: "test"}},
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
+	expectedPodSpec.Affinity = &v1.Affinity{
+		NodeAffinity: getDefaultNodeAffinity(),
+	}
 	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
@@ -866,6 +918,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 				constants.LabelKeyClusterName: cluster.Name,
 				constants.LabelKeyDriverName:  driverName,
 			},
+			Annotations: make(map[string]string),
 		},
 		Spec: expectedPodSpec,
 	}
@@ -907,7 +960,9 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 
 	// Verify a pod is created for the given node with correct owner ref
 	require.Len(t, podControl.Templates, 2)
+	expectedPodTemplate.Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
 	require.Equal(t, expectedPodTemplate, &podControl.Templates[0])
+	expectedPodTemplate.Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
 	require.Equal(t, expectedPodTemplate, &podControl.Templates[1])
 	require.Len(t, podControl.ControllerRefs, 2)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
@@ -6904,6 +6959,7 @@ func createStorageCluster() *corev1.StorageCluster {
 					MaxUnavailable: &maxUnavailable,
 				},
 			},
+			Placement: &corev1.PlacementSpec{},
 		},
 	}
 }
@@ -6987,7 +7043,8 @@ func createStoragePod(
 func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: nodeName,
+			Name:   nodeName,
+			Labels: make(map[string]string),
 		},
 		Status: v1.NodeStatus{
 			Allocatable: map[v1.ResourceName]resource.Quantity{

@@ -32,6 +32,15 @@ spec:
                 - "false"
               - key: node-role.kubernetes.io/master
                 operator: DoesNotExist
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                  - "false"
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
       hostNetwork: true
       hostPID: false
       containers:

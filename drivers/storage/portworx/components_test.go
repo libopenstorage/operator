@@ -4083,6 +4083,23 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 									},
 								},
 							},
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpExists,
+									},
+									{
+										Key:      "node-role.kubernetes.io/worker",
+										Operator: v1.NodeSelectorOpExists,
+									},
+								},
+							},
 						},
 					},
 				},
