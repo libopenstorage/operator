@@ -1403,7 +1403,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[2])
 }
 
-// When a StorageNode is unhealthy, and the storage node is not a k8s node. we should not update storage pod as
+// When a StorageNode is unhealthy, and the storage node is not a k8s node. we should not upgrade storage pod as
 // it may cause storage cluster to lose quorum.  This could happen if a user removes a k8s node from the cluster
 // for maintenance, and meanwhile tries to uppgrade portworx.
 func TestStoragePodUpdateWhenStorageNodeUnhealthy(t *testing.T) {
@@ -1497,6 +1497,36 @@ func TestStoragePodUpdateWhenStorageNodeUnhealthy(t *testing.T) {
 
 	// The old pod be marked for deletion.
 	require.NotEmpty(t, podControl.DeletePodName)
+
+	// Reset the test for upgrade.
+	podControl.DeletePodName = []string{}
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.ImagePullSecret = stringPtr("updated-pull-secret")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	// TestCase: Storage node 0, which is also a k8s node, is unhealthy, no storage pod should be upgraded.
+	storageNodes[0].Status = storageapi.Status_STATUS_ERROR
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
+
+	// TestCase: There is a k8s node should not run storage pod, but storage node exists and is unhealthy.
+	// no storage pod should be upgraded.
+	storageNodes[0].Status = storageapi.Status_STATUS_OK
+	storageNodes[3].Status = storageapi.Status_STATUS_ERROR
+
+	k8sNode4 := createK8sNode("k8s-node-4", 10)
+	k8sNode4.Labels["node-role.kubernetes.io/master"] = ""
+	k8sClient.Create(context.TODO(), k8sNode4)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, podControl.DeletePodName)
 }
 
 func TestFailedStoragePodsGetRemoved(t *testing.T) {
@@ -5173,6 +5203,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
@@ -7465,24 +7496,8 @@ func createStorageNode(nodeName string, healthy bool) *storageapi.StorageNode {
 		status = storageapi.Status_STATUS_ERROR
 	}
 	return &storageapi.StorageNode{
-		Id:                   "",
-		Cpu:                  0,
-		MemTotal:             0,
-		MemUsed:              0,
-		MemFree:              0,
-		AvgLoad:              0,
-		Status:               status,
-		Disks:                nil,
-		Pools:                nil,
-		MgmtIp:               "",
-		DataIp:               "",
-		Hostname:             "",
-		NodeLabels:           nil,
-		SchedulerNodeName:    nodeName,
-		HWType:               0,
-		XXX_NoUnkeyedLiteral: struct{}{},
-		XXX_unrecognized:     nil,
-		XXX_sizecache:        0,
+		Status:            status,
+		SchedulerNodeName: nodeName,
 	}
 }
 

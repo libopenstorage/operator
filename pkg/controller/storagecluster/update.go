@@ -414,8 +414,13 @@ func (c *Controller) getUnavailableNumbers(
 			"update of storage cluster  %#v: %v", cluster, err)
 	}
 	storageNodeMap := make(map[string]*storageapi.StorageNode)
+	var nonK8sStorageNodes []*storageapi.StorageNode
 	for _, storageNode := range storageNodeList {
-		storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+		if len(storageNode.SchedulerNodeName) == 0 {
+			nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
+		} else {
+			storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+		}
 	}
 
 	var numUnavailable, desiredNumberScheduled int
@@ -465,8 +470,12 @@ func (c *Controller) getUnavailableNumbers(
 		}
 	}
 
-	// For the storage nodes that do not have a corresponding k8s node.
 	for _, storageNode := range storageNodeMap {
+		nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
+	}
+
+	// For the storage nodes that do not have a corresponding k8s node.
+	for _, storageNode := range nonK8sStorageNodes {
 		if storageNode.Status != storageapi.Status_STATUS_OK {
 			logrus.WithField("StorageNode", storageNode).Info("Storage node is not healthy")
 			numUnavailable++
