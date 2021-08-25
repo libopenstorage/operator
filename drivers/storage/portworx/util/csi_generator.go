@@ -236,7 +236,7 @@ func (c *CSIConfiguration) DriverBasePath() string {
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 	provisionerImage := "docker.io/openstorage/csi-provisioner:v1.6.1-1"
-	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v4.0.0"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v4.2.1"
 
 	// For k8s 1.19 and earlier, use older version
 	if g.kubeVersion.LessThan(k8sVer1_20) {
@@ -250,10 +250,10 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 
 	return &CSIImages{
 		Attacher:      "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar: "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
+		NodeRegistrar: "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.3.0",
 		Provisioner:   provisionerImage,
 		Snapshotter:   snapshotterImage,
-		Resizer:       "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
+		Resizer:       "k8s.gcr.io/sig-storage/csi-resizer:v1.3.0",
 	}
 }
 
