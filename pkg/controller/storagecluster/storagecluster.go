@@ -818,6 +818,11 @@ func (c *Controller) podsShouldBeOnNode(
 	cluster *corev1.StorageCluster,
 ) (nodesNeedingStoragePods, podsToDelete []string, err error) {
 	shouldRun, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
+	logrus.WithFields(logrus.Fields{
+		"node":                  node.Name,
+		"shouldRun":             shouldRun,
+		"shouldContinueRunning": shouldContinueRunning,
+	}).WithError(err).Debug("check node should run storage pod")
 	if err != nil {
 		return
 	}
@@ -905,6 +910,11 @@ func (c *Controller) nodeShouldRunStoragePod(
 	taints := node.Spec.Taints
 	fitsNodeName, fitsNodeAffinity, fitsTaints := checkPredicates(newPod, node, taints)
 	if !fitsNodeName || !fitsNodeAffinity {
+		logrus.WithFields(logrus.Fields{
+			"nodeName":         node.Name,
+			"fitsNodeName":     fitsNodeName,
+			"fitsNodeAffinity": fitsNodeAffinity,
+		}).Debug("pod does not fit")
 		return false, false, nil
 	}
 
@@ -913,6 +923,10 @@ func (c *Controller) nodeShouldRunStoragePod(
 		shouldContinueRunning := v1helper.TolerationsTolerateTaintsWithFilter(newPod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
 			return t.Effect == v1.TaintEffectNoExecute
 		})
+		logrus.WithFields(logrus.Fields{
+			"nodeName":              node.Name,
+			"shouldContinueRunning": shouldContinueRunning,
+		}).Debug("pod does not fit taints")
 		return false, shouldContinueRunning, nil
 	}
 
