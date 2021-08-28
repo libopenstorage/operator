@@ -1,6 +1,7 @@
 package storage
 
 import (
+	storageapi "github.com/libopenstorage/openstorage/api"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -73,6 +74,8 @@ type ClusterPluginInterface interface {
 	// If the storage service has already been deleted then it will return nil
 	// If the storage service deletion is in progress then it will return the appropriate status
 	DeleteStorage(*corev1.StorageCluster) (*corev1.ClusterCondition, error)
+	// GetStorageNodes returns the current storage node list.
+	GetStorageNodes(cluster *corev1.StorageCluster) ([]*storageapi.StorageNode, error)
 }
 
 var (
