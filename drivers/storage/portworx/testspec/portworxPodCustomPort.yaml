@@ -31,10 +31,6 @@ spec:
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
-            - name: "CSI_ENDPOINT"
-              value: "unix:///var/lib/kubelet/csi-plugins/com.openstorage.pxd/csi.sock"
-            - name: "PORTWORX_CSIVERSION"
-              value: "0.3"
             - name: "PX_NAMESPACE"
               value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"
@@ -116,7 +112,7 @@ spec:
             path: /opt/pwx
         - name: osddriver
           hostPath:
-            path: /var/lib/osd/driver            
+            path: /var/lib/osd/driver
         - name: procmount
           hostPath:
             path: /proc
@@ -132,11 +128,3 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins
-            type: DirectoryOrCreate
-        - name: csi-driver-path
-          hostPath:
-            path: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
-            type: DirectoryOrCreate

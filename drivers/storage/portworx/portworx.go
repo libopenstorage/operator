@@ -629,12 +629,15 @@ func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
 		}
 	}
 
-	// Enable CSI flag by default
-	if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
-		if toUpdate.Spec.FeatureGates == nil {
-			toUpdate.Spec.FeatureGates = make(map[string]string)
+	if t.isK3s || toUpdate.Spec.Version == "" {
+		// Enable CSI if running in k3s environment or
+		// if this is a new Portworx installation
+		if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
+			if toUpdate.Spec.FeatureGates == nil {
+				toUpdate.Spec.FeatureGates = make(map[string]string)
+			}
+			toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
 		}
-		toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
 	}
 
 	setSecuritySpecDefaults(toUpdate)

@@ -887,9 +887,16 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		},
 	}
 
-	// Enable CSI by default
+	// Enable CSI by default for a new install
 	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
+
+	// Don't enable CSI by default for existing cluster
+	cluster.Spec.FeatureGates = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.False(t, pxutil.IsCSIEnabled(cluster))
+	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Enable CSI if running in k3s cluster
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
