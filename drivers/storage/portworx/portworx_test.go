@@ -5849,7 +5849,13 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
-	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap)
+	pureConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pureStorageCloudDriveConfigMap,
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
 	driver := portworx{
 		k8sClient: k8sClient,
 	}
@@ -5857,7 +5863,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	configMaps := &v1.ConfigMapList{}
 	err := testutil.List(k8sClient, configMaps)
 	require.NoError(t, err)
-	require.Len(t, configMaps.Items, 2)
+	require.Len(t, configMaps.Items, 3)
 
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)

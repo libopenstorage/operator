@@ -65,6 +65,7 @@ const (
 	pxKvdbPrefix                      = "pwx/"
 	internalEtcdConfigMapPrefix       = "px-bootstrap-"
 	cloudDriveConfigMapPrefix         = "px-cloud-drive-"
+	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
 	bootstrapCloudDriveNamespace      = "kube-system"
 )
 
@@ -132,6 +133,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 	configMaps := []string{
 		fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName),
 		fmt.Sprintf("%s%s", cloudDriveConfigMapPrefix, strippedClusterName),
+		pureStorageCloudDriveConfigMap,
 	}
 	for _, cm := range configMaps {
 		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, bootstrapCloudDriveNamespace)
