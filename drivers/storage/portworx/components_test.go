@@ -1502,7 +1502,7 @@ func verifyPVCControllerInstall(
 	serviceAccountList := &v1.ServiceAccountList{}
 	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
-	require.Len(t, serviceAccountList.Items, 3)
+	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PVCServiceAccountName, cluster.Namespace)
@@ -1516,7 +1516,7 @@ func verifyPVCControllerInstall(
 	clusterRoleList := &rbacv1.ClusterRoleList{}
 	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
-	require.Len(t, clusterRoleList.Items, 3)
+	require.Len(t, clusterRoleList.Items, 2)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "pvcControllerClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
@@ -1530,7 +1530,7 @@ func verifyPVCControllerInstall(
 	crbList := &rbacv1.ClusterRoleBindingList{}
 	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
-	require.Len(t, crbList.Items, 3)
+	require.Len(t, crbList.Items, 2)
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "pvcControllerClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
@@ -1958,7 +1958,7 @@ func TestLighthouseInstall(t *testing.T) {
 	serviceAccountList := &v1.ServiceAccountList{}
 	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
-	require.Len(t, serviceAccountList.Items, 4)
+	require.Len(t, serviceAccountList.Items, 3)
 
 	sa := &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.LhServiceAccountName, cluster.Namespace)
@@ -1972,7 +1972,7 @@ func TestLighthouseInstall(t *testing.T) {
 	clusterRoleList := &rbacv1.ClusterRoleList{}
 	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
-	require.Len(t, clusterRoleList.Items, 4)
+	require.Len(t, clusterRoleList.Items, 3)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "lighthouseClusterRole.yaml")
 	actualCR := &rbacv1.ClusterRole{}
@@ -1986,7 +1986,7 @@ func TestLighthouseInstall(t *testing.T) {
 	crbList := &rbacv1.ClusterRoleBindingList{}
 	err = testutil.List(k8sClient, crbList)
 	require.NoError(t, err)
-	require.Len(t, crbList.Items, 4)
+	require.Len(t, crbList.Items, 3)
 
 	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "lighthouseClusterRoleBinding.yaml")
 	actualCRB := &rbacv1.ClusterRoleBinding{}
@@ -2001,7 +2001,7 @@ func TestLighthouseInstall(t *testing.T) {
 	serviceList := &v1.ServiceList{}
 	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
-	require.Len(t, serviceList.Items, 4)
+	require.Len(t, serviceList.Items, 3)
 
 	expectedLhService := testutil.GetExpectedService(t, "lighthouseService.yaml")
 	lhService := &v1.Service{}
@@ -8538,30 +8538,30 @@ func TestDisableCSI_0_3(t *testing.T) {
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	// Remove CSI flag. Default should be enabled.
+	// Remove CSI flag. Default should be disabled.
 	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
 	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
 	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	statefulSet = &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDisableCSI_1_0(t *testing.T) {
@@ -8645,34 +8645,34 @@ func TestDisableCSI_1_0(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 
-	// Remove CSI flag. Default should be enabled.
+	// Remove CSI flag. Default should be disabled.
 	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	cr = &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	crb = &rbacv1.ClusterRoleBinding{}
 	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	service = &v1.Service{}
 	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
-	require.NoError(t, err)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestMonitoringMetricsEnabled(t *testing.T) {

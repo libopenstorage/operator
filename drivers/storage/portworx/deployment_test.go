@@ -122,7 +122,7 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
-	assert.Len(t, actual.Containers[0].Env, 7)
+	assert.Len(t, actual.Containers[0].Env, 6)
 	var regConfigEnv *v1.EnvVar
 	var regSecretEnv *v1.EnvVar
 	for _, env := range actual.Containers[0].Env {
@@ -143,7 +143,7 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 
 	assert.Len(t, actual.ImagePullSecrets, 1)
 	assert.Equal(t, expectedPullSecret, actual.ImagePullSecrets[0])
-	assert.Len(t, actual.Containers[0].Env, 8)
+	assert.Len(t, actual.Containers[0].Env, 6)
 	regConfigEnv = nil
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == "REGISTRY_CONFIG" {
@@ -3169,7 +3169,7 @@ func TestIKSEnvVariables(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	assert.Len(t, actual.Containers[0].Env, 7)
+	assert.Len(t, actual.Containers[0].Env, 5)
 	var podIPEnv *v1.EnvVar
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == "PX_POD_IP" {
@@ -3184,7 +3184,7 @@ func TestIKSEnvVariables(t *testing.T) {
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	assert.Len(t, actual.Containers[0].Env, 6)
+	assert.Len(t, actual.Containers[0].Env, 4)
 	podIPEnv = nil
 	for _, env := range actual.Containers[0].Env {
 		if env.Name == "PX_POD_IP" {
