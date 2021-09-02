@@ -1989,6 +1989,15 @@ func TestPodSpecForK3s(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// retry w/ RKE2 version identifier0 -- should also default to K3s distro tweaks
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.21.4+rke2r2",
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
 }
 
 func TestPodSpecForBottleRocketAMI(t *testing.T) {

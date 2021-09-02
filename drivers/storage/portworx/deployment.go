@@ -1541,7 +1541,7 @@ func getDefaultVolumeInfoList() []volumeInfo {
 
 func isK3sCluster(ext string) bool {
 	if len(ext) > 0 {
-		return strings.HasPrefix(ext[1:], "k3s")
+		return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
 	}
 	return false
 }
