@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/go-version"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
-	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/go-version"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
+	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -48,6 +49,9 @@ const (
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
+	// Stork scheduler cannot run with kube-scheduler image > v1.22
+	pinnedStorkSchedulerVersion          = "1.21.4"
+	minK8SVersionForPinnedStorkScheduler = "1.22.0"
 )
 
 const (
@@ -763,9 +767,21 @@ func (c *Controller) createStorkSchedDeployment(
 	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
 		kubeSchedImage = "k8s.gcr.io/kube-scheduler-amd64"
 	}
+
+	k8sVersion, err := version.NewVersion(minK8SVersionForPinnedStorkScheduler)
+	if err != nil {
+		logrus.WithError(err).Errorf("Could not parse version %s", minK8SVersionForPinnedStorkScheduler)
+		return err
+	}
+
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sVersion) {
+		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
+	} else {
+		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
+	}
 	imageName := util.GetImageURN(
 		cluster,
-		kubeSchedImage+":v"+c.kubernetesVersion.String(),
+		kubeSchedImage,
 	)
 
 	command := []string{
