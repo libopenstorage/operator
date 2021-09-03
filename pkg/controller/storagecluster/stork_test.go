@@ -18,7 +18,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestStorkInstallation(t *testing.T) {
@@ -278,6 +279,126 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.Empty(t, storkStorageClass.OwnerReferences)
 	require.Equal(t, "stork-snapshot", storkStorageClass.Provisioner)
 	require.True(t, *storkStorageClass.AllowVolumeExpansion)
+}
+
+func TestStorkSchedulerK8SVersions(t *testing.T) {
+	var (
+		k8sVersionStr string
+		cluster       *corev1.StorageCluster
+		k8sClient     client.Client
+	)
+	setup := func() {
+		mockCtrl := gomock.NewController(t)
+		defer mockCtrl.Finish()
+
+		cluster = &corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-cluster",
+				Namespace: "kube-test",
+			},
+			Spec: corev1.StorageClusterSpec{
+				Stork: &corev1.StorkSpec{
+					Enabled: true,
+					Image:   "osd/stork:test",
+					Env: []v1.EnvVar{
+						{
+							Name:  "TEST",
+							Value: "test-value",
+						},
+						{
+							Name: "SECRET_ENV",
+							ValueFrom: &v1.EnvVarSource{
+								SecretKeyRef: &v1.SecretKeySelector{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "secret-name",
+									},
+									Key: "secret-key",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+		k8sVersion, _ := version.NewVersion(k8sVersionStr)
+		driver := testutil.MockDriver(mockCtrl)
+		k8sClient = testutil.FakeK8sClient(cluster)
+		controller := Controller{
+			client:              k8sClient,
+			Driver:              driver,
+			kubernetesVersion:   k8sVersion,
+			lastPodCreationTime: make(map[string]time.Time),
+		}
+
+		driverEnvs := map[string]*v1.EnvVar{
+			"PX_NAMESPACE": {
+				Name:  "PX_NAMESPACE",
+				Value: cluster.Namespace,
+			},
+		}
+		driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+		driver.EXPECT().GetStorkEnvMap(cluster).
+			Return(driverEnvs).
+			AnyTimes()
+
+		err := controller.syncStork(cluster)
+		require.NoError(t, err)
+	}
+
+	k8sVersionStr = "1.22.0"
+	setup()
+
+	expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedVersionedDeployment.yaml")
+	schedDeployment := &appsv1.Deployment{}
+	err := testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+	require.Len(t, schedDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+
+	k8sVersionStr = "1.22.5"
+	setup()
+
+	expectedSchedDeployment = testutil.GetExpectedDeployment(t, "storkSchedVersionedDeployment.yaml")
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+	require.Len(t, schedDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+
+	k8sVersionStr = "1.21.0"
+	setup()
+
+	expectedSchedDeployment = testutil.GetExpectedDeployment(t, "storkSchedVersionedDeployment.yaml")
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+	require.Len(t, schedDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, "1.21.4", k8sVersionStr, -1)
+	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 }
 
 func TestStorkWithoutImage(t *testing.T) {
