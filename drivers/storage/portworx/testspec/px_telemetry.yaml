@@ -107,12 +107,24 @@ spec:
           args:
             - "-Dserver.rest_server.core_pool_size=2"
             - "-Dstandalone.controller_sn=testNode"
+          livenessProbe:
+            periodSeconds: 30
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
           name: telemetry
           resources:
             requests:
               memory: "256Mi"
             limits:
               memory: "512Mi"
+          readinessProbe:
+            periodSeconds: 30
+            httpGet:
+              host: 127.0.0.1
+              path: /1.0/status
+              port: 1970
           securityContext:
             privileged: true
           terminationMessagePolicy: File
