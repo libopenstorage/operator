@@ -648,6 +648,26 @@ func (t *template) telemetryContainer() *v1.Container {
 				Value: t.cluster.Namespace,
 			},
 		},
+		LivenessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+			PeriodSeconds: 30,
+		},
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+			PeriodSeconds: 30,
+		},
 		SecurityContext: &v1.SecurityContext{
 			Privileged: boolPtr(true),
 		},
