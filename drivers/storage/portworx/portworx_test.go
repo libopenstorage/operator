@@ -218,11 +218,6 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.True(t, *cluster.Spec.Storage.UseAll)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
-	// By default monitoring is enabled since test uses image 3.0.0 (2.8+)
-	require.NotNil(t, cluster.Spec.Monitoring)
-	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
-	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
-
 	// Use default image from release manifest when spec.image has empty string
 	cluster.Spec.Image = "  "
 	cluster.Spec.Version = "  "
@@ -331,6 +326,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Placement = &corev1.PlacementSpec{}
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+
+	// By default monitoring is not enabled
+	require.Nil(t, cluster.Spec.Monitoring)
 
 	// If metrics was enabled previosly, enable it in prometheus spec
 	// and remove the enableMetrics config
@@ -6379,16 +6377,22 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.7.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
 		},
 	}
 
-	// Don't enable telemetry by default < 2.8.0
+	// Disable telemetry for px version < 2.8.0
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Empty(t, cluster.Spec.Monitoring)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 
-	// Enable telemetry by default for 2.8.0
+	// Allow telemetry to be enabled for 2.8.0
 	cluster.Spec.Image = "px/image:2.8.0"
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.NotEmpty(t, cluster.Spec.Monitoring) // telemetry is under monitoring
 	require.NotEmpty(t, cluster.Spec.Monitoring.Telemetry)
