@@ -587,14 +587,6 @@ func setPortworxDefaults(toUpdate *corev1.StorageCluster) {
 	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxVer2_8) {
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
 		toUpdate.Spec.Monitoring.Telemetry.Image = ""
-	} else if toUpdate.Spec.Monitoring == nil || toUpdate.Spec.Monitoring.Telemetry == nil {
-		// enable telemetry for 2.8+ if not specified in spec by user
-		if t.pxVersion.GreaterThanOrEqual(pxVer2_8) {
-			if toUpdate.Spec.Monitoring == nil {
-				toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
-			}
-			toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{Enabled: true}
-		}
 	}
 
 	setNodeSpecDefaults(toUpdate)
