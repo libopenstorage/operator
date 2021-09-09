@@ -295,7 +295,7 @@ func (p *portworx) GetStoragePodSpec(
 		t.cloudConfig = cloudConfig
 	}
 
-	containers := t.portworxContainer()
+	containers := t.portworxContainer(cluster)
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
@@ -482,7 +482,7 @@ func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Con
 	}
 }
 
-func (t *template) portworxContainer() v1.Container {
+func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Container {
 	pxImage := util.GetImageURN(t.cluster, t.cluster.Spec.Image)
 	sc := &v1.SecurityContext{
 		Privileged: boolPtr(true),
@@ -495,7 +495,7 @@ func (t *template) portworxContainer() v1.Container {
 			},
 		}
 	}
-	return v1.Container{
+	container := v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
 		ImagePullPolicy: t.imagePullPolicy,
@@ -526,6 +526,10 @@ func (t *template) portworxContainer() v1.Container {
 		SecurityContext:        sc,
 		VolumeMounts:           t.getVolumeMounts(),
 	}
+	if cluster.Spec.Resources != nil {
+		container.Resources = *cluster.Spec.Resources
+	}
+	return container
 }
 
 func (t *template) kvdbContainer() v1.Container {
