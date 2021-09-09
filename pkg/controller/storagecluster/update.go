@@ -698,6 +698,8 @@ func matchSelectedFields(
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.RuntimeOpts, currentSpec.RuntimeOpts) {
 		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.Resources, currentSpec.Resources) {
+		return false, nil
 	} else if !elementsMatch(oldSpec.Env, currentSpec.Env) {
 		return false, nil
 	} else if !elementsMatch(oldSpec.Volumes, currentSpec.Volumes) {

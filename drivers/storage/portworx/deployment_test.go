@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -201,6 +202,40 @@ func TestPodSpecWithTolerations(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, kvdbPodSpec)
 	require.ElementsMatch(t, tolerations, kvdbPodSpec.Tolerations)
+}
+
+func TestPodSpecWithPortworxContainerResources(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{},
+	}
+
+	// Case 1: Empty resources during deployment
+	driver := portworx{}
+	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assert.Len(t, podSpec.Containers, 1)
+	assert.Equal(t, v1.ResourceRequirements{}, podSpec.Containers[0].Resources)
+
+	// Case 2: Add resources during deployment
+	resources := v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("4Gi"),
+			v1.ResourceCPU:    resource.MustParse("4"),
+		},
+	}
+	cluster.Spec.Resources = &resources
+
+	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assert.Len(t, podSpec.Containers, 1)
+	assert.Equal(t, resources, podSpec.Containers[0].Resources)
 }
 
 func TestPodSpecWithEnvOverrides(t *testing.T) {

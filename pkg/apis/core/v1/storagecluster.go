@@ -105,6 +105,8 @@ type StorageClusterSpec struct {
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
+	// Resource requirements for portworx container in a storage cluster pod, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // VolumeSpec describes a volume that needs to be mounted inside a container

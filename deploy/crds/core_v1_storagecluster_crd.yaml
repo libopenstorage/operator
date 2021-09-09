@@ -55,6 +55,20 @@ spec:
                       storage cluster components. The key specifies component in format of "kind/component",
                       e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
                       string that contains custom annotation key and value pairs.
+              resources:
+                type: object
+                description: Specifies the compute resource requirements for the storage pod.
+                properties:
+                  requests:
+                    type: object
+                    description: Requested resources for the storage pod.
+                    properties:
+                      memory:
+                        type: string
+                        description: Requested memory for the storage pod.
+                      cpu:
+                        type: string
+                        description: Requested cpu for the storage pod.
               image:
                 type: string
                 description: Docker image of the storage driver.
