@@ -57,7 +57,7 @@ func testUpgradeStorageCluster(t *testing.T) {
 
 		// Validate cluster deployment
 		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateUpgradeTimeout, defaultValidateUpgradeRetryInterval, "")
+		err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateUpgradeTimeout, defaultValidateUpgradeRetryInterval, true, "")
 		require.NoError(t, err)
 	}
 

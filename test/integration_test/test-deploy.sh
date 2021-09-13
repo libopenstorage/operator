@@ -110,8 +110,14 @@ kubectl create -f /testspecs/operator-test-pod.yaml
 
 for i in $(seq 1 100) ; do
     test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
-    if [ "$test_status" == "Running" ] || [ "$test_status" == "Completed" ]; then
+    if [ "$test_status" == "Running" ] || [ "$test_status" == "Succeeded" ]; then
         break
+    elif [ "$test_status" == "Failed" ]; then
+        kubectl -n kube-system logs operator-test
+
+        echo ""
+        echo "Tests failed"
+        exit 1
     else
         echo "Test hasn't started yet, status: $test_status"
         sleep 5
@@ -120,6 +126,7 @@ done
 
 kubectl -n kube-system logs -f operator-test
 for i in $(seq 1 100) ; do
+	sleep 5  # Give the test pod a chance to finish first after the logs stop
     test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
     if [ "$test_status" == "Running" ]; then
         echo "Test is still running, status: $test_status"

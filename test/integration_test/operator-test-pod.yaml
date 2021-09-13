@@ -51,6 +51,7 @@ spec:
     - -t
     - /operator.test
     - -test.v
+    - -test.failfast
     - -test.short=SHORT_FLAG
     - -portworx-spec-gen-url=PORTWORX_SPEC_GEN_URL
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
