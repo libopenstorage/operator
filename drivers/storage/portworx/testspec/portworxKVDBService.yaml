@@ -1,0 +1,16 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: portworx-kvdb-service
+  namespace: kube-test
+  labels:
+    name: portworx
+spec:
+  selector:
+    kvdb: "true"
+  type: ClusterIP
+  ports:
+    - name: px-kvdb
+      protocol: TCP
+      port: 9019
+      targetPort: 10016
