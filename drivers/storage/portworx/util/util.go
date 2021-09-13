@@ -41,6 +41,8 @@ const (
 	DefaultPortworxServiceAccountName = "portworx"
 	// PortworxServiceName name of the Portworx Kubernetes service
 	PortworxServiceName = "portworx-service"
+	// PortworxKVDBServiceName name of the Portworx KVDB Kubernetes service
+	PortworxKVDBServiceName = "portworx-kvdb-service"
 	// PortworxRESTPortName name of the Portworx API port
 	PortworxRESTPortName = "px-api"
 	// PortworxSDKPortName name of the Portworx SDK port

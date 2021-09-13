@@ -14,10 +14,6 @@ spec:
       protocol: TCP
       port: 9001
       targetPort: 10001
-    - name: px-kvdb
-      protocol: TCP
-      port: 9019
-      targetPort: 10016
     - name: px-sdk
       protocol: TCP
       port: 9020

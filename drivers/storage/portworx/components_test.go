@@ -192,6 +192,18 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPXService.Labels, pxService.Labels)
 	require.Equal(t, expectedPXService.Spec, pxService.Spec)
 
+	// Portworx KVDB Service
+	expectedPXKVDBService := testutil.GetExpectedService(t, "portworxKVDBService.yaml")
+	pxKVDBService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXKVDBService.Name, pxKVDBService.Name)
+	require.Equal(t, expectedPXKVDBService.Namespace, pxKVDBService.Namespace)
+	require.Len(t, pxKVDBService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxKVDBService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPXKVDBService.Labels, pxKVDBService.Labels)
+	require.Equal(t, expectedPXKVDBService.Spec, pxKVDBService.Spec)
+
 	// Portworx API Service
 	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService.yaml")
 	pxAPIService := &v1.Service{}
@@ -316,6 +328,37 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	err = testutil.List(k8sClient, dsList)
 	require.NoError(t, err)
 	require.Empty(t, dsList.Items)
+}
+
+func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: false,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx KVDB Services should not be created when internal KVDB is disabled
+	pxKVDBService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
@@ -1021,6 +1064,11 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 				pxutil.AnnotationServiceType: "ClusterIP",
 			},
 		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
 	}
 
 	err := driver.PreInstall(cluster)
@@ -1047,6 +1095,11 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
 
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
+
 	pxAPIService = &v1.Service{}
 	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
@@ -1063,6 +1116,11 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeNodePort, pxService.Spec.Type)
 
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, pxService.Spec.Type)
+
 	pxAPIService = &v1.Service{}
 	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
 	require.NoError(t, err)
@@ -1076,6 +1134,11 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 
 	pxService = &v1.Service{}
 	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
+
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
 
@@ -3893,7 +3956,7 @@ func TestCSIInstall(t *testing.T) {
 	serviceList := &v1.ServiceList{}
 	err = testutil.List(k8sClient, serviceList)
 	require.NoError(t, err)
-	require.Len(t, serviceList.Items, 3)
+	require.Len(t, serviceList.Items, 4)
 
 	expectedService := testutil.GetExpectedService(t, "csiService.yaml")
 	service := &v1.Service{}
