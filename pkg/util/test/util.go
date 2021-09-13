@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -349,6 +350,7 @@ func ValidateStorageCluster(
 	pxImageList map[string]string,
 	clusterSpec *corev1.StorageCluster,
 	timeout, interval time.Duration,
+	shouldStartSuccessfully bool,
 	kubeconfig ...string,
 ) error {
 	// Set kubeconfig
@@ -357,8 +359,20 @@ func ValidateStorageCluster(
 	}
 
 	// Validate StorageCluster
-	liveCluster, err := validateStorageClusterIsOnline(clusterSpec, timeout, interval)
-	if err != nil {
+	var liveCluster *corev1.StorageCluster
+	var err error
+	if shouldStartSuccessfully {
+		liveCluster, err = validateStorageClusterIsOnline(clusterSpec, timeout, interval)
+		if err != nil {
+			return err
+		}
+	} else {
+		// If we shouldn't start successfully, this is all we need to check
+		return validateStorageClusterIsFailed(clusterSpec, timeout, interval)
+	}
+
+	// Validate that spec matches live spec
+	if err = validateDeployedSpec(clusterSpec, liveCluster); err != nil {
 		return err
 	}
 
@@ -368,7 +382,7 @@ func ValidateStorageCluster(
 	}
 
 	// Get list of expected Portworx node names
-	expectedPxNodeNameList, err := getExpectedPxNodeNameList(clusterSpec)
+	expectedPxNodeNameList, err := GetExpectedPxNodeNameList(clusterSpec)
 	if err != nil {
 		return err
 	}
@@ -383,7 +397,6 @@ func ValidateStorageCluster(
 		return err
 	}
 
-	// TODO: Add validation to check what is expected (clusterSpec) and what actually got deployed (liveSpec)
 	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
 		return err
 	}
@@ -436,6 +449,41 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func sortNodesByNodeName(nodes []corev1.NodeSpec) func(i, j int) bool {
+	return func(i, j int) bool {
+		return nodes[i].Selector.NodeName < nodes[j].Selector.NodeName
+	}
+}
+
+func nodeSpecsToMaps(nodes []corev1.NodeSpec) map[string]*corev1.CloudStorageNodeSpec {
+	toReturn := map[string]*corev1.CloudStorageNodeSpec{}
+
+	for _, node := range nodes {
+		toReturn[node.Selector.NodeName] = node.CloudStorage
+	}
+
+	return toReturn
+}
+
+func validateDeployedSpec(expected, live *corev1.StorageCluster) error {
+	// Validate cloudStorage
+	if !reflect.DeepEqual(expected.Spec.CloudStorage, live.Spec.CloudStorage) {
+		return fmt.Errorf("deployed CloudStorage spec doesn't match expected")
+	}
+	// Validate kvdb
+	if !reflect.DeepEqual(expected.Spec.Kvdb, live.Spec.Kvdb) {
+		return fmt.Errorf("deployed Kvdb spec doesn't match expected")
+	}
+	// Validate nodes
+	if !reflect.DeepEqual(nodeSpecsToMaps(expected.Spec.Nodes), nodeSpecsToMaps(live.Spec.Nodes)) {
+		return fmt.Errorf("deployed Nodes spec doesn't match expected")
+	}
+
+	// TODO: validate more parts of the spec as we test with them
 
 	return nil
 }
@@ -653,7 +701,10 @@ func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) er
 	return nil
 }
 
-func getExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error) {
+// GetExpectedPxNodeNameList will get the list of node names that should be included
+// in the given Portworx cluster, by seeing if each non-master node matches the given
+// node selectors and affinities.
+func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error) {
 	var nodeNameListWithPxPods []string
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
@@ -1051,14 +1102,13 @@ func ConstructPxReleaseManifestURL(specGenURL string) (string, error) {
 	return u.String(), nil
 }
 
-func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
-	t := func() (interface{}, bool, error) {
+func validateStorageClusterInState(cluster *corev1.StorageCluster, status corev1.ClusterConditionStatus) func() (interface{}, bool, error) {
+	return func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
 		}
-
-		if cluster.Status.Phase != "Online" {
+		if cluster.Status.Phase != string(status) {
 			if cluster.Status.Phase == "" {
 				return nil, true, fmt.Errorf("failed to get cluster status")
 			}
@@ -1066,14 +1116,42 @@ func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, int
 		}
 		return cluster, false, nil
 	}
+}
 
-	out, err := task.DoRetryWithTimeout(t, timeout, interval)
+func validateAllStorageNodesInState(namespace string, status corev1.NodeConditionStatus) func() (interface{}, bool, error) {
+	return func() (interface{}, bool, error) {
+		// Get all StorageNodes
+		storageNodeList, err := operatorops.Instance().ListStorageNodes(namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to list StorageNodes in %s, Err: %v", namespace, err)
+		}
+
+		for _, node := range storageNodeList.Items {
+			if node.Status.Phase != string(status) {
+				return nil, true, fmt.Errorf("StorageNode %s in %s is in state %v", node.Name, namespace, node.Status.Phase)
+			}
+		}
+
+		return nil, false, nil
+	}
+}
+
+func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
+	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterOnline), timeout, interval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
 	}
 	cluster = out.(*corev1.StorageCluster)
 
 	return cluster, nil
+}
+
+func validateStorageClusterIsFailed(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	_, err := task.DoRetryWithTimeout(validateAllStorageNodesInState(cluster.Namespace, corev1.NodeFailedStatus), timeout, interval)
+	if err != nil {
+		return fmt.Errorf("failed to wait for StorageNodes to be failed, Err: %v", err)
+	}
+	return nil
 }
 
 // CreateClusterWithTLS is a helper method
