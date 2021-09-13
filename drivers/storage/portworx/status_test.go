@@ -2,19 +2,26 @@ package portworx
 
 import (
 	"context"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/mock"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestSetupContextWithToken(t *testing.T) {
@@ -174,6 +181,286 @@ func TestSetupContextWithToken(t *testing.T) {
 				_, ok := metadata.FromOutgoingContext(ctx)
 				assert.Equal(t, false, ok, "Expected no metadata to be found")
 			}
+		})
+	}
+}
+
+func TestUpdateStorageNodePhase(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	testCases := []struct {
+		name          string
+		pxNode        *api.StorageNode
+		storageNode   *corev1.StorageNode
+		expectedPhase string
+	}{
+		{
+			name: "with-no-conditions",
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{},
+			},
+			expectedPhase: "Initializing",
+		},
+		{
+			name: "with-only-succeeded-init-condition",
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeSucceededStatus,
+							LastTransitionTime: metav1.NewTime(time.Now()),
+						},
+					},
+				},
+			},
+			expectedPhase: "Initializing",
+		},
+		{
+			name: "with-succeeded-init-condition-and-state-condition-without-status",
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeSucceededStatus,
+							LastTransitionTime: metav1.NewTime(time.Now()),
+						},
+						{
+							Type:               corev1.NodeStateCondition,
+							LastTransitionTime: metav1.NewTime(time.Now().Add(time.Minute)),
+						},
+					},
+				},
+			},
+			expectedPhase: "Initializing",
+		},
+		{
+			name: "with-old-succeeded-init-condition-and-valid-state-condition",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_NOT_IN_QUORUM,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeSucceededStatus,
+							LastTransitionTime: metav1.NewTime(time.Now().Add(time.Minute * -1)),
+						},
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "NotInQuorum",
+		},
+		{
+			name: "with-new-succeeded-init-condition-and-valid-state-condition",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_NOT_IN_QUORUM,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeSucceededStatus,
+							LastTransitionTime: metav1.NewTime(time.Now().Add(time.Minute)),
+						},
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "NotInQuorum",
+		},
+		{
+			name: "with-no-init-condition-and-valid-state-condition",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_NOT_IN_QUORUM,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "NotInQuorum",
+		},
+		{
+			name: "with-old-failed-init-condition-and-valid-state-condition",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_NOT_IN_QUORUM,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeFailedStatus,
+							LastTransitionTime: metav1.NewTime(time.Now().Add(time.Minute * -1)),
+						},
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "NotInQuorum",
+		},
+		{
+			name: "with-new-failed-init-condition-and-valid-state-condition",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_NOT_IN_QUORUM,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeInitCondition,
+							Status:             corev1.NodeFailedStatus,
+							LastTransitionTime: metav1.NewTime(time.Now().Add(time.Minute)),
+						},
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "Failed",
+		},
+	}
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	pxPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "portworx-pod",
+			Namespace:       cluster.Namespace,
+			Labels:          pxutil.SelectorLabels(),
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: "k8s-node",
+		},
+	}
+	err := k8sClient.Create(context.TODO(), pxPod)
+	require.NoError(t, err)
+
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			driver := portworx{
+				k8sClient: k8sClient,
+			}
+			err := k8sClient.Create(context.TODO(), tc.storageNode, &client.CreateOptions{})
+			require.NoError(t, err)
+
+			expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+				Nodes: []*api.StorageNode{tc.pxNode},
+			}
+			mockNodeServer.EXPECT().
+				EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+				Return(expectedNodeEnumerateResp, nil).
+				Times(1)
+
+			err = driver.UpdateStorageClusterStatus(cluster)
+			require.NoError(t, err)
+
+			storageNode := &corev1.StorageNode{}
+			err = testutil.Get(k8sClient, storageNode, tc.storageNode.Name, cluster.Namespace)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedPhase, storageNode.Status.Phase)
+
+			err = testutil.Delete(k8sClient, tc.storageNode)
+			require.NoError(t, err)
 		})
 	}
 }
