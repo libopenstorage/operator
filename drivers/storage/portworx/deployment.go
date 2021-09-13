@@ -297,7 +297,7 @@ func (p *portworx) GetStoragePodSpec(
 		t.cloudConfig = cloudConfig
 	}
 
-	containers := t.portworxContainer()
+	containers := t.portworxContainer(cluster)
 	podSpec := v1.PodSpec{
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
@@ -484,7 +484,7 @@ func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Con
 	}
 }
 
-func (t *template) portworxContainer() v1.Container {
+func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Container {
 	pxImage := util.GetImageURN(t.cluster, t.cluster.Spec.Image)
 	sc := &v1.SecurityContext{
 		Privileged: boolPtr(true),
@@ -497,7 +497,7 @@ func (t *template) portworxContainer() v1.Container {
 			},
 		}
 	}
-	return v1.Container{
+	container := v1.Container{
 		Name:            pxContainerName,
 		Image:           pxImage,
 		ImagePullPolicy: t.imagePullPolicy,
@@ -528,6 +528,10 @@ func (t *template) portworxContainer() v1.Container {
 		SecurityContext:        sc,
 		VolumeMounts:           t.getVolumeMounts(),
 	}
+	if cluster.Spec.Resources != nil {
+		container.Resources = *cluster.Spec.Resources
+	}
+	return container
 }
 
 func (t *template) kvdbContainer() v1.Container {
@@ -647,6 +651,26 @@ func (t *template) telemetryContainer() *v1.Container {
 				Name:  pxutil.EnvKeyPortworxNamespace,
 				Value: t.cluster.Namespace,
 			},
+		},
+		LivenessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+			PeriodSeconds: 30,
+		},
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "127.0.0.1",
+					Path: "/1.0/status",
+					Port: intstr.FromInt(1970),
+				},
+			},
+			PeriodSeconds: 30,
 		},
 		SecurityContext: &v1.SecurityContext{
 			Privileged: boolPtr(true),
