@@ -78,6 +78,12 @@ func (c *portworxBasic) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createPortworxService(cluster, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
+	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
+		if err := c.createPortworxKVDBService(cluster, ownerRef); err != nil {
+			// This should not block portworx installation
+			return err
+		}
+	}
 	return nil
 }
 
@@ -93,6 +99,9 @@ func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxKVDBServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 
@@ -420,14 +429,7 @@ func getPortworxServiceSpec(
 ) *v1.Service {
 	labels := pxutil.SelectorLabels()
 	startPort := pxutil.StartPort(cluster)
-	kvdbTargetPort := 9019
-	sdkTargetPort := 9020
-	restGatewayTargetPort := 9021
-	if startPort != pxutil.DefaultStartPort {
-		kvdbTargetPort = startPort + 15
-		sdkTargetPort = startPort + 16
-		restGatewayTargetPort = startPort + 17
-	}
+	_, sdkTargetPort, restGatewayTargetPort := getTargetPorts(startPort)
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -444,12 +446,6 @@ func getPortworxServiceSpec(
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(9001),
 					TargetPort: intstr.FromInt(startPort),
-				},
-				{
-					Name:       pxutil.PortworxKVDBPortName,
-					Protocol:   v1.ProtocolTCP,
-					Port:       int32(9019),
-					TargetPort: intstr.FromInt(kvdbTargetPort),
 				},
 				{
 					Name:       pxutil.PortworxSDKPortName,
@@ -477,6 +473,68 @@ func getPortworxServiceSpec(
 	}
 
 	return newService
+}
+
+func (c *portworxBasic) createPortworxKVDBService(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	service := getPortworxKVDBServiceSpec(cluster, ownerRef)
+	return k8sutil.CreateOrUpdateService(c.k8sClient, service, ownerRef)
+}
+
+func getPortworxKVDBServiceSpec(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) *v1.Service {
+	labels := pxutil.SelectorLabels()
+	startPort := pxutil.StartPort(cluster)
+	kvdbTargetPort, _, _ := getTargetPorts(startPort)
+
+	newService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxKVDBServiceName,
+			Namespace: cluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{
+				constants.LabelKeyKVDBPod: constants.LabelValueTrue,
+			},
+			Type: v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				{
+					Name:       pxutil.PortworxKVDBPortName,
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(9019),
+					TargetPort: intstr.FromInt(kvdbTargetPort),
+				},
+			},
+		},
+	}
+
+	if ownerRef != nil {
+		newService.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	}
+
+	serviceType := pxutil.ServiceType(cluster)
+	if serviceType != "" {
+		newService.Spec.Type = serviceType
+	}
+
+	return newService
+}
+
+func getTargetPorts(startPort int) (int, int, int) {
+	kvdbTargetPort := 9019
+	sdkTargetPort := 9020
+	restGatewayTargetPort := 9021
+	if startPort != pxutil.DefaultStartPort {
+		kvdbTargetPort = startPort + 15
+		sdkTargetPort = startPort + 16
+		restGatewayTargetPort = startPort + 17
+	}
+	return kvdbTargetPort, sdkTargetPort, restGatewayTargetPort
 }
 
 func getSecretsNamespace(cluster *corev1.StorageCluster) string {
