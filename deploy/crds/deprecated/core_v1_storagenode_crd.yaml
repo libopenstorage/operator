@@ -126,8 +126,16 @@ spec:
                     description: Status of the condition.
                   reason:
                     type: string
-                    description: Reason is the human readable message indicating details about the
+                    description: Reason is a unique one-word reason about the current state
+                      of the cluster.
+                  message:
+                    type: string
+                    description: Message is the human readable message indicating details about the
                       current state of the cluster.
+                  lastTransitionTime:
+                    type: string
+                    format: date-time
+                    description: Time at which the condition changed.
             geography:
               type: object
               description: Contains topology information for the storage node.
