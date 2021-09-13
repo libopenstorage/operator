@@ -162,7 +162,7 @@ test:
 
 integration-test:
 	@echo "Building operator integration tests"
-	@cd test/integration_test && go test -tags integrationtest -v -c -o operator.test
+	@cd test/integration_test && go test -tags integrationtest,fafb -v -c -o operator.test
 
 integration-test-container:
 	@echo "Building operator test container $(OPERATOR_TEST_IMG)"
