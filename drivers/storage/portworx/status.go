@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -468,30 +467,29 @@ func mapNodeStatus(status api.Status) corev1.NodeConditionStatus {
 }
 
 func getStorageNodePhase(status *corev1.NodeStatus) string {
-	latestTime := metav1.NewTime(time.Time{})
-	var latestCondition *corev1.NodeCondition
+	var nodeInitCondition *corev1.NodeCondition
+	var nodeStateCondition *corev1.NodeCondition
 
 	for _, condition := range status.Conditions {
-		// Find the latest condition. If it is InitCondition, and has
-		// the same timestamp as the latest one then don't make it latest
-		if latestTime.Before(&condition.LastTransitionTime) ||
-			latestTime.IsZero() ||
-			(latestTime.Equal(&condition.LastTransitionTime) &&
-				condition.Type != corev1.NodeInitCondition) {
-			latestCondition = condition.DeepCopy()
-			latestTime = condition.LastTransitionTime
+		if condition.Type == corev1.NodeInitCondition {
+			nodeInitCondition = condition.DeepCopy()
+		} else if condition.Type == corev1.NodeStateCondition {
+			nodeStateCondition = condition.DeepCopy()
 		}
 	}
 
-	// If no condition or status found return Initializing phase.
-	// Also if the InitCondition is the latest condition and it has succeeded,
-	// then keep the node phase as Initializing
-	if latestCondition == nil || latestCondition.Status == "" ||
-		(latestCondition.Type == corev1.NodeInitCondition &&
-			latestCondition.Status == corev1.NodeSucceededStatus) {
+	if nodeInitCondition == nil || nodeInitCondition.Status == corev1.NodeSucceededStatus {
+		if nodeStateCondition != nil && nodeStateCondition.Status != "" {
+			return string(nodeStateCondition.Status)
+		}
 		return string(corev1.NodeInitStatus)
+	} else if nodeStateCondition == nil ||
+		nodeStateCondition.LastTransitionTime.Before(&nodeInitCondition.LastTransitionTime) {
+		// If portworx restarts and updates the NodeInit condition, it would have a
+		// more recent timestamp than operator updated NodeState condition.
+		return string(nodeInitCondition.Status)
 	}
-	return string(latestCondition.Status)
+	return string(nodeStateCondition.Status)
 }
 
 func blobToBootstrapEntries(
