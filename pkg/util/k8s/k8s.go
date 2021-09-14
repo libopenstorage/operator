@@ -1385,6 +1385,81 @@ func DeletePrometheus(
 	return k8sClient.Update(context.TODO(), prometheus)
 }
 
+// CreateOrUpdateAlertManager creates a AlertManager object if not present, else updates it
+func CreateOrUpdateAlertManager(
+	k8sClient client.Client,
+	alertManager *monitoringv1.Alertmanager,
+	ownerRef *metav1.OwnerReference,
+) error {
+	existingAlertManager := &monitoringv1.Alertmanager{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      alertManager.Name,
+			Namespace: alertManager.Namespace,
+		},
+		existingAlertManager,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Debugf("Creating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
+		return k8sClient.Create(context.TODO(), alertManager)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(alertManager.Spec, existingAlertManager.Spec)
+
+	for _, o := range existingAlertManager.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			alertManager.OwnerReferences = append(alertManager.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(alertManager.OwnerReferences) > len(existingAlertManager.OwnerReferences) {
+		alertManager.ResourceVersion = existingAlertManager.ResourceVersion
+		logrus.Debugf("Updating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
+		return k8sClient.Update(context.TODO(), alertManager)
+	}
+	return nil
+}
+
+// DeleteAlertManager deletes a AlertManager instance if present and owned
+func DeleteAlertManager(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	alertManager := &monitoringv1.Alertmanager{}
+	err := k8sClient.Get(context.TODO(), resource, alertManager)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(alertManager.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(alertManager.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(alertManager.OwnerReferences) > 0 && len(alertManager.OwnerReferences) == len(newOwners)) {
+		logrus.Debugf("Cannot delete AlertManager %s/%s as it is not owned", namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Debugf("Deleting %s/%s AlertManager", namespace, name)
+		return k8sClient.Delete(context.TODO(), alertManager)
+	}
+	alertManager.OwnerReferences = newOwners
+	logrus.Debugf("Disowning %s/%s AlertManager", namespace, name)
+	return k8sClient.Update(context.TODO(), alertManager)
+}
+
 // CreateOrUpdatePodDisruptionBudget creates a PodDisruptionBudget object if not present, else updates it
 func CreateOrUpdatePodDisruptionBudget(
 	k8sClient client.Client,

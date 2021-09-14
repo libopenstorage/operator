@@ -6886,6 +6886,7 @@ func (m *fakeManifest) GetVersions(
 			PrometheusOperator:        "quay.io/coreos/prometheus-operator:v1.2.3",
 			PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 			PrometheusConfigMapReload: "quay.io/coreos/configmap-reload:v1.2.3",
+			AlertManager:              "quay.io/prometheus/alertmanager:v1.2.3",
 		},
 	}
 }

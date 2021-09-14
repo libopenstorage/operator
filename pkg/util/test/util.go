@@ -230,6 +230,15 @@ func GetExpectedPrometheusRule(t *testing.T, fileName string) *monitoringv1.Prom
 	return prometheusRule
 }
 
+// GetExpectedAlertManager returns the AlertManager object from given yaml spec file
+func GetExpectedAlertManager(t *testing.T, fileName string) *monitoringv1.Alertmanager {
+	obj := getKubernetesObject(t, fileName)
+	alertManager, ok := obj.(*monitoringv1.Alertmanager)
+	assert.True(t, ok, "Expected Alertmanager object")
+	return alertManager
+
+}
+
 // GetExpectedPSP returns the PodSecurityPolicy object from given yaml spec file
 func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPolicy {
 	obj := getKubernetesObject(t, fileName)

@@ -48,13 +48,17 @@ import (
 )
 
 func TestOrderOfComponents(t *testing.T) {
+	reregisterComponents()
+	component.RegisterDisruptionBudgetComponent()
+	component.RegisterPortworxCRDComponent()
+
 	components := component.GetAll()
 
 	componentNames := make([]string, len(components))
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 17)
+	require.Len(t, components, 18)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -80,6 +84,7 @@ func TestOrderOfComponents(t *testing.T) {
 			component.TelemetryComponentName,
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
+			component.AlertManagerComponentName,
 		},
 		componentNames[3:],
 	)
@@ -5851,6 +5856,17 @@ func TestPrometheusInstall(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	cluster.Spec.Placement = nil
 
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -5945,11 +5961,28 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, prometheus.OwnerReferences[0].Name)
 	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
 
+	// Prometheus instance with remote write endpoint
 	cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint = "test.endpoint:1234"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedPrometheus = testutil.GetExpectedPrometheus(t, "prometheusInstanceWithRemoteWriteEndpoint.yaml")
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheus.Name, prometheus.Name)
+	require.Equal(t, expectedPrometheus.Namespace, prometheus.Namespace)
+	require.Len(t, prometheus.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, prometheus.OwnerReferences[0].Name)
+	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
+
+	// Prometheus instance with alert manager enabled
+	cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint = ""
+	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{Enabled: true}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedPrometheus = testutil.GetExpectedPrometheus(t, "prometheusInstanceWithAlertManager.yaml")
 	prometheus = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheus, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5994,6 +6027,9 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -6002,6 +6038,17 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6132,6 +6179,9 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -6144,6 +6194,17 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	// Case: Custom registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -6224,6 +6285,14 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/prometheus/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment := &appsv1.Deployment{}
@@ -6336,6 +6405,14 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		*prometheusInstance.Spec.Image,
 	)
 
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/prometheus/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
+	)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -6437,6 +6514,14 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		"quay.io/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"quay.io/prometheus/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -6547,6 +6632,14 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/prometheus/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRegistry+"/prometheus/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -6896,6 +6989,9 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -6908,6 +7004,17 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	// Case: Custom repo-registry should be added to the images
 	err := driver.PreInstall(cluster)
@@ -6982,6 +7089,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment := &appsv1.Deployment{}
@@ -7088,6 +7203,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		*prometheusInstance.Spec.Image,
 	)
 
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
+	)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -7190,6 +7313,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -7295,6 +7426,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		*prometheusInstance.Spec.Image,
 	)
 
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"quay.io/prometheus/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
+	)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -7397,6 +7536,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/prometheus:v1.2.3",
 		*prometheusInstance.Spec.Image,
+	)
+
+	alertManagerInstance = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		customRepo+"/alertmanager:v1.2.3",
+		*alertManagerInstance.Spec.Image,
 	)
 
 	csiDeployment = &appsv1.Deployment{}
@@ -7803,6 +7950,9 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -7815,6 +7965,17 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	// Case: Image pull secret should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -7861,6 +8022,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
+
+	alertManagerInst := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, alertManagerInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, alertManagerInst.Spec.ImagePullSecrets[0].Name)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -7923,6 +8090,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, alertManagerInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, alertManagerInst.Spec.ImagePullSecrets[0].Name)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -7977,6 +8150,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, prometheusInst.Spec.ImagePullSecrets)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, alertManagerInst.Spec.ImagePullSecrets)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8028,6 +8206,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, prometheusInst.Spec.ImagePullSecrets)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, alertManagerInst.Spec.ImagePullSecrets)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8089,6 +8272,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, prometheusInst.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, prometheusInst.Spec.ImagePullSecrets[0].Name)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, alertManagerInst.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, alertManagerInst.Spec.ImagePullSecrets[0].Name)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8149,6 +8338,9 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -8161,6 +8353,17 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	// Case: Tolerations should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -8200,6 +8403,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	alertManagerInst := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, alertManagerInst.Spec.Tolerations)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8253,6 +8461,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, alertManagerInst.Spec.Tolerations)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8311,6 +8524,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, alertManagerInst.Spec.Tolerations)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8364,6 +8582,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, alertManagerInst.Spec.Tolerations)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8415,6 +8638,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, prometheusInst.Spec.Tolerations)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, alertManagerInst.Spec.Tolerations)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8468,6 +8696,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, prometheusInst.Spec.Tolerations)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, alertManagerInst.Spec.Tolerations)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8519,6 +8752,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, prometheusInst.Spec.Tolerations)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, alertManagerInst.Spec.Tolerations)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8585,6 +8823,9 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
 				},
 			},
 			FeatureGates: map[string]string{
@@ -8597,6 +8838,17 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
 
 	// Case: Node affinity should be applied to the deployment
 	err := driver.PreInstall(cluster)
@@ -8636,6 +8888,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
+
+	alertManagerInst := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, alertManagerInst.Spec.Affinity.NodeAffinity)
 
 	csiDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8693,6 +8950,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, alertManagerInst.Spec.Affinity.NodeAffinity)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8744,6 +9006,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, prometheusInst.Spec.Affinity)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, alertManagerInst.Spec.Affinity)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -8797,6 +9064,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, prometheusInst.Spec.Affinity.NodeAffinity)
 
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, alertManagerInst.Spec.Affinity.NodeAffinity)
+
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -8848,6 +9120,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, prometheusInst, component.PrometheusInstanceName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, prometheusInst.Spec.Affinity)
+
+	alertManagerInst = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInst, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, alertManagerInst.Spec.Affinity)
 
 	csiDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
@@ -10790,6 +11067,7 @@ func reregisterComponents() {
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
+	component.RegisterAlertManagerComponent()
 	component.RegisterAuthComponent()
 	component.RegisterTLSComponent()
 	component.RegisterPSPComponent()

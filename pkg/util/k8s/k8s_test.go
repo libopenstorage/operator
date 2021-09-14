@@ -1397,6 +1397,162 @@ func TestDeletePrometheus(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestAlertManagerChangeSpec(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedAlertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Tag: "foo",
+		},
+	}
+
+	err := CreateOrUpdateAlertManager(k8sClient, expectedAlertManager, nil)
+	require.NoError(t, err)
+
+	actualAlertManager := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, actualAlertManager, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "foo", actualAlertManager.Spec.Tag)
+
+	// Change spec
+	expectedAlertManager.Spec.Tag = "bar"
+
+	err = CreateOrUpdateAlertManager(k8sClient, expectedAlertManager, nil)
+	require.NoError(t, err)
+
+	actualAlertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, actualAlertManager, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "bar", actualAlertManager.Spec.Tag)
+}
+
+func TestAlertManagerWithOwnerReferences(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	firstOwner := metav1.OwnerReference{UID: "first-owner"}
+	expectedAlertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "test-ns",
+			OwnerReferences: []metav1.OwnerReference{firstOwner},
+		},
+	}
+
+	err := CreateOrUpdateAlertManager(k8sClient, expectedAlertManager, nil)
+	require.NoError(t, err)
+
+	actualAlertManager := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, actualAlertManager, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualAlertManager.OwnerReferences)
+
+	// Update with the same owner. Nothing should change as owner hasn't changed.
+	err = CreateOrUpdateAlertManager(k8sClient, expectedAlertManager, &firstOwner)
+	require.NoError(t, err)
+
+	actualAlertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, actualAlertManager, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualAlertManager.OwnerReferences)
+
+	// Update with a new owner.
+	secondOwner := metav1.OwnerReference{UID: "second-owner"}
+	expectedAlertManager.OwnerReferences = []metav1.OwnerReference{secondOwner}
+
+	err = CreateOrUpdateAlertManager(k8sClient, expectedAlertManager, &secondOwner)
+	require.NoError(t, err)
+
+	actualAlertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, actualAlertManager, "test", "test-ns")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualAlertManager.OwnerReferences)
+}
+
+func TestDeleteAlertManager(t *testing.T) {
+	name := "test"
+	namespace := "test-ns"
+	expected := &monitoringv1.Alertmanager{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Alertmanager",
+			APIVersion: "monitoring.coreos.com/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(expected)
+
+	// Don't delete or throw error if the alert manager is not present
+	err := DeleteAlertManager(k8sClient, "not-present-alert-manager", namespace)
+	require.NoError(t, err)
+
+	alertManager := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, alertManager)
+
+	// Don't delete when there is no owner in the alert manager
+	// but trying to delete for specific owners
+	err = DeleteAlertManager(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
+	require.NoError(t, err)
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, alertManager)
+
+	// Delete when there is no owner in the alert manager
+	err = DeleteAlertManager(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Don't delete when the alert manager is owned by an object
+	// and no owner reference passed in delete call
+	expected.OwnerReferences = []metav1.OwnerReference{{UID: "alpha"}, {UID: "beta"}, {UID: "gamma"}}
+	expected.ResourceVersion = ""
+	err = k8sClient.Create(context.TODO(), expected)
+	require.NoError(t, err)
+
+	err = DeleteAlertManager(k8sClient, name, namespace)
+	require.NoError(t, err)
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.NoError(t, err)
+	require.Equal(t, expected, alertManager)
+
+	// Don't delete when the alert manager is owned by objects
+	// more than what are passed on delete call
+	err = DeleteAlertManager(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
+	require.NoError(t, err)
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.NoError(t, err)
+	require.Len(t, alertManager.OwnerReferences, 2)
+	require.Equal(t, types.UID("alpha"), alertManager.OwnerReferences[0].UID)
+	require.Equal(t, types.UID("gamma"), alertManager.OwnerReferences[1].UID)
+
+	// Delete when delete call passes all owners (or more) of the alert manager
+	err = DeleteAlertManager(k8sClient, name, namespace,
+		metav1.OwnerReference{UID: "theta"},
+		metav1.OwnerReference{UID: "gamma"},
+		metav1.OwnerReference{UID: "alpha"},
+	)
+	require.NoError(t, err)
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, name, namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestPrometheusRuleChangeSpec(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	expectedRule := &monitoringv1.PrometheusRule{

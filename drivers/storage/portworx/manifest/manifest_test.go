@@ -35,7 +35,8 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.0-rc1",
+			AlertManager:              "image/alertmanager:2.6.0",
+			Telemetry:                 "image/ccm-service:2.6.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -69,7 +70,8 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.0-rc1",
+			AlertManager:              "image/alertmanager:2.6.0",
+			Telemetry:                 "image/ccm-service:2.6.0",
 		},
 	}
 
@@ -154,7 +156,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.5.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.5.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
-			Telemetry:                 "image/ccm-service:3.0.0-rc1",
+			AlertManager:              "image/alertmanager:2.6.0",
+			Telemetry:                 "image/ccm-service:2.6.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -238,7 +241,8 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.0-rc1",
+			AlertManager:              "image/alertmanager:2.6.0",
+			Telemetry:                 "image/ccm-service:2.6.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -314,7 +318,8 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusOperator:        "image/prometheus-operator:2.6.0",
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.0-rc1",
+			AlertManager:              "image/alertmanager:2.6.0",
+			Telemetry:                 "image/ccm-service:2.6.0",
 		},
 	}
 	cluster := &corev1.StorageCluster{
@@ -388,6 +393,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, defaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
 	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
 	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
+	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
 	require.Equal(t, defaultTelemetryImage, rel.Components.Telemetry)
 	require.Equal(t, "image/csiprovisioner:3.0.0", rel.Components.CSIProvisioner)
 	require.Empty(t, rel.Components.CSIAttacher)
