@@ -244,14 +244,19 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 		}
 
-		if toUpdate.Spec.Monitoring != nil &&
-			toUpdate.Spec.Monitoring.Prometheus != nil &&
-			toUpdate.Spec.Monitoring.Prometheus.Enabled &&
-			(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged) {
-			toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
-			toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
-			toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
-			toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
+		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
+			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
+				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged) {
+				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
+				toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
+				toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
+				toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
+			}
+			if toUpdate.Spec.Monitoring.Prometheus.AlertManager != nil &&
+				toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
+				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged) {
+				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
+			}
 		}
 
 		// Reset the component update strategy if it is 'Once', so that we don't
@@ -294,6 +299,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.PrometheusOperator = ""
 		toUpdate.Status.DesiredImages.PrometheusConfigMapReload = ""
 		toUpdate.Status.DesiredImages.PrometheusConfigReloader = ""
+	}
+
+	if toUpdate.Spec.Monitoring == nil ||
+		toUpdate.Spec.Monitoring.Prometheus == nil ||
+		toUpdate.Spec.Monitoring.Prometheus.AlertManager == nil ||
+		!toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+		toUpdate.Status.DesiredImages.AlertManager = ""
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
@@ -841,7 +853,8 @@ func hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasLighthouseChanged(cluster) ||
 		hasCSIChanged(cluster) ||
 		hasTelemetryChanged(cluster) ||
-		hasPrometheusChanged(cluster)
+		hasPrometheusChanged(cluster) ||
+		hasAlertManagerChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1.StorageCluster) bool {
@@ -870,6 +883,14 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled &&
 		cluster.Status.DesiredImages.PrometheusOperator == ""
+}
+
+func hasAlertManagerChanged(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Prometheus != nil &&
+		cluster.Spec.Monitoring.Prometheus.AlertManager != nil &&
+		cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
+		cluster.Status.DesiredImages.AlertManager == ""
 }
 
 func autoUpdateStork(cluster *corev1.StorageCluster) bool {

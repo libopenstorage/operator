@@ -892,6 +892,14 @@ spec:
                       remoteWriteEndpoint:
                         type: string
                         description: Specifies the remote write endpoint for Prometheus.
+                      alertManager:
+                        type: object
+                        description: Contains configuration of AlertManager for the storage cluster.
+                        properties:
+                          enabled:
+                            type: boolean
+                            description: Flag indicating whether AlertManager needs to be enabled and deployed
+                              by the Storage operator.
                   telemetry:
                     type: object
                     description: Contains telemetry configuration for the storage cluster.
@@ -1339,6 +1347,9 @@ spec:
               clusterName:
                 type: string
                 description: Name of the storage cluster.
+              version:
+                type: string
+                description: Version of the storage driver.
               clusterUid:
                 type: string
                 description: Unique ID of the storage cluster.
@@ -1361,6 +1372,52 @@ spec:
                     type: integer
                     format: int64
                     description: The number of storage nodes per zone in the cluster.
+              desiredImages:
+                type: object
+                description: Represents all the desired images of various components.
+                properties:
+                  stork:
+                    type: string
+                    description: Desired image for stork.
+                  userInterface:
+                    type: string
+                    description: Desired image for user interface.
+                  autopilot:
+                    type: string
+                    description: Desired image for autopilot.
+                  csiNodeDriverRegistrar:
+                    type: string
+                    description: Desired image for CSI node driver registrar.
+                  csiDriverRegistrar:
+                    type: string
+                    description: Desired image for CSI driver registrar.
+                  csiProvisioner:
+                    type: string
+                    description: Desired image for CSI provisioner.
+                  csiAttacher:
+                    type: string
+                    description: Desired image for CSI attacher.
+                  csiSnapshotter:
+                    type: string
+                    description: Desired image for CSI snapshotter.
+                  prometheusOperator:
+                    type: string
+                    description: Desired image for Prometheus operator.
+                  prometheusConfigMapReload:
+                    type: string
+                    description: Desired image for Prometheus config map reload.
+                  prometheusConfigReloader:
+                    type: string
+                    description: Desired image for Prometheus config reloader.
+                  prometheus:
+                    type: string
+                    description: Desired image for Prometheus.
+                  alertManager:
+                    type: string
+                    description: Desired image for AlertManager.
+                  telemetry:
+                    type: string
+                    description: Desired image for telemetry.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.

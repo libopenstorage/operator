@@ -578,6 +578,19 @@ func (c *prometheus) createPrometheusInstance(
 		},
 	}
 
+	if cluster.Spec.Monitoring.Prometheus.AlertManager != nil &&
+		cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+		prometheusInst.Spec.Alerting = &monitoringv1.AlertingSpec{
+			Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
+				{
+					Namespace: cluster.Namespace,
+					Name:      AlertManagerServiceName,
+					Port:      intstr.FromString(alertManagerPortName),
+				},
+			},
+		}
+	}
+
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
 		prometheusInst.Spec.ImagePullSecrets = append(
 			[]v1.LocalObjectReference{},

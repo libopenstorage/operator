@@ -1,0 +1,28 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: px-prometheus
+  namespace: kube-test
+spec:
+  replicas: 1
+  logLevel: debug
+  serviceAccountName: px-prometheus
+  image: quay.io/prometheus/prometheus:v1.2.3
+  serviceMonitorSelector:
+    matchExpressions:
+    - key: prometheus
+      operator: In
+      values:
+      - portworx
+      - px-backup
+  alerting:
+    alertmanagers:
+    - namespace: kube-test
+      name: alertmanager-portworx
+      port: web
+  resources:
+    requests:
+      memory: 400Mi
+  ruleSelector:
+    matchLabels:
+      prometheus: portworx

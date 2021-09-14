@@ -30,6 +30,7 @@ const (
 	defaultLighthouseImage                = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage                 = "portworx/px-node-wiper:2.5.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
+	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
 	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
@@ -55,6 +56,7 @@ type Release struct {
 	CSIResizer                string `yaml:"csiResizer,omitempty"`
 	CSISnapshotter            string `yaml:"csiSnapshotter,omitempty"`
 	Prometheus                string `yaml:"prometheus,omitempty"`
+	AlertManager              string `yaml:"alertManager,omitempty"`
 	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
 	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `yaml:"prometheusConfigReloader,omitempty"`
@@ -171,6 +173,7 @@ func defaultRelease(
 			Lighthouse:                defaultLighthouseImage,
 			NodeWiper:                 defaultNodeWiperImage,
 			Prometheus:                defaultPrometheusImage,
+			AlertManager:              defaultAlertManagerImage,
 			PrometheusOperator:        defaultPrometheusOperatorImage,
 			PrometheusConfigMapReload: defaultPrometheusConfigMapReloadImage,
 			PrometheusConfigReloader:  defaultPrometheusConfigReloaderImage,
@@ -199,6 +202,9 @@ func fillDefaults(
 	}
 	if rel.Components.Prometheus == "" {
 		rel.Components.Prometheus = defaultPrometheusImage
+	}
+	if rel.Components.AlertManager == "" {
+		rel.Components.AlertManager = defaultAlertManagerImage
 	}
 	if rel.Components.PrometheusOperator == "" {
 		rel.Components.PrometheusOperator = defaultPrometheusOperatorImage

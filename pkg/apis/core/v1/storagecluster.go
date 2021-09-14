@@ -535,6 +535,14 @@ type PrometheusSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// RemoteWriteEndpoint specifies the remote write endpoint
 	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
+	// AlertManager spec for configuring alert manager
+	AlertManager *AlertManagerSpec `json:"alertManager,omitempty"`
+}
+
+// AlertManagerSpec contains configuration of AlertManager
+type AlertManagerSpec struct {
+	// Enabled decides whether alert manager needs to be deployed
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // StorageClusterStatus is the status of a storage cluster
@@ -574,6 +582,7 @@ type ComponentImages struct {
 	PrometheusConfigMapReload string `json:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `json:"prometheusConfigReloader,omitempty"`
 	Prometheus                string `json:"prometheus,omitempty"`
+	AlertManager              string `json:"alertManager,omitempty"`
 	Telemetry                 string `json:"telemetry,omitempty"`
 }
 
