@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: portworx
+  namespace: kube-test
+  labels:
+    alertmanager: portworx
+spec:
+  replicas: 3
+  image: quay.io/prometheus/alertmanager:v1.2.3
