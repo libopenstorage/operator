@@ -22,10 +22,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	storageapi "github.com/libopenstorage/openstorage/api"
 	"reflect"
 	"sort"
 
+	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -405,13 +405,13 @@ func (c *Controller) getUnavailableNumbers(
 	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
 	if err != nil {
 		return -1, -1, fmt.Errorf("couldn't get list of nodes during rolling "+
-			"update of storage cluster  %#v: %v", cluster, err)
+			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 	}
 
 	storageNodeList, err := c.Driver.GetStorageNodes(cluster)
 	if err != nil {
 		return -1, -1, fmt.Errorf("couldn't get list of storage nodes during rolling "+
-			"update of storage cluster  %#v: %v", cluster, err)
+			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 	}
 	storageNodeMap := make(map[string]*storageapi.StorageNode)
 	var nonK8sStorageNodes []*storageapi.StorageNode
