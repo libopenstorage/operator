@@ -36,6 +36,7 @@ const (
 	AlertManagerConfigSecretName = "alertmanager-portworx"
 
 	alertManagerPortName = "web"
+	alertManagerLabelKey = "alertmanager"
 )
 
 type alertManager struct {
@@ -208,7 +209,7 @@ func (c *alertManager) createAlertManagerInstance(
 
 func alertManagerLabels() map[string]string {
 	return map[string]string{
-		"alertmanager": AlertManagerInstanceName,
+		alertManagerLabelKey: AlertManagerInstanceName,
 	}
 }
 

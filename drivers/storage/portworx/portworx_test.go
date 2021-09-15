@@ -1058,6 +1058,91 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigMapReload)
 }
 
+func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.8.0",
+		},
+	}
+
+	// Don't enable alert manager if monitoring spec is nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring)
+	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+
+	// Don't enable alert manager if prometheus spec is nil
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+
+	// Don't enable alert manager if alert manager spec is nil
+	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus.AlertManager)
+	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+
+	// Don't enable alert manager if nothing specified in alert manager spec
+	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus.AlertManager)
+	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+
+	// Use images from release manifest if enabled
+	cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = true
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
+		cluster.Status.DesiredImages.AlertManager)
+
+	// Use images from release manifest if desired was reset
+	cluster.Status.DesiredImages.AlertManager = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
+		cluster.Status.DesiredImages.AlertManager)
+
+	// Do not overwrite desired images if nothing has changed
+	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "prometheus/alertmanager:old",
+		cluster.Status.DesiredImages.AlertManager)
+
+	// Do not overwrite desired images even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "prometheus/alertmanager:old",
+		cluster.Status.DesiredImages.AlertManager)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4",
+		cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired images if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
+		cluster.Status.DesiredImages.AlertManager)
+
+	// Change desired images if px image has changed
+	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
+		cluster.Status.DesiredImages.AlertManager)
+
+	// Reset desired images if alert manager has been disabled
+	cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+}
+
 func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
