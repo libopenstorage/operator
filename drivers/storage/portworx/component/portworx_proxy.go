@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -59,7 +60,10 @@ func (c *portworxProxy) Initialize(
 }
 
 func (c *portworxProxy) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return cluster.Namespace != api.NamespaceSystem &&
+	enabled, err := strconv.ParseBool(cluster.Annotations[pxutil.AnnotationPortworxProxy])
+	// If annotation is not present or invalid, then portworx proxy is considered enabled
+	return (err != nil || enabled) &&
+		cluster.Namespace != api.NamespaceSystem &&
 		pxutil.StartPort(cluster) != pxutil.DefaultStartPort &&
 		pxutil.IsPortworxEnabled(cluster)
 }
