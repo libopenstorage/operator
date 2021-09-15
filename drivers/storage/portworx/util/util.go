@@ -102,6 +102,9 @@ const (
 	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
 	// of pod security policies
 	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
+	// AnnotationPortworxProxy annotation indicating whether to enable creation of
+	// portworx proxy for Portworx in-tree driver
+	AnnotationPortworxProxy = pxAnnotationPrefix + "/portworx-proxy"
 	// AnnotationTelemetryArcusLocation annotation indicates the location (internal/external) of Arcus
 	// that CCM should use
 	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
