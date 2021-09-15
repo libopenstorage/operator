@@ -6716,6 +6716,142 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 }
 
+func TestGetStorageNodes(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: SDK response returns zero nodes
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil)
+
+	nodes, err := driver.GetStorageNodes(cluster)
+	require.NoError(t, err)
+	require.Empty(t, nodes)
+
+	// TestCase: SDK response returns some nodes
+	expectedNodeEnumerateResp.Nodes = []*api.StorageNode{
+		{
+			Id: "node-one",
+		},
+		{
+			Id: "node-two",
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil)
+
+	nodes, err = driver.GetStorageNodes(cluster)
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+
+	// TestCase: SDK returns error
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(nil, fmt.Errorf("SDK error"))
+
+	nodes, err = driver.GetStorageNodes(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SDK error")
+	require.Nil(t, nodes)
+
+	// TestCase: Error setting up tokens for auth enabled cluster
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+	}
+
+	nodes, err = driver.GetStorageNodes(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to get portworx apps secret")
+	require.Nil(t, nodes)
+}
+
+func TestGetStorageNodesWithConnectionErrors(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: "127.0.0.1",
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: GRPC connection timeout, but with empty StorageCluster status
+	nodes, err := driver.GetStorageNodes(cluster)
+	require.NoError(t, err)
+	require.Empty(t, nodes)
+
+	// TestCase: GRPC connection timeout, but with Initializing StorageCluster status
+	cluster.Status.Phase = string(corev1.ClusterInit)
+
+	nodes, err = driver.GetStorageNodes(cluster)
+	require.NoError(t, err)
+	require.Empty(t, nodes)
+
+	// TestCase: GRPC connection timeout, but with Online StorageCluster status
+	cluster.Status.Phase = string(corev1.ClusterOnline)
+
+	nodes, err = driver.GetStorageNodes(cluster)
+	require.Error(t, err)
+	require.Empty(t, nodes)
+}
+
 func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
 }
