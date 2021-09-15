@@ -638,6 +638,92 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPortworxProxy: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+		},
+	}
+
+	// TestCase: Portworx proxy disabled explicitly
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxProxySA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxySvc := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	pxProxyDS := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: Portworx proxy annotation has true value
+	cluster.Annotations[pxutil.AnnotationPortworxProxy] = "true"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxProxySA = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyCRB = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	pxProxySvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyDS = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	// TestCase: Portworx proxy annotation has invalid boolean value
+	cluster.Annotations[pxutil.AnnotationPortworxProxy] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxProxySA = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxProxySA, component.PxProxyServiceAccountName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyCRB = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxProxyCRB, component.PxProxyClusterRoleBindingName, "")
+	require.NoError(t, err)
+
+	pxProxySvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+
+	pxProxyDS = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+}
+
 func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
