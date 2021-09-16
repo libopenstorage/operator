@@ -965,10 +965,13 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 
 	// Verify a pod is created for the given node with correct owner ref
 	require.Len(t, podControl.Templates, 2)
-	expectedPodTemplate.Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
-	require.Equal(t, expectedPodTemplate, &podControl.Templates[0])
-	expectedPodTemplate.Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
-	require.Equal(t, expectedPodTemplate, &podControl.Templates[1])
+	expectedPodTemplates := []v1.PodTemplateSpec{
+		*expectedPodTemplate.DeepCopy(),
+		*expectedPodTemplate.DeepCopy(),
+	}
+	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
+	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
+	require.ElementsMatch(t, expectedPodTemplates, podControl.Templates)
 	require.Len(t, podControl.ControllerRefs, 2)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
