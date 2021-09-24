@@ -148,7 +148,7 @@ spec:
       annotations:
         description: Pool {{$labels.POOL}} from node {{$labels.instance}}, from Portworx cluster {{$labels.clusterid}} successfully expanded.
         summary: Portworx pool {{$labels.POOL}} successfully expanded.
-      expr: px_alerts_poolexpandsuccessful == 1
+      expr: px_alerts_poolexpandsuccessful > 1
       labels:
         issue: Portworx pool expand successful.
         severity: warning
@@ -156,7 +156,7 @@ spec:
       annotations:
         description: Pool expansion for pool {{$labels.POOL}} from node {{$labels.instance}}, from Portworx cluster {{$labels.clusterid}} failed. Please check Portworx alerts for more details.
         summary: Pool expansion for pool {{$labels.POOL}} failed.
-      expr: px_alerts_poolexpandfailed == 1
+      expr: px_alerts_poolexpandfailed > 1
       labels:
         issue: Portworx pool expand failure.
         severity: critical

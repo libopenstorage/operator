@@ -188,7 +188,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	pxVersionChanged := pxEnabled &&
 		(toUpdate.Spec.Version == "" || toUpdate.Spec.Version != toUpdate.Status.Version)
 
-	if pxVersionChanged || autoUpdateComponents(toUpdate) || hasComponentChanged(toUpdate) {
+	if pxVersionChanged || autoUpdateComponents(toUpdate) || p.hasComponentChanged(toUpdate) {
 		// Force latest versions only if the component update strategy is Once
 		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
 			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
@@ -244,8 +244,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
+			prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
 			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
-				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged) {
+				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
 				toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
 				toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
@@ -253,7 +254,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 			if toUpdate.Spec.Monitoring.Prometheus.AlertManager != nil &&
 				toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
-				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged) {
+				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
 			}
 		}
@@ -854,14 +855,15 @@ func removeDeprecatedFields(
 	}
 }
 
-func hasComponentChanged(cluster *corev1.StorageCluster) bool {
+func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 	return hasStorkChanged(cluster) ||
 		hasAutopilotChanged(cluster) ||
 		hasLighthouseChanged(cluster) ||
 		hasCSIChanged(cluster) ||
 		hasTelemetryChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
-		hasAlertManagerChanged(cluster)
+		hasAlertManagerChanged(cluster) ||
+		p.hasPrometheusVersionChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1.StorageCluster) bool {
@@ -890,6 +892,12 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled &&
 		cluster.Status.DesiredImages.PrometheusOperator == ""
+}
+
+func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {
+	return p.k8sVersion != nil &&
+		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
+		cluster.Status.DesiredImages.PrometheusOperator == manifest.DefaultPrometheusOperatorImage
 }
 
 func hasAlertManagerChanged(cluster *corev1.StorageCluster) bool {

@@ -47,10 +47,6 @@ const (
 	csiResizerContainerName     = "csi-resizer"
 )
 
-var (
-	k8sVer1_18, _ = version.NewVersion("1.18")
-)
-
 type csi struct {
 	isCreated             bool
 	csiNodeInfoCRDCreated bool
@@ -154,7 +150,7 @@ func (c *csi) Delete(cluster *corev1.StorageCluster) error {
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	csiConfig := c.getCSIConfiguration(cluster, pxVersion)
 	if csiConfig.IncludeCsiDriverInfo {
-		if c.k8sVersion.GreaterThanOrEqual(k8sVer1_18) {
+		if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_18) {
 			if err := k8sutil.DeleteCSIDriver(c.k8sClient, csiConfig.DriverName); err != nil {
 				return err
 			}
@@ -844,7 +840,7 @@ func (c *csi) createCSIDriver(
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
 	// For k8s 1.18 and later, use the GA CSI Driver
-	if c.k8sVersion.GreaterThanOrEqual(k8sVer1_18) {
+	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_18) {
 		volumeLifecycleModes := []storagev1.VolumeLifecycleMode{
 			storagev1.VolumeLifecyclePersistent,
 		}
