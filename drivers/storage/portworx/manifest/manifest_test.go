@@ -390,7 +390,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, defaultAutopilotImage, rel.Components.Autopilot)
 	require.Equal(t, defaultLighthouseImage, rel.Components.Lighthouse)
 	require.Equal(t, "image/prometheus:3.0.0", rel.Components.Prometheus)
-	require.Equal(t, defaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
+	require.Equal(t, DefaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
 	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
 	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
 	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
@@ -421,6 +421,56 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(nil).Components, rel.Components)
 	require.Empty(t, rel.Components.CSIProvisioner)
+}
+
+func TestManifestFillPrometheusDefaults(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "3.0.0",
+	}
+
+	k8sVersion, _ := version.NewSemver("1.16.8")
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			versionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
+
+	m := Instance()
+	m.Init(k8sClient, nil, k8sVersion)
+	rel := m.GetVersions(cluster, true)
+	fillDefaults(expected, k8sVersion)
+	require.Equal(t, expected, rel)
+	require.Equal(t, defaultPrometheusImage, rel.Components.Prometheus)
+	require.Equal(t, DefaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
+	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
+	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
+	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
+
+	// TestCase: For k8s 1.22, default Prometheus images should be updated
+	k8sVersion, _ = version.NewSemver("1.22.0")
+	m.Init(k8sClient, nil, k8sVersion)
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, "quay.io/prometheus/prometheus:v2.29.1", rel.Components.Prometheus)
+	require.Equal(t, "quay.io/prometheus-operator/prometheus-operator:v0.50.0", rel.Components.PrometheusOperator)
+	require.Equal(t, "", rel.Components.PrometheusConfigMapReload)
+	require.Equal(t, "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0", rel.Components.PrometheusConfigReloader)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v0.22.2", rel.Components.AlertManager)
 }
 
 func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
@@ -39,6 +40,10 @@ const (
 
 var (
 	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
+	// K8sVer1_18 k8s 1.18
+	K8sVer1_18, _ = version.NewVersion("1.18")
+	// K8sVer1_22 k8s 1.22
+	K8sVer1_22, _ = version.NewVersion("1.22")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -109,6 +114,21 @@ func ParseObjectFromFile(
 	codecs := serializer.NewCodecFactory(scheme)
 	_, _, err = codecs.UniversalDeserializer().Decode([]byte(objBytes), nil, obj)
 	return err
+}
+
+// CreateCRD creates a crd if not present
+func CreateCRD(
+	crd *apiextensionsv1.CustomResourceDefinition,
+) error {
+	_, err := apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err = apiextensionsops.Instance().RegisterCRD(crd); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateOrUpdateServiceAccount creates a service account if not present,

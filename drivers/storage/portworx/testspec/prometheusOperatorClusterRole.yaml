@@ -18,11 +18,16 @@ rules:
       - monitoring.coreos.com
     resources:
       - alertmanagers
+      - alertmanagers/finalizers
+      - alertmanagerconfigs
       - prometheuses
       - prometheuses/finalizers
+      - thanosrulers
+      - thanosrulers/finalizers
       - servicemonitors
-      - prometheusrules
       - podmonitors
+      - probes
+      - prometheusrules
     verbs: ["*"]
   - apiGroups:
       - apps
@@ -41,8 +46,9 @@ rules:
   - apiGroups: [""]
     resources:
       - services
+      - services/finalizers
       - endpoints
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "create", "update", "delete"]
   - apiGroups: [""]
     resources:
       - nodes
@@ -50,6 +56,10 @@ rules:
   - apiGroups: [""]
     resources:
       - namespaces
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
     verbs: ["get", "list", "watch"]
   - apiGroups: ["security.openshift.io"]
     resources:

@@ -7,6 +7,7 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,8 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -2573,4 +2576,42 @@ func TestWarningEvent(t *testing.T) {
 	WarningEvent(recorder, n1, "test reason", "test message")
 	lastEvent := <-recorder.Events
 	require.True(t, strings.Contains(lastEvent, "test reason"))
+}
+
+func TestCreateCRD(t *testing.T) {
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	expectedCRD := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test",
+			Generation: 1,
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "A",
+		},
+	}
+
+	// TestCase: test CRD is created
+	err := CreateCRD(expectedCRD)
+	require.NoError(t, err)
+
+	actualCRD, err := fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, expectedCRD, actualCRD)
+
+	// TestCase: existing CRD should not be updated
+	updatedCRD := expectedCRD.DeepCopy()
+	updatedCRD.Spec.Group = "B"
+	updatedCRD.Generation = 2
+	err = CreateCRD(updatedCRD)
+	require.NoError(t, err)
+
+	actualCRD, err = fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		Get(context.TODO(), expectedCRD.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, expectedCRD, actualCRD)
+	require.NotEqual(t, updatedCRD, actualCRD)
 }

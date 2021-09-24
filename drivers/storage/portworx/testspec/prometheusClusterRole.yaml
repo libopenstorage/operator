@@ -7,6 +7,7 @@ rules:
   - apiGroups: [""]
     resources:
       - nodes
+      - nodes/metrics
       - services
       - endpoints
       - pods
@@ -15,7 +16,11 @@ rules:
     resources:
       - configmaps
     verbs: ["get"]
-  - nonResourceURLs: ["/metrics", "/federate"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor", "/federate"]
     verbs: ["get"]
   - apiGroups: ["policy"]
     resources: ["podsecuritypolicies"]
