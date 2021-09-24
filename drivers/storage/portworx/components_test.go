@@ -14,6 +14,7 @@ import (
 	"github.com/golang/mock/gomock"
 	osdapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -5830,6 +5831,142 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
 }
 
+func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.22.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{
+				PrometheusOperator: manifest.DefaultPrometheusOperatorImage,
+			},
+		},
+	}
+
+	// Setup manifest and config directory
+	m := &fakeManifest{}
+	m.Init(nil, nil, k8sutil.K8sVer1_22)
+	manifest.SetInstance(m)
+	defer manifestSetup()
+	pxutil.SpecsBaseDir = func() string {
+		return "../../../bin/configs"
+	}
+	defer func() {
+		pxutil.SpecsBaseDir = func() string {
+			return pxutil.PortworxSpecsDir
+		}
+	}()
+
+	// TestCase: k8s 1.22 should upgrade Prometheus operator image
+	driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Placement = nil
+	require.Equal(t,
+		"quay.io/prometheus-operator/prometheus-operator:v0.50.0",
+		cluster.Status.DesiredImages.PrometheusOperator)
+
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Prometheus operator ClusterRole should be updated as well
+	expectedCR := testutil.GetExpectedClusterRole(t, "prometheusOperatorClusterRole.yaml")
+	actualCR := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.PrometheusOperatorClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Empty(t, actualCR.OwnerReferences)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
+	// Prometheus operator Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "prometheusOperatorDeployment_v0.50.0.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Labels, deployment.Labels)
+	require.Equal(t, expectedDeployment.Annotations, deployment.Annotations)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Prometheus and alert manager instances should use new images
+	prometheusInstance := &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"quay.io/prometheus/prometheus:v2.29.1",
+		*prometheusInstance.Spec.Image,
+	)
+	alertManagerInstance := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManagerInstance, component.AlertManagerInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		"quay.io/prometheus/alertmanager:v0.22.2",
+		*alertManagerInstance.Spec.Image,
+	)
+
+	// Prometheus CRDs should be registered
+	crdNameList := []string{
+		"alertmanagerconfigs.monitoring.coreos.com",
+		"alertmanagers.monitoring.coreos.com",
+		"podmonitors.monitoring.coreos.com",
+		"probes.monitoring.coreos.com",
+		"prometheuses.monitoring.coreos.com",
+		"prometheusrules.monitoring.coreos.com",
+		"servicemonitors.monitoring.coreos.com",
+		"thanosrulers.monitoring.coreos.com",
+	}
+
+	crds, err := fakeExtClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		List(context.TODO(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, crds.Items, len(crdNameList))
+	for _, crdName := range crdNameList {
+		_, err := fakeExtClient.ApiextensionsV1().
+			CustomResourceDefinitions().
+			Get(context.TODO(), crdName, metav1.GetOptions{})
+		require.NoError(t, err)
+	}
+}
+
 func TestPrometheusInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -6270,14 +6407,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRegistry + "/coreos/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRegistry + "/coreos/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance := &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -6388,14 +6521,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRegistry + "/coreos/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRegistry + "/coreos/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -6499,14 +6628,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		"quay.io/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
 		"--config-reloader-image=quay.io/coreos/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
 		"--prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -6617,14 +6742,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		customRegistry+"/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRegistry+"/coreos/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRegistry+"/coreos/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRegistry + "/coreos/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRegistry + "/coreos/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -7074,14 +7195,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRepo + "/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRepo + "/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance := &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -7186,14 +7303,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRepo + "/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRepo + "/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -7298,14 +7411,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRepo + "/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRepo + "/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -7409,14 +7518,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		"quay.io/coreos/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
 		"--config-reloader-image=quay.io/coreos/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
 		"--prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)
@@ -7521,14 +7626,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		customRepo+"/prometheus-operator:v1.2.3",
 		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
-	require.Equal(t,
-		"--config-reloader-image="+customRepo+"/configmap-reload:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[2],
-	)
-	require.Equal(t,
-		"--prometheus-config-reloader="+customRepo+"/prometheus-config-reloader:v1.2.3",
-		prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args[3],
-	)
+	require.Subset(t, prometheusOperatorDeployment.Spec.Template.Spec.Containers[0].Args, []string{
+		"--config-reloader-image=" + customRepo + "/configmap-reload:v1.2.3",
+		"--prometheus-config-reloader=" + customRepo + "/prometheus-config-reloader:v1.2.3",
+	})
 
 	prometheusInstance = &monitoringv1.Prometheus{}
 	err = testutil.Get(k8sClient, prometheusInstance, component.PrometheusInstanceName, cluster.Namespace)

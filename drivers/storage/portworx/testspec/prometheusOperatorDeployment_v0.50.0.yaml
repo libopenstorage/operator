@@ -1,3 +1,4 @@
+# For k8s 1.22+ with newer version Prometheus operator
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,9 +20,8 @@ spec:
         - args:
             - -namespaces=kube-test
             - --kubelet-service=kube-test/kubelet
-            - --prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v1.2.3
-            - --config-reloader-image=quay.io/coreos/configmap-reload:v1.2.3
-          image: quay.io/coreos/prometheus-operator:v1.2.3
+            - --prometheus-config-reloader=quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0
+          image: quay.io/prometheus-operator/prometheus-operator:v0.50.0
           imagePullPolicy: Always
           name: px-prometheus-operator
           ports:
