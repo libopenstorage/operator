@@ -24,18 +24,27 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion                = "2.6.5"
-	defaultStorkImage                     = "openstorage/stork:2.6.2"
-	defaultAutopilotImage                 = "portworx/autopilot:1.3.0"
-	defaultLighthouseImage                = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage                 = "portworx/px-node-wiper:2.5.0"
+	DefaultPortworxVersion = "2.6.5"
+	defaultStorkImage      = "openstorage/stork:2.6.2"
+	defaultAutopilotImage  = "portworx/autopilot:1.3.0"
+	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
+	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
+	defaultTelemetryImage  = "purestorage/ccm-service:3.0.3"
+
+	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
+	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
-	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
-	defaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
-	defaultTelemetryImage                 = "purestorage/ccm-service:3.0.3"
-	defaultManifestRefreshInterval        = 3 * time.Hour
+	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
+
+	// Default new Prometheus images for k8s 1.22+
+	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.50.0"
+	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.29.1"
+	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
+	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.22.2"
+
+	defaultManifestRefreshInterval = 3 * time.Hour
 )
 
 var (
@@ -168,19 +177,15 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:                     defaultStorkImage,
-			Autopilot:                 defaultAutopilotImage,
-			Lighthouse:                defaultLighthouseImage,
-			NodeWiper:                 defaultNodeWiperImage,
-			Prometheus:                defaultPrometheusImage,
-			AlertManager:              defaultAlertManagerImage,
-			PrometheusOperator:        defaultPrometheusOperatorImage,
-			PrometheusConfigMapReload: defaultPrometheusConfigMapReloadImage,
-			PrometheusConfigReloader:  defaultPrometheusConfigReloaderImage,
-			Telemetry:                 defaultTelemetryImage,
+			Stork:      defaultStorkImage,
+			Autopilot:  defaultAutopilotImage,
+			Lighthouse: defaultLighthouseImage,
+			NodeWiper:  defaultNodeWiperImage,
+			Telemetry:  defaultTelemetryImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
+	fillPrometheusDefaults(rel, k8sVersion)
 	return rel
 }
 
@@ -200,26 +205,11 @@ func fillDefaults(
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
 	}
-	if rel.Components.Prometheus == "" {
-		rel.Components.Prometheus = defaultPrometheusImage
-	}
-	if rel.Components.AlertManager == "" {
-		rel.Components.AlertManager = defaultAlertManagerImage
-	}
-	if rel.Components.PrometheusOperator == "" {
-		rel.Components.PrometheusOperator = defaultPrometheusOperatorImage
-	}
-	if rel.Components.PrometheusConfigMapReload == "" {
-		rel.Components.PrometheusConfigMapReload = defaultPrometheusConfigMapReloadImage
-	}
-	if rel.Components.PrometheusConfigReloader == "" {
-		rel.Components.PrometheusConfigReloader = defaultPrometheusConfigReloaderImage
-	}
-
 	if rel.Components.Telemetry == "" {
 		rel.Components.Telemetry = defaultTelemetryImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
+	fillPrometheusDefaults(rel, k8sVersion)
 }
 
 func fillCSIDefaults(
@@ -241,6 +231,43 @@ func fillCSIDefaults(
 	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
 	rel.Components.CSIResizer = csiImages.Resizer
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
+}
+
+func fillPrometheusDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
+		if rel.Components.Prometheus == "" {
+			rel.Components.Prometheus = defaultNewPrometheusImage
+		}
+		if rel.Components.PrometheusOperator == "" {
+			rel.Components.PrometheusOperator = defaultNewPrometheusOperatorImage
+		}
+		if rel.Components.PrometheusConfigReloader == "" {
+			rel.Components.PrometheusConfigReloader = defaultNewPrometheusConfigReloaderImage
+		}
+		if rel.Components.AlertManager == "" {
+			rel.Components.AlertManager = defaultNewAlertManagerImage
+		}
+		return
+	}
+
+	if rel.Components.Prometheus == "" {
+		rel.Components.Prometheus = defaultPrometheusImage
+	}
+	if rel.Components.PrometheusOperator == "" {
+		rel.Components.PrometheusOperator = DefaultPrometheusOperatorImage
+	}
+	if rel.Components.PrometheusConfigMapReload == "" {
+		rel.Components.PrometheusConfigMapReload = defaultPrometheusConfigMapReloadImage
+	}
+	if rel.Components.PrometheusConfigReloader == "" {
+		rel.Components.PrometheusConfigReloader = defaultPrometheusConfigReloaderImage
+	}
+	if rel.Components.AlertManager == "" {
+		rel.Components.AlertManager = defaultAlertManagerImage
+	}
 }
 
 func refreshInterval(cluster *corev1.StorageCluster) time.Duration {

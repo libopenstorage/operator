@@ -19,6 +19,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/api/bootstrap/k8s"
@@ -7004,9 +7005,13 @@ func manifestSetup() {
 	manifest.SetInstance(&fakeManifest{})
 }
 
-type fakeManifest struct{}
+type fakeManifest struct {
+	k8sVersion *version.Version
+}
 
-func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, _ *version.Version) {}
+func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion *version.Version) {
+	m.k8sVersion = k8sVersion
+}
 
 func (m *fakeManifest) GetVersions(
 	_ *corev1.StorageCluster,
@@ -7016,7 +7021,7 @@ func (m *fakeManifest) GetVersions(
 	if force {
 		compVersion = newCompVersion()
 	}
-	return &manifest.Version{
+	version := &manifest.Version{
 		PortworxVersion: "3.0.0",
 		Components: manifest.Release{
 			Stork:                     "openstorage/stork:" + compVersion,
@@ -7037,6 +7042,15 @@ func (m *fakeManifest) GetVersions(
 			AlertManager:              "quay.io/prometheus/alertmanager:v1.2.3",
 		},
 	}
+	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
+		version.Components.PrometheusOperator = "quay.io/prometheus-operator/prometheus-operator:v0.50.0"
+		version.Components.Prometheus = "quay.io/prometheus/prometheus:v2.29.1"
+		version.Components.PrometheusConfigMapReload = ""
+		version.Components.PrometheusConfigReloader = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
+		version.Components.AlertManager = "quay.io/prometheus/alertmanager:v0.22.2"
+
+	}
+	return version
 }
 
 func compVersion() string {

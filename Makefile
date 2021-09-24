@@ -16,6 +16,8 @@ STORAGE_OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_IMAGE):$(D
 STORAGE_OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_STORAGE_OPERATOR_TEST_IMAGE):$(DOCKER_HUB_STORAGE_OPERATOR_TEST_TAG)
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
+PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-19.0.1
+PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/prometheus-community/helm-charts/$(PROMETHEUS_OPERATOR_HELM_CHARTS_TAG)/charts/kube-prometheus-stack/crds
 
 HAS_GOMODULES := $(shell go help mod why 2> /dev/null)
 
@@ -175,10 +177,18 @@ verify-catalog:
 downloads: getconfigs get-release-manifest
 
 cleanconfigs:
-	rm -f "bin/configs/portworx-prometheus-rule.yaml"
+	rm -rf bin/configs
 
 getconfigs: cleanconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-podmonitors.yaml' -O bin/configs/prometheus-crd-podmonitors.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-probes.yaml' -O bin/configs/prometheus-crd-probes.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-prometheuses.yaml' -O bin/configs/prometheus-crd-prometheuses.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-prometheusrules.yaml' -O bin/configs/prometheus-crd-prometheusrules.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-servicemonitors.yaml' -O bin/configs/prometheus-crd-servicemonitors.yaml
+	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-thanosrulers.yaml' -O bin/configs/prometheus-crd-thanosrulers.yaml
 
 clean-release-manifest:
 	rm -rf manifests

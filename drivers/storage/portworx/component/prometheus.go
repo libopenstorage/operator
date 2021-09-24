@@ -3,6 +3,8 @@ package component
 import (
 	"context"
 	"fmt"
+	"path"
+	"path/filepath"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -17,6 +19,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metaerrors "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,6 +57,7 @@ const (
 
 type prometheus struct {
 	k8sClient         client.Client
+	k8sVersion        *version.Version
 	scheme            *runtime.Scheme
 	recorder          record.EventRecorder
 	isOperatorCreated bool
@@ -69,11 +73,12 @@ func (c *prometheus) Priority() int32 {
 
 func (c *prometheus) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.k8sVersion = &k8sVersion
 	c.scheme = scheme
 	c.recorder = recorder
 }
@@ -85,6 +90,11 @@ func (c *prometheus) IsEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 func (c *prometheus) Reconcile(cluster *corev1.StorageCluster) error {
+	if c.k8sVersion != nil && c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
+		if err := c.createPrometheusCRDs(); err != nil {
+			return err
+		}
+	}
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := c.createOperatorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
@@ -173,6 +183,27 @@ func (c *prometheus) MarkDeleted() {
 	c.isOperatorCreated = false
 }
 
+// createPrometheusCRDs registers all CRDs needed by prometheus operator
+// with prometheus operator upgraded to 0.50.0, it no longer registers CRDs automatically
+// check for details: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/crds
+func (c *prometheus) createPrometheusCRDs() error {
+	filename := path.Join(pxutil.SpecsBaseDir(), "prometheus-crd-*.yaml")
+	files, err := filepath.Glob(filename)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		if err := k8sutil.ParseObjectFromFile(file, c.scheme, crd); err != nil {
+			return err
+		}
+		if err := k8sutil.CreateCRD(crd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *prometheus) createOperatorServiceAccount(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
@@ -207,6 +238,7 @@ func (c *prometheus) createPrometheusServiceAccount(
 	)
 }
 
+// RBAC rule reference: https://github.com/prometheus-operator/prometheus-operator/blob/release-0.50/Documentation/rbac.md
 func (c *prometheus) createOperatorClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
@@ -229,11 +261,16 @@ func (c *prometheus) createOperatorClusterRole() error {
 					APIGroups: []string{"monitoring.coreos.com"},
 					Resources: []string{
 						"alertmanagers",
+						"alertmanagers/finalizers",
+						"alertmanagerconfigs",
 						"prometheuses",
 						"prometheuses/finalizers",
+						"thanosrulers",
+						"thanosrulers/finalizers",
 						"servicemonitors",
-						"prometheusrules",
 						"podmonitors",
+						"probes",
+						"prometheusrules",
 					},
 					Verbs: []string{"*"},
 				},
@@ -254,8 +291,8 @@ func (c *prometheus) createOperatorClusterRole() error {
 				},
 				{
 					APIGroups: []string{""},
-					Resources: []string{"services", "endpoints"},
-					Verbs:     []string{"get", "create", "update"},
+					Resources: []string{"services", "services/finalizers", "endpoints"},
+					Verbs:     []string{"get", "create", "update", "delete"},
 				},
 				{
 					APIGroups: []string{""},
@@ -265,6 +302,11 @@ func (c *prometheus) createOperatorClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"namespaces"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"networking.k8s.io"},
+					Resources: []string{"ingresses"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
@@ -284,6 +326,7 @@ func (c *prometheus) createOperatorClusterRole() error {
 	)
 }
 
+// RBAC rule reference: https://github.com/prometheus-operator/prometheus-operator/blob/release-0.50/Documentation/rbac.md
 func (c *prometheus) createPrometheusClusterRole() error {
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
@@ -294,7 +337,7 @@ func (c *prometheus) createPrometheusClusterRole() error {
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{""},
-					Resources: []string{"nodes", "services", "endpoints", "pods"},
+					Resources: []string{"nodes", "nodes/metrics", "services", "endpoints", "pods"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
@@ -303,7 +346,12 @@ func (c *prometheus) createPrometheusClusterRole() error {
 					Verbs:     []string{"get"},
 				},
 				{
-					NonResourceURLs: []string{"/metrics", "/federate"},
+					APIGroups: []string{"networking.k8s.io"},
+					Resources: []string{"ingresses"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					NonResourceURLs: []string{"/metrics", "/metrics/cadvisor", "/federate"},
 					Verbs:           []string{"get"},
 				},
 				{
@@ -432,9 +480,11 @@ func getPrometheusOperatorDeploymentSpec(
 	args = append(args,
 		fmt.Sprintf("-namespaces=%s", cluster.Namespace),
 		fmt.Sprintf("--kubelet-service=%s/kubelet", cluster.Namespace),
-		fmt.Sprintf("--config-reloader-image=%s", configReloaderImageName),
 		fmt.Sprintf("--prometheus-config-reloader=%s", prometheusConfigReloaderImageName),
 	)
+	if configReloaderImageName != "" {
+		args = append(args, fmt.Sprintf("--config-reloader-image=%s", configReloaderImageName))
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
