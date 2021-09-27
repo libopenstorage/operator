@@ -439,6 +439,14 @@ func (p *portworx) DeleteStorage(
 ) (*corev1.ClusterCondition, error) {
 	p.deleteComponents(cluster)
 
+	// Close connection to Portworx GRPC server
+	if p.sdkConn != nil {
+		if err := p.sdkConn.Close(); err != nil {
+			logrus.Warnf("Failed to close sdk connection: %v", err)
+		}
+		p.sdkConn = nil
+	}
+
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
 		// No Delete strategy provided or Portworx not installed through the operator,
 		// then do not wipe Portworx
