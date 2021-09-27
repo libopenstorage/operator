@@ -160,6 +160,7 @@ func (a *auth) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	a.closeSdkConn()
 	return nil
 }
 
