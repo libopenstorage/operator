@@ -87,6 +87,7 @@ func (c *disruptionBudget) Delete(cluster *corev1.StorageCluster) error {
 	); err != nil {
 		return err
 	}
+	c.closeSdkConn()
 	return nil
 }
 

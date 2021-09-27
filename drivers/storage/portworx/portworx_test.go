@@ -4764,6 +4764,69 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.Empty(t, pspList.Items)
 }
 
+func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := &portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(&api.SdkNodeEnumerateWithFiltersResponse{}, nil).
+		AnyTimes()
+
+	// Force initialize a connection to the GRPC server
+	_, err := driver.GetStorageNodes(cluster)
+	require.NoError(t, err)
+
+	require.NotNil(t, driver.sdkConn)
+
+	// SDK connection should be closed on StorageCluster deletion
+	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	_, err = driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Nil(t, driver.sdkConn)
+}
+
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
