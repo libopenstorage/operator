@@ -1397,6 +1397,9 @@ spec:
                   csiAttacher:
                     type: string
                     description: Desired image for CSI attacher.
+                  csiResizer:
+                    type: string
+                    description: Desired image for CSI resizer.
                   csiSnapshotter:
                     type: string
                     description: Desired image for CSI snapshotter.
@@ -1442,4 +1445,4 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
-        preserveUnknownFields: false
+        x-kubernetes-preserve-unknown-fields: true

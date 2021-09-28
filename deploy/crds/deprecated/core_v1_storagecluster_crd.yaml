@@ -1382,6 +1382,9 @@ spec:
                 csiAttacher:
                   type: string
                   description: Desired image for CSI attacher.
+                csiResizer:
+                  type: string
+                  description: Desired image for CSI resizer.
                 csiSnapshotter:
                   type: string
                   description: Desired image for CSI snapshotter.
