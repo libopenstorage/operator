@@ -4,9 +4,12 @@ package integrationtest
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+
 	"github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -51,6 +55,62 @@ const (
 	// defaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	defaultValidateUninstallRetryInterval = 30 * time.Second
 )
+
+// node* is to be used in the Node section of the StorageCluster spec. node0 will select the
+// alphabetically 1st PX node, node1 will select the 2nd, and so on
+const (
+	nodeReplacePrefix = "replaceWithNodeNumber"
+
+	node0 = nodeReplacePrefix + "0"
+	node1 = nodeReplacePrefix + "1"
+	node2 = nodeReplacePrefix + "2"
+)
+
+// TestrailCase describes one test case on TestRail, which will
+// instantiate the given StorageCluster spec, check that it
+// started/failed to start correctly, and then remove it.
+type TestrailCase struct {
+	CaseIDs                 []string
+	Spec                    corev1.StorageClusterSpec
+	ShouldStartSuccessfully bool
+}
+
+func (trc *TestrailCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error {
+	cluster.Name = makeDNS1123Compatible(strings.Join(trc.CaseIDs, "-"))
+	cluster.Spec.CloudStorage = trc.Spec.CloudStorage
+	cluster.Spec.Kvdb = trc.Spec.Kvdb
+
+	names, err := testutil.GetExpectedPxNodeNameList(cluster)
+	if err != nil {
+		return err
+	}
+	// Sort for consistent order between multiple tests
+	sort.Strings(names)
+
+	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
+	// the name of the Nth eligible Portworx node
+	for i := range trc.Spec.Nodes {
+		if !strings.HasPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
+			continue
+		}
+
+		num := strings.TrimPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
+		parsedNum, err := strconv.Atoi(num)
+		if err != nil {
+			return err
+		}
+
+		if parsedNum >= len(names) {
+			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
+		}
+
+		trc.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
+	}
+
+	cluster.Spec.Nodes = trc.Spec.Nodes
+
+	return nil
+}
 
 func TestMain(m *testing.M) {
 	flag.StringVar(&pxDockerUsername,

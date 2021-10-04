@@ -3,30 +3,19 @@
 package integrationtest
 
 import (
-	"fmt"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"sort"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	k8sv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-)
-
-// node* is to be used in the Node section of the StorageCluster spec. node0 will select the
-// alphabetically 1st PX node, node1 will select the 2nd, and so on
-const (
-	nodeReplacePrefix = "replaceWithNodeNumber"
-
-	node0 = nodeReplacePrefix + "0"
-	node1 = nodeReplacePrefix + "1"
-	node2 = nodeReplacePrefix + "2"
 )
 
 var (
@@ -46,7 +35,7 @@ var (
 	autoJournalDrive = &v1.CloudStorageSpec{
 		CloudStorageCommon: v1.CloudStorageCommon{
 			KvdbDeviceSpec:    &size32,
-			JournalDeviceSpec: &auto, // TODO: Once PWX-21364 is fixed, add this back in!
+			JournalDeviceSpec: &auto,
 			DeviceSpecs:       &disks100,
 		},
 	}
@@ -58,131 +47,76 @@ var (
 	}
 )
 
-type TestrailCase struct {
-	ID                      string
-	Spec                    v1.StorageClusterSpec
-	BackendRequirements     BackendRequirements
-	ShouldStartSuccessfully bool
-}
-
-func (trc *TestrailCase) PopulateStorageCluster(cluster *v1.StorageCluster) error {
-	cluster.Name = makeDNS1123Compatible(trc.ID)
-	cluster.Spec.CloudStorage = trc.Spec.CloudStorage
-	cluster.Spec.Kvdb = trc.Spec.Kvdb
-
-	names, err := testutil.GetExpectedPxNodeNameList(cluster)
-	if err != nil {
-		return err
-	}
-	// Sort for consistent order between multiple tests
-	sort.Strings(names)
-
-	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
-	// the name of the Nth eligible Portworx node
-	for i := range trc.Spec.Nodes {
-		if !strings.HasPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
-			continue
-		}
-
-		num := strings.TrimPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
-		parsedNum, err := strconv.Atoi(num)
-		if err != nil {
-			return err
-		}
-
-		if parsedNum >= len(names) {
-			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
-		}
-
-		trc.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
-	}
-
-	cluster.Spec.Nodes = trc.Spec.Nodes
-
-	return nil
-}
-
-var flashArrayPositiveInstallTests = []TestrailCase{
+var flashArrayPositiveInstallTests = []PureTestrailCase{
+	//// C55130: https://portworx.testrail.net/index.php?/cases/view/55130
+	// Install PX through operator with internal KVDB and journal drive on FlashArray
+	{
+		TestrailCase: TestrailCase{
+			CaseIDs: []string{"C55130"},
+			Spec: v1.StorageClusterSpec{
+				Kvdb: &internalKVDB,
+				CloudStorage: &v1.CloudStorageSpec{
+					CloudStorageCommon: v1.CloudStorageCommon{
+						KvdbDeviceSpec:    &size32,
+						JournalDeviceSpec: &size3,
+						DeviceSpecs:       &disks100,
+					},
+				},
+			},
+			ShouldStartSuccessfully: true,
+		},
+		BackendRequirements: BackendRequirements{
+			RequiredArrays: 1,
+		},
+	},
 	// C55129: https://portworx.testrail.net/index.php?/cases/view/55129
 	// Install PX through operator with internal KVDB on FlashArray
 	//    and
-	// C56411: https://portworx.testrail.net/index.php?/cases/view/56411
-	// Install PX through operator with one valid FlashArray
-	{
-		ID:                      "C55129-C56411",
-		ShouldStartSuccessfully: true,
-		BackendRequirements: BackendRequirements{
-			RequiredArrays: 1,
-		},
-		Spec: v1.StorageClusterSpec{
-			Kvdb: &internalKVDB,
-			CloudStorage: &v1.CloudStorageSpec{
-				CloudStorageCommon: v1.CloudStorageCommon{
-					KvdbDeviceSpec: &size32,
-					DeviceSpecs:    &disks100,
-				},
-			},
-		},
-	},
-	//// C55130: https://portworx.testrail.net/index.php?/cases/view/55130
-	// Install PX through operator with internal KVDB and journal drive on FlashArray
-	// TODO: Blocked due to PWX-21364, retest
-	{
-		ID:                      "C55130",
-		ShouldStartSuccessfully: true,
-		BackendRequirements: BackendRequirements{
-			RequiredArrays: 1,
-		},
-		Spec: v1.StorageClusterSpec{
-			Kvdb: &internalKVDB,
-			CloudStorage: &v1.CloudStorageSpec{
-				CloudStorageCommon: v1.CloudStorageCommon{
-					KvdbDeviceSpec:    &size32,
-					JournalDeviceSpec: &size3,
-					DeviceSpecs:       &disks100,
-				},
-			},
-		},
-	},
 	// C56414: https://portworx.testrail.net/index.php?/cases/view/56414
 	// Install PX through operator with internal KVDB and auto journal drive on FlashArray
 	//    and
+	// C56411: https://portworx.testrail.net/index.php?/cases/view/56411
+	// Install PX through operator with one valid FlashArray
+	//    and
 	// C55003: https://portworx.testrail.net/index.php?/cases/view/55003
 	// Uninstall PX through operator with Pure arrays, after clean install
-	// TODO: Blocked due to PWX-21364, retest
 	{
-		ID:                      "C56414-C55003", // TODO: handle multiple test IDs cleanly(?) (or just have multiple tests)
-		ShouldStartSuccessfully: true,
+		TestrailCase: TestrailCase{
+			CaseIDs:                 []string{"C55129", "C56414", "C56411", "C55003"},
+			Spec:                    simpleClusterSpec,
+			ShouldStartSuccessfully: true,
+		},
 		BackendRequirements: BackendRequirements{
 			RequiredArrays: 1,
 		},
-		Spec: simpleClusterSpec,
 	},
 	// C55133: https://portworx.testrail.net/index.php?/cases/view/55133
 	// Install PX through operator with heterogeneous cluster, with different nodes having different capacity drives
 	{
-		ID:                      "C55133",
-		ShouldStartSuccessfully: true,
-		BackendRequirements: BackendRequirements{
-			RequiredArrays: 1,
-		},
-		Spec: v1.StorageClusterSpec{
-			Kvdb:         &internalKVDB,
-			CloudStorage: autoJournalDrive,
-			Nodes: []v1.NodeSpec{
-				{
-					Selector: v1.NodeSelector{
-						NodeName: node0,
-					},
-					CloudStorage: &v1.CloudStorageNodeSpec{
-						CloudStorageCommon: v1.CloudStorageCommon{
-							DeviceSpecs:       &disks200,
-							JournalDeviceSpec: &auto,
-							KvdbDeviceSpec:    &size32,
+		TestrailCase: TestrailCase{
+			CaseIDs: []string{"C55133"},
+			Spec: v1.StorageClusterSpec{
+				Kvdb:         &internalKVDB,
+				CloudStorage: autoJournalDrive,
+				Nodes: []v1.NodeSpec{
+					{
+						Selector: v1.NodeSelector{
+							NodeName: node0,
+						},
+						CloudStorage: &v1.CloudStorageNodeSpec{
+							CloudStorageCommon: v1.CloudStorageCommon{
+								DeviceSpecs:       &disks200,
+								JournalDeviceSpec: &auto,
+								KvdbDeviceSpec:    &size32,
+							},
 						},
 					},
 				},
 			},
+			ShouldStartSuccessfully: true,
+		},
+		BackendRequirements: BackendRequirements{
+			RequiredArrays: 1,
 		},
 	},
 	// C55134: https://portworx.testrail.net/index.php?/cases/view/55134
@@ -209,28 +143,32 @@ var flashArrayPositiveInstallTests = []TestrailCase{
 	//C56412: https://portworx.testrail.net/index.php?/cases/view/56412
 	//Install PX through operator with multiple FlashArrays (all valid)
 	{
-		ID:                      "C56412",
-		ShouldStartSuccessfully: true,
+		TestrailCase: TestrailCase{
+			CaseIDs:                 []string{"C56412"},
+			Spec:                    simpleClusterSpec,
+			ShouldStartSuccessfully: true,
+		},
 		BackendRequirements: BackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  0,
 		},
-		Spec: simpleClusterSpec,
 	},
 	//C56413: https://portworx.testrail.net/index.php?/cases/view/56413
 	//Install PX through operator with both valid and invalid FlashArrays
 	{
-		ID:                      "C56413",
-		ShouldStartSuccessfully: true,
+		TestrailCase: TestrailCase{
+			CaseIDs:                 []string{"C56413"},
+			Spec:                    simpleClusterSpec,
+			ShouldStartSuccessfully: true,
+		},
 		BackendRequirements: BackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  1,
 		},
-		Spec: simpleClusterSpec,
 	},
 }
 
-/*var flashArrayNegativeInstallTests = []TestrailCase{
+/*var flashArrayNegativeInstallTests = []TestrailCase{ // TODO: need to be sure we have the right way to detect failure to start
 	// C54982: https://portworx.testrail.net/index.php?/cases/view/54982
 	// Install PX with invalid credentials
 	// C55004: https://portworx.testrail.net/index.php?/cases/view/55004
@@ -262,11 +200,11 @@ var flashArrayPositiveInstallTests = []TestrailCase{
 
 func TestFAFBPositiveInstallation(t *testing.T) {
 	for _, testCase := range flashArrayPositiveInstallTests {
-		t.Run(testCase.ID, matrixTest(testCase))
+		t.Run(strings.Join(testCase.CaseIDs, "-"), matrixTest(testCase))
 	}
 }
 
-func matrixTest(c TestrailCase) func(*testing.T) {
+func matrixTest(c PureTestrailCase) func(*testing.T) {
 	return func(t *testing.T) {
 		// Check that we have enough backends to support this test: skip early
 		fleetBackends := GenerateFleetOrSkip(t, pxNamespace, c.BackendRequirements)
@@ -329,6 +267,8 @@ func matrixTest(c TestrailCase) func(*testing.T) {
 		logrus.Infof("Delete Secret %s", OutputSecretName)
 		err = deletePureSecretIfExists(cluster.Namespace)
 		require.NoError(t, err)
+
+		// TODO: mark test completion using testrail IDs
 	}
 }
 
@@ -338,14 +278,27 @@ func createPureSecret(config DiscoveryConfig, namespace string) error {
 		return err
 	}
 
-	_, err = coreops.Instance().UpdateSecretData(OutputSecretName, namespace, map[string][]byte{
-		"pure.json": pureJSON,
+	if err = deletePureSecretIfExists(namespace); err != nil {
+		return err
+	}
+
+	// Wait a little bit
+	time.Sleep(time.Second * 5)
+
+	_, err = coreops.Instance().CreateSecret(&k8sv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OutputSecretName,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			"pure.json": pureJSON,
+		},
 	})
 	return err
 }
 
 func deletePureSecretIfExists(namespace string) error {
-	if err := coreops.Instance().DeleteSecret(OutputSecretName, namespace); !errors.IsNotFound(err) {
+	if err := coreops.Instance().DeleteSecret(OutputSecretName, namespace); !errors.IsNotFound(err) && !errors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil
