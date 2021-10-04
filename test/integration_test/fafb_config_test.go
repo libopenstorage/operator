@@ -49,6 +49,19 @@ type BackendRequirements struct {
 	InvalidArrays, InvalidBlades int
 }
 
+// PureTestrailCase is a TestrailCase with additional
+// information to construct a px-pure-secret.
+type PureTestrailCase struct {
+	TestrailCase
+	BackendRequirements BackendRequirements
+}
+
+// DiscoveryConfig represents a single pure.json file
+type DiscoveryConfig struct {
+	Arrays []FlashArrayEntry `json:"FlashArrays,omitempty"`
+	Blades []FlashBladeEntry `json:"FlashBlades,omitempty"`
+}
+
 // FlashArrayEntry represents a single FlashArray in a pure.json file
 type FlashArrayEntry struct {
 	APIToken     string            `json:"APIToken,omitempty"`
@@ -62,12 +75,6 @@ type FlashBladeEntry struct {
 	NFSEndPoint  string            `json:"NFSEndPoint,omitempty"`
 	APIToken     string            `json:"APIToken,omitempty"`
 	Labels       map[string]string `json:"Labels,omitempty"`
-}
-
-// DiscoveryConfig represents a single pure.json file
-type DiscoveryConfig struct {
-	Arrays []FlashArrayEntry `json:"FlashArrays,omitempty"`
-	Blades []FlashBladeEntry `json:"FlashBlades,omitempty"`
 }
 
 // DumpJSON returns this DiscoveryConfig in a JSON byte array,
