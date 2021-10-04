@@ -126,13 +126,12 @@ done
 
 kubectl -n kube-system logs -f operator-test
 for i in $(seq 1 100) ; do
-	sleep 5  # Give the test pod a chance to finish first after the logs stop
+    sleep 5  # Give the test pod a chance to finish first after the logs stop
     test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
     if [ "$test_status" == "Running" ]; then
         echo "Test is still running, status: $test_status"
         kubectl -n kube-system logs -f operator-test
     else
-        sleep 5
         break
     fi
 done

@@ -453,12 +453,6 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 	return nil
 }
 
-func sortNodesByNodeName(nodes []corev1.NodeSpec) func(i, j int) bool {
-	return func(i, j int) bool {
-		return nodes[i].Selector.NodeName < nodes[j].Selector.NodeName
-	}
-}
-
 func nodeSpecsToMaps(nodes []corev1.NodeSpec) map[string]*corev1.CloudStorageNodeSpec {
 	toReturn := map[string]*corev1.CloudStorageNodeSpec{}
 
