@@ -178,7 +178,7 @@ cleanconfigs:
 	rm -f "bin/configs/portworx-prometheus-rule.yaml"
 
 getconfigs: cleanconfigs
-	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs
+	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 
 clean-release-manifest:
 	rm -rf manifests
