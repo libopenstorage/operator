@@ -453,6 +453,9 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 	return nil
 }
 
+// nodeSpecsToMaps takes the given node spec list and converts it to a map of node names to
+// cloud storage specs. Note that this will not work for label selectors at the moment, only
+// node names.
 func nodeSpecsToMaps(nodes []corev1.NodeSpec) map[string]*corev1.CloudStorageNodeSpec {
 	toReturn := map[string]*corev1.CloudStorageNodeSpec{}
 
