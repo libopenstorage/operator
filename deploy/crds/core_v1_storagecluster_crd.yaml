@@ -577,7 +577,7 @@ spec:
                                       name:
                                         type: string
                                       optional:
-                                        type: string
+                                        type: boolean
                                       items:
                                         type: array
                                         items:
@@ -595,7 +595,7 @@ spec:
                                       name:
                                         type: string
                                       optional:
-                                        type: string
+                                        type: boolean
                                       items:
                                         type: array
                                         items:
@@ -814,7 +814,7 @@ spec:
                                       name:
                                         type: string
                                       optional:
-                                        type: string
+                                        type: boolean
                                       items:
                                         type: array
                                         items:
@@ -832,7 +832,7 @@ spec:
                                       name:
                                         type: string
                                       optional:
-                                        type: string
+                                        type: boolean
                                       items:
                                         type: array
                                         items:
@@ -1052,7 +1052,7 @@ spec:
                                   name:
                                     type: string
                                   optional:
-                                    type: string
+                                    type: boolean
                                   items:
                                     type: array
                                     items:
@@ -1070,7 +1070,7 @@ spec:
                                   name:
                                     type: string
                                   optional:
-                                    type: string
+                                    type: boolean
                                   items:
                                     type: array
                                     items:
