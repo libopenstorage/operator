@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	storageapi "github.com/libopenstorage/openstorage/api"
 	"reflect"
 	"strconv"
 	"testing"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
+	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
@@ -1404,132 +1404,6 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[2])
-}
-
-// When a StorageNode is unhealthy, and the storage node is not a k8s node. we should not upgrade storage pod as
-// it may cause storage cluster to lose quorum.  This could happen if a user removes a k8s node from the cluster
-// for maintenance, and meanwhile tries to uppgrade portworx.
-func TestStoragePodUpdateWhenStorageNodeUnhealthy(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	driverName := "mock-driver"
-	cluster := createStorageCluster()
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	storageLabels := map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  driverName,
-	}
-	k8sClient := testutil.FakeK8sClient(cluster)
-	podControl := &k8scontroller.FakePodControl{}
-	recorder := record.NewFakeRecorder(10)
-	controller := &Controller{
-		client:              k8sClient,
-		Driver:              driver,
-		podControl:          podControl,
-		recorder:            recorder,
-		kubernetesVersion:   k8sVersion,
-		lastPodCreationTime: make(map[string]time.Time),
-	}
-
-	var storageNodes []*storageapi.StorageNode
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-3", true))
-	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
-
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
-	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
-
-	// This will create a revision which we will map to our pre-created pods
-	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
-	require.NoError(t, err)
-
-	// Kubernetes node with enough resources to create new pods
-	for i := 0; i < 3; i++ {
-		k8sNode := createK8sNode(fmt.Sprintf("k8s-node-%d", i), 10)
-		k8sClient.Create(context.TODO(), k8sNode)
-
-		// Pods that are already running on the k8s nodes with same hash
-		storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
-		storagePod := createStoragePod(cluster, fmt.Sprintf("storage-pod-%d", i), k8sNode.Name, storageLabels)
-		storagePod.Status.Conditions = []v1.PodCondition{
-			{
-				Type:   v1.PodReady,
-				Status: v1.ConditionTrue,
-			},
-		}
-		k8sClient.Create(context.TODO(), storagePod)
-	}
-
-	// TestCase: Add imagePullSecret to trigger portworx updates. No update should happen as there is one unhealthy
-	// storage node.
-	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-	cluster.Spec.ImagePullSecret = stringPtr("pull-secret")
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
-
-	request := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-	}
-	result, err := controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-
-	// The old pod should not be marked for deletion.
-	require.Empty(t, podControl.DeletePodName)
-
-	// TestCase: mark the unhealthy storage node to healthy, the update should begin.
-	storageNodes[3].Status = storageapi.Status_STATUS_OK
-	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-
-	// The old pod be marked for deletion.
-	require.NotEmpty(t, podControl.DeletePodName)
-
-	// Reset the test for upgrade.
-	podControl.DeletePodName = []string{}
-	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-	cluster.Spec.ImagePullSecret = stringPtr("updated-pull-secret")
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
-
-	// TestCase: Storage node 0, which is also a k8s node, is unhealthy, no storage pod should be upgraded.
-	storageNodes[0].Status = storageapi.Status_STATUS_ERROR
-
-	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, podControl.DeletePodName)
-
-	// TestCase: There is a k8s node should not run storage pod, but storage node exists and is unhealthy.
-	// no storage pod should be upgraded.
-	storageNodes[0].Status = storageapi.Status_STATUS_OK
-	storageNodes[3].Status = storageapi.Status_STATUS_ERROR
-
-	k8sNode4 := createK8sNode("k8s-node-4", 10)
-	k8sNode4.Labels["node-role.kubernetes.io/master"] = ""
-	k8sClient.Create(context.TODO(), k8sNode4)
-
-	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, podControl.DeletePodName)
 }
 
 func TestFailedStoragePodsGetRemoved(t *testing.T) {
@@ -2982,6 +2856,196 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Len(t, podControl.Templates, 1)
 	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
+}
+
+// When any storage node is unhealthy, we should not upgrade storage pod as it may cause
+// storage cluster to lose quorum. The unhealthy storage node could be running on -
+// - a Kubernetes node
+// - a Kubernetes node where it is not supposed to run now (exluded later using taints, node affinity, etc)
+// - outside the Kubernetes cluster
+// These scenarios may happen if the user removes a node from Kubernetes for maintenance,
+// and meanwhile tries to upgrade the storage cluster.
+func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := &Controller{
+		client:              k8sClient,
+		Driver:              driver,
+		podControl:          podControl,
+		recorder:            recorder,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
+	}
+
+	var storageNodes []*storageapi.StorageNode
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
+	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	// This will create a revision which we will map to our pre-created pods
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+	storageLabels[defaultStorageClusterUniqueLabelKey] = rev1Hash
+
+	// Kubernetes node with enough resources to create new pods
+	for i := 0; i < 3; i++ {
+		k8sNode := createK8sNode(fmt.Sprintf("k8s-node-%d", i), 10)
+		k8sClient.Create(context.TODO(), k8sNode)
+
+		storagePod := createStoragePod(cluster, fmt.Sprintf("storage-pod-%d", i), k8sNode.Name, storageLabels)
+		storagePod.Status.Conditions = []v1.PodCondition{
+			{
+				Type:   v1.PodReady,
+				Status: v1.ConditionTrue,
+			},
+		}
+		k8sClient.Create(context.TODO(), storagePod)
+	}
+
+	// TestCase: Change image pull secret to trigger portworx updates.
+	// No update should happen as there is one unhealthy storage node.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.ImagePullSecret = stringPtr("pull-secret")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should not be marked for deletion.
+	require.Empty(t, podControl.DeletePodName)
+
+	// TestCase: Mark the unhealthy storage node to healthy, the update should begin.
+	storageNodes[3].Status = storageapi.Status_STATUS_OK
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod be marked for deletion.
+	require.NotEmpty(t, podControl.DeletePodName)
+
+	// TestCase: Storage node 0, which is also a k8s node, is unhealthy,
+	// no storage pod should be upgraded.
+	storageNodes[0].Status = storageapi.Status_STATUS_ERROR
+
+	// Reset the test for upgrade.
+	podControl.DeletePodName = []string{}
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.ImagePullSecret = stringPtr("updated-pull-secret")
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Empty(t, podControl.DeletePodName)
+
+	// TestCase: K8s node should not run storage pod, but unhealthy storage node exists,
+	// without any pod - no storage pod should be upgraded.
+	storageNodes[0].Status = storageapi.Status_STATUS_OK
+	storageNodes[3].SchedulerNodeName = "k8s-node-4"
+	storageNodes[3].Status = storageapi.Status_STATUS_ERROR
+
+	k8sNode4 := createK8sNode("k8s-node-4", 10)
+	k8sNode4.Spec.Taints = []v1.Taint{
+		{
+			Key:    "key",
+			Effect: v1.TaintEffectNoExecute,
+		},
+	}
+	k8sClient.Create(context.TODO(), k8sNode4)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Empty(t, podControl.DeletePodName)
+
+	// TestCase: There is a k8s node should not run storage pod, but healthy storage node exists,
+	// without any pod - upgrade should continue.
+	storageNodes[3].Status = storageapi.Status_STATUS_OK
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion.
+	require.NotEmpty(t, podControl.DeletePodName)
+
+	// TestCase: There is a k8s node should not run storage pod, but healthy storage node exists,
+	// with ready pod - upgrade should continue
+	storagePod := createStoragePod(cluster, "storage-pod-4", "k8s-node-4", storageLabels)
+	storagePod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionTrue,
+		},
+	}
+	k8sClient.Create(context.TODO(), storagePod)
+
+	// Reset the test for upgrade
+	podControl.DeletePodName = []string{}
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion.
+	require.NotEmpty(t, podControl.DeletePodName)
+
+	// TestCase: There is a k8s node should not run storage pod, but healthy storage node exists,
+	// with not ready pod - upgrade should continue
+	storagePod.Status.Conditions = []v1.PodCondition{
+		{
+			Type:   v1.PodReady,
+			Status: v1.ConditionFalse,
+		},
+	}
+	k8sClient.Update(context.TODO(), storagePod)
+
+	// Reset the test for upgrade
+	podControl.DeletePodName = []string{}
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should not be marked for deletion.
+	require.NotEmpty(t, podControl.DeletePodName)
 }
 
 func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {

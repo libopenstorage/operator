@@ -430,7 +430,8 @@ func (c *Controller) getUnavailableNumbers(
 		if storageNodeExists {
 			delete(storageNodeMap, node.Name)
 			if storageNode.Status != storageapi.Status_STATUS_OK {
-				logrus.WithField("StorageNode", storageNode).Info("Storage node is not healthy")
+				logrus.WithField("StorageNode", fmt.Sprintf("%s/%s", cluster.Namespace, node.Name)).
+					Info("Storage node is not healthy")
 				numUnavailable++
 				continue
 			}
@@ -446,27 +447,27 @@ func (c *Controller) getUnavailableNumbers(
 			return -1, -1, err
 		}
 
-		// During Openshift cluster upgrade, the node will be tainted hence wantToRun will be false,
-		// so we need to check if StorageNode exists to decide whether to check if the storage node is available.
-		if wantToRun || storageNodeExists {
-			desiredNumberScheduled++
-			storagePods, exists := nodeToStoragePods[node.Name]
-			if !exists {
-				numUnavailable++
-				continue
+		if !wantToRun {
+			continue
+		}
+
+		desiredNumberScheduled++
+		storagePods, exists := nodeToStoragePods[node.Name]
+		if !exists {
+			numUnavailable++
+			continue
+		}
+		available := false
+		for _, pod := range storagePods {
+			// for the purposes of update we ensure that the pod is
+			// both available and not terminating
+			if podutil.IsPodReady(pod) && pod.DeletionTimestamp == nil {
+				available = true
+				break
 			}
-			available := false
-			for _, pod := range storagePods {
-				// for the purposes of update we ensure that the pod is
-				// both available and not terminating
-				if podutil.IsPodReady(pod) && pod.DeletionTimestamp == nil {
-					available = true
-					break
-				}
-			}
-			if !available {
-				numUnavailable++
-			}
+		}
+		if !available {
+			numUnavailable++
 		}
 	}
 
