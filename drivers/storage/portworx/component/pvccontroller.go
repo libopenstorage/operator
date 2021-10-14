@@ -40,6 +40,7 @@ const (
 	defaultPVCControllerCPU = "200m"
 
 	defaultPVCControllerInsecurePort = "10252"
+	defaultPVCControllerSecurePort   = "10257"
 
 	// AksPVCControllerInsecurePort is the PVC controller port and health check port, due to the default port
 	// is already used on AKS we use different port for AKS.
@@ -289,7 +290,6 @@ func (c *pvcController) createDeployment(
 	command := []string{
 		"kube-controller-manager",
 		"--leader-elect=true",
-		"--address=0.0.0.0",
 		"--controllers=persistentvolume-binder,persistentvolume-expander",
 		"--use-service-account-credentials=true",
 	}
@@ -298,10 +298,14 @@ func (c *pvcController) createDeployment(
 	} else {
 		command = append(command, "--leader-elect-resource-lock=configmaps")
 	}
-	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
-		command = append(command, "--port="+port)
-	} else if pxutil.IsAKS(cluster) {
-		command = append(command, "--port="+AksPVCControllerInsecurePort)
+
+	if c.k8sVersion.LessThan(k8sutil.K8sVer1_22) {
+		command = append(command, "--address=0.0.0.0")
+		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
+			command = append(command, "--port="+port)
+		} else if pxutil.IsAKS(cluster) {
+			command = append(command, "--port="+AksPVCControllerInsecurePort)
+		}
 	}
 
 	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
@@ -342,7 +346,7 @@ func (c *pvcController) createDeployment(
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
-		deployment := getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
+		deployment := c.getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -351,7 +355,7 @@ func (c *pvcController) createDeployment(
 	return nil
 }
 
-func getPVCControllerDeploymentSpec(
+func (c *pvcController) getPVCControllerDeploymentSpec(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	imageName string,
@@ -363,7 +367,17 @@ func getPVCControllerDeploymentSpec(
 	maxSurge := intstr.FromInt(1)
 
 	healthCheckPort := defaultPVCControllerInsecurePort
-	if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
+	healthCheckScheme := v1.URISchemeHTTP
+	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
+		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && port != "" {
+			healthCheckPort = port
+		} else if pxutil.IsAKS(cluster) {
+			healthCheckPort = AksPVCControllerSecurePort
+		} else {
+			healthCheckPort = defaultPVCControllerSecurePort
+		}
+		healthCheckScheme = v1.URISchemeHTTPS
+	} else if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		healthCheckPort = port
 	} else if pxutil.IsAKS(cluster) {
 		healthCheckPort = AksPVCControllerInsecurePort
@@ -423,7 +437,7 @@ func getPVCControllerDeploymentSpec(
 										Host:   "127.0.0.1",
 										Path:   "/healthz",
 										Port:   intstr.Parse(healthCheckPort),
-										Scheme: v1.URISchemeHTTP,
+										Scheme: healthCheckScheme,
 									},
 								},
 							},
