@@ -1264,6 +1264,67 @@ func TestPVCControllerInstall(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
+func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.22.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	// TestCase: Simple install on k8s 1.22
+	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment.yaml")
+	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
+	expectedContainer.Command = expectedContainer.Command[0:5]
+	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.22.0"
+	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
+	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
+	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
+
+	// TestCase: Add both port and secure port annotations
+	cluster.Annotations[pxutil.AnnotationPVCControllerPort] = "12345"
+	cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort] = "12346"
+	expectedContainer.Command = append(expectedContainer.Command, "--secure-port=12346")
+	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(12346)
+	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
+
+	// TestCase: Simple install on AKS
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationIsAKS: "true",
+	}
+	expectedContainer = expectedDeployment.Spec.Template.Spec.Containers[0]
+	expectedContainer.Command[5] = "--secure-port=10261"
+	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10261)
+	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
+}
+
 func TestPVCControllerWithInvalidValue(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
