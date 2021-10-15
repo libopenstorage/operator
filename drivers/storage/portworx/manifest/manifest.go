@@ -26,7 +26,7 @@ const (
 	// if none specified and if version manifest could not be fetched
 	DefaultPortworxVersion = "2.7.4"
 	defaultStorkImage      = "openstorage/stork:2.6.5"
-	defaultAutopilotImage  = "portworx/autopilot:1.3.0"
+	defaultAutopilotImage  = "portworx/autopilot:1.3.1-rc1"
 	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
 	defaultTelemetryImage  = "purestorage/ccm-service:3.0.3"
