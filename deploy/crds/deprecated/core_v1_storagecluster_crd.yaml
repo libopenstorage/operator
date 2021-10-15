@@ -20,7 +20,7 @@ spec:
     served: true
     storage: true
   - name: v1alpha1
-    served: true
+    served: false
     storage: false
   additionalPrinterColumns:
   - name: Cluster UUID
