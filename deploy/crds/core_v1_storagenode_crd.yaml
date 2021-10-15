@@ -147,7 +147,7 @@ spec:
                     type: string
                     description: Rack on which the storage node is placed.
   - name: v1alpha1
-    served: true
+    served: false
     storage: false
     subresources:
       status: {}

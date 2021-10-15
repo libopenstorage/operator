@@ -1363,7 +1363,7 @@ spec:
                       description: Reason is human readable message indicating details about the current
                         state of the cluster.
   - name: v1alpha1
-    served: true
+    served: false
     storage: false
     subresources:
       status: {}
