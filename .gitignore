@@ -5,6 +5,7 @@ manifests/
 *.test
 coverage.txt
 profile.out
+test/integration_test/operator-test-pod.yaml
 
 # IDEs
 .vscode

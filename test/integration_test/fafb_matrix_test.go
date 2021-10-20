@@ -221,11 +221,8 @@ func matrixTest(c PureTestrailCase) func(*testing.T) {
 		c.PopulateStorageCluster(cluster)
 
 		// Add extra env variables
-		releaseManifestURL := pxSpecGenURL
-		if !strings.HasSuffix(releaseManifestURL, "/") {
-			releaseManifestURL += "/"
-		}
-		releaseManifestURL += "version"
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(pxSpecGenURL)
+		require.NoError(t, err)
 
 		cluster.Spec.Env = append(cluster.Spec.Env, []k8sv1.EnvVar{
 			{

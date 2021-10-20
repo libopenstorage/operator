@@ -1,5 +1,8 @@
 #!/bin/bash -x
 
+test_pod_template="/testspecs/operator-test-pod-template.yaml"
+test_pod_spec="/testspecs/operator-test-pod.yaml"
+
 test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
 upgrade_hops_url_list=""
@@ -65,48 +68,52 @@ done
 apk update
 apk add jq
 
+# Copy test pod template to a new file
+cp $test_pod_template $test_pod_spec
+
 # Set log level
-sed -i 's/'LOG_LEVEL'/'"$log_level"'/g' /testspecs/operator-test-pod.yaml
+sed -i 's/'LOG_LEVEL'/'"$log_level"'/g' $test_pod_spec
 
 # Set Operator tests to execute
 if [ "$focus_tests" != "" ]; then
-     echo "Running focussed test: ${focus_tests}"
-	sed -i 's|'FOCUS_TESTS'|- -test.run='"$focus_tests"'|g' /testspecs/operator-test-pod.yaml
-else 
-	sed -i 's|'FOCUS_TESTS'|''|g' /testspecs/operator-test-pod.yaml
+    echo "Running focussed test: ${focus_tests}"
+    parsed_focus_tests=${focus_tests//[\/]/\\/}
+    sed -i 's/'FOCUS_TESTS'/'"$parsed_focus_tests"'/g' $test_pod_spec
+else
+    sed -i 's/'"-\s-test.run=FOCUS_TESTS"'/''/g' $test_pod_spec
 fi
 
-sed -i 's/'SHORT_FLAG'/'"$short_test"'/g' /testspecs/operator-test-pod.yaml
+sed -i 's/'SHORT_FLAG'/'"$short_test"'/g' $test_pod_spec
 
 # Set Portworx Spec Generator URL
 if [ "$portworx_spec_gen_url" == "" ]; then
-	portworx_spec_gen_url=$default_portworx_spec_gen_url
+    portworx_spec_gen_url=$default_portworx_spec_gen_url
 fi
 parsed_portworx_spec_gen_url=${portworx_spec_gen_url//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
-sed -i 's/'PORTWORX_SPEC_GEN_URL'/'"$parsed_portworx_spec_gen_url"'/g' /testspecs/operator-test-pod.yaml
+sed -i 's/'PORTWORX_SPEC_GEN_URL'/'"$parsed_portworx_spec_gen_url"'/g' $test_pod_spec
 
 # Upgrade hops URL list
 if [ "$upgrade_hops_url_list" != "" ]; then
-	parsed_upgrade_hops_url_list=${upgrade_hops_url_list//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
-	sed -i 's/'UPGRADE_HOPS_URL_LIST'/'"$parsed_upgrade_hops_url_list"'/g' /testspecs/operator-test-pod.yaml
+    parsed_upgrade_hops_url_list=${upgrade_hops_url_list//[\/]/\\/} # This hack is needed because sed has issues with // and it throws an error
+    sed -i 's/'UPGRADE_HOPS_URL_LIST'/'"$parsed_upgrade_hops_url_list"'/g' $test_pod_spec
 else
-	sed -i 's|'UPGRADE_HOPS_URL_LIST'|''|g' /testspecs/operator-test-pod.yaml
+    sed -i 's|'UPGRADE_HOPS_URL_LIST'|''|g' $test_pod_spec
 fi
 
 # Portworx Docker credentials
 if [ "$portworx_docker_username" != "" ] && [ "$portworx_docker_password" != "" ]; then
-	sed -i 's/'PORTWORX_DOCKER_USERNAME'/'"$portworx_docker_username"'/g' /testspecs/operator-test-pod.yaml
-	sed -i 's/'PORTWORX_DOCKER_PASSWORD'/'"$portworx_docker_password"'/g' /testspecs/operator-test-pod.yaml
+    sed -i 's/'PORTWORX_DOCKER_USERNAME'/'"$portworx_docker_username"'/g' $test_pod_spec
+    sed -i 's/'PORTWORX_DOCKER_PASSWORD'/'"$portworx_docker_password"'/g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_DOCKER_USERNAME'|''|g' /testspecs/operator-test-pod.yaml
-	sed -i 's|'PORTWORX_DOCKER_PASSWORD'|''|g' /testspecs/operator-test-pod.yaml
+    sed -i 's|'PORTWORX_DOCKER_USERNAME'|''|g' $test_pod_spec
+    sed -i 's|'PORTWORX_DOCKER_PASSWORD'|''|g' $test_pod_spec
 fi
 
 # Set test image
-sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g'  /testspecs/operator-test-pod.yaml
+sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g' $test_pod_spec
 
-kubectl delete -f /testspecs/operator-test-pod.yaml
-kubectl create -f /testspecs/operator-test-pod.yaml
+kubectl delete -f $test_pod_template
+kubectl create -f $test_pod_spec
 
 for i in $(seq 1 100) ; do
     test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
