@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -182,6 +183,7 @@ func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 }
 
 func createStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
+	portworx.SetPortworxDefaults(cluster)
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
@@ -214,22 +216,33 @@ func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) e
 		envVarList := []v1.EnvVar{}
 
 		// Add release manifest URL to Env Vars
-		envVarList = append(envVarList, []v1.EnvVar{{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL}}...)
+		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
 
 		// Add Portworx Docker credentials to Env Vars
 		if pxDockerUsername != "" && pxDockerPassword != "" {
 			envVarList = append(envVarList, []v1.EnvVar{{Name: testutil.PxRegistryUserEnvVarName, Value: pxDockerUsername}, {Name: testutil.PxRegistryPasswordEnvVarName, Value: pxDockerPassword}}...)
 		}
 
-		cluster = addEnvVarToStorageCluster(envVarList, cluster)
+		addEnvVarToStorageCluster(envVarList, cluster)
 	}
 
 	return nil
 }
 
-func addEnvVarToStorageCluster(envVarList []v1.EnvVar, cluster *corev1.StorageCluster) *corev1.StorageCluster {
-	cluster.Spec.CommonConfig.Env = append(cluster.Spec.CommonConfig.Env, envVarList...)
-	return cluster
+// addEnvVarToStorageCluster will overwrite existing or add new env variables
+func addEnvVarToStorageCluster(envVarList []v1.EnvVar, cluster *corev1.StorageCluster) {
+	envMap := make(map[string]v1.EnvVar)
+	var newEnvVarList []v1.EnvVar
+	for _, env := range cluster.Spec.Env {
+		envMap[env.Name] = env
+	}
+	for _, env := range envVarList {
+		envMap[env.Name] = env
+	}
+	for _, env := range envMap {
+		newEnvVarList = append(newEnvVarList, env)
+	}
+	cluster.Spec.Env = newEnvVarList
 }
 
 func validateStorageClusterComponents(cluster *corev1.StorageCluster) error {

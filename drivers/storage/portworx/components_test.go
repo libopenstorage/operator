@@ -3431,7 +3431,7 @@ func TestSecurityInstall(t *testing.T) {
 		},
 	}
 	// Initial run
-	setPortworxDefaults(cluster)
+	SetPortworxDefaults(cluster)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3647,7 +3647,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 		},
 	}
 	// Initial run
-	setPortworxDefaults(cluster)
+	SetPortworxDefaults(cluster)
 
 	// token should be refreshed if the issuer changes
 	err = driver.PreInstall(cluster) // regenerate token with long lifetime

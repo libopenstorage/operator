@@ -41,9 +41,9 @@ spec:
   - command: ["gotestsum"]
     args:
     - --junitfile
-    - /testresults/junit.xml 
+    - /testresults/junit.xml
     - --format
-    - standard-verbose 
+    - standard-verbose
     - --raw-command
     - go
     - tool
@@ -58,7 +58,7 @@ spec:
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
     - -upgrade-hops-url-list=UPGRADE_HOPS_URL_LIST
     - -log-level=LOG_LEVEL
-    FOCUS_TESTS
+    - -test.run=FOCUS_TESTS
     imagePullPolicy: Always
     image: openstorage/px-operator-test:latest
     securityContext:
@@ -73,6 +73,6 @@ spec:
   - hostPath:
       path: /testresults/
       type: DirectoryOrCreate
-    name: testresults  
+    name: testresults
   serviceAccountName: operator-test-account
   restartPolicy: Never
