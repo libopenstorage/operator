@@ -29,7 +29,8 @@ var (
 	pxDockerUsername string
 	pxDockerPassword string
 
-	pxSpecGenURL string
+	pxSpecGenURL    string
+	pxImageOverride string
 
 	pxUpgradeHopsURLList string
 
@@ -126,6 +127,10 @@ func TestMain(m *testing.M) {
 		"portworx-spec-gen-url",
 		"",
 		"Portworx Spec Generator URL, defines what Portworx version will be deployed")
+	flag.StringVar(&pxImageOverride,
+		"portworx-image-override",
+		"",
+		"Portworx Image override, defines what Portworx version will be deployed")
 	flag.StringVar(&pxUpgradeHopsURLList,
 		"upgrade-hops-url-list",
 		"",
@@ -206,6 +211,8 @@ func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, ima
 }
 
 func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) error {
+	var envVarList []v1.EnvVar
+
 	// Set release manifest URL and Docker credentials in case of edge-install.portworx.com
 	if strings.Contains(specGenURL, "edge") {
 		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
@@ -213,18 +220,23 @@ func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) e
 			return err
 		}
 
-		envVarList := []v1.EnvVar{}
-
 		// Add release manifest URL to Env Vars
 		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
-
-		// Add Portworx Docker credentials to Env Vars
-		if pxDockerUsername != "" && pxDockerPassword != "" {
-			envVarList = append(envVarList, []v1.EnvVar{{Name: testutil.PxRegistryUserEnvVarName, Value: pxDockerUsername}, {Name: testutil.PxRegistryPasswordEnvVarName, Value: pxDockerPassword}}...)
-		}
-
-		addEnvVarToStorageCluster(envVarList, cluster)
 	}
+
+	// Add Portworx image properties, if specified
+	if pxDockerUsername != "" && pxDockerPassword != "" {
+		envVarList = append(envVarList,
+			[]v1.EnvVar{
+				{Name: testutil.PxRegistryUserEnvVarName, Value: pxDockerUsername},
+				{Name: testutil.PxRegistryPasswordEnvVarName, Value: pxDockerPassword},
+			}...)
+	}
+	if pxImageOverride != "" {
+		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: pxImageOverride})
+	}
+
+	addEnvVarToStorageCluster(envVarList, cluster)
 
 	return nil
 }

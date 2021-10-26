@@ -123,21 +123,32 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 	// Install PX through operator on FlashArray with storage and storageless nodes
 	// TODO: Needs to remove prereqs from storageless node before running test
 	//{
-	//	ID:                      "C55134",
-	//	ShouldStartSuccessfully: true,
+	//	TestrailCase: TestrailCase{
+	//		CaseIDs: []string{
+	//			"C55134",
+	//		},
+	//		Spec: v1.StorageClusterSpec{
+	//			Kvdb: &internalKVDB,
+	//			CloudStorage: &v1.CloudStorageSpec{
+	//				CloudStorageCommon: v1.CloudStorageCommon{
+	//					DeviceSpecs: &disks100,
+	//					KvdbDeviceSpec:    &size32,
+	//					JournalDeviceSpec: &auto,
+	//				},
+	//			},
+	//			Nodes: []v1.NodeSpec{
+	//				{
+	//					Selector: v1.NodeSelector{
+	//						NodeName: node0,
+	//					},
+	//					CloudStorage: nil,
+	//				},
+	//			},
+	//		},
+	//		ShouldStartSuccessfully: true,
+	//	},
 	//	BackendRequirements: BackendRequirements{
 	//		RequiredArrays: 1,
-	//	},
-	//	Spec: v1.StorageClusterSpec{
-	//		Kvdb: &internalKVDB,
-	//		CloudStorage: &v1.CloudStorageSpec{
-	//			CloudStorageCommon: v1.CloudStorageCommon{
-	//				DeviceSpecs: &disks100,
-	//				KvdbDeviceSpec:    &size32,
-	//				// TODO: re-enable journal drives
-	//			},
-	//			MaxStorageNodes: &threeStorageNodes, // TODO: change this to using the node selector
-	//		},
 	//	},
 	//},
 	//C56412: https://portworx.testrail.net/index.php?/cases/view/56412
