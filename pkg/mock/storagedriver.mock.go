@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	storageapi "github.com/libopenstorage/openstorage/api"
+	api "github.com/libopenstorage/openstorage/api"
 	storage "github.com/libopenstorage/operator/drivers/storage"
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v10 "k8s.io/api/core/v1"
@@ -38,21 +38,6 @@ func NewMockDriver(ctrl *gomock.Controller) *MockDriver {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDriver) EXPECT() *MockDriverMockRecorder {
 	return m.recorder
-}
-
-// GetStorageNodes returns the current storage node list.
-func (m *MockDriver) GetStorageNodes(arg0 *v1.StorageCluster) ([]*storageapi.StorageNode, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
-	ret0, _ := ret[0].([]*storageapi.StorageNode)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetStorageNodes indicates an expected call of GetStorageNodes.
-func (mr *MockDriverMockRecorder) GetStorageNodes(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockDriver)(nil).GetStorageNodes), arg0)
 }
 
 // DeleteStorage mocks base method.
@@ -97,6 +82,21 @@ func (m *MockDriver) GetSelectorLabels() map[string]string {
 func (mr *MockDriverMockRecorder) GetSelectorLabels() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelectorLabels", reflect.TypeOf((*MockDriver)(nil).GetSelectorLabels))
+}
+
+// GetStorageNodes mocks base method.
+func (m *MockDriver) GetStorageNodes(arg0 *v1.StorageCluster) ([]*api.StorageNode, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
+	ret0, _ := ret[0].([]*api.StorageNode)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStorageNodes indicates an expected call of GetStorageNodes.
+func (mr *MockDriverMockRecorder) GetStorageNodes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockDriver)(nil).GetStorageNodes), arg0)
 }
 
 // GetStoragePodSpec mocks base method.

@@ -6,8 +6,6 @@ github.com/PuerkitoBio/urlesc
 github.com/armon/go-metrics
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
-# github.com/cenkalti/backoff v2.2.1+incompatible
-github.com/cenkalti/backoff
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
 # github.com/coreos/etcd v3.3.13+incompatible
@@ -139,13 +137,12 @@ github.com/libopenstorage/cloudops/pkg/storagedistribution
 github.com/libopenstorage/cloudops/pkg/utils
 github.com/libopenstorage/cloudops/specs/decisionmatrix
 github.com/libopenstorage/cloudops/unsupported
-# github.com/libopenstorage/openstorage v8.0.1-0.20200914191223-6fb8d163a67c+incompatible
+# github.com/libopenstorage/openstorage v8.0.1-0.20211025171211-43eadb190637+incompatible
 ## explicit
 github.com/libopenstorage/openstorage/api
 github.com/libopenstorage/openstorage/pkg/auth
+github.com/libopenstorage/openstorage/pkg/correlation
 github.com/libopenstorage/openstorage/pkg/grpcserver
-github.com/libopenstorage/openstorage/pkg/util
-github.com/libopenstorage/openstorage/volume
 # github.com/mailru/easyjson v0.7.0
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
@@ -171,6 +168,8 @@ github.com/opencontainers/go-digest
 # github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 ## explicit
 github.com/openshift/api/config/v1
+# github.com/pborman/uuid v1.2.0
+github.com/pborman/uuid
 # github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
