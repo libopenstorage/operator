@@ -10,6 +10,7 @@ focus_tests=""
 short_test=false
 portworx_docker_username=""
 portworx_docker_password=""
+portworx_image_override=""
 log_level="debug"
 for i in "$@"
 do
@@ -35,6 +36,12 @@ case $i in
     --portworx-spec-gen-url)
         echo "Portworx Spec Generator URL to use to for test: $2"
         portworx_spec_gen_url=$2
+        shift
+        shift
+        ;;
+    --portworx-image-override)
+        echo "Portworx Image to use for test: %2"
+        portworx_image_override=$2
         shift
         shift
         ;;
@@ -111,6 +118,7 @@ fi
 
 # Set test image
 sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g' $test_pod_spec
+sed -i 's/'PX_IMAGE_OVERRIDE'/'"$portworx_image_override"'/g' $test_pod_spec
 
 kubectl delete -f $test_pod_template
 kubectl create -f $test_pod_spec
