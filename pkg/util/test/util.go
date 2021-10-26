@@ -62,6 +62,8 @@ const (
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
 	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
+	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
+	PxImageEnvVarName = "PX_IMAGE"
 )
 
 // MockDriver creates a mock storage driver

@@ -56,6 +56,7 @@ spec:
     - -portworx-spec-gen-url=PORTWORX_SPEC_GEN_URL
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
+    - -portworx-image-override=PX_IMAGE_OVERRIDE
     - -upgrade-hops-url-list=UPGRADE_HOPS_URL_LIST
     - -log-level=LOG_LEVEL
     - -test.run=FOCUS_TESTS
