@@ -55,7 +55,11 @@ type OIDCAuthenticator struct {
 
 // NewOIDC returns a new OIDC authenticator
 func NewOIDC(config *OIDCAuthConfig) (*OIDCAuthenticator, error) {
-	p, err := oidc.NewProvider(context.Background(), config.Issuer)
+	// Reverting the defaultTimeout base context as some of the coreos oidc api
+	// takes this context for subsequent call and end up using expired context.
+	ctx := context.Background()
+
+	p, err := oidc.NewProvider(ctx, config.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to communicate with OIDC provider %s: %v",
 			config.Issuer,
