@@ -409,19 +409,20 @@ func ValidateStorageCluster(
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	var pxVersion string
 
-	imageOverride := false
+	imageOverride := ""
 
 	// Check if we have a PX_IMAGE set
-	for _, env := range cluster.Spec.CommonConfig.Env {
+	for _, env := range cluster.Spec.Env {
 		if env.Name == PxImageEnvVarName {
-			imageOverride = true
+			imageOverride = env.Value
+			break
 		}
 	}
 
 	// Construct PX Version string used to match to deployed expected PX version
 	if strings.Contains(pxImageList["version"], "_") {
-		if len(cluster.Spec.CommonConfig.Env) > 0 {
-			for _, env := range cluster.Spec.CommonConfig.Env {
+		if len(cluster.Spec.Env) > 0 {
+			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
 					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
 					if pxVersion == "" {
@@ -446,8 +447,8 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		var readyNodes int
 		for _, storageNode := range storageNodeList.Items {
 			logString := fmt.Sprintf("storagenode: %s Expected status: %s Got: %s, ", storageNode.Name, expectedStatus, storageNode.Status.Phase)
-			if imageOverride {
-				logString += fmt.Sprintf("Running PX version: %s", storageNode.Spec.Version)
+			if imageOverride != "" {
+				logString += fmt.Sprintf("Running PX version: %s From image: %s", storageNode.Spec.Version, imageOverride)
 			} else {
 				logString += fmt.Sprintf("Expected PX version: %s Got: %s", pxVersion, storageNode.Spec.Version)
 			}
@@ -458,7 +459,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 				continue
 			}
 			// If we didn't specify a custom image, make sure it's running the expected version
-			if !imageOverride && !strings.Contains(storageNode.Spec.Version, pxVersion) {
+			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, pxVersion) {
 				continue
 			}
 
