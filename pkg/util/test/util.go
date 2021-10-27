@@ -409,10 +409,20 @@ func ValidateStorageCluster(
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	var pxVersion string
 
+	imageOverride := ""
+
+	// Check if we have a PX_IMAGE set
+	for _, env := range cluster.Spec.Env {
+		if env.Name == PxImageEnvVarName {
+			imageOverride = env.Value
+			break
+		}
+	}
+
 	// Construct PX Version string used to match to deployed expected PX version
 	if strings.Contains(pxImageList["version"], "_") {
-		if len(cluster.Spec.CommonConfig.Env) > 0 {
-			for _, env := range cluster.Spec.CommonConfig.Env {
+		if len(cluster.Spec.Env) > 0 {
+			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
 					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
 					if pxVersion == "" {
@@ -436,10 +446,24 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		expectedStatus := "Online"
 		var readyNodes int
 		for _, storageNode := range storageNodeList.Items {
-			if storageNode.Status.Phase == expectedStatus && strings.Contains(storageNode.Spec.Version, pxVersion) {
-				readyNodes++
+			logString := fmt.Sprintf("storagenode: %s Expected status: %s Got: %s, ", storageNode.Name, expectedStatus, storageNode.Status.Phase)
+			if imageOverride != "" {
+				logString += fmt.Sprintf("Running PX version: %s From image: %s", storageNode.Spec.Version, imageOverride)
+			} else {
+				logString += fmt.Sprintf("Expected PX version: %s Got: %s", pxVersion, storageNode.Spec.Version)
 			}
-			logrus.Debugf("storagenode: %s Expected status: %s Got: %s, Expected PX version: %s Got: %s", storageNode.Name, expectedStatus, storageNode.Status.Phase, pxVersion, storageNode.Spec.Version)
+			logrus.Debug(logString)
+
+			// Don't mark this node as ready if it's not in the expected phase
+			if storageNode.Status.Phase != expectedStatus {
+				continue
+			}
+			// If we didn't specify a custom image, make sure it's running the expected version
+			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, pxVersion) {
+				continue
+			}
+
+			readyNodes++
 		}
 
 		if readyNodes != len(storageNodeList.Items) {

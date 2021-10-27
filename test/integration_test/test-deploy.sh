@@ -40,7 +40,7 @@ case $i in
         shift
         ;;
     --portworx-image-override)
-        echo "Portworx Image to use for test: %2"
+        echo "Portworx Image to use for test: $2"
         portworx_image_override=$2
         shift
         shift
@@ -118,7 +118,7 @@ fi
 
 # Set test image
 sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g' $test_pod_spec
-sed -i 's/'PX_IMAGE_OVERRIDE'/'"$portworx_image_override"'/g' $test_pod_spec
+sed -i 's|'PX_IMAGE_OVERRIDE'|'"$portworx_image_override"'|g' $test_pod_spec
 
 kubectl delete -f $test_pod_template
 kubectl create -f $test_pod_spec
