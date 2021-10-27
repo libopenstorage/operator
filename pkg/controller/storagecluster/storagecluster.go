@@ -184,6 +184,11 @@ func (c *Controller) StartWatch() error {
 	return nil
 }
 
+// GetKubernetesClient returns the kubernetes client used by the controller
+func (c *Controller) GetKubernetesClient() client.Client {
+	return c.client
+}
+
 // Reconcile reads that state of the cluster for a StorageCluster object and makes changes based on
 // the state read and what is in the StorageCluster.Spec
 // Note:
@@ -209,6 +214,15 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	if c.waitingForMigrationApproval(cluster) {
+		k8s.InfoEvent(
+			c.recorder, cluster, util.MigrationPendingReason,
+			fmt.Sprintf("To proceed with the migration, set the %s annotation on the "+
+				"StorageCluster to 'true'", constants.AnnotationMigrationApproved),
+		)
+		return reconcile.Result{}, nil
+	}
+
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		cluster.Status.Phase = string(corev1.ClusterOperationFailed)
@@ -224,6 +238,11 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (c *Controller) waitingForMigrationApproval(cluster *corev1.StorageCluster) bool {
+	approved, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationMigrationApproved])
+	return err == nil && !approved
 }
 
 func (c *Controller) validate(cluster *corev1.StorageCluster) error {
