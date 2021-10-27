@@ -28,6 +28,8 @@ const (
 	UpdatePausedReason = "UpdatePaused"
 	// ClusterOnlineReason is added to an event when a cluster comes online
 	ClusterOnlineReason = "ClusterOnline"
+	// MigrationPendingReason is added to an event when the migration is in pending state.
+	MigrationPendingReason = "MigrationPending"
 )
 
 var (

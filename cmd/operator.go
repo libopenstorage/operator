@@ -12,6 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/controller/storagenode"
 	_ "github.com/libopenstorage/operator/pkg/log"
+	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
 	"github.com/libopenstorage/operator/pkg/version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
@@ -187,6 +188,9 @@ func run(c *cli.Context) {
 	if err := storageNodeController.StartWatch(); err != nil {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
+
+	migrationHandler := migration.New(&storageClusterController)
+	go migrationHandler.Start()
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
