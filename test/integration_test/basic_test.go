@@ -3,6 +3,7 @@
 package integrationtest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -14,12 +15,13 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
-func TestBasic(t *testing.T) {
-	t.Run("testBasicInstallWithAllDefaults", testBasicInstallWithAllDefaults)
-	t.Run("testBasicNodeAffinityLabels", testBasicNodeAffinityLabels)
+func TestStorageClusterBasic(t *testing.T) {
+	t.Run("InstallWithAllDefaults", testInstallWithAllDefaults)
+	t.Run("NodeAffinityLabels", testNodeAffinityLabels)
+	t.Run("Upgrade", testUpgrade)
 }
 
-func testBasicInstallWithAllDefaults(t *testing.T) {
+func testInstallWithAllDefaults(t *testing.T) {
 	// Get versions from URL
 	logrus.Infof("Get component images from versions URL")
 	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
@@ -52,7 +54,7 @@ func testBasicInstallWithAllDefaults(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func testBasicNodeAffinityLabels(t *testing.T) {
+func testNodeAffinityLabels(t *testing.T) {
 	var err error
 	labelKey := "skip/px"
 	labelValue := "true"
@@ -130,4 +132,60 @@ func testBasicNodeAffinityLabels(t *testing.T) {
 	if err := coreops.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKey); err != nil {
 		require.NoError(t, err)
 	}
+}
+
+func testUpgrade(t *testing.T) {
+	var err error
+	var lastHopURL string
+	var cluster *op_corev1.StorageCluster
+	clusterName := "upgrade-test"
+
+	upgradeHopURLs := strings.Split(pxUpgradeHopsURLList, ",")
+
+	for ind, hopURL := range upgradeHopURLs {
+		if ind == 0 {
+			logrus.Infof("Deploying starting cluster using %s", hopURL)
+		} else {
+			logrus.Infof("Upgrading from %s to %s", lastHopURL, hopURL)
+		}
+		lastHopURL = hopURL
+
+		// Get versions from URL
+		logrus.Infof("Get component images from versions URL")
+		imageListMap, err := testutil.GetImagesFromVersionURL(hopURL)
+		require.NoError(t, err)
+
+		if ind == 0 {
+			// Construct Portworx StorageCluster object
+			cluster, err = constructStorageCluster(hopURL, imageListMap)
+			require.NoError(t, err)
+
+			cluster.Name = clusterName
+
+			// Deploy cluster
+			logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+			cluster, err = createStorageCluster(cluster)
+			require.NoError(t, err)
+		} else {
+			// Update cluster
+			logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+			cluster, err = updateStorageCluster(cluster, hopURL, imageListMap)
+			require.NoError(t, err)
+		}
+
+		// Validate cluster deployment
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(imageListMap, cluster, defaultValidateUpgradeTimeout, defaultValidateUpgradeRetryInterval, true, "")
+		require.NoError(t, err)
+	}
+
+	// Delete cluster
+	logrus.Infof("Delete StorageCluster %s", cluster.Name)
+	err = testutil.UninstallStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Validate cluster deletion
+	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	require.NoError(t, err)
 }
