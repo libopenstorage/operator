@@ -34,7 +34,17 @@ metadata:
             "annotations": {
               "portworx.io/is-openshift": "true"
             }
-          }
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "core.libopenstorage.org/v1",
+          "kind": "StorageNode",
+          "metadata": {
+            "name": "example",
+            "namespace": "test-operator"
+          },
+          "spec": {}
         }
       ]
 spec:
@@ -226,8 +236,7 @@ spec:
       name: storageclusters.core.libopenstorage.org
       version: v1
       displayName: Storage Cluster
-      description: Storage Cluster installs Portworx in the cluster.
-        It has all the necessary configurations to setup and update a Portworx cluster.
+      description: Storage Cluster installs Portworx in the cluster. It has all the necessary configurations to setup and update a Portworx cluster.
       specDescriptors:
       - description: Details of the storage used by the storage driver.
         displayName: Storage
@@ -504,8 +513,7 @@ spec:
       name: storagenodes.core.libopenstorage.org
       version: v1
       displayName: Storage Node
-      description: Do not create Storage Node as it is internally created by the operator.
-        It represents the status of a Portworx node.
+      description: Do not create Storage Node as it is internally created by the operator. It represents the status of a Portworx node.
       specDescriptors:
       - path: version
         displayName: Version
