@@ -9,7 +9,7 @@ metadata:
     description: Cloud native storage solution for production workloads
     containerImage: portworx/px-operator:master
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2020-04-22T08:00:00Z
+    createdAt: 2022-01-01T08:00:00Z
     support: Portworx, Inc
     certified: "true"
     operatorframework.io/initialization-resource: |-
@@ -34,7 +34,17 @@ metadata:
             "annotations": {
               "portworx.io/is-openshift": "true"
             }
-          }
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "core.libopenstorage.org/v1",
+          "kind": "StorageNode",
+          "metadata": {
+            "name": "example",
+            "namespace": "test-operator"
+          },
+          "spec": {}
         }
       ]
 spec:
@@ -42,7 +52,7 @@ spec:
   version: 2.0.0
   minKubeVersion: "1.12.0"
   maturity: stable
-  replaces: portworx-operator.v1.5.0
+  replaces: portworx-operator.v1.6.0
   maintainers:
   - name: Portworx
     email: support@portworx.com
@@ -226,8 +236,7 @@ spec:
       name: storageclusters.core.libopenstorage.org
       version: v1
       displayName: Storage Cluster
-      description: Storage Cluster installs Portworx in the cluster.
-        It has all the necessary configurations to setup and update a Portworx cluster.
+      description: Storage Cluster installs Portworx in the cluster. It has all the necessary configurations to setup and update a Portworx cluster.
       specDescriptors:
       - description: Details of the storage used by the storage driver.
         displayName: Storage
@@ -499,8 +508,7 @@ spec:
       name: storagenodes.core.libopenstorage.org
       version: v1
       displayName: Storage Node
-      description: Do not create Storage Node as it is internally created by the operator.
-        It represents the status of a Portworx node.
+      description: Do not create Storage Node as it is internally created by the operator. It represents the status of a Portworx node.
       specDescriptors:
       - path: version
         displayName: Version
