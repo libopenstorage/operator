@@ -11120,6 +11120,41 @@ func TestTelemetryEnable(t *testing.T) {
 	require.Len(t, telemetryConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, telemetryConfigMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
+
+	// Proxy config map
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	// Collector config map
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	// Collector role
+	role := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, role.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
+
+	// Collector role binding
+	roleBinding := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, roleBinding.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
+
+	// Collector deployment
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 }
 
 func TestDisableTelemetry(t *testing.T) {

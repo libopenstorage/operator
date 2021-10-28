@@ -31,6 +31,11 @@ const (
 	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
 	defaultTelemetryImage  = "purestorage/ccm-service:3.0.3"
 
+	// DefaultEnvoyImage is the default Envoy image for metrics collector pod.
+	DefaultEnvoyImage = "envoyproxy/envoy:v1.19.1"
+	// DefaultCollectorImage is the default metrics collector container image.
+	DefaultCollectorImage = "pureezhang/realtime-metrics:latest"
+
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
