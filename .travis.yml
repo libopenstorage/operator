@@ -9,6 +9,7 @@ before_install:
   - sudo mv opm /usr/local/bin/opm
 script:
   - |
+    echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USER}" --password-stdin
     if [ "${TRAVIS_BRANCH}" == "master" ]; then
       export DOCKER_HUB_OPERATOR_TAG=master
       export DOCKER_HUB_OPERATOR_TEST_TAG=master
@@ -18,7 +19,6 @@ script:
     fi
     make vendor-update all test verify-bundle-dir container integration-test integration-test-container &&
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
-      docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}";
       make deploy;
       make integration-test-deploy;
       if [ "${TRAVIS_BRANCH}" == "master" ]; then
