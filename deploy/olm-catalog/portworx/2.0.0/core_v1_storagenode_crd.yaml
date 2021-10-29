@@ -146,12 +146,3 @@ spec:
                   rack:
                     type: string
                     description: Rack on which the storage node is placed.
-  - name: v1alpha1
-    served: false
-    storage: false
-    subresources:
-      status: {}
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
