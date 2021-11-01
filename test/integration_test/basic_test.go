@@ -9,7 +9,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -85,6 +87,17 @@ var testStorageClusterBasicCases = []TestCase{
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
 		},
 		TestFunc: BasicUpgrade,
+	},
+	{
+		TestName:        "InstallWithTelemetry",
+		TestrailCaseIDs: []string{},
+		TestSpec: func(t *testing.T) interface{} {
+			cluster := &op_corev1.StorageCluster{}
+			cluster.Name = "telemetry-test"
+			return cluster
+		},
+		ShouldSkip: func() bool { return false },
+		TestFunc:   BasicUpgrade,
 	},
 }
 
@@ -207,4 +220,71 @@ func BasicUpgrade(tc *TestCase) func(*testing.T) {
 		err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
 		require.NoError(t, err)
 	}
+}
+
+func InstallWithTelemetry(tc *TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
+
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*op_corev1.StorageCluster)
+		require.True(t, ok)
+
+		testInstallWithTelemetry(t, cluster)
+	}
+}
+
+func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
+	secret := testutil.GetExpectedSecret(t, "/specs/pure-telemetry-cert.yaml")
+	require.NotNil(t, secret)
+
+	_, err := coreops.Instance().GetSecret(component.TelemetryCertName, "kube-system")
+	require.True(t, err == nil || errors.IsNotFound(err))
+
+	if errors.IsNotFound(err) {
+		secret, err = coreops.Instance().CreateSecret(secret)
+		require.NoError(t, err)
+	} else {
+		secret, err = coreops.Instance().UpdateSecret(secret)
+		require.NoError(t, err)
+	}
+
+	// Deploy portworx with telemetry set to true
+	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
+	require.NoError(t, err)
+
+	err = constructStorageCluster(cluster, pxSpecGenURL, imageListMap)
+	require.NoError(t, err)
+
+	cluster.Name = "test-sc"
+	cluster.Spec.Monitoring = &op_corev1.MonitoringSpec{
+		Telemetry: &op_corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
+
+	cluster, err = createStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateTelemetry(
+		imageListMap,
+		cluster,
+		defaultValidateDeployTimeout,
+		defaultValidateDeployRetryInterval)
+	require.NoError(t, err)
+
+	// Delete cluster
+	logrus.Infof("Delete StorageCluster %s", cluster.Name)
+	err = testutil.UninstallStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Validate cluster deletion
+	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+	require.NoError(t, err)
+
+	err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
+	require.NoError(t, err)
 }
