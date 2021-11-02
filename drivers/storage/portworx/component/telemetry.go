@@ -6,6 +6,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,6 +34,8 @@ const (
 	CollectorRoleBindingName = "px-metrics-collector"
 	// CollectorConfigFileName is file name of the collector pod config.
 	CollectorConfigFileName = "portworx.yaml"
+	// CollectorProxyConfigFileName is file name of envoy config.
+	CollectorProxyConfigFileName = "envoy-config.yaml"
 	// CollectorConfigMapName is name of config map for metrics collector.
 	CollectorConfigMapName = "px-collector-config"
 	// CollectorProxyConfigMapName is name of the config map for envoy proxy.
@@ -373,7 +376,7 @@ static_resources:
 `, cluster.UID, pxutil.GetPortworxVersion(cluster), arcusLocation, arcusLocation)
 
 	data := map[string]string{
-		CollectorConfigFileName: config,
+		CollectorProxyConfigFileName: config,
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
@@ -383,6 +386,7 @@ static_resources:
 				Name:            CollectorProxyConfigMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Annotations:     map[string]string{constants.AnnotationReconcileObject: "true"},
 			},
 			Data: data,
 		},
@@ -425,6 +429,7 @@ forwardConfig:
 				Name:            CollectorConfigMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Annotations:     map[string]string{constants.AnnotationReconcileObject: "true"},
 			},
 			Data: data,
 		},

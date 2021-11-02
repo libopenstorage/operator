@@ -66,6 +66,10 @@ const (
 	PxImageEnvVarName = "PX_IMAGE"
 )
 
+// TestSpecPath is the path for all test specs. Due to currently functional test and
+// unit test use different path, this needs to be set accordingly.
+var TestSpecPath = "testspec"
+
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
@@ -252,7 +256,7 @@ func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPol
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
+	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
 	apiextensionsv1beta1.AddToScheme(s)
@@ -364,7 +368,7 @@ func ValidateStorageCluster(
 	var liveCluster *corev1.StorageCluster
 	var err error
 	if shouldStartSuccessfully {
-		liveCluster, err = validateStorageClusterIsOnline(clusterSpec, timeout, interval)
+		liveCluster, err = ValidateStorageClusterIsOnline(clusterSpec, timeout, interval)
 		if err != nil {
 			return err
 		}
@@ -886,15 +890,21 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 func validatePodsByName(namespace, name string, timeout, interval time.Duration) error {
 	listOptions := map[string]string{"name": name}
-	return validatePods(namespace, listOptions, timeout, interval)
+	return ValidatePods(namespace, listOptions, timeout, interval)
 }
 
-func validatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
+// ValidatePods wait for pod to become online
+func ValidatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
 		pods, err := coreops.Instance().GetPods(namespace, listOptions)
 		if err != nil {
 			return nil, true, err
 		}
+
+		if len(pods.Items) == 0 {
+			return nil, true, fmt.Errorf("no pods found with filter %v", listOptions)
+		}
+
 		podReady := 0
 		for _, pod := range pods.Items {
 			for _, c := range pod.Status.InitContainerStatuses {
@@ -1160,7 +1170,8 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 	}
 }
 
-func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
+// ValidateStorageClusterIsOnline wait for storage cluster to become online.
+func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
 	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterOnline), timeout, interval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
