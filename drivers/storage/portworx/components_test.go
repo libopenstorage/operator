@@ -11068,7 +11068,7 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 	require.Empty(t, len(policies.Items))
 }
 
-func TestTelemetryEnable(t *testing.T) {
+func TestTelemetryEnableAndDisable(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -11090,7 +11090,13 @@ func TestTelemetryEnable(t *testing.T) {
 				},
 			},
 		},
+
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
 	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11155,47 +11161,29 @@ func TestTelemetryEnable(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
-}
 
-func TestDisableTelemetry(t *testing.T) {
-	// first enabled
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Monitoring: &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-					Image:   "portworx/px-telemetry:2.1.2",
-				},
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// CCM config map
-	telemetryConfigMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-
-	// disable telemetry, config map should go away
+	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
+
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// CCM config map
-	telemetryConfigMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 

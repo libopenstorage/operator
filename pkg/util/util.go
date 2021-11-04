@@ -7,9 +7,10 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-version"
+	v1 "k8s.io/api/core/v1"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
-	v1 "k8s.io/api/core/v1"
 )
 
 // Reasons for controller events

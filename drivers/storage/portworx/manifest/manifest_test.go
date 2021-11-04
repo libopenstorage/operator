@@ -37,6 +37,8 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -72,6 +74,8 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 
@@ -158,6 +162,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -243,6 +249,8 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -320,6 +328,8 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 	cluster := &corev1.StorageCluster{

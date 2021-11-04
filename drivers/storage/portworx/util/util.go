@@ -16,8 +16,6 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -26,6 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 const (
@@ -897,4 +901,53 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.Monitoring != nil &&
 		spec.Monitoring.Telemetry != nil &&
 		spec.Monitoring.Telemetry.Enabled
+}
+
+// ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component
+// Which includes:
+//   namespace
+//   custom image registry for images
+//   ImagePullPolicy
+//   ImagePullSecret
+//   affinity
+//   toleration
+func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *appsv1.Deployment) error {
+	deployment.Namespace = cluster.Namespace
+
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		// Change image to custom repository if it has not been done
+		if !strings.HasPrefix(container.Image, cluster.Spec.CustomImageRegistry) {
+			container.Image = util.GetImageURN(cluster, container.Image)
+		}
+		container.ImagePullPolicy = ImagePullPolicy(cluster)
+	}
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				deployment.Spec.Template.Spec.Tolerations = append(
+					deployment.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
+	}
+
+	return nil
 }

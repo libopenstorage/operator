@@ -1,18 +1,24 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -39,9 +45,15 @@ const (
 	// CollectorConfigMapName is name of config map for metrics collector.
 	CollectorConfigMapName = "px-collector-config"
 	// CollectorProxyConfigMapName is name of the config map for envoy proxy.
-	CollectorProxyConfigMapName = "px-proxy-config"
+	CollectorProxyConfigMapName = "px-collector-proxy-config"
 	// CollectorDeploymentName is name of metrics collector deployment.
 	CollectorDeploymentName = "px-metrics-collector"
+	// DefaultArcusLocation is the default arcus location.
+	DefaultArcusLocation = "rest.cloud-support.purestorage.com"
+	// CollectorServiceAccountName is name of the metrics collector service account
+	CollectorServiceAccountName = "metrics-collector"
+
+	defaultAutopilotMetricsPort = 9628
 )
 
 type telemetry struct {
@@ -83,6 +95,11 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+
+	if err := t.deleteMetricsCollector(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+
 	t.MarkDeleted()
 	return nil
 }
@@ -96,10 +113,42 @@ func RegisterTelemetryComponent() {
 	Register(TelemetryComponentName, &telemetry{})
 }
 
+func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.OwnerReference) error {
+	if err := k8sutil.DeleteServiceAccount(t.k8sClient, CollectorServiceAccountName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, CollectorProxyConfigMapName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, CollectorConfigMapName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteRole(t.k8sClient, CollectorRoleName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, CollectorRoleBindingName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteDeployment(t.k8sClient, CollectorDeploymentName, namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (t *telemetry) deployMetricsCollector(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if err := t.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
+
 	if err := t.createProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
@@ -127,8 +176,83 @@ func (t *telemetry) createCollectorDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if t.isCollectorDeploymentCreated {
-		return nil
+	deployment, err := t.getCollectorDeployment(cluster, ownerRef)
+	if err != nil {
+		return err
+	}
+
+	existingDeployment := &appsv1.Deployment{}
+	err = t.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      CollectorDeploymentName,
+			Namespace: cluster.Namespace,
+		},
+		existingDeployment,
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Kubernetes will bounce pod when spec changes, hence we should determine
+	// whether we should update the deployment based on spec change.
+	modified := !equality.Semantic.DeepDerivative(deployment.Spec, existingDeployment.Spec)
+
+	if !t.isCollectorDeploymentCreated || modified {
+		logrus.WithFields(logrus.Fields{
+			"isCreated": t.isCollectorDeploymentCreated,
+			"modified":  modified,
+		}).Info("will create/update the deployment.")
+		return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
+	}
+
+	logrus.Debug("no change to collector deployment")
+	return nil
+}
+
+func (t *telemetry) createServiceAccount(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		t.k8sClient,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            CollectorServiceAccountName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (t *telemetry) getDesiredCollectorImage(cluster *corev1.StorageCluster) (string, error) {
+	if cluster.Status.DesiredImages != nil {
+		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollector), nil
+	}
+	return "", fmt.Errorf("metrics collector image is empty")
+}
+
+func (t *telemetry) getDesiredCollectorProxyImage(cluster *corev1.StorageCluster) (string, error) {
+	if cluster.Status.DesiredImages != nil {
+		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
+	}
+	return "", fmt.Errorf("metrics collector proxy image is empty")
+}
+
+func (t *telemetry) getCollectorDeployment(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) (*appsv1.Deployment, error) {
+	collectorImage, err := t.getDesiredCollectorImage(cluster)
+	if err != nil {
+		return nil, err
+	}
+
+	collectorProxyImage, err := t.getDesiredCollectorProxyImage(cluster)
+	if err != nil {
+		return nil, err
 	}
 
 	replicas := int32(1)
@@ -148,10 +272,11 @@ func (t *telemetry) createCollectorDeployment(
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
+					ServiceAccountName: CollectorServiceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:  "collector",
-							Image: manifest.DefaultCollectorImage,
+							Image: collectorImage,
 							Env: []v1.EnvVar{
 								{
 									Name:  "CONFIG",
@@ -175,7 +300,7 @@ func (t *telemetry) createCollectorDeployment(
 						},
 						{
 							Name:  "envoy",
-							Image: manifest.DefaultEnvoyImage,
+							Image: collectorProxyImage,
 							SecurityContext: &v1.SecurityContext{
 								RunAsUser: &runAsUser,
 							},
@@ -233,7 +358,12 @@ func (t *telemetry) createCollectorDeployment(
 		},
 	}
 
-	return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
+	err = pxutil.ApplyStorageClusterSettings(cluster, deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	return deployment, nil
 }
 
 func (t *telemetry) createCollectorRole(
@@ -275,7 +405,7 @@ func (t *telemetry) createCollectorRoleBinding(
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      "default",
+					Name:      CollectorServiceAccountName,
 					Namespace: cluster.Namespace,
 				},
 			},
@@ -293,9 +423,15 @@ func (t *telemetry) createProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if len(cluster.Status.ClusterUID) == 0 {
+		msg := "clusterUID is empty, wait for it to fill collector proxy config"
+		logrus.Warn(msg)
+		//return fmt.Errorf(msg)
+	}
+
 	arcusLocation, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]
 	if !present || len(arcusLocation) == 0 {
-		arcusLocation = "rest.cloud-support.purestorage.com"
+		arcusLocation = DefaultArcusLocation
 	}
 
 	config := fmt.Sprintf(
@@ -373,7 +509,7 @@ static_resources:
               filename: /appliance-cert/cert
             private_key:
               filename: /appliance-cert/private_key
-`, cluster.UID, pxutil.GetPortworxVersion(cluster), arcusLocation, arcusLocation)
+`, cluster.Status.ClusterUID, pxutil.GetPortworxVersion(cluster), arcusLocation, arcusLocation)
 
 	data := map[string]string{
 		CollectorProxyConfigFileName: config,
@@ -386,7 +522,6 @@ static_resources:
 				Name:            CollectorProxyConfigMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				Annotations:     map[string]string{constants.AnnotationReconcileObject: "true"},
 			},
 			Data: data,
 		},
@@ -398,6 +533,14 @@ func (t *telemetry) createCollectorConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	pxSelectorLabels := pxutil.SelectorLabels()
+	var selectorStr string
+	for k, v := range pxSelectorLabels {
+		selectorStr += fmt.Sprintf("        %s: %s\n", k, v)
+	}
+
+	port := pxutil.StartPort(cluster)
+
 	config := fmt.Sprintf(
 		`
 scrapeConfig:
@@ -405,18 +548,23 @@ scrapeConfig:
   k8sConfig:
     pods:
     - podSelector:
-        name: portworx
+%s
       namespace: %s
       endpoint: metrics
-      port: 9001
+      port: %d
     - podSelector:
         name: autopilot
       namespace: %s
       endpoint: metrics
-      port: 9001
+      port: %d
 forwardConfig:
   url: http://localhost:10000/metrics/1.0/pure1-metrics-pb
-    `, cluster.Namespace, cluster.Namespace)
+    `,
+		selectorStr,
+		cluster.Namespace,
+		port,
+		cluster.Namespace,
+		defaultAutopilotMetricsPort)
 
 	data := map[string]string{
 		CollectorConfigFileName: config,
@@ -429,7 +577,6 @@ forwardConfig:
 				Name:            CollectorConfigMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				Annotations:     map[string]string{constants.AnnotationReconcileObject: "true"},
 			},
 			Data: data,
 		},
