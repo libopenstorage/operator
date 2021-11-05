@@ -14,15 +14,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-
 	"github.com/portworx/sched-ops/k8s/operator"
-	"github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var (
@@ -31,18 +32,14 @@ var (
 
 	pxSpecGenURL    string
 	pxImageOverride string
+	pxSpecImages    map[string]string
 
-	pxUpgradeHopsURLList string
-
-	logLevel string
+	pxUpgradeHopsURLList []string
 )
 
 const (
 	// specDir is a directory with all the specs
 	specDir = "./operator-test"
-
-	// pxNamespace is a default namespace for StorageCluster
-	pxNamespace = "kube-system"
 
 	// defaultValidateDeployTimeout is a default timeout for deployment validation
 	defaultValidateDeployTimeout = 900 * time.Second
@@ -68,53 +65,19 @@ const (
 	node2 = nodeReplacePrefix + "2"
 )
 
-// TestrailCase describes one test case on TestRail, which will
-// instantiate the given StorageCluster spec, check that it
-// started/failed to start correctly, and then remove it.
-type TestrailCase struct {
-	CaseIDs                 []string
-	Spec                    corev1.StorageClusterSpec
-	ShouldStartSuccessfully bool
-}
-
-func (trc *TestrailCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error {
-	cluster.Name = makeDNS1123Compatible(strings.Join(trc.CaseIDs, "-"))
-	cluster.Spec.CloudStorage = trc.Spec.CloudStorage
-	cluster.Spec.Kvdb = trc.Spec.Kvdb
-
-	names, err := testutil.GetExpectedPxNodeNameList(cluster)
-	if err != nil {
-		return err
-	}
-	// Sort for consistent order between multiple tests
-	sort.Strings(names)
-
-	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
-	// the name of the Nth eligible Portworx node
-	for i := range trc.Spec.Nodes {
-		if !strings.HasPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
-			continue
-		}
-
-		num := strings.TrimPrefix(trc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
-		parsedNum, err := strconv.Atoi(num)
-		if err != nil {
-			return err
-		}
-
-		if parsedNum >= len(names) {
-			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
-		}
-
-		trc.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
-	}
-
-	cluster.Spec.Nodes = trc.Spec.Nodes
-
-	return nil
-}
-
 func TestMain(m *testing.M) {
+	if err := setup(); err != nil {
+		logrus.Errorf("Setup failed with error: %v", err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
+func setup() error {
+	// Parse flags
+	var pxUpgradeHopsURLs string
+	var logLevel string
+	var err error
 	flag.StringVar(&pxDockerUsername,
 		"portworx-docker-username",
 		"",
@@ -131,7 +94,7 @@ func TestMain(m *testing.M) {
 		"portworx-image-override",
 		"",
 		"Portworx Image override, defines what Portworx version will be deployed")
-	flag.StringVar(&pxUpgradeHopsURLList,
+	flag.StringVar(&pxUpgradeHopsURLs,
 		"upgrade-hops-url-list",
 		"",
 		"List of Portworx Spec Generator URLs separated by commas used for upgrade hops")
@@ -140,14 +103,14 @@ func TestMain(m *testing.M) {
 		"",
 		"Log level")
 	flag.Parse()
-	if err := setup(); err != nil {
-		logrus.Errorf("Setup failed with error: %v", err)
-		os.Exit(1)
-	}
-	os.Exit(m.Run())
-}
 
-func setup() error {
+	pxSpecImages, err = testutil.GetImagesFromVersionURL(pxSpecGenURL)
+	if err != nil {
+		return err
+	}
+
+	pxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+
 	// Set log level
 	logrusLevel, err := logrus.ParseLevel(logLevel)
 	if err != nil {
@@ -159,22 +122,57 @@ func setup() error {
 	return nil
 }
 
-// Here we make StorageCluster object and add all the common basic parameters that all StorageCluster should have
-func constructStorageCluster(specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
-	cluster := &corev1.StorageCluster{}
+func (tc *TestCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error {
+	cluster.Name = makeDNS1123Compatible(strings.Join(tc.TestrailCaseIDs, "-"))
+	cluster.Spec.CloudStorage = tc.Spec.CloudStorage
+	cluster.Spec.Kvdb = tc.Spec.Kvdb
 
+	names, err := testutil.GetExpectedPxNodeNameList(cluster)
+	if err != nil {
+		return err
+	}
+	// Sort for consistent order between multiple tests
+	sort.Strings(names)
+
+	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
+	// the name of the Nth eligible Portworx node
+	for i := range tc.Spec.Nodes {
+		if !strings.HasPrefix(tc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
+			continue
+		}
+
+		num := strings.TrimPrefix(tc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
+		parsedNum, err := strconv.Atoi(num)
+		if err != nil {
+			return err
+		}
+
+		if parsedNum >= len(names) {
+			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
+		}
+
+		tc.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
+	}
+
+	cluster.Spec.Nodes = tc.Spec.Nodes
+
+	return nil
+}
+
+// Here we make StorageCluster object and add all the common basic parameters that all StorageCluster should have
+func constructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, specImages map[string]string) error {
 	// Set Portworx Image
-	cluster.Spec.Image = imageListMap["version"]
+	cluster.Spec.Image = specImages["version"]
 
 	// Set Namespace
-	cluster.Namespace = pxNamespace
+	cluster.Namespace = PxNamespace
 
 	// Populate default Env Vars
 	if err := populateDefaultEnvVars(cluster, specGenURL); err != nil {
-		return nil, err
+		return err
 	}
 
-	return cluster, nil
+	return nil
 }
 
 func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, error) {
@@ -188,11 +186,13 @@ func createStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 }
 
 func createStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
+	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 	portworx.SetPortworxDefaults(cluster)
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
 func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
+	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 	// Get StorageCluster
 	cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	if err != nil {
@@ -287,4 +287,12 @@ func makeDNS1123Compatible(name string) string {
 	}
 
 	return name
+}
+
+// getPxVersionFromSpecGenURL gets the px version to install or upgrade,
+// e.g. return version 2.9 for https://edge-install.portworx.com/2.9
+func getPxVersionFromSpecGenURL(url string) *version.Version {
+	splitURL := strings.Split(url, "/")
+	v, _ := version.NewVersion(splitURL[len(splitURL)-1])
+	return v
 }

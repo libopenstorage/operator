@@ -1080,6 +1080,7 @@ func getK8SVersion() (string, error) {
 
 // GetImagesFromVersionURL gets images from version URL
 func GetImagesFromVersionURL(url string) (map[string]string, error) {
+	logrus.Infof("Get component images from versions URL")
 	imageListMap := make(map[string]string)
 
 	// Construct PX release manifest URL
