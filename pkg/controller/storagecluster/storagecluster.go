@@ -187,6 +187,12 @@ func (c *Controller) GetKubernetesClient() client.Client {
 	return c.client
 }
 
+// SetKubernetesClient sets the kubernetes client to be used by the controller.
+// This method is only used for testing.
+func (c *Controller) SetKubernetesClient(client client.Client) {
+	c.client = client
+}
+
 // Reconcile reads that state of the cluster for a StorageCluster object and makes changes based on
 // the state read and what is in the StorageCluster.Spec
 // Note:
