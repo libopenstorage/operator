@@ -14,7 +14,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -194,18 +193,19 @@ func (t *telemetry) createCollectorDeployment(
 		return err
 	}
 
-	// Kubernetes will bounce pod when spec changes, hence we should determine
-	// whether we should update the deployment based on spec change.
-	modified := !equality.Semantic.DeepDerivative(deployment.Spec, existingDeployment.Spec)
+	modified := !util.DeploymentDeepEqual(deployment, existingDeployment)
 
 	if !t.isCollectorDeploymentCreated || modified {
 		logrus.WithFields(logrus.Fields{
 			"isCreated": t.isCollectorDeploymentCreated,
 			"modified":  modified,
 		}).Info("will create/update the deployment.")
-		return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
+		if err = k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef); err != nil {
+			return err
+		}
 	}
 
+	t.isCollectorDeploymentCreated = true
 	logrus.Debug("no change to collector deployment")
 	return nil
 }
@@ -426,7 +426,7 @@ func (t *telemetry) createProxyConfigMap(
 	if len(cluster.Status.ClusterUID) == 0 {
 		msg := "clusterUID is empty, wait for it to fill collector proxy config"
 		logrus.Warn(msg)
-		//return fmt.Errorf(msg)
+		return fmt.Errorf(msg)
 	}
 
 	arcusLocation, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]

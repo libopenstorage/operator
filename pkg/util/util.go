@@ -11,6 +11,9 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"k8s.io/apimachinery/pkg/api/equality"
+
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // Reasons for controller events
@@ -150,6 +153,15 @@ func HaveTolerationsChanged(
 		return len(existingTolerations) != 0
 	}
 	return !reflect.DeepEqual(cluster.Spec.Placement.Tolerations, existingTolerations)
+}
+
+func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) bool {
+	return equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) &&
+		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes) &&
+		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets) &&
+		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity) &&
+		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations) &&
+		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName)
 }
 
 // HasNodeAffinityChanged checks if the nodeAffinity in the cluster is same as the

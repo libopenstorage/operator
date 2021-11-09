@@ -7040,6 +7040,8 @@ func (m *fakeManifest) GetVersions(
 			PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 			PrometheusConfigMapReload: "quay.io/coreos/configmap-reload:v1.2.3",
 			AlertManager:              "quay.io/prometheus/alertmanager:v1.2.3",
+			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
