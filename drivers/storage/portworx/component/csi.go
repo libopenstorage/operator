@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/hashicorp/go-version"
@@ -18,6 +19,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,17 +43,26 @@ const (
 	// CSIApplicationName name of the CSI application (deployment/statefulset)
 	CSIApplicationName = "px-csi-ext"
 
-	csiProvisionerContainerName = "csi-external-provisioner"
-	csiAttacherContainerName    = "csi-attacher"
-	csiSnapshotterContainerName = "csi-snapshotter"
-	csiResizerContainerName     = "csi-resizer"
+	csiProvisionerContainerName        = "csi-external-provisioner"
+	csiAttacherContainerName           = "csi-attacher"
+	csiSnapshotterContainerName        = "csi-snapshotter"
+	csiResizerContainerName            = "csi-resizer"
+	csiSnapshotControllerContainerName = "csi-snapshot-controller"
+
+	// CSI CRD config files
+	csiCRDPrefix                      = "csi-crd"
+	csiCRDSuffixVolumeSnapshot        = "volumesnapshot.yaml"
+	csiCRDSuffixVolumeSnapshotContent = "volumesnapshotcontent.yaml"
+	csiCRDSuffixVolumeSnapshotClass   = "volumesnapshotclass.yaml"
 )
 
 type csi struct {
-	isCreated             bool
-	csiNodeInfoCRDCreated bool
-	k8sClient             client.Client
-	k8sVersion            version.Version
+	isCreated              bool
+	csiNodeInfoCRDCreated  bool
+	csiSnapshotCRDsCreated bool
+	k8sClient              client.Client
+	k8sVersion             version.Version
+	scheme                 *runtime.Scheme
 }
 
 func (c *csi) Name() string {
@@ -65,11 +76,12 @@ func (c *csi) Priority() int32 {
 func (c *csi) Initialize(
 	k8sClient client.Client,
 	k8sVersion version.Version,
-	_ *runtime.Scheme,
+	scheme *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
 	c.k8sVersion = k8sVersion
+	c.scheme = scheme
 }
 
 func (c *csi) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -127,6 +139,13 @@ func (c *csi) Reconcile(cluster *corev1.StorageCluster) error {
 		}
 		c.csiNodeInfoCRDCreated = true
 	}
+	if !c.csiSnapshotCRDsCreated && cluster.Spec.CSI.InstallSnapshotCRDs != nil && *cluster.Spec.CSI.InstallSnapshotCRDs {
+		if err := c.createCSISnapshotCRDs(&c.k8sVersion); err != nil {
+			return err
+		}
+		c.csiSnapshotCRDsCreated = true
+	}
+
 	return nil
 }
 
@@ -404,14 +423,16 @@ func (c *csi) createDeployment(
 	}
 
 	var (
-		existingProvisionerImage = k8sutil.GetImageFromDeployment(existingDeployment, csiProvisionerContainerName)
-		existingAttacherImage    = k8sutil.GetImageFromDeployment(existingDeployment, csiAttacherContainerName)
-		existingSnapshotterImage = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotterContainerName)
-		existingResizerImage     = k8sutil.GetImageFromDeployment(existingDeployment, csiResizerContainerName)
-		provisionerImage         string
-		attacherImage            string
-		snapshotterImage         string
-		resizerImage             string
+		existingProvisionerImage        = k8sutil.GetImageFromDeployment(existingDeployment, csiProvisionerContainerName)
+		existingAttacherImage           = k8sutil.GetImageFromDeployment(existingDeployment, csiAttacherContainerName)
+		existingSnapshotterImage        = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotterContainerName)
+		existingResizerImage            = k8sutil.GetImageFromDeployment(existingDeployment, csiResizerContainerName)
+		existingSnapshotControllerImage = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotControllerContainerName)
+		provisionerImage                string
+		attacherImage                   string
+		snapshotterImage                string
+		resizerImage                    string
+		snapshotControllerImage         string
 	)
 
 	provisionerImage = util.GetImageURN(
@@ -437,17 +458,27 @@ func (c *csi) createDeployment(
 		)
 	}
 
+	if cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController != "" {
+		snapshotControllerImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSISnapshotController,
+		)
+	}
+
 	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		snapshotterImage != existingSnapshotterImage ||
 		resizerImage != existingResizerImage ||
+		snapshotControllerImage != existingSnapshotControllerImage ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
 		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef,
-			provisionerImage, attacherImage, snapshotterImage, resizerImage)
+			provisionerImage, attacherImage, snapshotterImage, resizerImage, snapshotControllerImage)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -462,6 +493,7 @@ func getCSIDeploymentSpec(
 	ownerRef *metav1.OwnerReference,
 	provisionerImage, attacherImage string,
 	snapshotterImage, resizerImage string,
+	snapshotControllerImage string,
 ) *appsv1.Deployment {
 	replicas := int32(3)
 	labels := map[string]string{
@@ -634,6 +666,21 @@ func getCSIDeploymentSpec(
 						Name:      "socket-dir",
 						MountPath: "/csi",
 					},
+				},
+			},
+		)
+	}
+
+	if csiConfig.IncludeSnapshotController && snapshotControllerImage != "" {
+		deployment.Spec.Template.Spec.Containers = append(
+			deployment.Spec.Template.Spec.Containers,
+			v1.Container{
+				Name:            csiSnapshotControllerContainerName,
+				Image:           snapshotControllerImage,
+				ImagePullPolicy: imagePullPolicy,
+				Args: []string{
+					"--v=3",
+					"--leader-election=true",
 				},
 			},
 		)
@@ -989,6 +1036,43 @@ func createCSINodeInfoCRD() error {
 	return apiextensionsops.Instance().ValidateCRDV1beta1(resource, 1*time.Minute, 5*time.Second)
 }
 
+func (c *csi) createCSISnapshotCRDs(k8sVersion *version.Version) error {
+	// Detect which CRD to use
+	var snapshotCRDVersion string
+	switch {
+	case k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) && k8sVersion.LessThan(k8sutil.K8sVer1_20):
+		snapshotCRDVersion = "v3"
+
+	case k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_20):
+		snapshotCRDVersion = "v4"
+
+	default:
+		// CRD creation not supported for K8s < 1.17
+		return nil
+	}
+
+	// Register all CRDs for a given version
+	for _, crdFile := range []string{csiCRDSuffixVolumeSnapshot, csiCRDSuffixVolumeSnapshotContent, csiCRDSuffixVolumeSnapshotClass} {
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+
+		// Parse CRD from file
+		if err := k8sutil.ParseObjectFromFile(
+			path.Join(pxutil.SpecsBaseDir(), fmt.Sprintf("%s-%s-%s", csiCRDPrefix, snapshotCRDVersion, crdFile)),
+			c.scheme,
+			crd,
+		); err != nil {
+			return err
+		}
+
+		// Create CRD
+		if err := k8sutil.CreateCRD(crd); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (c *csi) getCSIConfiguration(
 	cluster *corev1.StorageCluster,
 	pxVersion *version.Version,
@@ -996,8 +1080,14 @@ func (c *csi) getCSIConfiguration(
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
 	kubeletPath := pxutil.KubeletPath(cluster)
+	if cluster.Spec.CSI == nil {
+		cluster.Spec.CSI = &corev1.CSISpec{
+			Enabled:                   false,
+			InstallSnapshotController: boolPtr(false),
+		}
+	}
 	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, pxutil.IncludeCSISnapshotController(cluster))
 	if pxutil.IsCSIEnabled(cluster) {
 		return csiGenerator.GetCSIConfiguration()
 	}

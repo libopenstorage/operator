@@ -4854,6 +4854,41 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Check CRD does not exist
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshots.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.True(t, errors.IsNotFound(err))
+
+	// Enable snapshot controller & crds
+	cluster.Spec.CSI.Enabled = true
+	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+	cluster.Spec.CSI.InstallSnapshotCRDs = boolPtr(true)
+
+	// Prepare for CRD creation
+	pxutil.SpecsBaseDir = func() string {
+		return "../../../bin/configs"
+	}
+	defer func() {
+		pxutil.SpecsBaseDir = func() string {
+			return pxutil.PortworxSpecsDir
+		}
+	}()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Should have snapshot controller
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_with_snapcontroller.yaml")
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	fmt.Println("actual", deployment.Spec.Template.Spec.Containers)
+	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Should have volumesnapshot CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshots.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+
 }
 
 func TestCSIInstallWithPKS(t *testing.T) {
