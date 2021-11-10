@@ -82,8 +82,7 @@ var (
 			hostPath:  "/var/lib/osd",
 			mountPath: "/var/lib/osd",
 			pks: &pksVolumeInfo{
-				hostPath:  "/var/vcap/store/lib/osd",
-				mountPath: "/var/lib/osd",
+				hostPath: "/var/vcap/store/lib/osd",
 			},
 		},
 		{
