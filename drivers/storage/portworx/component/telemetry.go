@@ -144,6 +144,11 @@ func (t *telemetry) deployMetricsCollector(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if len(cluster.Status.ClusterUID) == 0 {
+		logrus.Warn("clusterUID is empty, wait for it to fill collector proxy config")
+		return nil
+	}
+
 	if err := t.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
@@ -419,12 +424,6 @@ func (t *telemetry) createProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if len(cluster.Status.ClusterUID) == 0 {
-		msg := "clusterUID is empty, wait for it to fill collector proxy config"
-		logrus.Warn(msg)
-		return fmt.Errorf(msg)
-	}
-
 	arcusLocation, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]
 	if !present || len(arcusLocation) == 0 {
 		arcusLocation = DefaultArcusLocation
