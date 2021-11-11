@@ -44,15 +44,15 @@ const (
 	// defaultValidateDeployTimeout is a default timeout for deployment validation
 	defaultValidateDeployTimeout = 900 * time.Second
 	// defaultValidateDeployRetryInterval is a default retry interval for deployment validation
-	defaultValidateDeployRetryInterval = 30 * time.Second
+	defaultValidateDeployRetryInterval = 5 * time.Second
 	// defaultValidateUpgradeTimeout is a default timeout for upgrade validation
 	defaultValidateUpgradeTimeout = 1400 * time.Second
 	// defaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
-	defaultValidateUpgradeRetryInterval = 60 * time.Second
+	defaultValidateUpgradeRetryInterval = 5 * time.Second
 	// defaultValidateUninstallTimeout is a default timeout for uninstall validation
 	defaultValidateUninstallTimeout = 900 * time.Second
 	// defaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
-	defaultValidateUninstallRetryInterval = 30 * time.Second
+	defaultValidateUninstallRetryInterval = 5 * time.Second
 )
 
 // node* is to be used in the Node section of the StorageCluster spec. node0 will select the

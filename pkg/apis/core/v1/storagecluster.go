@@ -584,6 +584,8 @@ type ComponentImages struct {
 	Prometheus                string `json:"prometheus,omitempty"`
 	AlertManager              string `json:"alertManager,omitempty"`
 	Telemetry                 string `json:"telemetry,omitempty"`
+	MetricsCollector          string `json:"metricsCollector,omitempty"`
+	MetricsCollectorProxy     string `json:"metricsCollectorProxy,omitempty"`
 }
 
 // Storage represents cluster storage details
