@@ -14,22 +14,22 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/openstorage/pkg/auth"
-	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/libopenstorage/openstorage/pkg/auth"
+	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -911,12 +911,12 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 //   ImagePullSecret
 //   affinity
 //   toleration
-func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *appsv1.Deployment) error {
+func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *appsv1.Deployment) {
 	deployment.Namespace = cluster.Namespace
 
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		// Change image to custom repository if it has not been done
-		if !strings.HasPrefix(container.Image, cluster.Spec.CustomImageRegistry) {
+		if !strings.HasPrefix(container.Image, strings.TrimSuffix(cluster.Spec.CustomImageRegistry, "/")) {
 			container.Image = util.GetImageURN(cluster, container.Image)
 		}
 		container.ImagePullPolicy = ImagePullPolicy(cluster)
@@ -948,6 +948,4 @@ func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *app
 			}
 		}
 	}
-
-	return nil
 }

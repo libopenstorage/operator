@@ -94,10 +94,17 @@ var testStorageClusterBasicCases = []TestCase{
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &op_corev1.StorageCluster{}
 			cluster.Name = "telemetry-test"
+			err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
+			require.NoError(t, err)
+			cluster.Spec.Monitoring = &op_corev1.MonitoringSpec{
+				Telemetry: &op_corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			}
 			return cluster
 		},
 		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicUpgrade,
+		TestFunc:   InstallWithTelemetry,
 	},
 }
 
@@ -237,7 +244,7 @@ func InstallWithTelemetry(tc *TestCase) func(*testing.T) {
 }
 
 func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
-	secret := testutil.GetExpectedSecret(t, "/specs/pure-telemetry-cert.yaml")
+	secret := testutil.GetExpectedSecret(t, "pure-telemetry-cert.yaml")
 	require.NotNil(t, secret)
 
 	_, err := coreops.Instance().GetSecret(component.TelemetryCertName, "kube-system")
@@ -252,24 +259,11 @@ func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
 	}
 
 	// Deploy portworx with telemetry set to true
-	imageListMap, err := testutil.GetImagesFromVersionURL(pxSpecGenURL)
-	require.NoError(t, err)
-
-	err = constructStorageCluster(cluster, pxSpecGenURL, imageListMap)
-	require.NoError(t, err)
-
-	cluster.Name = "test-sc"
-	cluster.Spec.Monitoring = &op_corev1.MonitoringSpec{
-		Telemetry: &op_corev1.TelemetrySpec{
-			Enabled: true,
-		},
-	}
-
 	cluster, err = createStorageCluster(cluster)
 	require.NoError(t, err)
 
 	err = testutil.ValidateTelemetry(
-		imageListMap,
+		pxSpecImages,
 		cluster,
 		defaultValidateDeployTimeout,
 		defaultValidateDeployRetryInterval)

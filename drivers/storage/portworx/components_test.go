@@ -8716,7 +8716,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:     "portworx/image:2.2",
+			Image:     "portworx/image:2.9",
 			StartPort: &startPort,
 			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
@@ -8736,6 +8736,9 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
@@ -8744,6 +8747,9 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 				Enabled: true,
 				Image:   "pxRepoImage",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -8871,6 +8877,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: New tolerations should be applied to the deployment
 	tolerations = append(tolerations, v1.Toleration{
 		Key:      "must-exist",
@@ -8933,6 +8944,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -8991,6 +9007,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
 	k8sClient.Update(context.TODO(), cluster)
@@ -9047,6 +9068,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Tolerations)
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -9105,6 +9131,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, pxRepoDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -9161,6 +9192,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxRepoDeployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, pxRepoDeployment.Spec.Template.Spec.Tolerations)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Tolerations)
 }
 
 func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {

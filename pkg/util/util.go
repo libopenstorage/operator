@@ -155,6 +155,7 @@ func HaveTolerationsChanged(
 	return !reflect.DeepEqual(cluster.Spec.Placement.Tolerations, existingTolerations)
 }
 
+// DeploymentDeepEqual compares if two deployments are same.
 func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) bool {
 	return equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) &&
 		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes) &&

@@ -50,7 +50,7 @@ const (
 	// DefaultArcusLocation is the default arcus location.
 	DefaultArcusLocation = "rest.cloud-support.purestorage.com"
 	// CollectorServiceAccountName is name of the metrics collector service account
-	CollectorServiceAccountName = "metrics-collector"
+	CollectorServiceAccountName = "px-metrics-collector"
 
 	defaultAutopilotMetricsPort = 9628
 )
@@ -206,7 +206,6 @@ func (t *telemetry) createCollectorDeployment(
 	}
 
 	t.isCollectorDeploymentCreated = true
-	logrus.Debug("no change to collector deployment")
 	return nil
 }
 
@@ -358,10 +357,7 @@ func (t *telemetry) getCollectorDeployment(
 		},
 	}
 
-	err = pxutil.ApplyStorageClusterSettings(cluster, deployment)
-	if err != nil {
-		return nil, err
-	}
+	pxutil.ApplyStorageClusterSettings(cluster, deployment)
 
 	return deployment, nil
 }
