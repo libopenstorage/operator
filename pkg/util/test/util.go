@@ -66,6 +66,10 @@ const (
 	PxImageEnvVarName = "PX_IMAGE"
 )
 
+// TestSpecPath is the path for all test specs. Due to currently functional test and
+// unit test use different path, this needs to be set accordingly.
+var TestSpecPath = "testspec"
+
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
@@ -252,7 +256,7 @@ func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPol
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join("testspec", fileName))
+	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
 	apiextensionsv1beta1.AddToScheme(s)
@@ -364,7 +368,7 @@ func ValidateStorageCluster(
 	var liveCluster *corev1.StorageCluster
 	var err error
 	if shouldStartSuccessfully {
-		liveCluster, err = validateStorageClusterIsOnline(clusterSpec, timeout, interval)
+		liveCluster, err = ValidateStorageClusterIsOnline(clusterSpec, timeout, interval)
 		if err != nil {
 			return err
 		}
@@ -877,7 +881,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		}
 	}
 
-	if err = validateMonitoring(cluster, timeout, interval); err != nil {
+	if err = validateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -886,15 +890,21 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 func validatePodsByName(namespace, name string, timeout, interval time.Duration) error {
 	listOptions := map[string]string{"name": name}
-	return validatePods(namespace, listOptions, timeout, interval)
+	return ValidatePods(namespace, listOptions, timeout, interval)
 }
 
-func validatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
+// ValidatePods wait for pod to become online
+func ValidatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
 		pods, err := coreops.Instance().GetPods(namespace, listOptions)
 		if err != nil {
 			return nil, true, err
 		}
+
+		if len(pods.Items) == 0 {
+			return nil, true, fmt.Errorf("no pods found with filter %v", listOptions)
+		}
+
 		podReady := 0
 		for _, pod := range pods.Items {
 			for _, c := range pod.Status.InitContainerStatuses {
@@ -932,11 +942,17 @@ func validateImageOnPods(image, namespace string, listOptions map[string]string)
 		return err
 	}
 	for _, pod := range pods.Items {
+		foundImage := false
 		for _, container := range pod.Spec.Containers {
-			if container.Image != image {
-				return fmt.Errorf("failed to validade image on pod %s container %s, Expected: %s Got: %s",
-					pod.Name, container.Name, image, container.Image)
+			if container.Image == image {
+				foundImage = true
+				break
 			}
+		}
+
+		if !foundImage {
+			return fmt.Errorf("failed to validade image %s on pod: %v",
+				image, pod)
 		}
 	}
 	return nil
@@ -963,7 +979,7 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 	return nil
 }
 
-func validateMonitoring(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func validateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	if cluster.Spec.Monitoring != nil &&
 		((cluster.Spec.Monitoring.EnableMetrics != nil && *cluster.Spec.Monitoring.EnableMetrics) ||
 			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
@@ -1011,6 +1027,87 @@ func validateMonitoring(cluster *corev1.StorageCluster, timeout, interval time.D
 			return err
 		}
 	}
+
+	err := ValidateTelemetry(pxImageList, cluster, timeout, interval)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateTelemetry validates telemetry component is running as expected
+func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry.Enabled {
+		// wait for the deployment to become online
+		dep := appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-metrics-collector",
+				Namespace: cluster.Namespace,
+			},
+		}
+		if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
+			return err
+		}
+
+		// Verify telemetry config map
+		_, err := coreops.Instance().GetConfigMap("px-telemetry-config", cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		// Verify collector config map
+		_, err = coreops.Instance().GetConfigMap("px-collector-config", cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		// Verify collector proxy config map
+		_, err = coreops.Instance().GetConfigMap("px-collector-proxy-config", cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		// Verify collector service account
+		_, err = coreops.Instance().GetServiceAccount("px-metrics-collector", cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		// TODO: uncomment following test code after spec-gen is updated.
+		//// Verify collector image
+		//imageName, ok := pxImageList["metricsCollector"]
+		//if !ok {
+		//	return fmt.Errorf("failed to find image for metrics collector")
+		//}
+		//
+		//imageName = util.GetImageURN(cluster, imageName)
+		//
+		//deployment, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
+		//if err != nil {
+		//	return err
+		//}
+		//
+		//if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
+		//	return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
+		//		deployment.Spec.Template.Spec.Containers[0].Image,
+		//		imageName)
+		//}
+		//
+		//// Verify collector proxy image
+		//imageName, ok = pxImageList["metricsCollectorProxy"]
+		//if !ok {
+		//	return fmt.Errorf("failed to find image for metrics collector")
+		//}
+		//
+		//imageName = util.GetImageURN(cluster, imageName)
+		//if deployment.Spec.Template.Spec.Containers[1].Image != imageName {
+		//	return fmt.Errorf("collector proxy image mismatch, image: %s, expected: %s",
+		//		deployment.Spec.Template.Spec.Containers[1].Image,
+		//		imageName)
+		//}
+	}
+
 	return nil
 }
 
@@ -1160,7 +1257,8 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 	}
 }
 
-func validateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
+// ValidateStorageClusterIsOnline wait for storage cluster to become online.
+func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
 	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterOnline), timeout, interval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)

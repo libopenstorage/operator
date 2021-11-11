@@ -229,6 +229,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
+			toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
+			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
 		}
 
 		if pxutil.IsCSIEnabled(toUpdate) &&
@@ -281,6 +283,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if !autoUpdateTelemetry(toUpdate) {
 		toUpdate.Status.DesiredImages.Telemetry = ""
+		toUpdate.Status.DesiredImages.MetricsCollector = ""
+		toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
 	}
 
 	if !pxutil.IsCSIEnabled(toUpdate) {

@@ -31,6 +31,9 @@ const (
 	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
 	defaultTelemetryImage  = "purestorage/ccm-service:3.0.3"
 
+	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
+	defaultCollectorImage      = "purestorage/realtime-metrics:latest"
+
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
@@ -70,6 +73,8 @@ type Release struct {
 	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader  string `yaml:"prometheusConfigReloader,omitempty"`
 	Telemetry                 string `yaml:"telemetry,omitempty"`
+	MetricsCollector          string `yaml:"metricsCollector,omitempty"`
+	MetricsCollectorProxy     string `yaml:"metricsCollectorProxy,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -177,11 +182,13 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:      defaultStorkImage,
-			Autopilot:  defaultAutopilotImage,
-			Lighthouse: defaultLighthouseImage,
-			NodeWiper:  defaultNodeWiperImage,
-			Telemetry:  defaultTelemetryImage,
+			Stork:                 defaultStorkImage,
+			Autopilot:             defaultAutopilotImage,
+			Lighthouse:            defaultLighthouseImage,
+			NodeWiper:             defaultNodeWiperImage,
+			Telemetry:             defaultTelemetryImage,
+			MetricsCollector:      defaultCollectorImage,
+			MetricsCollectorProxy: defaultCollectorProxyImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
@@ -207,6 +214,12 @@ func fillDefaults(
 	}
 	if rel.Components.Telemetry == "" {
 		rel.Components.Telemetry = defaultTelemetryImage
+	}
+	if rel.Components.MetricsCollector == "" {
+		rel.Components.MetricsCollector = defaultCollectorImage
+	}
+	if rel.Components.MetricsCollectorProxy == "" {
+		rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)

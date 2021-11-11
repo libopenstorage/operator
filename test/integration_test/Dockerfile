@@ -7,3 +7,4 @@ RUN apt-get update && \
 WORKDIR /
 
 COPY operator.test /
+COPY testspec /testspec

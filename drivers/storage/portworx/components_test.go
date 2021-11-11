@@ -5921,7 +5921,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
+			Image:               "portworx/image:2.8",
 			CustomImageRegistry: customRegistry,
 			StartPort:           &startPort,
 			UserInterface: &corev1.UserInterfaceSpec{
@@ -5937,11 +5937,15 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
 		},
+		Status: corev1.StorageClusterStatus{ClusterUID: "test-uid"},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
@@ -6058,6 +6062,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: Update registry should be added to the images
 	customRegistry = "test-registry:2222"
 	cluster.Spec.CustomImageRegistry = customRegistry
@@ -6163,6 +6180,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: If empty, remove custom registry from images
 	cluster.Spec.CustomImageRegistry = ""
 
@@ -6259,6 +6289,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		"purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
 	// Case: Custom registry should be added back in not present in images
@@ -6364,6 +6407,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRegistry+"/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRegistry+"/purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRegistry+"/envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 }
 
@@ -6675,7 +6731,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
+			Image:               "portworx/image:2.8",
 			CustomImageRegistry: customRepo,
 			StartPort:           &startPort,
 			UserInterface: &corev1.UserInterfaceSpec{
@@ -6691,10 +6747,14 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{Enabled: true},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -6806,6 +6866,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: Updated repo-registry should be added to the images
 	customRepo = "test-registry:1111/new-repo"
 	cluster.Spec.CustomImageRegistry = customRepo
@@ -6903,6 +6976,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
 	// Case: Flat registry should be used for images
@@ -7004,6 +7090,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
 	)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: If empty, remove custom repo-registry from images
 	cluster.Spec.CustomImageRegistry = ""
 
@@ -7100,6 +7199,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		"quay.io/k8scsi/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		"purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
 	// Case: Custom repo-registry should be added back in not present in images
@@ -7199,6 +7311,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-resizer:v1.2.3",
 		csiDeployment.Spec.Template.Spec.Containers[2].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 }
 
@@ -7396,11 +7521,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.2",
+			Image:               "portworx/image:2.8",
 			CustomImageRegistry: customRepo,
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -7428,6 +7561,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
 	// Case: Updated repo-registry should be added to the images
@@ -7458,6 +7604,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: Flat registry should be used for images
 	customRepo = "test-registry:1111"
 	cluster.Spec.CustomImageRegistry = customRepo + "//"
@@ -7484,6 +7643,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
 	// Case: If empty, remove custom repo-registry from images
@@ -7513,6 +7685,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
 	)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		"purestorage/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		"envoyproxy/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
+	)
+
 	// Case: Custom repo-registry should be added back in not present in images
 	customRepo = "test-registry:1111/newest-repo"
 	cluster.Spec.CustomImageRegistry = customRepo
@@ -7539,6 +7724,19 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.Equal(t,
 		customRepo+"/csi-attacher:v1.2.3",
 		csiStatefulSet.Spec.Template.Spec.Containers[1].Image,
+	)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
+	require.Equal(t,
+		customRepo+"/realtime-metrics:latest",
+		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
+	)
+	require.Equal(t,
+		customRepo+"/envoy:v1.19.1",
+		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 }
 
@@ -7583,10 +7781,16 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -7660,6 +7864,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, collectorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
 	// Case: Updated image pull secet should be applied to the deployment
 	imagePullSecret = "new-secret"
 	k8sClient.Update(context.TODO(), cluster)
@@ -7721,6 +7931,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, collectorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
 	// Case: If empty, remove image pull secret from the deployment
 	imagePullSecret = ""
 	k8sClient.Update(context.TODO(), cluster)
@@ -7773,6 +7989,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, collectorDeployment.Spec.Template.Spec.ImagePullSecrets)
+
 	// Case: If nil, remove image pull secret from the deployment
 	cluster.Spec.ImagePullSecret = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -7824,6 +8045,11 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, collectorDeployment.Spec.Template.Spec.ImagePullSecrets)
 
 	// Case: Image pull secret should be added back if not present in deployment
 	imagePullSecret = "pull-secret"
@@ -7886,6 +8112,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csiDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	require.Equal(t, imagePullSecret, csiDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, collectorDeployment.Spec.Template.Spec.ImagePullSecrets, 1)
+	require.Equal(t, imagePullSecret, collectorDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 }
 
 func TestCompleteInstallWithTolerationsChange(t *testing.T) {
@@ -7919,7 +8151,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:     "portworx/image:2.2",
+			Image:     "portworx/image:2.9",
 			StartPort: &startPort,
 			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
@@ -7939,10 +8171,16 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -8060,6 +8298,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: New tolerations should be applied to the deployment
 	tolerations = append(tolerations, v1.Toleration{
 		Key:      "must-exist",
@@ -8117,6 +8360,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -8170,6 +8418,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
 	k8sClient.Update(context.TODO(), cluster)
@@ -8221,6 +8474,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Tolerations)
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
@@ -8274,6 +8532,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.ElementsMatch(t, tolerations, collectorDeployment.Spec.Template.Spec.Tolerations)
+
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -8325,6 +8588,11 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Tolerations)
 }
 
 func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
@@ -8365,7 +8633,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:     "portworx/image:2.2",
+			Image:     "portworx/image:2.8",
 			StartPort: &startPort,
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
@@ -8385,10 +8653,16 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
 			},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-uid",
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -8453,6 +8727,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, collectorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	// Case: Updated node affinity should be applied to the deployment
 	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
 		NodeSelectorTerms[0].
@@ -8509,6 +8788,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
 
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, collectorDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
 	// Case: If node affinity is removed, it should be removed from the deployment
 	cluster.Spec.Placement.NodeAffinity = nil
 	k8sClient.Update(context.TODO(), cluster)
@@ -8560,6 +8844,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Affinity)
 
 	// Case: Node affinity should be added back if not present in deployment
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
@@ -8664,6 +8953,11 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	collectorDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, collectorDeployment.Spec.Template.Spec.Affinity)
 }
 
 func TestRemovePVCController(t *testing.T) {
@@ -10435,7 +10729,7 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 	require.Empty(t, len(policies.Items))
 }
 
-func TestTelemetryEnable(t *testing.T) {
+func TestTelemetryEnableAndDisable(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -10457,7 +10751,13 @@ func TestTelemetryEnable(t *testing.T) {
 				},
 			},
 		},
+
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
 	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -10487,47 +10787,64 @@ func TestTelemetryEnable(t *testing.T) {
 	require.Len(t, telemetryConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, telemetryConfigMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
-}
 
-func TestDisableTelemetry(t *testing.T) {
-	// first enabled
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Monitoring: &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-					Image:   "portworx/px-telemetry:2.1.2",
-				},
-			},
-		},
-	}
-
-	err := driver.PreInstall(cluster)
+	// Proxy config map
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 
-	// CCM config map
-	telemetryConfigMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	// Collector config map
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 
-	// disable telemetry, config map should go away
+	// Collector role
+	role := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, role.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
+
+	// Collector role binding
+	roleBinding := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, roleBinding.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
+
+	// Collector deployment
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+
+	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
+
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// CCM config map
-	telemetryConfigMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
