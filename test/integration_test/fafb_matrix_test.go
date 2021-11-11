@@ -3,7 +3,6 @@
 package integrationtest
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -47,12 +46,14 @@ var (
 	}
 )
 
-var flashArrayPositiveInstallTests = []PureTestrailCase{
+// TODO: add readable test names
+var flashArrayPositiveInstallTests = []TestCase{
 	//// C55130: https://portworx.testrail.net/index.php?/cases/view/55130
 	// Install PX through operator with internal KVDB and journal drive on FlashArray
 	{
-		TestCase: TestCase{
-			TestrailCaseIDs: []string{"C55130"},
+		TestName:        "C55130",
+		TestrailCaseIDs: []string{"C55130"},
+		TestSpec: createStorageClusterTestSpecFunc(&v1.StorageCluster{
 			Spec: v1.StorageClusterSpec{
 				Kvdb: &internalKVDB,
 				CloudStorage: &v1.CloudStorageSpec{
@@ -63,11 +64,12 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 					},
 				},
 			},
-			ShouldStartSuccessfully: true,
-		},
-		BackendRequirements: BackendRequirements{
+		}),
+		ShouldStartSuccessfully: true,
+		PureBackendRequirements: &PureBackendRequirements{
 			RequiredArrays: 1,
 		},
+		TestFunc: BasicInstallWithFAFB,
 	},
 	// C55129: https://portworx.testrail.net/index.php?/cases/view/55129
 	// Install PX through operator with internal KVDB on FlashArray
@@ -81,20 +83,22 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 	// C55003: https://portworx.testrail.net/index.php?/cases/view/55003
 	// Uninstall PX through operator with Pure arrays, after clean install
 	{
-		TestCase: TestCase{
-			TestrailCaseIDs:         []string{"C55129", "C56414", "C56411", "C55003"},
-			Spec:                    simpleClusterSpec,
-			ShouldStartSuccessfully: true,
-		},
-		BackendRequirements: BackendRequirements{
+
+		TestName:                "C55129-C56414-C56411-C55003",
+		TestrailCaseIDs:         []string{"C55129", "C56414", "C56411", "C55003"},
+		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		ShouldStartSuccessfully: true,
+		PureBackendRequirements: &PureBackendRequirements{
 			RequiredArrays: 1,
 		},
+		TestFunc: BasicInstallWithFAFB,
 	},
 	// C55133: https://portworx.testrail.net/index.php?/cases/view/55133
 	// Install PX through operator with heterogeneous cluster, with different nodes having different capacity drives
 	{
-		TestCase: TestCase{
-			TestrailCaseIDs: []string{"C55133"},
+		TestName:        "C55133",
+		TestrailCaseIDs: []string{"C55133"},
+		TestSpec: createStorageClusterTestSpecFunc(&v1.StorageCluster{
 			Spec: v1.StorageClusterSpec{
 				Kvdb:         &internalKVDB,
 				CloudStorage: autoJournalDrive,
@@ -113,11 +117,12 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 					},
 				},
 			},
-			ShouldStartSuccessfully: true,
-		},
-		BackendRequirements: BackendRequirements{
+		}),
+		ShouldStartSuccessfully: true,
+		PureBackendRequirements: &PureBackendRequirements{
 			RequiredArrays: 1,
 		},
+		TestFunc: BasicInstallWithFAFB,
 	},
 	// C55134: https://portworx.testrail.net/index.php?/cases/view/55134
 	// Install PX through operator on FlashArray with storage and storageless nodes
@@ -147,35 +152,35 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 	//		},
 	//		ShouldStartSuccessfully: true,
 	//	},
-	//	BackendRequirements: BackendRequirements{
+	//	PureBackendRequirements: PureBackendRequirements{
 	//		RequiredArrays: 1,
 	//	},
 	//},
 	//C56412: https://portworx.testrail.net/index.php?/cases/view/56412
 	//Install PX through operator with multiple FlashArrays (all valid)
 	{
-		TestCase: TestCase{
-			TestrailCaseIDs:         []string{"C56412"},
-			Spec:                    simpleClusterSpec,
-			ShouldStartSuccessfully: true,
-		},
-		BackendRequirements: BackendRequirements{
+		TestName:                "C56412",
+		TestrailCaseIDs:         []string{"C56412"},
+		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		ShouldStartSuccessfully: true,
+		PureBackendRequirements: &PureBackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  0,
 		},
+		TestFunc: BasicInstallWithFAFB,
 	},
 	//C56413: https://portworx.testrail.net/index.php?/cases/view/56413
 	//Install PX through operator with both valid and invalid FlashArrays
 	{
-		TestCase: TestCase{
-			TestrailCaseIDs:         []string{"C56413"},
-			Spec:                    simpleClusterSpec,
-			ShouldStartSuccessfully: true,
-		},
-		BackendRequirements: BackendRequirements{
+		TestName:                "C56413",
+		TestrailCaseIDs:         []string{"C56413"},
+		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		ShouldStartSuccessfully: true,
+		PureBackendRequirements: &PureBackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  1,
 		},
+		TestFunc: BasicInstallWithFAFB,
 	},
 }
 
@@ -211,21 +216,27 @@ var flashArrayPositiveInstallTests = []PureTestrailCase{
 
 func TestFAFBPositiveInstallation(t *testing.T) {
 	for _, testCase := range flashArrayPositiveInstallTests {
-		t.Run(strings.Join(testCase.TestrailCaseIDs, "-"), matrixTest(testCase))
+		testCase.RunTest(t)
 	}
 }
 
-func matrixTest(c PureTestrailCase) func(*testing.T) {
+func BasicInstallWithFAFB(tc *TestCase) func(*testing.T) {
 	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
+
 		// Check that we have enough backends to support this test: skip early
-		fleetBackends := GenerateFleetOrSkip(t, PxNamespace, c.BackendRequirements)
+		require.NotEmpty(t, tc.PureBackendRequirements)
+		fleetBackends := GenerateFleetOrSkip(t, PxNamespace, tc.PureBackendRequirements)
 
 		// Construct Portworx StorageCluster object
-		cluster := &v1.StorageCluster{}
-		err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
-		require.NoError(t, err)
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*v1.StorageCluster)
+		require.True(t, ok)
 
-		c.PopulateStorageCluster(cluster)
+		err := PopulatePureStorageCluster(tc, cluster)
+		require.NoError(t, err)
 
 		// Add extra env variables
 		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(pxSpecGenURL)
@@ -247,24 +258,8 @@ func matrixTest(c PureTestrailCase) func(*testing.T) {
 		err = createPureSecret(fleetBackends, PxNamespace)
 		require.NoError(t, err)
 
-		// Deploy cluster
-		cluster, err = createStorageCluster(cluster)
-		require.NoError(t, err)
-
-		// Validate cluster deployment
-		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, c.ShouldStartSuccessfully, "")
-		require.NoError(t, err)
-
-		// Delete cluster
-		logrus.Infof("Delete StorageCluster %s", cluster.Name)
-		err = testutil.UninstallStorageCluster(cluster)
-		require.NoError(t, err)
-
-		// Validate cluster deletion
-		logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-		err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
-		require.NoError(t, err)
+		// Install, validation and deletion
+		BasicInstall(tc)(t)
 
 		// Delete px-pure-secret
 		logrus.Infof("Delete Secret %s", OutputSecretName)
