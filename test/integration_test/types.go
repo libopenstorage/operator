@@ -31,11 +31,15 @@ type TestCase struct {
 	ShouldStartSuccessfully bool
 	// ShouldSkip check env requirements for the test case
 	ShouldSkip func() bool
+	// PureBackendRequirements contains additional information to construct a px-pure-secret.
+	PureBackendRequirements *PureBackendRequirements
+
+	// TODO: Split TestFunc to TestSetup, TestFunc and TestTearDown
 }
 
-// BackendRequirements is used to describe what backends are required for
+// PureBackendRequirements is used to describe what backends are required for
 // a given test, including how many should be invalid.
-type BackendRequirements struct {
+type PureBackendRequirements struct {
 	// RequiredArrays and RequiredBlades indicate how many FlashArrays and
 	// FlashBlades are required respectively. If not enough are present in
 	// the source secret, this test will instead be skipped. If set to
@@ -46,13 +50,6 @@ type BackendRequirements struct {
 	// If set to AllAvailableBackends, all backends will have their
 	// credentials set invalid.
 	InvalidArrays, InvalidBlades int
-}
-
-// PureTestrailCase is a TestCase with additional
-// information to construct a px-pure-secret.
-type PureTestrailCase struct {
-	TestCase
-	BackendRequirements BackendRequirements
 }
 
 // DiscoveryConfig represents a single pure.json file
@@ -84,5 +81,8 @@ func (dc *DiscoveryConfig) DumpJSON() ([]byte, error) {
 
 // RunTest executes the actual test function
 func (tc *TestCase) RunTest(t *testing.T) {
+	if tc.ShouldSkip == nil {
+		tc.ShouldSkip = func() bool { return false }
+	}
 	t.Run(tc.TestName, tc.TestFunc(tc))
 }
