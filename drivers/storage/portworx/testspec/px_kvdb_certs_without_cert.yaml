@@ -73,8 +73,8 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
-            - name: osddriver
-              mountPath: /var/lib/osd/driver
+            - name: varlibosd
+              mountPath: /var/lib/osd
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -127,9 +127,9 @@ spec:
         - name: optpwx
           hostPath:
             path: /opt/pwx
-        - name: osddriver
+        - name: varlibosd
           hostPath:
-            path: /var/lib/osd/driver
+            path: /var/lib/osd
         - name: kvdbcerts
           secret:
             secretName: kvdb-auth-secret

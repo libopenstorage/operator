@@ -73,8 +73,8 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
-            - name: osddriver
-              mountPath: /var/lib/osd/driver
+            - name: varlibosd
+              mountPath: /var/lib/osd
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -87,8 +87,6 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-            - name: pxlogs
-              mountPath: /var/lib/osd/log
         - name: csi-node-driver-registrar
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
           args:
@@ -133,9 +131,9 @@ spec:
         - name: optpwx
           hostPath:
             path: /var/vcap/store/opt/pwx
-        - name: osddriver
+        - name: varlibosd
           hostPath:
-            path: /var/vcap/store/lib/osd/driver            
+            path: /var/vcap/store/lib/osd            
         - name: registration-dir
           hostPath:
             path: /var/vcap/data/kubelet/plugins_registry
@@ -159,6 +157,3 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
-        - name: pxlogs
-          hostPath:
-            path: /var/vcap/store/lib/osd/log

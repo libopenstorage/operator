@@ -78,10 +78,11 @@ var (
 			},
 		},
 		{
-			name: "pxlogs",
+			name:      "varlibosd",
+			hostPath:  "/var/lib/osd",
+			mountPath: "/var/lib/osd",
 			pks: &pksVolumeInfo{
-				hostPath:  "/var/vcap/store/lib/osd/log",
-				mountPath: "/var/lib/osd/log",
+				hostPath: "/var/vcap/store/lib/osd",
 			},
 		},
 		{
@@ -1615,14 +1616,6 @@ func getDefaultVolumeInfoList() []volumeInfo {
 			mountPath: "/opt/pwx",
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/opt/pwx",
-			},
-		},
-		{
-			name:      "osddriver",
-			hostPath:  "/var/lib/osd/driver",
-			mountPath: "/var/lib/osd/driver",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/lib/osd/driver",
 			},
 		},
 		{
