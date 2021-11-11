@@ -83,6 +83,8 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
+            - name: varlibosd
+              mountPath: /var/lib/osd
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -95,8 +97,6 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-            - name: pxlogs
-              mountPath: /var/lib/osd/log
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
@@ -122,6 +122,9 @@ spec:
         - name: optpwx
           hostPath:
             path: /var/vcap/store/opt/pwx
+        - name: varlibosd
+          hostPath:
+            path: /var/vcap/store/lib/osd
         - name: procmount
           hostPath:
             path: /proc
@@ -137,6 +140,3 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
-        - name: pxlogs
-          hostPath:
-            path: /var/vcap/store/lib/osd/log

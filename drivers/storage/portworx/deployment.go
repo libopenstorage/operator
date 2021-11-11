@@ -76,10 +76,11 @@ var (
 			},
 		},
 		{
-			name: "pxlogs",
+			name:      "varlibosd",
+			hostPath:  "/var/lib/osd",
+			mountPath: "/var/lib/osd",
 			pks: &pksVolumeInfo{
-				hostPath:  "/var/vcap/store/lib/osd/log",
-				mountPath: "/var/lib/osd/log",
+				hostPath: "/var/vcap/store/lib/osd",
 			},
 		},
 		{
