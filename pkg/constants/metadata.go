@@ -35,10 +35,6 @@ const (
 	// the custom registry, there is a list of hardcoded common registries, however the list
 	// may not be complete, users can use this annotation to add more.
 	AnnotationCommonImageRegistries = OperatorPrefix + "/common-image-registries"
-
-	// AnnotationMigrationApproved is used to take user's approval for portworx migration from
-	// old installation method to the operator managed method.
-	AnnotationMigrationApproved = "portworx.io/migration-approved"
 )
 
 const (

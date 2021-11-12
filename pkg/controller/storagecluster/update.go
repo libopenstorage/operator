@@ -226,7 +226,7 @@ func (c *Controller) controlledHistories(
 		return fresh, nil
 	})
 
-	selector := c.storageClusterSelectorLabels(cluster)
+	selector := c.StorageClusterSelectorLabels(cluster)
 	// Use ControllerRefManager to adopt/orphan as needed. Histories that don't match the
 	// labels but are owned by this storage cluster are released (disowned). Histories that
 	// match the labels and do not have ref to this storage cluster are owned by it.
@@ -251,7 +251,7 @@ func (c *Controller) snapshot(
 
 	hash := computeHash(&cluster.Spec, cluster.Status.CollisionCount)
 	name := historyName(cluster.Name, hash)
-	historyLabels := c.storageClusterSelectorLabels(cluster)
+	historyLabels := c.StorageClusterSelectorLabels(cluster)
 	historyLabels[defaultStorageClusterUniqueLabelKey] = hash
 
 	history := &apps.ControllerRevision{
