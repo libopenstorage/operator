@@ -220,15 +220,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	if c.waitingForMigrationApproval(cluster) {
-		k8s.InfoEvent(
-			c.recorder, cluster, util.MigrationPendingReason,
-			fmt.Sprintf("To proceed with the migration, set the %s annotation on the "+
-				"StorageCluster to 'true'", constants.AnnotationMigrationApproved),
-		)
-		return reconcile.Result{}, nil
-	}
-
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		cluster.Status.Phase = string(corev1.ClusterOperationFailed)
@@ -236,6 +227,15 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
 		}
 		return reconcile.Result{}, err
+	}
+
+	if c.waitingForMigrationApproval(cluster) {
+		k8s.InfoEvent(
+			c.recorder, cluster, util.MigrationPendingReason,
+			fmt.Sprintf("To proceed with the migration, set the %s annotation on the "+
+				"StorageCluster to 'true'", constants.AnnotationMigrationApproved),
+		)
+		return reconcile.Result{}, nil
 	}
 
 	if err := c.syncStorageCluster(cluster); err != nil {
@@ -247,8 +247,9 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 }
 
 func (c *Controller) waitingForMigrationApproval(cluster *corev1.StorageCluster) bool {
-	approved, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationMigrationApproved])
-	return err == nil && !approved
+	_, migrationLabelPresent := cluster.Annotations[constants.AnnotationMigrationApproved]
+	return (migrationLabelPresent && cluster.Status.Phase == "") ||
+		cluster.Status.Phase == constants.PhaseAwaitingApproval
 }
 
 func (c *Controller) validate(cluster *corev1.StorageCluster) error {
@@ -974,7 +975,7 @@ func (c *Controller) createPodTemplate(
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
-			Labels:    c.storageClusterSelectorLabels(cluster),
+			Labels:    c.StorageClusterSelectorLabels(cluster),
 		},
 		Spec: podSpec,
 	}
@@ -1007,7 +1008,7 @@ func (c *Controller) newSimulationPod(
 	newPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
-			Labels:    c.storageClusterSelectorLabels(cluster),
+			Labels:    c.StorageClusterSelectorLabels(cluster),
 		},
 		Spec: v1.PodSpec{
 			NodeName: nodeName,
@@ -1028,9 +1029,44 @@ func (c *Controller) newSimulationPod(
 		}
 	}
 
+	// Add constraints that are used for migration. We should remove this whenever we
+	// remove the migration code
+	addMigrationConstraints(&newPod.Spec)
+
 	// Add default tolerations for StorageCluster pods
 	k8s.AddOrUpdateStoragePodTolerations(&newPod.Spec)
 	return newPod, nil
+}
+
+func addMigrationConstraints(podSpec *v1.PodSpec) {
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &v1.Affinity{}
+	}
+	if podSpec.Affinity.NodeAffinity == nil {
+		podSpec.Affinity.NodeAffinity = &v1.NodeAffinity{}
+	}
+	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{}
+	}
+	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms == nil {
+		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{{}}
+	}
+
+	selectorTerms := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	for i, term := range selectorTerms {
+		if term.MatchExpressions == nil {
+			term.MatchExpressions = make([]v1.NodeSelectorRequirement, 0)
+		}
+		selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
+			Key:      constants.LabelPortworxDaemonsetMigration,
+			Operator: v1.NodeSelectorOpNotIn,
+			Values: []string{
+				constants.LabelValueMigrationPending,
+				constants.LabelValueMigrationStarting,
+			},
+		})
+	}
+	podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = selectorTerms
 }
 
 // checkPredicates checks if a StorageCluster pod can run on a node
@@ -1153,7 +1189,7 @@ func (c *Controller) getStoragePods(
 		return fresh, nil
 	})
 
-	selector := c.storageClusterSelectorLabels(cluster)
+	selector := c.StorageClusterSelectorLabels(cluster)
 	// Use ControllerRefManager to adopt/orphan as needed. Pods that don't match the
 	// labels but are owned by this storage cluster are released (disowned). Pods that
 	// match the labels and do not have ref to this storage cluster are owned by it.
@@ -1195,7 +1231,8 @@ func (c *Controller) createStorageNode(
 	}
 }
 
-func (c *Controller) storageClusterSelectorLabels(cluster *corev1.StorageCluster) map[string]string {
+// StorageClusterSelectorLabels returns the selector labels for child objects of given storagecluster
+func (c *Controller) StorageClusterSelectorLabels(cluster *corev1.StorageCluster) map[string]string {
 	clusterLabels := c.Driver.GetSelectorLabels()
 	if clusterLabels == nil {
 		clusterLabels = make(map[string]string)
