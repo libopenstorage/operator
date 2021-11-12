@@ -1422,6 +1422,12 @@ spec:
                   telemetry:
                     type: string
                     description: Desired image for telemetry.
+                  metricsCollector:
+                    type: string
+                    description: Desired image for metrics collector.
+                  metricsCollectorProxy:
+                    type: string
+                    description: Desired image for metrics collector proxy.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.
