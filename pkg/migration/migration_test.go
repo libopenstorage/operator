@@ -219,7 +219,7 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: phaseAwaitingApproval,
+			Phase: constants.PhaseAwaitingApproval,
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -377,7 +377,7 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: phaseAwaitingApproval,
+			Phase: constants.PhaseAwaitingApproval,
 		},
 	}
 	cluster := &corev1.StorageCluster{}
