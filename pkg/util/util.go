@@ -9,9 +9,10 @@ import (
 	"github.com/hashicorp/go-version"
 	v1 "k8s.io/api/core/v1"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
-	"k8s.io/apimachinery/pkg/api/equality"
 
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -157,8 +158,11 @@ func HaveTolerationsChanged(
 
 // DeploymentDeepEqual compares if two deployments are same.
 func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) bool {
+	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
+	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
 	return equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) &&
-		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes) &&
+		len(d1.Spec.Template.Spec.Volumes) == len(d2.Spec.Template.Spec.Volumes) &&
+		equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes) &&
 		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets) &&
 		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity) &&
 		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations) &&
