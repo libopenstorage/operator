@@ -22,15 +22,15 @@ var (
 
 const (
 	// DefaultValidateDeployTimeout is a default timeout for deployment validation
-	DefaultValidateDeployTimeout = 900 * time.Second
+	DefaultValidateDeployTimeout = 15 * time.Minute
 	// DefaultValidateDeployRetryInterval is a default retry interval for deployment validation
 	DefaultValidateDeployRetryInterval = 10 * time.Second
 	// DefaultValidateUpgradeTimeout is a default timeout for upgrade validation
-	DefaultValidateUpgradeTimeout = 1400 * time.Second
+	DefaultValidateUpgradeTimeout = 25 * time.Minute
 	// DefaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
 	DefaultValidateUpgradeRetryInterval = 10 * time.Second
 	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
-	DefaultValidateUninstallTimeout = 900 * time.Second
+	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 10 * time.Second
 
@@ -42,4 +42,7 @@ const (
 
 	// NodeReplacePrefix is used for replacing node name during the test
 	NodeReplacePrefix = "replaceWithNodeNumber"
+
+	// PortworxOperatorDeploymentName name of portworx operator deployment
+	PortworxOperatorDeploymentName = "portworx-operator"
 )
