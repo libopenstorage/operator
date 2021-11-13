@@ -1,30 +1,26 @@
-// +build fafb
-
-package integrationtest
+package utils
 
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
-	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-)
+	"k8s.io/apimachinery/pkg/api/errors"
 
-const (
-	// SourceConfigSecretName is the name of the secret that contains the superset of all credentials
-	// we may select from for these tests.
-	SourceConfigSecretName = "px-pure-secret-source"
-	// OutputSecretName is the name of the secret we will output chosen credential subsets to.
-	OutputSecretName = "px-pure-secret"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/types"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 var (
-	sourceConfig          DiscoveryConfig
+	sourceConfig          types.DiscoveryConfig
 	sourceConfigPresent   bool
 	sourceConfigLoadError error
 	sourceConfigLoadOnce  sync.Once
@@ -79,7 +75,7 @@ func loadSourceConfigOrFail(t *testing.T, namespace string) {
 // If not enough devices exist to meet the requirements or the source secret does not
 // exist, the test will be skipped.
 func GenerateFleetOrSkip(t *testing.T, namespace string,
-	req *PureBackendRequirements) DiscoveryConfig {
+	req *types.PureBackendRequirements) types.DiscoveryConfig {
 	loadSourceConfigOrFail(t, namespace)
 
 	logrus.WithFields(logrus.Fields{
@@ -106,7 +102,7 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 	}
 
 	// We have enough devices for this test, let's make a fleet and give it back for testing
-	newFleet := DiscoveryConfig{}
+	newFleet := types.DiscoveryConfig{}
 
 	addedArrays := 0
 	for _, value := range sourceConfig.Arrays {
@@ -116,7 +112,7 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 		}
 
 		// Copy the value over
-		entry := FlashArrayEntry{
+		entry := types.FlashArrayEntry{
 			APIToken:     value.APIToken,
 			MgmtEndPoint: value.MgmtEndPoint,
 			Labels:       value.Labels,
@@ -137,7 +133,7 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 		}
 
 		// Copy the value over
-		entry := FlashBladeEntry{
+		entry := types.FlashBladeEntry{
 			APIToken:     value.APIToken,
 			MgmtEndPoint: value.MgmtEndPoint,
 			NFSEndPoint:  value.NFSEndPoint,
@@ -152,4 +148,38 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 	}
 
 	return newFleet
+}
+
+// PopulateStorageCluster populate the cluster name and update node names
+func PopulateStorageCluster(tc *types.TestCase, cluster *corev1.StorageCluster) error {
+	cluster.Name = MakeDNS1123Compatible(strings.Join(tc.TestrailCaseIDs, "-"))
+
+	names, err := testutil.GetExpectedPxNodeNameList(cluster)
+	if err != nil {
+		return err
+	}
+	// Sort for consistent order between multiple tests
+	sort.Strings(names)
+
+	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
+	// the name of the Nth eligible Portworx node
+	for i := range cluster.Spec.Nodes {
+		if !strings.HasPrefix(cluster.Spec.Nodes[i].Selector.NodeName, NodeReplacePrefix) {
+			continue
+		}
+
+		num := strings.TrimPrefix(cluster.Spec.Nodes[i].Selector.NodeName, NodeReplacePrefix)
+		parsedNum, err := strconv.Atoi(num)
+		if err != nil {
+			return err
+		}
+
+		if parsedNum >= len(names) {
+			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
+		}
+
+		cluster.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
+	}
+
+	return nil
 }
