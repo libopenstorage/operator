@@ -6,15 +6,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/types"
+	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
+)
+
+// node* is to be used in the Node section of the StorageCluster spec. node0 will select the
+// alphabetically 1st PX node, node1 will select the 2nd, and so on
+const (
+	node0 = ci_utils.NodeReplacePrefix + "0"
+	node1 = ci_utils.NodeReplacePrefix + "1"
+	node2 = ci_utils.NodeReplacePrefix + "2"
 )
 
 var (
@@ -30,9 +40,9 @@ var (
 
 	threeStorageNodes = uint32(3)
 
-	internalKVDB     = v1.KvdbSpec{Internal: true}
-	autoJournalDrive = &v1.CloudStorageSpec{
-		CloudStorageCommon: v1.CloudStorageCommon{
+	internalKVDB     = corev1.KvdbSpec{Internal: true}
+	autoJournalDrive = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
 			KvdbDeviceSpec:    &size32,
 			JournalDeviceSpec: &auto,
 			DeviceSpecs:       &disks100,
@@ -40,24 +50,24 @@ var (
 	}
 
 	// simpleClusterSpec is a StorageCluster with internal KVDB and auto journal drives
-	simpleClusterSpec = v1.StorageClusterSpec{
+	simpleClusterSpec = corev1.StorageClusterSpec{
 		Kvdb:         &internalKVDB,
 		CloudStorage: autoJournalDrive,
 	}
 )
 
 // TODO: add readable test names
-var flashArrayPositiveInstallTests = []TestCase{
+var flashArrayPositiveInstallTests = []types.TestCase{
 	//// C55130: https://portworx.testrail.net/index.php?/cases/view/55130
 	// Install PX through operator with internal KVDB and journal drive on FlashArray
 	{
 		TestName:        "C55130",
 		TestrailCaseIDs: []string{"C55130"},
-		TestSpec: createStorageClusterTestSpecFunc(&v1.StorageCluster{
-			Spec: v1.StorageClusterSpec{
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			Spec: corev1.StorageClusterSpec{
 				Kvdb: &internalKVDB,
-				CloudStorage: &v1.CloudStorageSpec{
-					CloudStorageCommon: v1.CloudStorageCommon{
+				CloudStorage: &corev1.CloudStorageSpec{
+					CloudStorageCommon: corev1.CloudStorageCommon{
 						KvdbDeviceSpec:    &size32,
 						JournalDeviceSpec: &size3,
 						DeviceSpecs:       &disks100,
@@ -66,7 +76,7 @@ var flashArrayPositiveInstallTests = []TestCase{
 			},
 		}),
 		ShouldStartSuccessfully: true,
-		PureBackendRequirements: &PureBackendRequirements{
+		PureBackendRequirements: &types.PureBackendRequirements{
 			RequiredArrays: 1,
 		},
 		TestFunc: BasicInstallWithFAFB,
@@ -86,9 +96,9 @@ var flashArrayPositiveInstallTests = []TestCase{
 
 		TestName:                "C55129-C56414-C56411-C55003",
 		TestrailCaseIDs:         []string{"C55129", "C56414", "C56411", "C55003"},
-		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		TestSpec:                ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{}),
 		ShouldStartSuccessfully: true,
-		PureBackendRequirements: &PureBackendRequirements{
+		PureBackendRequirements: &types.PureBackendRequirements{
 			RequiredArrays: 1,
 		},
 		TestFunc: BasicInstallWithFAFB,
@@ -98,17 +108,17 @@ var flashArrayPositiveInstallTests = []TestCase{
 	{
 		TestName:        "C55133",
 		TestrailCaseIDs: []string{"C55133"},
-		TestSpec: createStorageClusterTestSpecFunc(&v1.StorageCluster{
-			Spec: v1.StorageClusterSpec{
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			Spec: corev1.StorageClusterSpec{
 				Kvdb:         &internalKVDB,
 				CloudStorage: autoJournalDrive,
-				Nodes: []v1.NodeSpec{
+				Nodes: []corev1.NodeSpec{
 					{
-						Selector: v1.NodeSelector{
+						Selector: corev1.NodeSelector{
 							NodeName: node0,
 						},
-						CloudStorage: &v1.CloudStorageNodeSpec{
-							CloudStorageCommon: v1.CloudStorageCommon{
+						CloudStorage: &corev1.CloudStorageNodeSpec{
+							CloudStorageCommon: corev1.CloudStorageCommon{
 								DeviceSpecs:       &disks200,
 								JournalDeviceSpec: &auto,
 								KvdbDeviceSpec:    &size32,
@@ -119,7 +129,7 @@ var flashArrayPositiveInstallTests = []TestCase{
 			},
 		}),
 		ShouldStartSuccessfully: true,
-		PureBackendRequirements: &PureBackendRequirements{
+		PureBackendRequirements: &types.PureBackendRequirements{
 			RequiredArrays: 1,
 		},
 		TestFunc: BasicInstallWithFAFB,
@@ -132,18 +142,18 @@ var flashArrayPositiveInstallTests = []TestCase{
 	//		TestrailCaseIDs: []string{
 	//			"C55134",
 	//		},
-	//		Spec: v1.StorageClusterSpec{
+	//		Spec: corev1.StorageClusterSpec{
 	//			Kvdb: &internalKVDB,
-	//			CloudStorage: &v1.CloudStorageSpec{
-	//				CloudStorageCommon: v1.CloudStorageCommon{
+	//			CloudStorage: &corev1.CloudStorageSpec{
+	//				CloudStorageCommon: corev1.CloudStorageCommon{
 	//					DeviceSpecs: &disks100,
 	//					KvdbDeviceSpec:    &size32,
 	//					JournalDeviceSpec: &auto,
 	//				},
 	//			},
-	//			Nodes: []v1.NodeSpec{
+	//			Nodes: []corev1.NodeSpec{
 	//				{
-	//					Selector: v1.NodeSelector{
+	//					Selector: corev1.NodeSelector{
 	//						NodeName: node0,
 	//					},
 	//					CloudStorage: nil,
@@ -161,9 +171,9 @@ var flashArrayPositiveInstallTests = []TestCase{
 	{
 		TestName:                "C56412",
 		TestrailCaseIDs:         []string{"C56412"},
-		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		TestSpec:                ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{}),
 		ShouldStartSuccessfully: true,
-		PureBackendRequirements: &PureBackendRequirements{
+		PureBackendRequirements: &types.PureBackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  0,
 		},
@@ -174,9 +184,9 @@ var flashArrayPositiveInstallTests = []TestCase{
 	{
 		TestName:                "C56413",
 		TestrailCaseIDs:         []string{"C56413"},
-		TestSpec:                createStorageClusterTestSpecFunc(&v1.StorageCluster{}),
+		TestSpec:                ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{}),
 		ShouldStartSuccessfully: true,
-		PureBackendRequirements: &PureBackendRequirements{
+		PureBackendRequirements: &types.PureBackendRequirements{
 			RequiredArrays: 2,
 			InvalidArrays:  1,
 		},
@@ -220,7 +230,7 @@ func TestFAFBPositiveInstallation(t *testing.T) {
 	}
 }
 
-func BasicInstallWithFAFB(tc *TestCase) func(*testing.T) {
+func BasicInstallWithFAFB(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
 			t.Skip()
@@ -228,18 +238,18 @@ func BasicInstallWithFAFB(tc *TestCase) func(*testing.T) {
 
 		// Check that we have enough backends to support this test: skip early
 		require.NotEmpty(t, tc.PureBackendRequirements)
-		fleetBackends := GenerateFleetOrSkip(t, PxNamespace, tc.PureBackendRequirements)
+		fleetBackends := ci_utils.GenerateFleetOrSkip(t, ci_utils.PxNamespace, tc.PureBackendRequirements)
 
 		// Construct Portworx StorageCluster object
 		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*v1.StorageCluster)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		err := PopulatePureStorageCluster(tc, cluster)
+		err := ci_utils.PopulateStorageCluster(tc, cluster)
 		require.NoError(t, err)
 
 		// Add extra env variables
-		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(pxSpecGenURL)
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(ci_utils.PxSpecGenURL)
 		require.NoError(t, err)
 
 		cluster.Spec.Env = append(cluster.Spec.Env, []k8sv1.EnvVar{
@@ -254,15 +264,15 @@ func BasicInstallWithFAFB(tc *TestCase) func(*testing.T) {
 		}...)
 
 		// Create px-pure-secret
-		logrus.Infof("Create or update %s in %s", OutputSecretName, PxNamespace)
-		err = createPureSecret(fleetBackends, PxNamespace)
+		logrus.Infof("Create or update %s in %s", ci_utils.OutputSecretName, ci_utils.PxNamespace)
+		err = createPureSecret(fleetBackends, ci_utils.PxNamespace)
 		require.NoError(t, err)
 
 		// Install, validation and deletion
 		BasicInstall(tc)(t)
 
 		// Delete px-pure-secret
-		logrus.Infof("Delete Secret %s", OutputSecretName)
+		logrus.Infof("Delete Secret %s", ci_utils.OutputSecretName)
 		err = deletePureSecretIfExists(cluster.Namespace)
 		require.NoError(t, err)
 
@@ -270,7 +280,7 @@ func BasicInstallWithFAFB(tc *TestCase) func(*testing.T) {
 	}
 }
 
-func createPureSecret(config DiscoveryConfig, namespace string) error {
+func createPureSecret(config types.DiscoveryConfig, namespace string) error {
 	pureJSON, err := config.DumpJSON()
 	if err != nil {
 		return err
@@ -285,7 +295,7 @@ func createPureSecret(config DiscoveryConfig, namespace string) error {
 
 	_, err = coreops.Instance().CreateSecret(&k8sv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      OutputSecretName,
+			Name:      ci_utils.OutputSecretName,
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
@@ -296,7 +306,7 @@ func createPureSecret(config DiscoveryConfig, namespace string) error {
 }
 
 func deletePureSecretIfExists(namespace string) error {
-	if err := coreops.Instance().DeleteSecret(OutputSecretName, namespace); !errors.IsNotFound(err) && !errors.IsAlreadyExists(err) {
+	if err := coreops.Instance().DeleteSecret(ci_utils.OutputSecretName, namespace); !errors.IsNotFound(err) && !errors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil
