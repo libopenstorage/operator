@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -106,6 +107,20 @@ var testStorageClusterBasicCases = []TestCase{
 		ShouldSkip: func() bool { return false },
 		TestFunc:   InstallWithTelemetry,
 	},
+	{
+		TestName:        "InstallWithCSI",
+		TestrailCaseIDs: []string{},
+		TestSpec: func(t *testing.T) interface{} {
+			cluster := &op_corev1.StorageCluster{}
+			cluster.Name = "csi-test"
+			err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
+			require.NoError(t, err)
+			cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
+			return cluster
+		},
+		ShouldSkip: func() bool { return false },
+		TestFunc:   BasicCsiRegression,
+	},
 }
 
 func TestStorageClusterBasic(t *testing.T) {
@@ -194,7 +209,7 @@ func BasicUpgrade(tc *TestCase) func(*testing.T) {
 		var lastHopURL string
 		for i, hopURL := range pxUpgradeHopsURLList {
 			// Get versions from URL
-			logrus.Infof("Get component images from versions URL")
+			logrus.Infof("Get component images from version URL")
 			specImages, err := testutil.GetImagesFromVersionURL(hopURL)
 			require.NoError(t, err)
 			lastHopURL = hopURL
@@ -207,7 +222,19 @@ func BasicUpgrade(tc *TestCase) func(*testing.T) {
 				require.NoError(t, err)
 			} else {
 				logrus.Infof("Upgrading from %s to %s", lastHopURL, hopURL)
-				cluster, err = updateStorageCluster(cluster, hopURL, specImages)
+				// Get live StorageCluster
+				cluster, err := getStorageCluster(cluster.Name, cluster.Namespace)
+				require.NoError(t, err)
+
+				// Set Portworx Image
+				cluster.Spec.Image = specImages["version"]
+
+				// Populate default Env Vars
+				err = populateDefaultEnvVars(cluster, hopURL)
+				require.NoError(t, err)
+
+				// Update live StorageCluster
+				cluster, err = updateStorageCluster(cluster)
 				require.NoError(t, err)
 			}
 
@@ -281,4 +308,99 @@ func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
 
 	err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
 	require.NoError(t, err)
+}
+
+// BasicCsiRegression test includes the following steps:
+// 1. Deploy PX with CSI enabled and validate CSI components and images
+// 2. Delete "px-csi-ext" pods and validate they get re-deployed
+// 3. Disable CSI and validate CSI components got successfully removed
+// 4. Enabled CSI and validate CSI components and images
+// 5. Delete "portworx" pods and validate they get re-deployed
+// 6. Delete "px-csi-ext" pods and validate they get re-deployed
+// 7. Delete StorageCluster and validate it got successfully removed
+func BasicCsiRegression(tc *TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
+
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*op_corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Deploy cluster
+		cluster, err = createStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Validate cluster deployment
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Delete px-csi-ext pods and validate they get redeploymed
+		logrus.Info("Delete px-csi-ext pods and validate they get re-deployed")
+		err = testutil.DeletePodsByDeployment("px-csi-ext", cluster.Namespace)
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Disable CSI and update live StorageCluster
+		logrus.Info("Disable CSI and validate StorageCluster")
+		cluster, err = getStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.FeatureGates = map[string]string{"CSI": "false"}
+		cluster, err = updateStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Sleep for 20 seconds to let operator start the update process
+		logrus.Debug("Sleeping for 20 seconds...")
+		time.Sleep(20 * time.Second)
+
+		// Validate cluster deployment
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Disable CSI and update live StorageCluster
+		logrus.Info("Enable CSI")
+		cluster, err = getStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
+		cluster, err = updateStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Sleep for 20 seconds to let operator start the update process
+		logrus.Debug("Sleeping for 20 seconds...")
+		time.Sleep(20 * time.Second)
+
+		// Validate cluster deployment
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Delete portworx oci-mon pods and validate they get redeploymed
+		logrus.Info("Delete portworx pods and validate they get re-deployed")
+		err = testutil.DeletePodsByLabel(cluster.Namespace, "name", "portworx")
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Delete px-csi-ext pods and validate they get redeploymed
+		logrus.Info("Delete px-csi-ext pods and validate they get re-deployed")
+		err = testutil.DeletePodsByDeployment("px-csi-ext", cluster.Namespace)
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Delete cluster
+		logrus.Infof("Delete StorageCluster %s", cluster.Name)
+		err = testutil.UninstallStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Validate cluster deletion
+		logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+		err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
+		require.NoError(t, err)
+	}
 }

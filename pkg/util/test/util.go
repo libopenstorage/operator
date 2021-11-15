@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -609,8 +610,13 @@ func ValidateUninstallStorageCluster(
 				cluster.Namespace, cluster.Name, err)
 		}
 
+		var podsToBeDeleted []string
+		for _, pod := range pods {
+			podsToBeDeleted = append(podsToBeDeleted, pod.Name)
+		}
+
 		if len(pods) > 0 {
-			return "", true, fmt.Errorf("%v pods are still present", len(pods))
+			return "", true, fmt.Errorf("%d pods are still present, waiting for Portworx pods to be deleted: %s", len(pods), podsToBeDeleted)
 		}
 
 		return "", true, fmt.Errorf("pods are deleted, but StorageCluster %v/%v still present",
@@ -646,21 +652,24 @@ func validateStorageClusterPods(
 
 		var pxNodeNameList []string
 		var podsNotReady []string
+		var podsReady []string
 		for _, pod := range pods {
 			if !coreops.Instance().IsPodReady(pod) {
 				podsNotReady = append(podsNotReady, pod.Name)
 			}
 			pxNodeNameList = append(pxNodeNameList, pod.Spec.NodeName)
+			podsReady = append(podsReady, pod.Name)
 		}
 
 		if len(podsNotReady) > 0 {
-			return "", true, fmt.Errorf("pods are not Ready: %v", podsNotReady)
+			return "", true, fmt.Errorf("Waiting for Portworx pods to be ready: %s", podsNotReady)
 		}
 
 		if !assert.ElementsMatch(&testing.T{}, expectedPxNodeNameList, pxNodeNameList) {
 			return "", false, fmt.Errorf("expected Portworx nodes: %+v, got %+v", expectedPxNodeNameList, pxNodeNameList)
 		}
 
+		logrus.Debugf("All Portworx pods are ready: %s", podsReady)
 		return "", false, nil
 	}
 
@@ -867,20 +876,12 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		}
 	}
 
-	if csi, _ := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"]); csi {
-		// check if all px containers are up since csi has extra containers alongside oci monitor
-		if err = validatePodsByName(cluster.Namespace, "portworx", timeout, interval); err != nil {
-			return err
-		}
-
-		pxCsiDp := &appsv1.Deployment{}
-		pxCsiDp.Name = "px-csi-ext"
-		pxCsiDp.Namespace = cluster.Namespace
-		if err = appops.Instance().ValidateDeployment(pxCsiDp, timeout, interval); err != nil {
-			return err
-		}
+	// Validate CSI components and images
+	if validateCSI(pxImageList, cluster, timeout, interval); err != nil {
+		return err
 	}
 
+	// Validate Monitoring
 	if err = validateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
@@ -888,9 +889,236 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-func validatePodsByName(namespace, name string, timeout, interval time.Duration) error {
-	listOptions := map[string]string{"name": name}
+func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	csi, _ := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"])
+	pxCsiDp := &appsv1.Deployment{}
+	pxCsiDp.Name = "px-csi-ext"
+	pxCsiDp.Namespace = cluster.Namespace
+
+	if csi {
+		logrus.Debug("CSI is enabled in StorageCluster")
+
+		// Validate CSI container image inside Portworx OCI Monitor pods
+		if err := validatePortworxOciMonCsiImage(cluster.Namespace, pxImageList); err != nil {
+			return err
+		}
+
+		// Validate px-csi-ext deployment and pods
+		if err := validateDeployment(pxCsiDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate CSI container images inside px-csi-ext pods
+		if err := validateCsiExtImages(cluster.Namespace, pxImageList); err != nil {
+			return err
+		}
+	} else if !csi {
+		logrus.Debug("CSI is disabled in StorageCluster")
+
+		// Validate px-csi-ext deployment doesn't exist
+		retCsiDpObject, err := appops.Instance().GetDeployment(pxCsiDp.Name, pxCsiDp.Namespace)
+		if err != nil || retCsiDpObject == nil {
+			logrus.Debugf("CSI Deployment %s is nil as expected, Err: %v", pxCsiDp.Name, err)
+		} else {
+			return fmt.Errorf("failed to validate CSI. Found deployment %s when it was not suppose to be deployed", pxCsiDp.Name)
+		}
+	}
+	return nil
+}
+
+func validateDeployment(deployment *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Debugf("Validating deployment: %s", deployment.Name)
+	return appops.Instance().ValidateDeployment(deployment, timeout, interval)
+}
+
+func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]string) error {
+	var csiNodeDriverRegistrar string
+
+	logrus.Debug("Validating CSI container images inside Portworx OCI Monitor pods")
+
+	// Get Portworx pods
+	listOptions := map[string]string{"name": "portworx"}
+	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+
+	// We looking for this image in the container
+	if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
+		csiNodeDriverRegistrar = value
+	} else {
+		return fmt.Errorf("Failed to find image for csiNodeDriverRegistrar")
+	}
+
+	// Go through each pod and find all container and match images for each container
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			if container.Name == "csi-node-driver-registrar" {
+				if container.Image != csiNodeDriverRegistrar {
+					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiNodeDriverRegistrar, container.Image)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateCsiExtImages(namespace string, pxImageList map[string]string) error {
+	var csiProvisionerImage string
+	var csiSnapshotterImage string
+	var csiResizerImage string
+
+	logrus.Debug("Validating CSI container images inside px-csi-ext pods")
+
+	// Get px-csi-ext pods
+	listOptions := map[string]string{"app": "px-csi-driver"}
+	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+
+	// We looking for these 3 images in 3 containers in the 3 px-csi-ext pods
+	if value, ok := pxImageList["csiProvisioner"]; ok {
+		csiProvisionerImage = value
+	} else {
+		return fmt.Errorf("Failed to find image for csiProvisioner")
+	}
+
+	if value, ok := pxImageList["csiSnapshotter"]; ok {
+		csiSnapshotterImage = value
+	} else {
+		return fmt.Errorf("Failed to find image for csiSnapshotter")
+	}
+
+	if value, ok := pxImageList["csiResizer"]; ok {
+		csiResizerImage = value
+	} else {
+		return fmt.Errorf("Failed to find image for csiResizer")
+	}
+
+	// Go through each pod and find all container and match images for each container
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			if container.Name == "csi-external-provisioner" {
+				if container.Image != csiProvisionerImage {
+					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiProvisionerImage, container.Image)
+				}
+			} else if container.Name == "csi-snapshotter" {
+				if container.Image != csiSnapshotterImage {
+					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiSnapshotterImage, container.Image)
+				}
+			} else if container.Name == "csi-resizer" {
+				if container.Image != csiResizerImage {
+					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validatePodsByLabel(namespace, label, name string, timeout, interval time.Duration) error {
+	listOptions := map[string]string{label: name}
 	return ValidatePods(namespace, listOptions, timeout, interval)
+}
+
+// DeletePodsByDeployment deletes pods for the given deployment name and namespace
+func DeletePodsByDeployment(deploymentName, deploymentNamespace string) error {
+	deployment, err := appops.Instance().GetDeployment(deploymentName, deploymentNamespace)
+	if err != nil {
+		return err
+	}
+
+	// Get pods list from deployment
+	pods, err := appops.Instance().GetDeploymentPods(deployment)
+	if err != nil {
+		return err
+	}
+
+	var podsNamesToDelete []string
+	var podsToDelete []v1.Pod
+	for _, pod := range pods {
+		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
+		podsToDelete = append(podsToDelete, pod)
+	}
+	logrus.Debugf("Deleting pods: %s", podsNamesToDelete)
+
+	// Delete pods
+	if err := coreops.Instance().DeletePods(pods, false); err != nil {
+		return err
+	}
+
+	logrus.Debugf("Waiting for pods to be deleted: %s", podsNamesToDelete)
+	if err := waitForPodsToBeDeleted(podsToDelete, 30*time.Second); err != nil {
+		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
+	}
+
+	logrus.Debugf("Pods for deployment %s have been successfully deleted", deploymentName)
+	return nil
+}
+
+// DeletePodsByLabel deletes pods for the given label and namespace
+func DeletePodsByLabel(namespace, label, name string) error {
+	listOptions := map[string]string{label: name}
+	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+
+	var podsNamesToDelete []string
+	var podsToDelete []v1.Pod
+	for _, pod := range pods.Items {
+		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
+		podsToDelete = append(podsToDelete, pod)
+	}
+	logrus.Debugf("Deleting pods with label %s=%s: %s", label, name, podsNamesToDelete)
+
+	// Delete pods
+	if err := coreops.Instance().DeletePods(pods.Items, false); err != nil {
+		return err
+	}
+
+	logrus.Debugf("Waiting for pods to be deleted: %s", podsNamesToDelete)
+	if err := waitForPodsToBeDeleted(podsToDelete, 30*time.Second); err != nil {
+		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
+	}
+
+	logrus.Debugf("Pods with label %s=%s have been successfully deleted", label, name)
+	return nil
+}
+
+func waitForPodsToBeDeleted(podsToDelete []v1.Pod, timeout time.Duration) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error)
+
+	// Wait for pods to be deleted
+	for index, pod := range podsToDelete {
+		wg.Add(1)
+		go func(pod v1.Pod, index int) {
+			defer wg.Done()
+			if err := coreops.Instance().WaitForPodDeletion(pod.UID, pod.Namespace, timeout); err != nil {
+				errChan <- fmt.Errorf("Failed to delete pod %s, Err: %v", pod.Name, err)
+			}
+		}(pod, index)
+
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	ok := true
+	for err := range errChan {
+		logrus.Error(err)
+		ok = false
+	}
+
+	if !ok {
+		return fmt.Errorf("Failed to delete pods")
+	}
+	return nil
 }
 
 // ValidatePods wait for pod to become online
@@ -906,9 +1134,12 @@ func ValidatePods(namespace string, listOptions map[string]string, timeout, inte
 		}
 
 		podReady := 0
+		var podsReady []string
+		var podsNotReady []string
 		for _, pod := range pods.Items {
 			for _, c := range pod.Status.InitContainerStatuses {
 				if !c.Ready {
+					podsNotReady = append(podsNotReady, pod.Name)
 					continue
 				}
 			}
@@ -920,12 +1151,15 @@ func ValidatePods(namespace string, listOptions map[string]string, timeout, inte
 				}
 			}
 			if len(pod.Spec.Containers) == containerReady {
+				podsReady = append(podsReady, pod.Name)
 				podReady++
 			}
 		}
 		if len(pods.Items) == podReady {
+			logrus.Debugf("All pods are ready: %s", podsReady)
 			return nil, false, nil
 		}
+		logrus.Debugf("Waiting pods to be ready: %s", podsNotReady)
 		return nil, true, fmt.Errorf("pods %+v not ready. Expected: %d Got: %d", listOptions, len(pods.Items), podReady)
 	}
 
@@ -1181,7 +1415,7 @@ func GetImagesFromVersionURL(url string) (map[string]string, error) {
 	imageListMap := make(map[string]string)
 
 	// Construct PX release manifest URL
-	pxReleaseManifestURL, err := ConstructPxReleaseManifestURL(url)
+	pxReleaseManifestURL, err := ConstructVersionURL(url)
 	if err != nil {
 		return nil, err
 	}
@@ -1213,12 +1447,30 @@ func GetImagesFromVersionURL(url string) (map[string]string, error) {
 	return imageListMap, nil
 }
 
+// ConstructVersionURL constructs Portworx version URL that contains component images
+func ConstructVersionURL(specGenURL string) (string, error) {
+	k8sVersion, err := getK8SVersion()
+	if err != nil {
+		return "", fmt.Errorf("Failed to construct version URL, Err: %v", err)
+	}
+
+	versionURL := path.Join(specGenURL, fmt.Sprintf("version?kbver=%s", k8sVersion))
+	u, err := url.Parse(versionURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
+	}
+
+	// TODO Using strings.Replace to replace /// with //, because I coulnd't figure out how not to properly construct this URL without ///
+	return strings.Replace(u.String(), "///", "//", -1), nil
+}
+
 // ConstructPxReleaseManifestURL constructs Portworx install URL
 func ConstructPxReleaseManifestURL(specGenURL string) (string, error) {
 	u, err := url.Parse(specGenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
 	}
+
 	u.Path = path.Join(u.Path, "version")
 	return u.String(), nil
 }

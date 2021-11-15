@@ -191,22 +191,13 @@ func createStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
-func updateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
+func getStorageCluster(clusterName, clusterNamespace string) (*corev1.StorageCluster, error) {
+	logrus.Infof("Get StorageCluster %s in %s", clusterName, clusterNamespace)
+	return operator.Instance().GetStorageCluster(clusterName, clusterNamespace)
+}
+
+func updateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-	// Get StorageCluster
-	cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set Portworx Image
-	cluster.Spec.Image = imageListMap["version"]
-
-	// Populate default Env Vars
-	if err = populateDefaultEnvVars(cluster, specGenURL); err != nil {
-		return nil, err
-	}
-
 	return operator.Instance().UpdateStorageCluster(cluster)
 }
 
