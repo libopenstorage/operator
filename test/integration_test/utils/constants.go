@@ -38,6 +38,11 @@ const (
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 10 * time.Second
 
+	// LabelValueTrue value "true" for a label
+	LabelValueTrue = "true"
+	// LabelValueFalse value "false" for a label
+	LabelValueFalse = "false"
+
 	// SourceConfigSecretName is the name of the secret that contains the superset of all credentials
 	// we may select from for these tests.
 	SourceConfigSecretName = "px-pure-secret-source"

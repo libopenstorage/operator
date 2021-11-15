@@ -27,7 +27,6 @@ import (
 
 const (
 	labelKeySkipPX = "skip/px"
-	labelValueTrue = "true"
 )
 
 var (
@@ -58,7 +57,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 										{
 											Key:      labelKeySkipPX,
 											Operator: v1.NodeSelectorOpNotIn,
-											Values:   []string{labelValueTrue},
+											Values:   []string{ci_utils.LabelValueTrue},
 										},
 									},
 								},
@@ -145,32 +144,14 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 			t.Skip()
 		}
 
-		// Get K8S nodes
-		nodeList, err := coreops.Instance().GetNodes()
-		require.NoError(t, err)
-
 		// Set Node Affinity label one of the K8S nodes
-		var nodeNameWithLabel string
-		for _, node := range nodeList.Items {
-			if coreops.Instance().IsNodeMaster(node) {
-				continue // Skip master node, we don't need to label it
-			}
-			logrus.Infof("Label node %s with %s=%s", node.Name, labelKeySkipPX, labelValueTrue)
-			if err := coreops.Instance().AddLabelOnNode(node.Name, labelKeySkipPX, labelValueTrue); err != nil {
-				require.NoError(t, err)
-			}
-			nodeNameWithLabel = node.Name
-			break
-		}
+		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeySkipPX, ci_utils.LabelValueTrue)
 
 		// Run basic install test and validation
 		BasicInstall(tc)(t)
 
 		// Remove Node Affinity label from the node
-		logrus.Infof("Remove label %s from node %s", nodeNameWithLabel, labelKeySkipPX)
-		if err := coreops.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKeySkipPX); err != nil {
-			require.NoError(t, err)
-		}
+		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeySkipPX)
 	}
 }
 

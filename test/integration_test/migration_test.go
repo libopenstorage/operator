@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,17 +31,23 @@ const (
 	operatorRestartRetryInterval = 10 * time.Second
 	clusterCreationTimeout       = 2 * time.Minute
 	clusterCreationRetryInterval = 5 * time.Second
+	labelKeyPXEnabled            = "px/enabled"
 )
 
 var migrationTestCases = []types.TestCase{
 	{
-		TestName:   "SimpleDaemonSetMigration",
+		TestName:   "SimpleMigration",
 		ShouldSkip: func() bool { return false },
 		TestFunc:   BasicMigration,
 	},
+	{
+		TestName:   "SimpleMigrationWithoutNodeAffinity",
+		ShouldSkip: func() bool { return false },
+		TestFunc:   MigrationWithoutNodeAffinity,
+	},
 }
 
-func TestMigrationBasic(t *testing.T) {
+func TestDaemonSetMigration(t *testing.T) {
 	for _, tc := range migrationTestCases {
 		tc.RunTest(t)
 	}
@@ -52,41 +59,76 @@ func BasicMigration(tc *types.TestCase) func(*testing.T) {
 			t.Skip()
 		}
 
-		logrus.Infof("Creating portworx daemonset spec")
 		ds := testutil.GetExpectedDaemonSet(t, "migration/simple-daemonset.yaml")
 		require.NotNil(t, ds)
 
-		_, err := appops.Instance().CreateDaemonSet(ds, metav1.CreateOptions{})
-		require.NoError(t, err)
+		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeyPXEnabled, ci_utils.LabelValueFalse)
 
-		err = appops.Instance().ValidateDaemonSet(ds.Name, ds.Namespace, ci_utils.DefaultValidateDeployTimeout)
-		require.NoError(t, err)
+		testMigration(t, ds)
 
-		logrus.Infof("Restarting portworx operator to trigger migration")
-		restartPortworxOperator(t)
+		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeyPXEnabled)
+	}
+}
 
-		pxImageMap, err := getPortworxImagesFromDaemonSet(t, ds)
-		require.NoError(t, err)
+func MigrationWithoutNodeAffinity(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
 
-		logrus.Infof("Validate equivalient StorageCluster has been created")
-		cluster, err := validateStorageClusterIsCreatedForDaemonSet(ds)
-		require.NoError(t, err)
+		ds := testutil.GetExpectedDaemonSet(t, "migration/simple-daemonset.yaml")
+		require.NotNil(t, ds)
 
-		logrus.Infof("Approving migration for StorageCluster %s", cluster.Name)
-		cluster, err = approveMigration(cluster)
-		require.NoError(t, err)
+		ds.Spec.Template.Spec.Affinity = nil
 
-		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(pxImageMap, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
-		require.NoError(t, err)
+		testMigration(t, ds)
+	}
+}
 
-		logrus.Infof("Delete StorageCluster %s", cluster.Name)
-		err = testutil.UninstallStorageCluster(cluster)
-		require.NoError(t, err)
+func testMigration(t *testing.T, ds *appsv1.DaemonSet) {
+	logrus.Infof("Creating portworx daemonset spec")
+	_, err := appops.Instance().CreateDaemonSet(ds, metav1.CreateOptions{})
+	require.NoError(t, err)
 
-		logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-		err = testutil.ValidateUninstallStorageCluster(cluster, ci_utils.DefaultValidateUninstallTimeout, ci_utils.DefaultValidateUninstallRetryInterval)
-		require.NoError(t, err)
+	err = appops.Instance().ValidateDaemonSet(ds.Name, ds.Namespace, ci_utils.DefaultValidateDeployTimeout)
+	require.NoError(t, err)
+
+	logrus.Infof("Restarting portworx operator to trigger migration")
+	restartPortworxOperator(t)
+
+	pxImageMap, err := getPortworxImagesFromDaemonSet(t, ds)
+	require.NoError(t, err)
+
+	logrus.Infof("Validate equivalient StorageCluster has been created")
+	cluster, err := validateStorageClusterIsCreatedForDaemonSet(ds)
+	require.NoError(t, err)
+
+	logrus.Infof("Approving migration for StorageCluster %s", cluster.Name)
+	cluster, err = approveMigration(cluster)
+	require.NoError(t, err)
+
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(pxImageMap, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
+	require.NoError(t, err)
+
+	logrus.Infof("Validate original spec is deleted")
+	err = appops.Instance().ValidateDaemonSetIsTerminated(ds.Name, ds.Namespace, 5*time.Minute)
+	require.NoError(t, err)
+
+	logrus.Infof("Delete StorageCluster %s", cluster.Name)
+	err = testutil.UninstallStorageCluster(cluster)
+	require.NoError(t, err)
+
+	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+	err = testutil.ValidateUninstallStorageCluster(cluster, ci_utils.DefaultValidateUninstallTimeout, ci_utils.DefaultValidateUninstallRetryInterval)
+	require.NoError(t, err)
+
+	logrus.Infof("Validate migration labels have been removed from nodes")
+	nodeList, err := coreops.Instance().GetNodes()
+	for _, node := range nodeList.Items {
+		_, exists := node.Labels[constants.LabelPortworxDaemonsetMigration]
+		require.False(t, exists, "%s label should not have been present on node %s",
+			constants.LabelPortworxDaemonsetMigration, node.Name)
 	}
 }
 
@@ -102,6 +144,19 @@ func validateStorageClusterIsCreatedForDaemonSet(ds *appsv1.DaemonSet) (*corev1.
 		if err != nil {
 			return nil, true, err
 		}
+
+		value, ok := cluster.Annotations[constants.AnnotationMigrationApproved]
+		if !ok {
+			return nil, true, fmt.Errorf("%s annotation is not present on StorageCluster", constants.AnnotationMigrationApproved)
+		}
+		approved, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, true, fmt.Errorf("invalid value %s assigned to annotation %s. %v",
+				value, constants.AnnotationMigrationApproved, err)
+		} else if approved {
+			return nil, true, fmt.Errorf("migration should not be auto-approved")
+		}
+
 		return cluster, false, nil
 	}
 	cluster, err := task.DoRetryWithTimeout(t, clusterCreationTimeout, clusterCreationRetryInterval)
