@@ -16,6 +16,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -122,10 +123,16 @@ func setup() error {
 	return nil
 }
 
-func (tc *TestCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error {
+func createStorageClusterTestSpecFunc(cluster *corev1.StorageCluster) func(t *testing.T) interface{} {
+	return func(t *testing.T) interface{} {
+		err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
+		require.NoError(t, err)
+		return cluster
+	}
+}
+
+func PopulatePureStorageCluster(tc *TestCase, cluster *corev1.StorageCluster) error {
 	cluster.Name = makeDNS1123Compatible(strings.Join(tc.TestrailCaseIDs, "-"))
-	cluster.Spec.CloudStorage = tc.Spec.CloudStorage
-	cluster.Spec.Kvdb = tc.Spec.Kvdb
 
 	names, err := testutil.GetExpectedPxNodeNameList(cluster)
 	if err != nil {
@@ -136,12 +143,12 @@ func (tc *TestCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error
 
 	// For each node, if the selector looks like "replaceWithNodeNumberN", replace it with
 	// the name of the Nth eligible Portworx node
-	for i := range tc.Spec.Nodes {
-		if !strings.HasPrefix(tc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
+	for i := range cluster.Spec.Nodes {
+		if !strings.HasPrefix(cluster.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix) {
 			continue
 		}
 
-		num := strings.TrimPrefix(tc.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
+		num := strings.TrimPrefix(cluster.Spec.Nodes[i].Selector.NodeName, nodeReplacePrefix)
 		parsedNum, err := strconv.Atoi(num)
 		if err != nil {
 			return err
@@ -151,10 +158,8 @@ func (tc *TestCase) PopulateStorageCluster(cluster *corev1.StorageCluster) error
 			return fmt.Errorf("requested node index %d is larger than eligible worker node count %d", parsedNum, len(names))
 		}
 
-		tc.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
+		cluster.Spec.Nodes[i].Selector.NodeName = names[parsedNum]
 	}
-
-	cluster.Spec.Nodes = tc.Spec.Nodes
 
 	return nil
 }

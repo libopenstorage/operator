@@ -30,7 +30,7 @@ var (
 	sourceConfigLoadOnce  sync.Once
 )
 
-// AllAvailableBackends can be used in a BackendRequirements struct
+// AllAvailableBackends can be used in a PureBackendRequirements struct
 // to indicate that all available FlashArrays or FlashBlades should be used
 const AllAvailableBackends = -1
 
@@ -79,7 +79,7 @@ func loadSourceConfigOrFail(t *testing.T, namespace string) {
 // If not enough devices exist to meet the requirements or the source secret does not
 // exist, the test will be skipped.
 func GenerateFleetOrSkip(t *testing.T, namespace string,
-	req BackendRequirements) DiscoveryConfig {
+	req *PureBackendRequirements) DiscoveryConfig {
 	loadSourceConfigOrFail(t, namespace)
 
 	logrus.WithFields(logrus.Fields{

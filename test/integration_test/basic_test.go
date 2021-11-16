@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -32,23 +33,17 @@ var testStorageClusterBasicCases = []TestCase{
 	{
 		TestName:        "InstallWithAllDefaults",
 		TestrailCaseIDs: []string{},
-		TestSpec: func(t *testing.T) interface{} {
-			cluster := &op_corev1.StorageCluster{}
-			cluster.Name = "simple-install"
-			err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
-			require.NoError(t, err)
-			return cluster
-		},
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicInstall,
+		TestSpec: createStorageClusterTestSpecFunc(&op_corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "simple-install"},
+		}),
+		TestFunc: BasicInstall,
 	},
 	{
 		TestName:        "NodeAffinityLabels",
 		TestrailCaseIDs: []string{},
-		TestSpec: func(t *testing.T) interface{} {
-			cluster := &op_corev1.StorageCluster{}
-			cluster.Name = "node-affinity-labels"
-			cluster.Spec = op_corev1.StorageClusterSpec{
+		TestSpec: createStorageClusterTestSpecFunc(&op_corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "node-affinity-labels"},
+			Spec: op_corev1.StorageClusterSpec{
 				Placement: &op_corev1.PlacementSpec{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -66,21 +61,17 @@ var testStorageClusterBasicCases = []TestCase{
 						},
 					},
 				},
-			}
-			err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
-			require.NoError(t, err)
-			return cluster
-		},
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicInstallWithNodeAffinity,
+			},
+		}),
+		TestFunc: BasicInstallWithNodeAffinity,
 	},
 	{
 		TestName:        "Upgrade",
 		TestrailCaseIDs: []string{},
 		TestSpec: func(t *testing.T) interface{} {
-			cluster := &op_corev1.StorageCluster{}
-			cluster.Name = "upgrade-test"
-			return cluster
+			return &op_corev1.StorageCluster{
+				ObjectMeta: meta.ObjectMeta{Name: "upgrade-test"},
+			}
 		},
 		ShouldSkip: func() bool {
 			k8sVersion, _ := k8sutil.GetVersion()
