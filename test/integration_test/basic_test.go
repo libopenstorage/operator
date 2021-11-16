@@ -14,10 +14,13 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	op_corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/types"
+	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/portworx/sched-ops/k8s/operator"
 )
 
 const (
@@ -29,11 +32,11 @@ var (
 	pxVer2_9, _ = version.NewVersion("2.9")
 )
 
-var testStorageClusterBasicCases = []TestCase{
+var testStorageClusterBasicCases = []types.TestCase{
 	{
 		TestName:        "InstallWithAllDefaults",
 		TestrailCaseIDs: []string{},
-		TestSpec: createStorageClusterTestSpecFunc(&op_corev1.StorageCluster{
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "simple-install"},
 		}),
 		TestFunc: BasicInstall,
@@ -41,10 +44,10 @@ var testStorageClusterBasicCases = []TestCase{
 	{
 		TestName:        "NodeAffinityLabels",
 		TestrailCaseIDs: []string{},
-		TestSpec: createStorageClusterTestSpecFunc(&op_corev1.StorageCluster{
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "node-affinity-labels"},
-			Spec: op_corev1.StorageClusterSpec{
-				Placement: &op_corev1.PlacementSpec{
+			Spec: corev1.StorageClusterSpec{
+				Placement: &corev1.PlacementSpec{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 							NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -69,13 +72,13 @@ var testStorageClusterBasicCases = []TestCase{
 		TestName:        "Upgrade",
 		TestrailCaseIDs: []string{},
 		TestSpec: func(t *testing.T) interface{} {
-			return &op_corev1.StorageCluster{
+			return &corev1.StorageCluster{
 				ObjectMeta: meta.ObjectMeta{Name: "upgrade-test"},
 			}
 		},
 		ShouldSkip: func() bool {
 			k8sVersion, _ := k8sutil.GetVersion()
-			pxVersion := getPxVersionFromSpecGenURL(pxUpgradeHopsURLList[0])
+			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
 		},
 		TestFunc: BasicUpgrade,
@@ -84,12 +87,12 @@ var testStorageClusterBasicCases = []TestCase{
 		TestName:        "InstallWithTelemetry",
 		TestrailCaseIDs: []string{},
 		TestSpec: func(t *testing.T) interface{} {
-			cluster := &op_corev1.StorageCluster{}
+			cluster := &corev1.StorageCluster{}
 			cluster.Name = "telemetry-test"
-			err := constructStorageCluster(cluster, pxSpecGenURL, pxSpecImages)
+			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 			require.NoError(t, err)
-			cluster.Spec.Monitoring = &op_corev1.MonitoringSpec{
-				Telemetry: &op_corev1.TelemetrySpec{
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
 				},
 			}
@@ -120,38 +123,23 @@ func TestStorageClusterBasic(t *testing.T) {
 	}
 }
 
-func BasicInstall(tc *TestCase) func(*testing.T) {
+func BasicInstall(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
 			t.Skip()
 		}
 
 		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*op_corev1.StorageCluster)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		// Deploy cluster
-		cluster, err := createStorageCluster(cluster)
-		require.NoError(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
-		// Validate cluster deployment
-		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(pxSpecImages, cluster, defaultValidateDeployTimeout, defaultValidateDeployRetryInterval, true, "")
-		require.NoError(t, err)
-
-		// Delete cluster
-		logrus.Infof("Delete StorageCluster %s", cluster.Name)
-		err = testutil.UninstallStorageCluster(cluster)
-		require.NoError(t, err)
-
-		// Validate cluster deletion
-		logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-		err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
-		require.NoError(t, err)
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
 
-func BasicInstallWithNodeAffinity(tc *TestCase) func(*testing.T) {
+func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
 			t.Skip()
@@ -186,7 +174,7 @@ func BasicInstallWithNodeAffinity(tc *TestCase) func(*testing.T) {
 	}
 }
 
-func BasicUpgrade(tc *TestCase) func(*testing.T) {
+func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
 			t.Skip()
@@ -194,74 +182,60 @@ func BasicUpgrade(tc *TestCase) func(*testing.T) {
 
 		// Get the storage cluster to start with
 		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*op_corev1.StorageCluster)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
 		var lastHopURL string
-		for i, hopURL := range pxUpgradeHopsURLList {
+		for i, hopURL := range ci_utils.PxUpgradeHopsURLList {
 			// Get versions from URL
 			logrus.Infof("Get component images from version URL")
 			specImages, err := testutil.GetImagesFromVersionURL(hopURL)
 			require.NoError(t, err)
-			lastHopURL = hopURL
 			if i == 0 {
 				// Deploy cluster
 				logrus.Infof("Deploying starting cluster using %s", hopURL)
-				err := constructStorageCluster(cluster, hopURL, specImages)
+				err := ci_utils.ConstructStorageCluster(cluster, hopURL, specImages)
 				require.NoError(t, err)
-				_, err = createStorageCluster(cluster)
-				require.NoError(t, err)
+				cluster = ci_utils.DeployAndValidateStorageCluster(cluster, specImages, t)
 			} else {
 				logrus.Infof("Upgrading from %s to %s", lastHopURL, hopURL)
 				// Get live StorageCluster
-				cluster, err := getStorageCluster(cluster.Name, cluster.Namespace)
+				cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 				require.NoError(t, err)
 
 				// Set Portworx Image
 				cluster.Spec.Image = specImages["version"]
 
-				// Populate default Env Vars
-				err = populateDefaultEnvVars(cluster, hopURL)
-				require.NoError(t, err)
-
 				// Update live StorageCluster
-				cluster, err = updateStorageCluster(cluster)
+				cluster, err = ci_utils.UpdateStorageCluster(cluster, hopURL)
+				require.NoError(t, err)
+				logrus.Infof("Validate upgraded StorageCluster %s", cluster.Name)
+				err = testutil.ValidateStorageCluster(specImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval, true, "")
 				require.NoError(t, err)
 			}
-
-			// Validate cluster deployment
-			logrus.Infof("Validate StorageCluster %s", cluster.Name)
-			err = testutil.ValidateStorageCluster(specImages, cluster, defaultValidateUpgradeTimeout, defaultValidateUpgradeRetryInterval, true, "")
-			require.NoError(t, err)
+			lastHopURL = hopURL
 		}
 
-		// Delete cluster
-		logrus.Infof("Delete StorageCluster %s", cluster.Name)
-		err := testutil.UninstallStorageCluster(cluster)
-		require.NoError(t, err)
-
-		// Validate cluster deletion
-		logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-		err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
-		require.NoError(t, err)
+		// Delete and validate the deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
 
-func InstallWithTelemetry(tc *TestCase) func(*testing.T) {
+func InstallWithTelemetry(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
 			t.Skip()
 		}
 
 		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*op_corev1.StorageCluster)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
 		testInstallWithTelemetry(t, cluster)
 	}
 }
 
-func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
+func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 	secret := testutil.GetExpectedSecret(t, "pure-telemetry-cert.yaml")
 	require.NotNil(t, secret)
 
@@ -277,25 +251,18 @@ func testInstallWithTelemetry(t *testing.T, cluster *op_corev1.StorageCluster) {
 	}
 
 	// Deploy portworx with telemetry set to true
-	cluster, err = createStorageCluster(cluster)
+	cluster, err = ci_utils.CreateStorageCluster(cluster)
 	require.NoError(t, err)
 
 	err = testutil.ValidateTelemetry(
-		pxSpecImages,
+		ci_utils.PxSpecImages,
 		cluster,
-		defaultValidateDeployTimeout,
-		defaultValidateDeployRetryInterval)
+		ci_utils.DefaultValidateDeployTimeout,
+		ci_utils.DefaultValidateDeployRetryInterval)
 	require.NoError(t, err)
 
-	// Delete cluster
-	logrus.Infof("Delete StorageCluster %s", cluster.Name)
-	err = testutil.UninstallStorageCluster(cluster)
-	require.NoError(t, err)
-
-	// Validate cluster deletion
-	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-	err = testutil.ValidateUninstallStorageCluster(cluster, defaultValidateUninstallTimeout, defaultValidateUninstallRetryInterval)
-	require.NoError(t, err)
+	// Delete and validate the deletion
+	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 
 	err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
 	require.NoError(t, err)
