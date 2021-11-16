@@ -23,7 +23,6 @@ require (
 	golang.org/x/tools v0.1.5 // indirect
 	google.golang.org/grpc v1.36.0
 	gopkg.in/yaml.v2 v2.4.0
-	honnef.co/go/tools v0.2.1 // indirect
 	k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver v0.20.4
 	k8s.io/apimachinery v0.20.4
