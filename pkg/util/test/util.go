@@ -912,16 +912,21 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		if err := validateCsiExtImages(cluster.Namespace, pxImageList); err != nil {
 			return err
 		}
-	} else if !csi {
+	} else {
 		logrus.Debug("CSI is disabled in StorageCluster")
 
 		// Validate px-csi-ext deployment doesn't exist
+		if err := appops.Instance().ValidateTerminatedDeployment(pxCsiDp, timeout, interval); err != nil {
+			return err
+		}
+		/* TODO KOKADBG REMOVE
 		retCsiDpObject, err := appops.Instance().GetDeployment(pxCsiDp.Name, pxCsiDp.Namespace)
 		if err != nil || retCsiDpObject == nil {
 			logrus.Debugf("CSI Deployment %s is nil as expected, Err: %v", pxCsiDp.Name, err)
 		} else {
 			return fmt.Errorf("failed to validate CSI. Found deployment %s when it was not suppose to be deployed", pxCsiDp.Name)
 		}
+		*/
 	}
 	return nil
 }
@@ -957,6 +962,7 @@ func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]str
 				if container.Image != csiNodeDriverRegistrar {
 					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiNodeDriverRegistrar, container.Image)
 				}
+				break
 			}
 		}
 	}
@@ -1058,9 +1064,8 @@ func DeletePodsByDeployment(deploymentName, deploymentNamespace string) error {
 	return nil
 }
 
-// DeletePodsByLabel deletes pods for the given label and namespace
-func DeletePodsByLabel(namespace, label, name string) error {
-	listOptions := map[string]string{label: name}
+// DeletePodsByLabels deletes pods for the given labels and namespace
+func DeletePodsByLabels(namespace string, listOptions map[string]string) error {
 	pods, err := coreops.Instance().GetPods(namespace, listOptions)
 	if err != nil {
 		return err
@@ -1072,19 +1077,18 @@ func DeletePodsByLabel(namespace, label, name string) error {
 		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
 		podsToDelete = append(podsToDelete, pod)
 	}
-	logrus.Debugf("Deleting pods with label %s=%s: %s", label, name, podsNamesToDelete)
+	logrus.Debugf("Deleting pods with labels %v: %s", listOptions, podsNamesToDelete)
 
 	// Delete pods
 	if err := coreops.Instance().DeletePods(pods.Items, false); err != nil {
 		return err
 	}
 
-	logrus.Debugf("Waiting for pods to be deleted: %s", podsNamesToDelete)
 	if err := waitForPodsToBeDeleted(podsToDelete, 30*time.Second); err != nil {
 		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
 	}
 
-	logrus.Debugf("Pods with label %s=%s have been successfully deleted", label, name)
+	logrus.Debugf("Pods with labels %v have been successfully deleted", listOptions)
 	return nil
 }
 
