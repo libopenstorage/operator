@@ -7,13 +7,12 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
-	github.com/grpc-ecosystem/grpc-gateway v1.14.5 // indirect
 	github.com/hashicorp/go-version v1.2.1
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
 	github.com/libopenstorage/openstorage v8.0.1-0.20211025171211-43eadb190637+incompatible
 	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
-	github.com/portworx/sched-ops v1.20.4-rc1.0.20210921050234-561b707a5d96
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20211117020105-370e0c26d39f
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.8.1
@@ -40,7 +39,7 @@ replace (
 	github.com/hashicorp/consul => github.com/hashicorp/consul v1.5.1
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
 	github.com/kubernetes-incubator/external-storage v0.0.0-00010101000000-000000000000 => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20211006132704-8a90df7acb50
+	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20211117020105-370e0c26d39f
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
 	gopkg.in/fsnotify.v1 v1.4.7 => github.com/fsnotify/fsnotify v1.4.7

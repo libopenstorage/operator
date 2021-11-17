@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -12,13 +13,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	appsops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/portworx/sched-ops/k8s/operator"
 )
 
 const (
@@ -99,6 +103,18 @@ var testStorageClusterBasicCases = []types.TestCase{
 		ShouldSkip: func() bool { return false },
 		TestFunc:   InstallWithTelemetry,
 	},
+	{
+		TestName:        "InstallWithCSI",
+		TestrailCaseIDs: []string{},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "csi-test"},
+			Spec: corev1.StorageClusterSpec{
+				FeatureGates: map[string]string{"CSI": "true"},
+			},
+		}),
+		ShouldSkip: func() bool { return false },
+		TestFunc:   BasicCsiRegression,
+	},
 }
 
 func TestStorageClusterBasic(t *testing.T) {
@@ -172,7 +188,7 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 		var lastHopURL string
 		for i, hopURL := range ci_utils.PxUpgradeHopsURLList {
 			// Get versions from URL
-			logrus.Infof("Get component images from versions URL")
+			logrus.Infof("Get component images from version URL")
 			specImages, err := testutil.GetImagesFromVersionURL(hopURL)
 			require.NoError(t, err)
 			if i == 0 {
@@ -183,7 +199,18 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 				cluster = ci_utils.DeployAndValidateStorageCluster(cluster, specImages, t)
 			} else {
 				logrus.Infof("Upgrading from %s to %s", lastHopURL, hopURL)
-				cluster, err = ci_utils.UpdateStorageCluster(cluster, hopURL, specImages)
+				// Get live StorageCluster
+				cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+				require.NoError(t, err)
+
+				// Set Portworx Image
+				cluster.Spec.Image = specImages["version"]
+
+				// Set defaults
+				portworx.SetPortworxDefaults(cluster)
+
+				// Update live StorageCluster
+				cluster, err = ci_utils.UpdateStorageCluster(cluster)
 				require.NoError(t, err)
 				logrus.Infof("Validate upgraded StorageCluster %s", cluster.Name)
 				err = testutil.ValidateStorageCluster(specImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval, true, "")
@@ -242,4 +269,72 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 
 	err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
 	require.NoError(t, err)
+}
+
+// BasicCsiRegression test includes the following steps:
+// 1. Deploy PX with CSI enabled and validate CSI components and images
+// 2. Delete "portworx" pods and validate they get re-deployed
+// 3. Delete "px-csi-ext" pods and validate they get re-deployed
+// 4. Disable CSI and validate CSI components got successfully removed
+// 5. Enabled CSI and validate CSI components and images
+// 6. Delete StorageCluster and validate it got successfully removed
+func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
+
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Delete portworx pods and validate they get re-deployed")
+		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		logrus.Info("Delete px-csi-ext pods and validate they get re-deployed")
+		err = appsops.Instance().DeleteDeploymentPods("px-csi-ext", cluster.Namespace, 120*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		logrus.Info("Disable CSI and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.FeatureGates = map[string]string{"CSI": "false"}
+		cluster, err = ci_utils.UpdateStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Sleep for 20 seconds to let operator start the update process
+		logrus.Debug("Sleeping for 20 seconds...")
+		time.Sleep(20 * time.Second)
+
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
+		require.NoError(t, err)
+
+		logrus.Info("Enable CSI and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
+		cluster, err = ci_utils.UpdateStorageCluster(cluster)
+		require.NoError(t, err)
+
+		// Sleep for 20 seconds to let operator start the update process
+		logrus.Debug("Sleeping for 20 seconds...")
+		time.Sleep(20 * time.Second)
+
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
 }
