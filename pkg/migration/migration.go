@@ -39,6 +39,13 @@ const (
 	operatorPodReadyTimeout        = 10 * time.Minute
 )
 
+// These function variables are introduced for unit testing
+var (
+	migrationRetryIntervalFunc         = getMigrationRetryInterval
+	daemonSetPodTerminationTimeoutFunc = getDaemonSetPodTerminationTimeout
+	operatorPodReadyTimeoutFunc        = getOperatorPodReadyTimeout
+)
+
 // Handler object that carries out migration of Portworx Daemonset
 // and it's components to operator managed StorageCluster object
 type Handler struct {
@@ -60,7 +67,7 @@ func New(ctrl *storagecluster.Controller) *Handler {
 func (h *Handler) Start() {
 	var pxDaemonSet *appsv1.DaemonSet
 
-	wait.PollImmediateInfinite(migrationRetryInterval, func() (bool, error) {
+	wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
 		var err error
 		pxDaemonSet, err = h.getPortworxDaemonSet(pxDaemonSet)
 		if errors.IsNotFound(err) {
@@ -82,7 +89,7 @@ func (h *Handler) Start() {
 		}
 
 		if err := h.processMigration(cluster, pxDaemonSet); err != nil {
-			logrus.Errorf("Migration failed, will retry in %v. %v", migrationRetryInterval, err)
+			logrus.Errorf("Migration failed, will retry in %v. %v", migrationRetryIntervalFunc(), err)
 			return false, nil
 		}
 
@@ -198,7 +205,7 @@ func (h *Handler) waitForDaemonSetPodTermination(
 	nodeName string,
 	nodeLog *logrus.Entry,
 ) error {
-	return wait.PollImmediate(podWaitInterval, daemonSetPodTerminationTimeout, func() (bool, error) {
+	return wait.PollImmediate(podWaitInterval, daemonSetPodTerminationTimeoutFunc(), func() (bool, error) {
 		node := &v1.Node{}
 		if err := h.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
 			nodeLog.Errorf("Failed to get node. %v", err)
@@ -228,7 +235,7 @@ func (h *Handler) waitForDaemonSetPodTermination(
 		podPresent := false
 		for _, pod := range podList.Items {
 			owner := metav1.GetControllerOf(&pod)
-			if owner != nil && owner.UID == ds.UID {
+			if owner != nil && owner.UID == ds.UID && pod.Spec.NodeName == nodeName {
 				podPresent = true
 				break
 			}
@@ -248,7 +255,7 @@ func (h *Handler) waitForPortworxPod(
 	nodeName string,
 	nodeLog *logrus.Entry,
 ) error {
-	return wait.PollImmediate(podWaitInterval, operatorPodReadyTimeout, func() (bool, error) {
+	return wait.PollImmediate(podWaitInterval, operatorPodReadyTimeoutFunc(), func() (bool, error) {
 		node := &v1.Node{}
 		if err := h.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
 			nodeLog.Errorf("Failed to get node. %v", err)
@@ -278,7 +285,7 @@ func (h *Handler) waitForPortworxPod(
 		var portworxPod *v1.Pod
 		for _, pod := range podList.Items {
 			owner := metav1.GetControllerOf(&pod)
-			if owner != nil && owner.UID == cluster.UID {
+			if owner != nil && owner.UID == cluster.UID && pod.Spec.NodeName == nodeName {
 				portworxPod = pod.DeepCopy()
 				break
 			}
@@ -921,4 +928,16 @@ func uint32Ptr(strValue string) *uint32 {
 
 func guestAccessTypePtr(value corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &value
+}
+
+func getMigrationRetryInterval() time.Duration {
+	return migrationRetryInterval
+}
+
+func getDaemonSetPodTerminationTimeout() time.Duration {
+	return daemonSetPodTerminationTimeout
+}
+
+func getOperatorPodReadyTimeout() time.Duration {
+	return operatorPodReadyTimeout
 }
