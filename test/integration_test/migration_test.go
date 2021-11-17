@@ -5,7 +5,6 @@ package integrationtest
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	apiscore "k8s.io/kubernetes/pkg/apis/core"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -36,14 +36,22 @@ const (
 
 var migrationTestCases = []types.TestCase{
 	{
-		TestName:   "SimpleMigration",
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicMigration,
+		TestName: "SimpleMigration",
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("migration/simple-daemonset.yaml")
+			require.NoError(t, err)
+			return objects
+		},
+		TestFunc: BasicMigration,
 	},
 	{
-		TestName:   "SimpleMigrationWithoutNodeAffinity",
-		ShouldSkip: func() bool { return false },
-		TestFunc:   MigrationWithoutNodeAffinity,
+		TestName: "SimpleMigrationWithoutNodeAffinity",
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("migration/simple-daemonset.yaml")
+			require.NoError(t, err)
+			return objects
+		},
+		TestFunc: MigrationWithoutNodeAffinity,
 	},
 }
 
@@ -59,12 +67,16 @@ func BasicMigration(tc *types.TestCase) func(*testing.T) {
 			t.Skip()
 		}
 
-		ds := testutil.GetExpectedDaemonSet(t, "migration/simple-daemonset.yaml")
-		require.NotNil(t, ds)
+		testSpec := tc.TestSpec(t)
+		objects, ok := testSpec.([]runtime.Object)
+		require.True(t, ok)
+
+		pxDaemonSet, objects := extractPortworxDaemonSetFromObjects(objects)
+		require.NotNil(t, pxDaemonSet)
 
 		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeyPXEnabled, ci_utils.LabelValueFalse)
 
-		testMigration(t, ds)
+		testMigration(t, objects, pxDaemonSet)
 
 		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeyPXEnabled)
 	}
@@ -76,28 +88,38 @@ func MigrationWithoutNodeAffinity(tc *types.TestCase) func(*testing.T) {
 			t.Skip()
 		}
 
-		ds := testutil.GetExpectedDaemonSet(t, "migration/simple-daemonset.yaml")
-		require.NotNil(t, ds)
+		testSpec := tc.TestSpec(t)
+		objects, ok := testSpec.([]runtime.Object)
+		require.True(t, ok)
 
-		ds.Spec.Template.Spec.Affinity = nil
+		pxDaemonSet, objects := extractPortworxDaemonSetFromObjects(objects)
+		require.NotNil(t, pxDaemonSet)
 
-		testMigration(t, ds)
+		// Remove affinity from portworx daemonset
+		pxDaemonSet.Spec.Template.Spec.Affinity = nil
+
+		testMigration(t, objects, pxDaemonSet)
 	}
 }
 
-func testMigration(t *testing.T, ds *appsv1.DaemonSet) {
-	logrus.Infof("Creating portworx daemonset spec")
-	_, err := appops.Instance().CreateDaemonSet(ds, metav1.CreateOptions{})
+func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet) {
+	err := ci_utils.AddPortworxImageToDaemonSet(ds)
 	require.NoError(t, err)
 
+	logrus.Infof("Creating portworx objects")
+	err = ci_utils.CreateObjects(objects)
+	require.NoError(t, err)
+
+	logrus.Infof("Creating portworx daemonset")
+	_, err = appops.Instance().CreateDaemonSet(ds, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	logrus.Infof("Waiting for portworx daemonset to be ready")
 	err = appops.Instance().ValidateDaemonSet(ds.Name, ds.Namespace, ci_utils.DefaultValidateDeployTimeout)
 	require.NoError(t, err)
 
 	logrus.Infof("Restarting portworx operator to trigger migration")
 	restartPortworxOperator(t)
-
-	pxImageMap, err := getPortworxImagesFromDaemonSet(t, ds)
-	require.NoError(t, err)
 
 	logrus.Infof("Validate equivalient StorageCluster has been created")
 	cluster, err := validateStorageClusterIsCreatedForDaemonSet(ds)
@@ -108,20 +130,15 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet) {
 	require.NoError(t, err)
 
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
-	err = testutil.ValidateStorageCluster(pxImageMap, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
+	err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster,
+		ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
 	require.NoError(t, err)
 
 	logrus.Infof("Validate original spec is deleted")
 	err = appops.Instance().ValidateDaemonSetIsTerminated(ds.Name, ds.Namespace, 5*time.Minute)
 	require.NoError(t, err)
 
-	logrus.Infof("Delete StorageCluster %s", cluster.Name)
-	err = testutil.UninstallStorageCluster(cluster)
-	require.NoError(t, err)
-
-	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
-	err = testutil.ValidateUninstallStorageCluster(cluster, ci_utils.DefaultValidateUninstallTimeout, ci_utils.DefaultValidateUninstallRetryInterval)
-	require.NoError(t, err)
+	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 
 	logrus.Infof("Validate migration labels have been removed from nodes")
 	nodeList, err := coreops.Instance().GetNodes()
@@ -130,6 +147,12 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet) {
 		require.False(t, exists, "%s label should not have been present on node %s",
 			constants.LabelPortworxDaemonsetMigration, node.Name)
 	}
+
+	// TODO: We should not need this in future as the migration should
+	// take care of removing all the old portworx specs
+	logrus.Infof("Remove remaining portworx objects")
+	err = ci_utils.DeleteObjects(objects)
+	require.NoError(t, err)
 }
 
 func approveMigration(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
@@ -179,22 +202,17 @@ func getClusterNameFromDaemonSet(ds *appsv1.DaemonSet) string {
 	return ""
 }
 
-func getPortworxImagesFromDaemonSet(t *testing.T, ds *appsv1.DaemonSet) (map[string]string, error) {
-	var pxImage string
-	for _, c := range ds.Spec.Template.Spec.Containers {
-		if c.Name == "portworx" {
-			pxImage = c.Image
-			break
+func extractPortworxDaemonSetFromObjects(objects []runtime.Object) (*appsv1.DaemonSet, []runtime.Object) {
+	var pxDaemonSet *appsv1.DaemonSet
+	remainingObjects := []runtime.Object{}
+	for _, obj := range objects {
+		if daemonSet, ok := obj.(*appsv1.DaemonSet); ok && daemonSet.Name == "portworx" {
+			pxDaemonSet = daemonSet.DeepCopy()
+		} else {
+			remainingObjects = append(remainingObjects, obj.DeepCopyObject())
 		}
 	}
-	require.NotEmpty(t, pxImage)
-
-	parts := strings.Split(pxImage, ":")
-	version := parts[len(parts)-1]
-	require.NotEmpty(t, version)
-
-	versionURL := fmt.Sprintf("https://install.portworx.com/%s", version)
-	return testutil.GetImagesFromVersionURL(versionURL)
+	return pxDaemonSet, remainingObjects
 }
 
 func restartPortworxOperator(t *testing.T) {
