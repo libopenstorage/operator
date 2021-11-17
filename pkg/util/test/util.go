@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -1024,107 +1023,7 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 	return nil
 }
 
-func validatePodsByLabel(namespace, label, name string, timeout, interval time.Duration) error {
-	listOptions := map[string]string{label: name}
-	return ValidatePods(namespace, listOptions, timeout, interval)
-}
-
-// DeletePodsByDeployment deletes pods for the given deployment name and namespace
-func DeletePodsByDeployment(deploymentName, deploymentNamespace string) error {
-	deployment, err := appops.Instance().GetDeployment(deploymentName, deploymentNamespace)
-	if err != nil {
-		return err
-	}
-
-	// Get pods list from deployment
-	pods, err := appops.Instance().GetDeploymentPods(deployment)
-	if err != nil {
-		return err
-	}
-
-	var podsNamesToDelete []string
-	var podsToDelete []v1.Pod
-	for _, pod := range pods {
-		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
-		podsToDelete = append(podsToDelete, pod)
-	}
-	logrus.Debugf("Deleting pods: %s", podsNamesToDelete)
-
-	// Delete pods
-	if err := coreops.Instance().DeletePods(pods, false); err != nil {
-		return err
-	}
-
-	logrus.Debugf("Waiting for pods to be deleted: %s", podsNamesToDelete)
-	if err := waitForPodsToBeDeleted(podsToDelete, 30*time.Second); err != nil {
-		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
-	}
-
-	logrus.Debugf("Pods for deployment %s have been successfully deleted", deploymentName)
-	return nil
-}
-
-// DeletePodsByLabels deletes pods for the given labels and namespace
-func DeletePodsByLabels(namespace string, listOptions map[string]string) error {
-	pods, err := coreops.Instance().GetPods(namespace, listOptions)
-	if err != nil {
-		return err
-	}
-
-	var podsNamesToDelete []string
-	var podsToDelete []v1.Pod
-	for _, pod := range pods.Items {
-		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
-		podsToDelete = append(podsToDelete, pod)
-	}
-	logrus.Debugf("Deleting pods with labels %v: %s", listOptions, podsNamesToDelete)
-
-	// Delete pods
-	if err := coreops.Instance().DeletePods(pods.Items, false); err != nil {
-		return err
-	}
-
-	if err := waitForPodsToBeDeleted(podsToDelete, 30*time.Second); err != nil {
-		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
-	}
-
-	logrus.Debugf("Pods with labels %v have been successfully deleted", listOptions)
-	return nil
-}
-
-func waitForPodsToBeDeleted(podsToDelete []v1.Pod, timeout time.Duration) error {
-	var wg sync.WaitGroup
-	errChan := make(chan error)
-
-	// Wait for pods to be deleted
-	for index, pod := range podsToDelete {
-		wg.Add(1)
-		go func(pod v1.Pod, index int) {
-			defer wg.Done()
-			if err := coreops.Instance().WaitForPodDeletion(pod.UID, pod.Namespace, timeout); err != nil {
-				errChan <- fmt.Errorf("Failed to delete pod %s, Err: %v", pod.Name, err)
-			}
-		}(pod, index)
-
-	}
-
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
-
-	ok := true
-	for err := range errChan {
-		logrus.Error(err)
-		ok = false
-	}
-
-	if !ok {
-		return fmt.Errorf("Failed to delete pods")
-	}
-	return nil
-}
-
+/*
 // ValidatePods wait for pod to become online
 func ValidatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
@@ -1173,6 +1072,7 @@ func ValidatePods(namespace string, listOptions map[string]string, timeout, inte
 
 	return nil
 }
+*/
 
 func validateImageOnPods(image, namespace string, listOptions map[string]string) error {
 	pods, err := coreops.Instance().GetPods(namespace, listOptions)

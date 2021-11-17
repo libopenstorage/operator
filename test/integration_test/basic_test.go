@@ -20,6 +20,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	appsops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
 )
@@ -296,14 +297,15 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Delete portworx oci-mon pods and validate they get re-deployed
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
-		err = testutil.DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"})
+		//err = testutil.DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"})
+		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
 		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 		require.NoError(t, err)
 
 		// Delete px-csi-ext pods and validate they get re-deployed
 		logrus.Info("Delete px-csi-ext pods and validate they get re-deployed")
-		err = testutil.DeletePodsByDeployment("px-csi-ext", cluster.Namespace)
+		err = appsops.Instance().DeleteDeploymentPods("px-csi-ext", cluster.Namespace, 120*time.Second)
 		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 		require.NoError(t, err)
