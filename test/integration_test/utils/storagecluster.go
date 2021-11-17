@@ -83,22 +83,8 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 }
 
 // UpdateStorageCluster updates the given storage cluster on k8s
-func UpdateStorageCluster(cluster *corev1.StorageCluster, specGenURL string, imageListMap map[string]string) (*corev1.StorageCluster, error) {
+func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-	// Get StorageCluster
-	cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set Portworx Image
-	cluster.Spec.Image = imageListMap["version"]
-
-	// Populate default Env Vars
-	if err = populateDefaultEnvVars(cluster, specGenURL); err != nil {
-		return nil, err
-	}
-
 	return operator.Instance().UpdateStorageCluster(cluster)
 }
 

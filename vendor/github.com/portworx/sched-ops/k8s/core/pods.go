@@ -54,6 +54,8 @@ type PodOps interface {
 	DeletePod(string, string, bool) error
 	// DeletePods deletes the given pods
 	DeletePods([]corev1.Pod, bool) error
+	// DeletePodsByLabels deletes pods for the given labels and namespace
+	DeletePodsByLabels(namespace string, labelSelector map[string]string, timeout time.Duration) error
 	// IsPodRunning checks if all containers in a pod are in running state
 	IsPodRunning(corev1.Pod) bool
 	// IsPodReady checks if all containers in a pod are ready (passed readiness probe)
@@ -68,32 +70,6 @@ type PodOps interface {
 	ValidatePod(pod *corev1.Pod, timeout, retryInterval time.Duration) error
 	// WatchPods sets up a watcher that listens for the changes to pods in given namespace
 	WatchPods(namespace string, fn WatchFunc, listOptions metav1.ListOptions) error
-}
-
-// DeletePods deletes the given pods
-func (c *Client) DeletePods(pods []corev1.Pod, force bool) error {
-	for _, pod := range pods {
-		if err := c.DeletePod(pod.Name, pod.Namespace, force); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// DeletePod deletes the given pod
-func (c *Client) DeletePod(name string, ns string, force bool) error {
-	if err := c.initClient(); err != nil {
-		return err
-	}
-
-	deleteOptions := metav1.DeleteOptions{}
-	if force {
-		gracePeriodSec := int64(0)
-		deleteOptions.GracePeriodSeconds = &gracePeriodSec
-	}
-
-	return c.kubernetes.CoreV1().Pods(ns).Delete(context.TODO(), name, deleteOptions)
 }
 
 // CreatePod creates the given pod.
@@ -295,6 +271,51 @@ func (c *Client) GetPodByUID(uid types.UID, namespace string) (*corev1.Pod, erro
 	}
 
 	return nil, schederrors.ErrPodsNotFound
+}
+
+// DeletePods deletes the given pods
+func (c *Client) DeletePods(pods []corev1.Pod, force bool) error {
+	return common.DeletePods(c.kubernetes.CoreV1(), pods, force)
+}
+
+// DeletePod deletes the given pod
+func (c *Client) DeletePod(name string, ns string, force bool) error {
+	if err := c.initClient(); err != nil {
+		return err
+	}
+
+	deleteOptions := metav1.DeleteOptions{}
+	if force {
+		gracePeriodSec := int64(0)
+		deleteOptions.GracePeriodSeconds = &gracePeriodSec
+	}
+
+	return c.kubernetes.CoreV1().Pods(ns).Delete(context.TODO(), name, deleteOptions)
+}
+
+// DeletePodsByLabels deletes pods for the given labels and namespace
+func (c *Client) DeletePodsByLabels(namespace string, listOptions map[string]string, timeout time.Duration) error {
+	pods, err := c.GetPods(namespace, listOptions)
+	if err != nil {
+		return err
+	}
+
+	var podsNamesToDelete []string
+	var podsToDelete []corev1.Pod
+	for _, pod := range pods.Items {
+		podsNamesToDelete = append(podsNamesToDelete, pod.Name)
+		podsToDelete = append(podsToDelete, pod)
+	}
+
+	if err := c.DeletePods(pods.Items, false); err != nil {
+		return err
+	}
+
+	if err := common.WaitForPodsToBeDeleted(c.kubernetes.CoreV1(), podsToDelete, timeout); err != nil {
+		return fmt.Errorf("Failed to wait for pods to be deleted: %s, Err: %v", podsNamesToDelete, err)
+	}
+
+	return nil
 }
 
 // IsPodRunning checks if all containers in a pod are in running state
