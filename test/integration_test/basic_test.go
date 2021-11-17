@@ -273,12 +273,11 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 
 // BasicCsiRegression test includes the following steps:
 // 1. Deploy PX with CSI enabled and validate CSI components and images
-// 2. Delete "px-csi-ext" pods and validate they get re-deployed
-// 3. Disable CSI and validate CSI components got successfully removed
-// 4. Enabled CSI and validate CSI components and images
-// 5. Delete "portworx" pods and validate they get re-deployed
-// 6. Delete "px-csi-ext" pods and validate they get re-deployed
-// 7. Delete StorageCluster and validate it got successfully removed
+// 2. Delete "portworx" pods and validate they get re-deployed
+// 3. Delete "px-csi-ext" pods and validate they get re-deployed
+// 4. Disable CSI and validate CSI components got successfully removed
+// 5. Enabled CSI and validate CSI components and images
+// 6. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
@@ -293,22 +292,18 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		// Create and validate StorageCluster
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
-		// Delete portworx oci-mon pods and validate they get re-deployed
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
-		//err = testutil.DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"})
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
 		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 		require.NoError(t, err)
 
-		// Delete px-csi-ext pods and validate they get re-deployed
 		logrus.Info("Delete px-csi-ext pods and validate they get re-deployed")
 		err = appsops.Instance().DeleteDeploymentPods("px-csi-ext", cluster.Namespace, 120*time.Second)
 		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 		require.NoError(t, err)
 
-		// Disable CSI and update live StorageCluster
 		logrus.Info("Disable CSI and validate StorageCluster")
 		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		require.NoError(t, err)
@@ -320,13 +315,11 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Debug("Sleeping for 20 seconds...")
 		time.Sleep(20 * time.Second)
 
-		// Validate cluster deployment
 		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
 		require.NoError(t, err)
 
-		// Disable CSI and update live StorageCluster
-		logrus.Info("Enable CSI")
+		logrus.Info("Enable CSI and validate StorageCluster")
 		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		require.NoError(t, err)
 		cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
@@ -337,9 +330,8 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Debug("Sleeping for 20 seconds...")
 		time.Sleep(20 * time.Second)
 
-		// Validate cluster deployment
 		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
 		require.NoError(t, err)
 
 		// Delete and validate StorageCluster deletion

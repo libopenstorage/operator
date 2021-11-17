@@ -968,9 +968,12 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 
 	logrus.Debug("Validating CSI container images inside px-csi-ext pods")
 
-	// Get px-csi-ext pods
-	listOptions := map[string]string{"app": "px-csi-driver"}
-	pods, err := coreops.Instance().GetPods(namespace, listOptions)
+	deployment, err := appops.Instance().GetDeployment("px-csi-ext", namespace)
+	if err != nil {
+		return err
+	}
+
+	pods, err := appops.Instance().GetDeploymentPods(deployment)
 	if err != nil {
 		return err
 	}
@@ -995,7 +998,7 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 	}
 
 	// Go through each pod and find all container and match images for each container
-	for _, pod := range pods.Items {
+	for _, pod := range pods {
 		for _, container := range pod.Spec.Containers {
 			if container.Name == "csi-external-provisioner" {
 				if container.Image != csiProvisionerImage {
