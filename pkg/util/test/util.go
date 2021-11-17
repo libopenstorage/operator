@@ -661,7 +661,7 @@ func validateStorageClusterPods(
 		}
 
 		if len(podsNotReady) > 0 {
-			return "", true, fmt.Errorf("Waiting for Portworx pods to be ready: %s", podsNotReady)
+			return "", true, fmt.Errorf("waiting for Portworx pods to be ready: %s", podsNotReady)
 		}
 
 		if !assert.ElementsMatch(&testing.T{}, expectedPxNodeNameList, pxNodeNameList) {
@@ -918,14 +918,6 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		if err := appops.Instance().ValidateTerminatedDeployment(pxCsiDp, timeout, interval); err != nil {
 			return err
 		}
-		/* TODO KOKADBG REMOVE
-		retCsiDpObject, err := appops.Instance().GetDeployment(pxCsiDp.Name, pxCsiDp.Namespace)
-		if err != nil || retCsiDpObject == nil {
-			logrus.Debugf("CSI Deployment %s is nil as expected, Err: %v", pxCsiDp.Name, err)
-		} else {
-			return fmt.Errorf("failed to validate CSI. Found deployment %s when it was not suppose to be deployed", pxCsiDp.Name)
-		}
-		*/
 	}
 	return nil
 }
@@ -951,7 +943,7 @@ func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]str
 	if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
 		csiNodeDriverRegistrar = value
 	} else {
-		return fmt.Errorf("Failed to find image for csiNodeDriverRegistrar")
+		return fmt.Errorf("failed to find image for csiNodeDriverRegistrar")
 	}
 
 	// Go through each pod and find all container and match images for each container
@@ -959,7 +951,7 @@ func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]str
 		for _, container := range pod.Spec.Containers {
 			if container.Name == "csi-node-driver-registrar" {
 				if container.Image != csiNodeDriverRegistrar {
-					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiNodeDriverRegistrar, container.Image)
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiNodeDriverRegistrar, container.Image)
 				}
 				break
 			}
@@ -987,19 +979,19 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 	if value, ok := pxImageList["csiProvisioner"]; ok {
 		csiProvisionerImage = value
 	} else {
-		return fmt.Errorf("Failed to find image for csiProvisioner")
+		return fmt.Errorf("failed to find image for csiProvisioner")
 	}
 
 	if value, ok := pxImageList["csiSnapshotter"]; ok {
 		csiSnapshotterImage = value
 	} else {
-		return fmt.Errorf("Failed to find image for csiSnapshotter")
+		return fmt.Errorf("failed to find image for csiSnapshotter")
 	}
 
 	if value, ok := pxImageList["csiResizer"]; ok {
 		csiResizerImage = value
 	} else {
-		return fmt.Errorf("Failed to find image for csiResizer")
+		return fmt.Errorf("failed to find image for csiResizer")
 	}
 
 	// Go through each pod and find all container and match images for each container
@@ -1007,72 +999,21 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 		for _, container := range pod.Spec.Containers {
 			if container.Name == "csi-external-provisioner" {
 				if container.Image != csiProvisionerImage {
-					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiProvisionerImage, container.Image)
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiProvisionerImage, container.Image)
 				}
 			} else if container.Name == "csi-snapshotter" {
 				if container.Image != csiSnapshotterImage {
-					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiSnapshotterImage, container.Image)
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiSnapshotterImage, container.Image)
 				}
 			} else if container.Name == "csi-resizer" {
 				if container.Image != csiResizerImage {
-					return fmt.Errorf("Found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
 				}
 			}
 		}
 	}
 	return nil
 }
-
-/*
-// ValidatePods wait for pod to become online
-func ValidatePods(namespace string, listOptions map[string]string, timeout, interval time.Duration) error {
-	t := func() (interface{}, bool, error) {
-		pods, err := coreops.Instance().GetPods(namespace, listOptions)
-		if err != nil {
-			return nil, true, err
-		}
-
-		if len(pods.Items) == 0 {
-			return nil, true, fmt.Errorf("no pods found with filter %v", listOptions)
-		}
-
-		podReady := 0
-		var podsReady []string
-		var podsNotReady []string
-		for _, pod := range pods.Items {
-			for _, c := range pod.Status.InitContainerStatuses {
-				if !c.Ready {
-					podsNotReady = append(podsNotReady, pod.Name)
-					continue
-				}
-			}
-			containerReady := 0
-			for _, c := range pod.Status.ContainerStatuses {
-				if c.Ready {
-					containerReady++
-					continue
-				}
-			}
-			if len(pod.Spec.Containers) == containerReady {
-				podsReady = append(podsReady, pod.Name)
-				podReady++
-			}
-		}
-		if len(pods.Items) == podReady {
-			logrus.Debugf("All pods are ready: %s", podsReady)
-			return nil, false, nil
-		}
-		logrus.Debugf("Waiting pods to be ready: %s", podsNotReady)
-		return nil, true, fmt.Errorf("pods %+v not ready. Expected: %d Got: %d", listOptions, len(pods.Items), podReady)
-	}
-
-	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
-		return err
-	}
-
-	return nil
-}
-*/
 
 func validateImageOnPods(image, namespace string, listOptions map[string]string) error {
 	pods, err := coreops.Instance().GetPods(namespace, listOptions)
@@ -1355,7 +1296,7 @@ func GetImagesFromVersionURL(url string) (map[string]string, error) {
 func ConstructVersionURL(specGenURL string) (string, error) {
 	k8sVersion, err := getK8SVersion()
 	if err != nil {
-		return "", fmt.Errorf("Failed to construct version URL, Err: %v", err)
+		return "", fmt.Errorf("failed to construct version URL, Err: %v", err)
 	}
 
 	versionURL := path.Join(specGenURL, fmt.Sprintf("version?kbver=%s", k8sVersion))

@@ -106,14 +106,12 @@ var testStorageClusterBasicCases = []types.TestCase{
 	{
 		TestName:        "InstallWithCSI",
 		TestrailCaseIDs: []string{},
-		TestSpec: func(t *testing.T) interface{} {
-			cluster := &corev1.StorageCluster{}
-			cluster.Name = "csi-test"
-			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
-			require.NoError(t, err)
-			cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
-			return cluster
-		},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "csi-test"},
+			Spec: corev1.StorageClusterSpec{
+				FeatureGates: map[string]string{"CSI": "true"},
+			},
+		}),
 		ShouldSkip: func() bool { return false },
 		TestFunc:   BasicCsiRegression,
 	},
