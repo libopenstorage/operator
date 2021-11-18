@@ -3,6 +3,7 @@
 package integrationtest
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -104,16 +105,22 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc:   InstallWithTelemetry,
 	},
 	{
-		TestName:        "InstallWithCSI",
+		TestName:        "BasicCsiRegression",
 		TestrailCaseIDs: []string{},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
-			ObjectMeta: meta.ObjectMeta{Name: "csi-test"},
-			Spec: corev1.StorageClusterSpec{
-				FeatureGates: map[string]string{"CSI": "true"},
-			},
+			ObjectMeta: meta.ObjectMeta{Name: "csi-regression-test"},
 		}),
 		ShouldSkip: func() bool { return false },
 		TestFunc:   BasicCsiRegression,
+	},
+	{
+		TestName:        "BasicStorkRegression",
+		TestrailCaseIDs: []string{},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "stork-regression-test"},
+		}),
+		ShouldSkip: func() bool { return false },
+		TestFunc:   BasicStorkRegression,
 	},
 }
 
@@ -272,12 +279,13 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 }
 
 // BasicCsiRegression test includes the following steps:
-// 1. Deploy PX with CSI enabled and validate CSI components and images
-// 2. Delete "portworx" pods and validate they get re-deployed
-// 3. Delete "px-csi-ext" pods and validate they get re-deployed
-// 4. Disable CSI and validate CSI components got successfully removed
-// 5. Enabled CSI and validate CSI components and images
-// 6. Delete StorageCluster and validate it got successfully removed
+// 1. Deploy PX with CSI enabled by default and validate CSI components and images
+// 2. Validate CSI is enabled by default
+// 3. Delete "portworx" pods and validate they get re-deployed
+// 4. Delete "px-csi-ext" pods and validate they get re-deployed
+// 5. Disable CSI and validate CSI components got successfully removed
+// 6. Enabled CSI and validate CSI components and images
+// 7. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		if tc.ShouldSkip() {
@@ -291,6 +299,11 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Create and validate StorageCluster
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate CSI is enabled by default
+		if cluster.Spec.FeatureGates["CSI"] != "true" {
+			require.NoError(t, fmt.Errorf("failed to validate CSI is enabled by default, it shouldn't be enabled by default, but it is set to %s", cluster.Spec.FeatureGates["CSI"]))
+		}
 
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
@@ -308,31 +321,128 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		require.NoError(t, err)
 		cluster.Spec.FeatureGates = map[string]string{"CSI": "false"}
-		cluster, err = ci_utils.UpdateStorageCluster(cluster)
-		require.NoError(t, err)
-
-		// Sleep for 20 seconds to let operator start the update process
-		logrus.Debug("Sleeping for 20 seconds...")
-		time.Sleep(20 * time.Second)
-
-		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
-		require.NoError(t, err)
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Enable CSI and validate StorageCluster")
 		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		require.NoError(t, err)
 		cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
-		cluster, err = ci_utils.UpdateStorageCluster(cluster)
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// BasicStorkRegression test includes the following steps:
+// 1. Deploy PX with Stork enabled by default and validate Stork components and images
+// 2. Validate Stork is enabled by default
+// 3. Validate Stork webhook-controller is empty by default
+// 4. Validate Stork hostName is <nil> by default
+// 5. Delete "stork" pods and validate they get re-deployed
+// 6. Delete "stork-scheduler" pods and validate they get re-deployed
+// 7. Enable Stork webhook-controller and validate
+// 8. Disable Stork webhook-controller and validate
+// 9. Remove Stork webhook-controller and validate
+// 10. Enable hotNetwork and validate
+// 11. Disable hostNetwork and validate
+// 12. Remove hostNetwork and valiate
+// 13. Disable Stork and validate Stork components got successfully removed
+// 14. Enabled Stork and validate Stork components and images
+// 15. Delete StorageCluster and validate it got successfully removed
+func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		if tc.ShouldSkip() {
+			t.Skip()
+		}
+
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate Stork is enabled by default
+		if !cluster.Spec.Stork.Enabled {
+			require.NoError(t, fmt.Errorf("failed to validate Stork is enabled by default, it should be enabled, but it is set to %v", cluster.Spec.Stork.Enabled))
+		}
+
+		// Validate Webhook controller arg doesn't by default
+		if len(cluster.Spec.Stork.Args["webhook-controller"]) != 0 {
+			require.NoError(t, fmt.Errorf("failed to validate webhook-controller, it shouldn't exist by default, but it is set to %s", cluster.Spec.Stork.Args["webhook-controller"]))
+		}
+
+		// Validate HostNetwork is <nil> by default
+		if cluster.Spec.Stork.HostNetwork != nil {
+			require.NoError(t, fmt.Errorf("failed to validate HostNetwork, it shouldn't exist by default, but it is set to %v", *cluster.Spec.Stork.HostNetwork))
+		}
+
+		logrus.Info("Delete stork pods and validate they get re-deployed")
+		err = appsops.Instance().DeleteDeploymentPods("stork", cluster.Namespace, 120*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 		require.NoError(t, err)
 
-		// Sleep for 20 seconds to let operator start the update process
-		logrus.Debug("Sleeping for 20 seconds...")
-		time.Sleep(20 * time.Second)
-
-		logrus.Infof("Validate StorageCluster %s", cluster.Name)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpdateTimeout, ci_utils.DefaultValidateUpdateRetryInterval, true, "")
+		logrus.Info("Delete stork-scheduler pods and validate they get re-deployed")
+		err = appsops.Instance().DeleteDeploymentPods("stork-scheduler", cluster.Namespace, 120*time.Second)
 		require.NoError(t, err)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		logrus.Info("Enable Stork webhook-controller and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		// At this point this map should be <nil>
+		if len(cluster.Spec.Stork.Args) == 0 {
+			cluster.Spec.Stork.Args = make(map[string]string)
+		}
+		cluster.Spec.Stork.Args["webhook-controller"] = "true"
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Disable Stork webhook-controller and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.Stork.Args["webhook-controller"] = "false"
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Remove Stork webhook-controller and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		delete(cluster.Spec.Stork.Args, "webhook-controller")
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Enable Stork hostNetwork and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		hostNetworkValue := true
+		cluster.Spec.Stork.HostNetwork = &hostNetworkValue
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Disable Stork hostNetwork and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		*cluster.Spec.Stork.HostNetwork = false
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Remove Stork hostNetwork and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.Stork.HostNetwork = nil
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Disable Stork and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.Stork.Enabled = false
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Info("Enable Stork and validate StorageCluster")
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+		cluster.Spec.Stork.Enabled = true
+		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)

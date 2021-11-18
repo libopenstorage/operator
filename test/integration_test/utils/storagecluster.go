@@ -4,6 +4,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -71,14 +72,17 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 	// Populate default values to empty fields first
 	portworx.SetPortworxDefaults(cluster)
 	// Deploy cluster
-	liveCluster, err := CreateStorageCluster(cluster)
+	cluster, err := CreateStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deployment
-	logrus.Infof("Validate StorageCluster %s", liveCluster.Name)
-	err = testutil.ValidateStorageCluster(pxSpecImages, liveCluster, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval, true, "")
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval, true, "")
 	require.NoError(t, err)
 
+	// Get latest version of live cluster
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	return liveCluster
 }
 
@@ -86,6 +90,22 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 	return operator.Instance().UpdateStorageCluster(cluster)
+}
+
+// UpdateAndValidateStorageCluster update and validate cluster
+func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) {
+	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+
+	cluster, err := operator.Instance().UpdateStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Sleep for 10 seconds to let operator start the update process
+	logrus.Debug("Sleeping for 10 seconds...")
+	time.Sleep(10 * time.Second)
+
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
+	require.NoError(t, err)
 }
 
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion

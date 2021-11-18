@@ -36,7 +36,7 @@ const (
 	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
 	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
-	DefaultValidateUninstallRetryInterval = 10 * time.Second
+	DefaultValidateUninstallRetryInterval = 20 * time.Second
 
 	// SourceConfigSecretName is the name of the secret that contains the superset of all credentials
 	// we may select from for these tests.
