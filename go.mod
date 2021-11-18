@@ -35,14 +35,16 @@ require (
 )
 
 replace (
-	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
-	github.com/hashicorp/consul => github.com/hashicorp/consul v1.5.1
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-	github.com/kubernetes-incubator/external-storage v0.0.0-00010101000000-000000000000 => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20211117020105-370e0c26d39f
+
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
 	gopkg.in/fsnotify.v1 v1.4.7 => github.com/fsnotify/fsnotify v1.4.7
+	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
+
+	// Replacing k8s.io dependencies is required if a dependency or any dependency of a dependency
+	// depends on k8s.io/kubernetes. See https://github.com/kubernetes/kubernetes/issues/79384#issuecomment-505725449
 	k8s.io/api => k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.20.4
 	k8s.io/apimachinery => k8s.io/apimachinery v0.20.4
