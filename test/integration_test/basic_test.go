@@ -36,7 +36,7 @@ var (
 var testStorageClusterBasicCases = []types.TestCase{
 	{
 		TestName:        "InstallWithAllDefaults",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C51022", "C50236"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "simple-install"},
 		}),
@@ -44,7 +44,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "NodeAffinityLabels",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C50962"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "node-affinity-labels"},
 			Spec: corev1.StorageClusterSpec{
@@ -71,13 +71,13 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "Upgrade",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C50241"},
 		TestSpec: func(t *testing.T) interface{} {
 			return &corev1.StorageCluster{
 				ObjectMeta: meta.ObjectMeta{Name: "upgrade-test"},
 			}
 		},
-		ShouldSkip: func() bool {
+		ShouldSkip: func(tc *types.TestCase) bool {
 			k8sVersion, _ := k8sutil.GetVersion()
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
@@ -86,7 +86,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "InstallWithTelemetry",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C55909"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
 			cluster.Name = "telemetry-test"
@@ -99,20 +99,18 @@ var testStorageClusterBasicCases = []types.TestCase{
 			}
 			return cluster
 		},
-		ShouldSkip: func() bool { return false },
-		TestFunc:   InstallWithTelemetry,
+		TestFunc: InstallWithTelemetry,
 	},
 	{
 		TestName:        "InstallWithCSI",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C51020"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "csi-test"},
 			Spec: corev1.StorageClusterSpec{
 				FeatureGates: map[string]string{"CSI": "true"},
 			},
 		}),
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicCsiRegression,
+		TestFunc: BasicCsiRegression,
 	},
 }
 
@@ -124,10 +122,6 @@ func TestStorageClusterBasic(t *testing.T) {
 
 func BasicInstall(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
@@ -140,10 +134,6 @@ func BasicInstall(tc *types.TestCase) func(*testing.T) {
 
 func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		// Set Node Affinity label one of the K8S nodes
 		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeySkipPX, ci_utils.LabelValueTrue)
 
@@ -157,10 +147,6 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 
 func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		// Get the storage cluster to start with
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -207,10 +193,6 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 
 func InstallWithTelemetry(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
@@ -261,10 +243,6 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 // 6. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		var err error
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
