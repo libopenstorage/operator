@@ -80,7 +80,7 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval, true, "")
 	require.NoError(t, err)
 
-	// Get latest version of live cluster
+	// Get the latest version of StorageCluster
 	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	return liveCluster
@@ -92,20 +92,25 @@ func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 	return operator.Instance().UpdateStorageCluster(cluster)
 }
 
-// UpdateAndValidateStorageCluster update and validate cluster
-func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) {
+// UpdateAndValidateStorageCluster update, validate and return new StorageCluster
+func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 
 	cluster, err := operator.Instance().UpdateStorageCluster(cluster)
 	require.NoError(t, err)
 
-	// Sleep for 10 seconds to let operator start the update process
-	logrus.Debug("Sleeping for 10 seconds...")
-	time.Sleep(10 * time.Second)
+	// Sleep for 5 seconds to let operator start the update process
+	logrus.Debug("Sleeping for 5 seconds...")
+	time.Sleep(5 * time.Second)
 
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
 	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
 	require.NoError(t, err)
+
+	// Get the latest version of live StorageCluster
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	return liveCluster
 }
 
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion

@@ -106,21 +106,19 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "BasicCsiRegression",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C55919", "C51020", "C51025", "C51026", "C54701", "C54706", "C58194", "C58195"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "csi-regression-test"},
 		}),
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicCsiRegression,
+		TestFunc: BasicCsiRegression,
 	},
 	{
 		TestName:        "BasicStorkRegression",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C57029", "C50244", "C50282", "C51243", "C54704", "C58260", "C54703", "C58259", "C53406", "C58256", "C58257", "C58258", "C53588", "C53628", "C53629", "C58261"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "stork-regression-test"},
 		}),
-		ShouldSkip: func() bool { return false },
-		TestFunc:   BasicStorkRegression,
+		TestFunc: BasicStorkRegression,
 	},
 }
 
@@ -301,9 +299,7 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate CSI is enabled by default
-		if cluster.Spec.FeatureGates["CSI"] != "true" {
-			require.NoError(t, fmt.Errorf("failed to validate CSI is enabled by default, it shouldn't be enabled by default, but it is set to %s", cluster.Spec.FeatureGates["CSI"]))
-		}
+		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "true")
 
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
@@ -318,16 +314,14 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		require.NoError(t, err)
 
 		logrus.Info("Disable CSI and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.FeatureGates = map[string]string{"CSI": "false"}
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "false")
 
 		logrus.Info("Enable CSI and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "true")
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
@@ -392,57 +386,41 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 		require.NoError(t, err)
 
 		logrus.Info("Enable Stork webhook-controller and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		// At this point this map should be <nil>
-		if len(cluster.Spec.Stork.Args) == 0 {
+		if cluster.Spec.Stork.Args == nil {
 			cluster.Spec.Stork.Args = make(map[string]string)
 		}
 		cluster.Spec.Stork.Args["webhook-controller"] = "true"
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork webhook-controller and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.Stork.Args["webhook-controller"] = "false"
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Remove Stork webhook-controller and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		delete(cluster.Spec.Stork.Args, "webhook-controller")
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Enable Stork hostNetwork and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		hostNetworkValue := true
 		cluster.Spec.Stork.HostNetwork = &hostNetworkValue
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork hostNetwork and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		*cluster.Spec.Stork.HostNetwork = false
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Remove Stork hostNetwork and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.Stork.HostNetwork = nil
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.Stork.Enabled = false
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Enable Stork and validate StorageCluster")
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
 		cluster.Spec.Stork.Enabled = true
-		ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
