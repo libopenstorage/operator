@@ -3,6 +3,7 @@
 package integrationtest
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -225,20 +226,20 @@ var flashArrayPositiveInstallTests = []types.TestCase{
 }*/
 
 func TestFAFBPositiveInstallation(t *testing.T) {
+	ci_utils.LoadSourceConfigOrFail(t, ci_utils.PxNamespace)
 	for _, testCase := range flashArrayPositiveInstallTests {
+		if testCase.ShouldSkip == nil {
+			testCase.ShouldSkip = ShouldSkipFAFBTest
+		}
 		testCase.RunTest(t)
 	}
 }
 
 func BasicInstallWithFAFB(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		// Check that we have enough backends to support this test: skip early
 		require.NotEmpty(t, tc.PureBackendRequirements)
-		fleetBackends := ci_utils.GenerateFleetOrSkip(t, ci_utils.PxNamespace, tc.PureBackendRequirements)
+		fleetBackends := ci_utils.GenerateFleet(t, ci_utils.PxNamespace, tc.PureBackendRequirements)
 
 		// Construct Portworx StorageCluster object
 		testSpec := tc.TestSpec(t)
@@ -310,4 +311,25 @@ func deletePureSecretIfExists(namespace string) error {
 		return err
 	}
 	return nil
+}
+
+// ShouldSkipFAFBTest If not enough devices exist to meet the requirements or the source secret does not
+// exist, the test will be skipped.
+func ShouldSkipFAFBTest(tc *types.TestCase) bool {
+	if !ci_utils.SourceConfigPresent {
+		fmt.Println("Source config not present, skipping")
+		return true
+	}
+
+	req := tc.PureBackendRequirements
+	// Check that we have enough devices to meet the requirements
+	if req.RequiredArrays > 0 && len(ci_utils.FAFBSourceConfig.Arrays) < req.RequiredArrays {
+		fmt.Printf("Test requires %d FlashArrays but only %d provided, skipping\n", req.RequiredArrays, len(ci_utils.FAFBSourceConfig.Arrays))
+		return true
+	}
+	if req.RequiredBlades > 0 && len(ci_utils.FAFBSourceConfig.Blades) < req.RequiredBlades {
+		fmt.Printf("Test requires %d FlashBlades but only %d provided, skipping\n", req.RequiredBlades, len(ci_utils.FAFBSourceConfig.Blades))
+		return true
+	}
+	return false
 }

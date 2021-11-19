@@ -20,8 +20,10 @@ import (
 )
 
 var (
-	sourceConfig          types.DiscoveryConfig
-	sourceConfigPresent   bool
+	// FAFBSourceConfig contains credentials provided in pure secret
+	FAFBSourceConfig types.DiscoveryConfig
+	// SourceConfigPresent checks whether pure secret present
+	SourceConfigPresent   bool
 	sourceConfigLoadError error
 	sourceConfigLoadOnce  sync.Once
 )
@@ -32,7 +34,7 @@ const AllAvailableBackends = -1
 
 func loadSourceConfig(namespace string) func() {
 	return func() {
-		sourceConfigPresent = false
+		SourceConfigPresent = false
 
 		secret, err := coreops.Instance().GetSecret(SourceConfigSecretName, namespace)
 		if err != nil {
@@ -47,37 +49,30 @@ func loadSourceConfig(namespace string) func() {
 		}
 
 		// At this point we know the secret is present, any errors will be parsing errors
-		sourceConfigPresent = true
+		SourceConfigPresent = true
 		pureJSON, ok := secret.Data["pure.json"]
 		if !ok {
 			sourceConfigLoadError = fmt.Errorf("secret %s is missing key pure.json", SourceConfigSecretName)
 			return
 		}
 
-		err = json.Unmarshal(pureJSON, &sourceConfig)
+		err = json.Unmarshal(pureJSON, &FAFBSourceConfig)
 		if err != nil {
 			sourceConfigLoadError = fmt.Errorf("failed to parse secret %s: %v", SourceConfigSecretName, err)
 		}
 	}
 }
 
-func loadSourceConfigOrFail(t *testing.T, namespace string) {
+// LoadSourceConfigOrFail loads the source config once during the test
+func LoadSourceConfigOrFail(t *testing.T, namespace string) {
 	sourceConfigLoadOnce.Do(loadSourceConfig(namespace))
-
 	require.NoError(t, sourceConfigLoadError, "Failed to load source configuration for backend credentials (other than not found error)")
-	if !sourceConfigPresent {
-		t.Skip("Source config not present, skipping")
-	}
 }
 
-// GenerateFleetOrSkip will attempt to create a fleet of devices matching the given
+// GenerateFleet will attempt to create a fleet of devices matching the given
 // requirements, consisting of devices from the source config.
-// If not enough devices exist to meet the requirements or the source secret does not
-// exist, the test will be skipped.
-func GenerateFleetOrSkip(t *testing.T, namespace string,
+func GenerateFleet(t *testing.T, namespace string,
 	req *types.PureBackendRequirements) types.DiscoveryConfig {
-	loadSourceConfigOrFail(t, namespace)
-
 	logrus.WithFields(logrus.Fields{
 		"RequiredArrays": req.RequiredArrays,
 		"RequiredBlades": req.RequiredBlades,
@@ -93,19 +88,11 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 		require.LessOrEqual(t, req.InvalidBlades, req.RequiredBlades)
 	}
 
-	// Check that we have enough devices to meet the requirements
-	if req.RequiredArrays > 0 && len(sourceConfig.Arrays) < req.RequiredArrays {
-		t.Skipf("Test requires %d FlashArrays but only %d provided, skipping", req.RequiredArrays, len(sourceConfig.Arrays))
-	}
-	if req.RequiredBlades > 0 && len(sourceConfig.Blades) < req.RequiredBlades {
-		t.Skipf("Test requires %d FlashBlades but only %d provided, skipping", req.RequiredBlades, len(sourceConfig.Blades))
-	}
-
 	// We have enough devices for this test, let's make a fleet and give it back for testing
 	newFleet := types.DiscoveryConfig{}
 
 	addedArrays := 0
-	for _, value := range sourceConfig.Arrays {
+	for _, value := range FAFBSourceConfig.Arrays {
 		// If we have enough arrays, stop now
 		if req.RequiredArrays != AllAvailableBackends && addedArrays >= req.RequiredArrays {
 			break
@@ -126,7 +113,7 @@ func GenerateFleetOrSkip(t *testing.T, namespace string,
 	}
 
 	addedBlades := 0
-	for _, value := range sourceConfig.Blades {
+	for _, value := range FAFBSourceConfig.Blades {
 		// If we have enough blades, stop now
 		if req.RequiredBlades != AllAvailableBackends && addedBlades >= req.RequiredBlades {
 			break
