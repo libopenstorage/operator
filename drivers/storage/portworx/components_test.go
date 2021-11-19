@@ -11455,6 +11455,12 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	memReq := deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+	memLimit := deployment.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]
+	cpuReq := deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+	require.Equal(t, "64Mi", (&memReq).String())
+	require.Equal(t, "128Mi", (&memLimit).String())
+	require.Equal(t, "200m", (&cpuReq).String())
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
