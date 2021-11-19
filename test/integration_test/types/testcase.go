@@ -87,19 +87,19 @@ func (tp *TestReporter) PrintTestResult() {
 
 	// Print Passed cases
 	fmt.Println("--- PASS:")
-	for _, tc := range TestReporterInstance().PassCases {
+	for _, tc := range tp.PassCases {
 		fmt.Printf("    %s %s\n", tc.TestName, tc.TestrailCaseIDs)
 	}
 
 	// Print Skipped cases
 	fmt.Println("--- SKIP:")
-	for _, tc := range TestReporterInstance().SkipCases {
+	for _, tc := range tp.SkipCases {
 		fmt.Printf("    %s %s\n", tc.TestName, tc.TestrailCaseIDs)
 	}
 
 	// Print Failed cases
 	fmt.Println("--- FAIL:")
-	for _, tc := range TestReporterInstance().FailCases {
+	for _, tc := range tp.FailCases {
 		fmt.Printf("    %s %s\n", tc.TestName, tc.TestrailCaseIDs)
 	}
 }

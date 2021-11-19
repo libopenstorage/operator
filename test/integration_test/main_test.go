@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -62,6 +63,11 @@ func setup() error {
 	}
 
 	ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+
+	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to discover installed portworx operator version: %v", err)
+	}
 
 	// Set log level
 	logrusLevel, err := logrus.ParseLevel(logLevel)
