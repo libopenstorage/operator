@@ -100,6 +100,9 @@ var testStorageClusterBasicCases = []types.TestCase{
 			return cluster
 		},
 		TestFunc: InstallWithTelemetry,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_7)
+		},
 	},
 	{
 		TestName:        "InstallWithCSI",
