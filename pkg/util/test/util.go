@@ -770,7 +770,7 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	k8sVersion, err := getK8SVersion()
+	k8sVersion, err := GetK8SVersion()
 	if err != nil {
 		return err
 	}
@@ -789,7 +789,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate Stork components and images
-	if err := validateStork(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
+	if err := ValidateStork(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
 		return err
 	}
 
@@ -856,7 +856,8 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-func validateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+// ValidateStork validates Stork components and images
+func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
 	storkDp := &appsv1.Deployment{}
 	storkDp.Name = "stork"
 	storkDp.Namespace = cluster.Namespace
@@ -865,61 +866,59 @@ func validateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 	storkSchedulerDp.Name = "stork-scheduler"
 	storkSchedulerDp.Namespace = cluster.Namespace
 
-	if cluster.Spec.Stork != nil {
-		if cluster.Spec.Stork.Enabled {
-			logrus.Debug("Stork is Enabled in StorageCluster")
+	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+		logrus.Debug("Stork is Enabled in StorageCluster")
 
-			// Validate stork deployment and pods
-			if err := validateDeployment(storkDp, timeout, interval); err != nil {
-				return err
-			}
+		// Validate stork deployment and pods
+		if err := validateDeployment(storkDp, timeout, interval); err != nil {
+			return err
+		}
 
-			var storkImageName string
-			if cluster.Spec.Stork.Image == "" {
-				if value, ok := pxImageList["stork"]; ok {
-					storkImageName = value
-				} else {
-					return fmt.Errorf("failed to find image for stork")
-				}
+		var storkImageName string
+		if cluster.Spec.Stork.Image == "" {
+			if value, ok := pxImageList["stork"]; ok {
+				storkImageName = value
 			} else {
-				storkImageName = cluster.Spec.Stork.Image
-			}
-
-			storkImage := util.GetImageURN(cluster, storkImageName)
-			err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
-			if err != nil {
-				return err
-			}
-
-			// Validate stork-scheduler deployment and pods
-			if err := validateDeployment(storkSchedulerDp, timeout, interval); err != nil {
-				return err
-			}
-
-			if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
-				return err
-			}
-
-			// Validate webhook-controller arguments
-			if err := validateStorkWebhookController(cluster.Spec.Stork.Args, storkDp); err != nil {
-				return err
-			}
-
-			// Validate hostNetwork parameter
-			if err := validateStorkHostNetwork(cluster.Spec.Stork.HostNetwork, storkDp); err != nil {
-				return err
+				return fmt.Errorf("failed to find image for stork")
 			}
 		} else {
-			logrus.Debug("Stork is Disabled in StorageCluster")
-			// Validate stork deployment is terminated or doesn't exist
-			if err := validateTerminatedDeployment(storkDp, timeout, interval); err != nil {
-				return err
-			}
+			storkImageName = cluster.Spec.Stork.Image
+		}
 
-			// Validate stork-scheduler deployment is terminated or doesn't exist
-			if err := validateTerminatedDeployment(storkSchedulerDp, timeout, interval); err != nil {
-				return err
-			}
+		storkImage := util.GetImageURN(cluster, storkImageName)
+		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
+		if err != nil {
+			return err
+		}
+
+		// Validate stork-scheduler deployment and pods
+		if err := validateDeployment(storkSchedulerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+			return err
+		}
+
+		// Validate webhook-controller arguments
+		if err := validateStorkWebhookController(cluster.Spec.Stork.Args, storkDp); err != nil {
+			return err
+		}
+
+		// Validate hostNetwork parameter
+		if err := validateStorkHostNetwork(cluster.Spec.Stork.HostNetwork, storkDp); err != nil {
+			return err
+		}
+	} else {
+		logrus.Debug("Stork is Disabled in StorageCluster")
+		// Validate stork deployment is terminated or doesn't exist
+		if err := validateTerminatedDeployment(storkDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate stork-scheduler deployment is terminated or doesn't exist
+		if err := validateTerminatedDeployment(storkSchedulerDp, timeout, interval); err != nil {
+			return err
 		}
 	}
 
@@ -936,21 +935,26 @@ func validateStorkWebhookController(webhookControllerArgs map[string]string, sto
 
 	// Go through every Stork pod and look for --weebhook-controller command in every stork container and match it to the webhook-controller arg passed in spec
 	for _, pod := range pods {
-		if pod.Spec.Containers != nil {
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "stork" {
-					if len(container.Command) > 0 {
-						for _, containerCommand := range container.Command {
-							if strings.Contains(containerCommand, "--webhook-controller") {
-								if len(webhookControllerArgs["webhook-controller"]) == 0 {
-									return fmt.Errorf("failed to validate webhook-controller, webhook-controller is missing from Stork args in the StorageCluster, but is found in the Stork pod [%s]", pod.Name)
-								} else if webhookControllerArgs["webhook-controller"] != strings.Split(containerCommand, "=")[1] {
-									return fmt.Errorf("failed to validate webhook-controller, wrong --webhook-controller value in the command in Stork pod [%s]: expected: %s, got: %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
-								}
-								logrus.Debugf("Value for webhook-controller inside Stork pod [%s] command args: expected %s, got %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
+		webhookExist := false
+		for _, container := range pod.Spec.Containers {
+			if container.Name == "stork" {
+				if len(container.Command) > 0 {
+					for _, containerCommand := range container.Command {
+						if strings.Contains(containerCommand, "--webhook-controller") {
+							if len(webhookControllerArgs["webhook-controller"]) == 0 {
+								return fmt.Errorf("failed to validate webhook-controller, webhook-controller is missing from Stork args in the StorageCluster, but is found in the Stork pod [%s]", pod.Name)
+							} else if webhookControllerArgs["webhook-controller"] != strings.Split(containerCommand, "=")[1] {
+								return fmt.Errorf("failed to validate webhook-controller, wrong --webhook-controller value in the command in Stork pod [%s]: expected: %s, got: %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
 							}
+							logrus.Debugf("Value for webhook-controller inside Stork pod [%s] command args: expected %s, got %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
+							webhookExist = true
+							continue
 						}
 					}
+				}
+				// Validate that if webhook-controller arg is missing from StorageCluster, it is also not found in pods
+				if len(webhookControllerArgs["webhook-controller"]) != 0 && !webhookExist {
+					return fmt.Errorf("failed to validate webhook-controller, webhook-controller is found in Stork args in the StorageCluster, but is found in missing from Stork pod [%s]", pod.Name)
 				}
 			}
 		}
@@ -1346,7 +1350,8 @@ func isOpenshift(cluster *corev1.StorageCluster) bool {
 	return err == nil && enabled
 }
 
-func getK8SVersion() (string, error) {
+// GetK8SVersion gets and return K8S server version
+func GetK8SVersion() (string, error) {
 	kbVerRegex := regexp.MustCompile(`^(v\d+\.\d+\.\d+).*`)
 	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
@@ -1360,19 +1365,19 @@ func getK8SVersion() (string, error) {
 }
 
 // GetImagesFromVersionURL gets images from version URL
-func GetImagesFromVersionURL(url string) (map[string]string, error) {
-	logrus.Infof("Get component images from versions URL")
+func GetImagesFromVersionURL(url, k8sVersion string) (map[string]string, error) {
 	imageListMap := make(map[string]string)
 
-	// Construct PX release manifest URL
-	pxReleaseManifestURL, err := ConstructVersionURL(url)
+	// Construct PX version URL
+	pxVersionURL, err := ConstructVersionURL(url, k8sVersion)
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infof("Get component images from version URL %s", pxVersionURL)
 
-	resp, err := http.Get(pxReleaseManifestURL)
+	resp, err := http.Get(pxVersionURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxReleaseManifestURL, err)
+		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxVersionURL, err)
 	}
 
 	htmlData, err := ioutil.ReadAll(resp.Body)
@@ -1398,12 +1403,7 @@ func GetImagesFromVersionURL(url string) (map[string]string, error) {
 }
 
 // ConstructVersionURL constructs Portworx version URL that contains component images
-func ConstructVersionURL(specGenURL string) (string, error) {
-	k8sVersion, err := getK8SVersion()
-	if err != nil {
-		return "", fmt.Errorf("failed to construct version URL, Err: %v", err)
-	}
-
+func ConstructVersionURL(specGenURL, k8sVersion string) (string, error) {
 	versionURL := path.Join(specGenURL, fmt.Sprintf("version?kbver=%s", k8sVersion))
 	u, err := url.Parse(versionURL)
 	if err != nil {

@@ -18,6 +18,9 @@ var (
 
 	// PxUpgradeHopsURLList urls for upgrade test
 	PxUpgradeHopsURLList []string
+
+	// K8sVersion is a K8s version from cluster server side
+	K8sVersion string
 )
 
 const (
@@ -37,6 +40,10 @@ const (
 	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 20 * time.Second
+	// DefaultValidateStorkTimeout is a default timeout for stork validation
+	DefaultValidateStorkTimeout = 60 * time.Minute
+	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
+	DefaultValidateStorkRetryInterval = 5 * time.Second
 
 	// SourceConfigSecretName is the name of the secret that contains the superset of all credentials
 	// we may select from for these tests.

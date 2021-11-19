@@ -139,7 +139,7 @@ func getPortworxImagesFromDaemonSet(t *testing.T, ds *appsv1.DaemonSet) (map[str
 	require.NotEmpty(t, version)
 
 	versionURL := fmt.Sprintf("https://install.portworx.com/%s", version)
-	return testutil.GetImagesFromVersionURL(versionURL)
+	return testutil.GetImagesFromVersionURL(versionURL, ci_utils.K8sVersion)
 }
 
 func restartPortworxOperator(t *testing.T) {

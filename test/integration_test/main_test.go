@@ -53,7 +53,12 @@ func setup() error {
 		"Log level")
 	flag.Parse()
 
-	ci_utils.PxSpecImages, err = test_util.GetImagesFromVersionURL(ci_utils.PxSpecGenURL)
+	ci_utils.K8sVersion, err = test_util.GetK8SVersion()
+	if err != nil {
+		return err
+	}
+
+	ci_utils.PxSpecImages, err = test_util.GetImagesFromVersionURL(ci_utils.PxSpecGenURL, ci_utils.K8sVersion)
 	if err != nil {
 		return err
 	}
