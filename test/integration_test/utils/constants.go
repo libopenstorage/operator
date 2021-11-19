@@ -2,6 +2,8 @@ package utils
 
 import (
 	"time"
+
+	"github.com/hashicorp/go-version"
 )
 
 // Global test parameters that are set at the beginning of the run
@@ -20,6 +22,9 @@ var (
 
 	// PxUpgradeHopsURLList urls for upgrade test
 	PxUpgradeHopsURLList []string
+
+	// PxOperatorVersion is the version of installed px operator found
+	PxOperatorVersion *version.Version
 )
 
 const (
@@ -54,6 +59,10 @@ const (
 	// NodeReplacePrefix is used for replacing node name during the test
 	NodeReplacePrefix = "replaceWithNodeNumber"
 
+	// PxNamespace is a default namespace for StorageCluster
+	PxNamespace = "kube-system"
 	// PortworxOperatorDeploymentName name of portworx operator deployment
 	PortworxOperatorDeploymentName = "portworx-operator"
+	// PortworxOperatorContainerName name of portworx operator container
+	PortworxOperatorContainerName = "portworx-operator"
 )

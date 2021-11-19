@@ -18,8 +18,6 @@ import (
 const (
 	// specDir is a directory with all the specs
 	specDir = "./operator-test"
-	// PxNamespace is a default namespace for StorageCluster
-	PxNamespace = "kube-system"
 )
 
 // CreateStorageClusterTestSpecFunc creates a function that returns test specs for a test case
