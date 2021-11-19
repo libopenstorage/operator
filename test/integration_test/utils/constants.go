@@ -1,6 +1,8 @@
 package utils
 
-import "time"
+import (
+	"time"
+)
 
 // Global test parameters that are set at the beginning of the run
 var (

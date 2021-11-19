@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	test_util "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 )
 
@@ -19,7 +20,9 @@ func TestMain(m *testing.M) {
 		logrus.Errorf("Setup failed with error: %v", err)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	exitCode := m.Run()
+	types.TestReporterInstance().PrintTestResult()
+	os.Exit(exitCode)
 }
 
 func setup() error {

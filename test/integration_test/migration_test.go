@@ -63,10 +63,6 @@ func TestDaemonSetMigration(t *testing.T) {
 
 func BasicMigration(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		objects, ok := testSpec.([]runtime.Object)
 		require.True(t, ok)
@@ -84,10 +80,6 @@ func BasicMigration(tc *types.TestCase) func(*testing.T) {
 
 func MigrationWithoutNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		objects, ok := testSpec.([]runtime.Object)
 		require.True(t, ok)
