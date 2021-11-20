@@ -11453,8 +11453,9 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "metricsCollectorDeployment.yaml")
+	require.True(t, util.DeploymentDeepEqual(expectedDeployment, deployment))
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
