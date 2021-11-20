@@ -9,6 +9,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,7 +53,10 @@ const (
 	// CollectorServiceAccountName is name of the metrics collector service account
 	CollectorServiceAccountName = "px-metrics-collector"
 
-	defaultAutopilotMetricsPort = 9628
+	defaultAutopilotMetricsPort   = 9628
+	defaultCollectorMemoryRequest = "64Mi"
+	defaultCollectorMemoryLimit   = "128Mi"
+	defaultCollectorCPU           = "0.2"
 )
 
 type telemetry struct {
@@ -264,6 +268,10 @@ func (t *telemetry) getCollectorDeployment(
 		"role": "realtime-metrics-collector",
 	}
 	runAsUser := int64(1111)
+	cpuQuantity, err := resource.ParseQuantity(defaultCollectorCPU)
+	if err != nil {
+		return nil, err
+	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CollectorDeploymentName,
@@ -281,6 +289,16 @@ func (t *telemetry) getCollectorDeployment(
 						{
 							Name:  "collector",
 							Image: collectorImage,
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceMemory: resource.MustParse(defaultCollectorMemoryRequest),
+									v1.ResourceCPU:    cpuQuantity,
+								},
+								Limits: v1.ResourceList{
+									v1.ResourceMemory: resource.MustParse(defaultCollectorMemoryLimit),
+								},
+							},
+
 							Env: []v1.EnvVar{
 								{
 									Name:  "CONFIG",

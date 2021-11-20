@@ -744,7 +744,8 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *appsv1.Deployment) {
 	deployment.Namespace = cluster.Namespace
 
-	for _, container := range deployment.Spec.Template.Spec.Containers {
+	for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
+		container := &deployment.Spec.Template.Spec.Containers[i]
 		// Change image to custom repository if it has not been done
 		if !strings.HasPrefix(container.Image, strings.TrimSuffix(cluster.Spec.CustomImageRegistry, "/")) {
 			container.Image = util.GetImageURN(cluster, container.Image)
