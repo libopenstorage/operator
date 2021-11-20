@@ -2,13 +2,11 @@ package utils
 
 import (
 	"path"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -21,8 +19,6 @@ import (
 const (
 	// specDir is a directory with all the specs
 	specDir = "./operator-test"
-	// PxNamespace is a default namespace for StorageCluster
-	PxNamespace = "kube-system"
 )
 
 // CreateStorageClusterTestSpecFunc creates a function that returns test specs for a test case
@@ -36,17 +32,13 @@ func CreateStorageClusterTestSpecFunc(cluster *corev1.StorageCluster) func(t *te
 
 // ConstructStorageCluster makes StorageCluster object and add all the common basic parameters that all StorageCluster should have
 func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, specImages map[string]string) error {
-	// Set Portworx Image
 	cluster.Spec.Image = specImages["version"]
-
-	// Set Namespace
 	cluster.Namespace = PxNamespace
-
-	// Populate default Env Vars
-	if err := populateDefaultEnvVars(cluster, specGenURL); err != nil {
+	env, err := addDefaultEnvVars(cluster.Spec.Env, specGenURL)
+	if err != nil {
 		return err
 	}
-
+	cluster.Spec.Env = env
 	return nil
 }
 
@@ -146,56 +138,9 @@ func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testi
 	require.NoError(t, err)
 }
 
-// addEnvVarToStorageCluster will overwrite existing or add new env variables
-func addEnvVarToStorageCluster(envVarList []v1.EnvVar, cluster *corev1.StorageCluster) {
-	envMap := make(map[string]v1.EnvVar)
-	var newEnvVarList []v1.EnvVar
-	for _, env := range cluster.Spec.Env {
-		envMap[env.Name] = env
-	}
-	for _, env := range envVarList {
-		envMap[env.Name] = env
-	}
-	for _, env := range envMap {
-		newEnvVarList = append(newEnvVarList, env)
-	}
-	cluster.Spec.Env = newEnvVarList
-}
-
 // ValidateStorageClusterComponents validates storage cluster components
 func ValidateStorageClusterComponents(cluster *corev1.StorageCluster) error {
 	// TODO: Validate expected components are deployed and running
 	// TODO: Validate the components are running with expected configuration
-	return nil
-}
-
-func populateDefaultEnvVars(cluster *corev1.StorageCluster, specGenURL string) error {
-	var envVarList []v1.EnvVar
-
-	// Set release manifest URL and Docker credentials in case of edge-install.portworx.com
-	if strings.Contains(specGenURL, "edge") {
-		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
-		if err != nil {
-			return err
-		}
-
-		// Add release manifest URL to Env Vars
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
-	}
-
-	// Add Portworx image properties, if specified
-	if PxDockerUsername != "" && PxDockerPassword != "" {
-		envVarList = append(envVarList,
-			[]v1.EnvVar{
-				{Name: testutil.PxRegistryUserEnvVarName, Value: PxDockerUsername},
-				{Name: testutil.PxRegistryPasswordEnvVarName, Value: PxDockerPassword},
-			}...)
-	}
-	if PxImageOverride != "" {
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: PxImageOverride})
-	}
-
-	addEnvVarToStorageCluster(envVarList, cluster)
-
 	return nil
 }

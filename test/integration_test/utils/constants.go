@@ -1,6 +1,10 @@
 package utils
 
-import "time"
+import (
+	"time"
+
+	"github.com/hashicorp/go-version"
+)
 
 // Global test parameters that are set at the beginning of the run
 var (
@@ -21,6 +25,9 @@ var (
 
 	// K8sVersion is a K8s version from cluster server side
 	K8sVersion string
+
+	// PxOperatorVersion is the version of installed px operator found
+	PxOperatorVersion *version.Version
 )
 
 const (
@@ -45,6 +52,11 @@ const (
 	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
 	DefaultValidateStorkRetryInterval = 5 * time.Second
 
+	// LabelValueTrue value "true" for a label
+	LabelValueTrue = "true"
+	// LabelValueFalse value "false" for a label
+	LabelValueFalse = "false"
+
 	// SourceConfigSecretName is the name of the secret that contains the superset of all credentials
 	// we may select from for these tests.
 	SourceConfigSecretName = "px-pure-secret-source"
@@ -54,6 +66,10 @@ const (
 	// NodeReplacePrefix is used for replacing node name during the test
 	NodeReplacePrefix = "replaceWithNodeNumber"
 
+	// PxNamespace is a default namespace for StorageCluster
+	PxNamespace = "kube-system"
 	// PortworxOperatorDeploymentName name of portworx operator deployment
 	PortworxOperatorDeploymentName = "portworx-operator"
+	// PortworxOperatorContainerName name of portworx operator container
+	PortworxOperatorContainerName = "portworx-operator"
 )

@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	test_util "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 )
 
@@ -19,7 +21,9 @@ func TestMain(m *testing.M) {
 		logrus.Errorf("Setup failed with error: %v", err)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	exitCode := m.Run()
+	types.TestReporterInstance().PrintTestResult()
+	os.Exit(exitCode)
 }
 
 func setup() error {
@@ -64,6 +68,11 @@ func setup() error {
 	}
 
 	ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+
+	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to discover installed portworx operator version: %v", err)
+	}
 
 	// Set log level
 	logrusLevel, err := logrus.ParseLevel(logLevel)

@@ -27,7 +27,6 @@ import (
 
 const (
 	labelKeySkipPX = "skip/px"
-	labelValueTrue = "true"
 )
 
 var (
@@ -37,7 +36,7 @@ var (
 var testStorageClusterBasicCases = []types.TestCase{
 	{
 		TestName:        "InstallWithAllDefaults",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C51022", "C50236"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "simple-install"},
 		}),
@@ -45,7 +44,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "NodeAffinityLabels",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C50962"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: meta.ObjectMeta{Name: "node-affinity-labels"},
 			Spec: corev1.StorageClusterSpec{
@@ -58,7 +57,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 										{
 											Key:      labelKeySkipPX,
 											Operator: v1.NodeSelectorOpNotIn,
-											Values:   []string{labelValueTrue},
+											Values:   []string{ci_utils.LabelValueTrue},
 										},
 									},
 								},
@@ -72,13 +71,13 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "Upgrade",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C50241"},
 		TestSpec: func(t *testing.T) interface{} {
 			return &corev1.StorageCluster{
 				ObjectMeta: meta.ObjectMeta{Name: "upgrade-test"},
 			}
 		},
-		ShouldSkip: func() bool {
+		ShouldSkip: func(tc *types.TestCase) bool {
 			k8sVersion, _ := k8sutil.GetVersion()
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
@@ -87,7 +86,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "InstallWithTelemetry",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C55909"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
 			cluster.Name = "telemetry-test"
@@ -100,8 +99,10 @@ var testStorageClusterBasicCases = []types.TestCase{
 			}
 			return cluster
 		},
-		ShouldSkip: func() bool { return false },
-		TestFunc:   InstallWithTelemetry,
+		TestFunc: InstallWithTelemetry,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_7)
+		},
 	},
 	{
 		TestName:        "BasicCsiRegression",
@@ -129,10 +130,6 @@ func TestStorageClusterBasic(t *testing.T) {
 
 func BasicInstall(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
@@ -145,45 +142,19 @@ func BasicInstall(tc *types.TestCase) func(*testing.T) {
 
 func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
-		// Get K8S nodes
-		nodeList, err := coreops.Instance().GetNodes()
-		require.NoError(t, err)
-
 		// Set Node Affinity label one of the K8S nodes
-		var nodeNameWithLabel string
-		for _, node := range nodeList.Items {
-			if coreops.Instance().IsNodeMaster(node) {
-				continue // Skip master node, we don't need to label it
-			}
-			logrus.Infof("Label node %s with %s=%s", node.Name, labelKeySkipPX, labelValueTrue)
-			if err := coreops.Instance().AddLabelOnNode(node.Name, labelKeySkipPX, labelValueTrue); err != nil {
-				require.NoError(t, err)
-			}
-			nodeNameWithLabel = node.Name
-			break
-		}
+		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeySkipPX, ci_utils.LabelValueTrue)
 
 		// Run basic install test and validation
 		BasicInstall(tc)(t)
 
 		// Remove Node Affinity label from the node
-		logrus.Infof("Remove label %s from node %s", nodeNameWithLabel, labelKeySkipPX)
-		if err := coreops.Instance().RemoveLabelOnNode(nodeNameWithLabel, labelKeySkipPX); err != nil {
-			require.NoError(t, err)
-		}
+		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeySkipPX)
 	}
 }
 
 func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		// Get the storage cluster to start with
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -230,10 +201,6 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 
 func InstallWithTelemetry(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
@@ -285,10 +252,6 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 // 7. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		var err error
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -345,10 +308,6 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 // 15. Delete StorageCluster and validate it got successfully removed
 func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
-		if tc.ShouldSkip() {
-			t.Skip()
-		}
-
 		var err error
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -364,7 +323,7 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 		require.Empty(t, cluster.Spec.Stork.Args["webhook-controller"], "failed to validate webhook-controller, it shouldn't exist by default, but it is set to %s", cluster.Spec.Stork.Args["webhook-controller"])
 
 		// Validate HostNetwork is <nil> by default
-		require.Nil(t, cluster.Spec.Stork.HostNetwork, "failed to validate HostNetwork, it should be nil by default, but it is set to %v", icluster.Spec.Stork.HostNetwork)
+		require.Nil(t, cluster.Spec.Stork.HostNetwork, "failed to validate HostNetwork, it should be nil by default, but it is set to %v", cluster.Spec.Stork.HostNetwork)
 
 		logrus.Info("Delete stork pods and validate they get re-deployed")
 		err = appsops.Instance().DeleteDeploymentPods("stork", cluster.Namespace, 120*time.Second)
