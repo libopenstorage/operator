@@ -41,7 +41,7 @@ const (
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 20 * time.Second
 	// DefaultValidateStorkTimeout is a default timeout for stork validation
-	DefaultValidateStorkTimeout = 60 * time.Minute
+	DefaultValidateStorkTimeout = 10 * time.Minute
 	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
 	DefaultValidateStorkRetryInterval = 5 * time.Second
 

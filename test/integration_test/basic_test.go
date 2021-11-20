@@ -364,7 +364,7 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 		require.Empty(t, cluster.Spec.Stork.Args["webhook-controller"], "failed to validate webhook-controller, it shouldn't exist by default, but it is set to %s", cluster.Spec.Stork.Args["webhook-controller"])
 
 		// Validate HostNetwork is <nil> by default
-		require.Nil(t, cluster.Spec.Stork.HostNetwork, "failed to validate HostNetwork, it should be nil by default, but it isn't", cluster.Spec.Stork.HostNetwork)
+		require.Nil(t, cluster.Spec.Stork.HostNetwork, "failed to validate HostNetwork, it should be nil by default, but it is set to %v", icluster.Spec.Stork.HostNetwork)
 
 		logrus.Info("Delete stork pods and validate they get re-deployed")
 		err = appsops.Instance().DeleteDeploymentPods("stork", cluster.Namespace, 120*time.Second)
