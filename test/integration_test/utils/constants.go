@@ -23,6 +23,9 @@ var (
 	// PxUpgradeHopsURLList urls for upgrade test
 	PxUpgradeHopsURLList []string
 
+	// K8sVersion is a K8s version from cluster server side
+	K8sVersion string
+
 	// PxOperatorVersion is the version of installed px operator found
 	PxOperatorVersion *version.Version
 )
@@ -43,7 +46,11 @@ const (
 	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
 	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
-	DefaultValidateUninstallRetryInterval = 10 * time.Second
+	DefaultValidateUninstallRetryInterval = 20 * time.Second
+	// DefaultValidateStorkTimeout is a default timeout for stork validation
+	DefaultValidateStorkTimeout = 10 * time.Minute
+	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
+	DefaultValidateStorkRetryInterval = 5 * time.Second
 
 	// LabelValueTrue value "true" for a label
 	LabelValueTrue = "true"
