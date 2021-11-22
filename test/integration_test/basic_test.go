@@ -78,6 +78,9 @@ var testStorageClusterBasicCases = []types.TestCase{
 			}
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
+			if len(ci_utils.PxUpgradeHopsURLList[0]) == 0 {
+				return true
+			}
 			k8sVersion, _ := k8sutil.GetVersion()
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
