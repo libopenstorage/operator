@@ -4,6 +4,7 @@ metadata:
   name: portworx-operator.v1.6.1
   namespace: placeholder
   annotations:
+    olm.skipRange: "<1.6.1"
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
@@ -52,7 +53,6 @@ spec:
   version: 1.6.1
   minKubeVersion: "1.12.0"
   maturity: stable
-  replaces: portworx-operator.v1.6.0
   maintainers:
   - name: Portworx
     email: support@portworx.com
