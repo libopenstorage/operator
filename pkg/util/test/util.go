@@ -901,12 +901,12 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 		}
 
 		// Validate webhook-controller arguments
-		if err := validateStorkWebhookController(cluster.Spec.Stork.Args, storkDp); err != nil {
+		if err := validateStorkWebhookController(cluster.Spec.Stork.Args, storkDp, timeout, interval); err != nil {
 			return err
 		}
 
 		// Validate hostNetwork parameter
-		if err := validateStorkHostNetwork(cluster.Spec.Stork.HostNetwork, storkDp); err != nil {
+		if err := validateStorkHostNetwork(cluster.Spec.Stork.HostNetwork, storkDp, timeout, interval); err != nil {
 			return err
 		}
 	} else {
@@ -925,65 +925,79 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 	return nil
 }
 
-func validateStorkWebhookController(webhookControllerArgs map[string]string, storkDeployment *appsv1.Deployment) error {
+func validateStorkWebhookController(webhookControllerArgs map[string]string, storkDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate Stork webhook-controller")
 
-	pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
-	if err != nil {
-		return err
-	}
+	t := func() (interface{}, bool, error) {
+		pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
+		if err != nil {
+			return nil, false, err
+		}
 
-	// Go through every Stork pod and look for --weebhook-controller command in every stork container and match it to the webhook-controller arg passed in spec
-	for _, pod := range pods {
-		webhookExist := false
-		for _, container := range pod.Spec.Containers {
-			if container.Name == "stork" {
-				if len(container.Command) > 0 {
-					for _, containerCommand := range container.Command {
-						if strings.Contains(containerCommand, "--webhook-controller") {
-							if len(webhookControllerArgs["webhook-controller"]) == 0 {
-								return fmt.Errorf("failed to validate webhook-controller, webhook-controller is missing from Stork args in the StorageCluster, but is found in the Stork pod [%s]", pod.Name)
-							} else if webhookControllerArgs["webhook-controller"] != strings.Split(containerCommand, "=")[1] {
-								return fmt.Errorf("failed to validate webhook-controller, wrong --webhook-controller value in the command in Stork pod [%s]: expected: %s, got: %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
+		// Go through every Stork pod and look for --weebhook-controller command in every stork container and match it to the webhook-controller arg passed in spec
+		for _, pod := range pods {
+			webhookExist := false
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "stork" {
+					if len(container.Command) > 0 {
+						for _, containerCommand := range container.Command {
+							if strings.Contains(containerCommand, "--webhook-controller") {
+								if len(webhookControllerArgs["webhook-controller"]) == 0 {
+									return nil, true, fmt.Errorf("failed to validate webhook-controller, webhook-controller is missing from Stork args in the StorageCluster, but is found in the Stork pod [%s]", pod.Name)
+								} else if webhookControllerArgs["webhook-controller"] != strings.Split(containerCommand, "=")[1] {
+									return nil, true, fmt.Errorf("failed to validate webhook-controller, wrong --webhook-controller value in the command in Stork pod [%s]: expected: %s, got: %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
+								}
+								logrus.Debugf("Value for webhook-controller inside Stork pod [%s] command args: expected %s, got %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
+								webhookExist = true
+								continue
 							}
-							logrus.Debugf("Value for webhook-controller inside Stork pod [%s] command args: expected %s, got %s", pod.Name, webhookControllerArgs["webhook-controller"], strings.Split(containerCommand, "=")[1])
-							webhookExist = true
-							continue
 						}
 					}
-				}
-				// Validate that if webhook-controller arg is missing from StorageCluster, it is also not found in pods
-				if len(webhookControllerArgs["webhook-controller"]) != 0 && !webhookExist {
-					return fmt.Errorf("failed to validate webhook-controller, webhook-controller is found in Stork args in the StorageCluster, but is found in missing from Stork pod [%s]", pod.Name)
+					// Validate that if webhook-controller arg is missing from StorageCluster, it is also not found in pods
+					if len(webhookControllerArgs["webhook-controller"]) != 0 && !webhookExist {
+						return nil, true, fmt.Errorf("failed to validate webhook-controller, webhook-controller is found in Stork args in the StorageCluster, but missing from Stork pod [%s]", pod.Name)
+					}
 				}
 			}
 		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func validateStorkHostNetwork(hostNetwork *bool, storkDeployment *appsv1.Deployment) error {
+func validateStorkHostNetwork(hostNetwork *bool, storkDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate Stork hostNetwork")
 
-	pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
-	if err != nil {
-		return err
-	}
-
-	// Setting hostNetworkValue to false if hostNetwork is nil, since its a *bool and we need to compare it to bool
-	var hostNetworkValue bool
-	if hostNetwork == nil {
-		hostNetworkValue = false
-	} else {
-		hostNetworkValue = *hostNetwork
-	}
-
-	for _, pod := range pods {
-		if pod.Spec.HostNetwork != hostNetworkValue {
-			return fmt.Errorf("failed to validate Stork hostNetwork inside Stork pod [%s]: expected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+	t := func() (interface{}, bool, error) {
+		pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
+		if err != nil {
+			return nil, false, err
 		}
-		logrus.Debugf("Value for hostNetwork inside Stork pod [%s]: epxected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+
+		// Setting hostNetworkValue to false if hostNetwork is nil, since its a *bool and we need to compare it to bool
+		var hostNetworkValue bool
+		if hostNetwork == nil {
+			hostNetworkValue = false
+		} else {
+			hostNetworkValue = *hostNetwork
+		}
+
+		for _, pod := range pods {
+			if pod.Spec.HostNetwork != hostNetworkValue {
+				return nil, true, fmt.Errorf("failed to validate Stork hostNetwork inside Stork pod [%s]: expected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+			}
+			logrus.Debugf("Value for hostNetwork inside Stork pod [%s]: epxected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
 	}
 
 	return nil
@@ -997,6 +1011,9 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 
 	if csi {
 		logrus.Debug("CSI is enabled in StorageCluster")
+		if err := validateCsiContainerInPxPods(cluster.Namespace, csi, timeout, interval); err != nil {
+			return err
+		}
 
 		// Validate CSI container image inside Portworx OCI Monitor pods
 		if err := validatePortworxOciMonCsiImage(cluster.Namespace, pxImageList); err != nil {
@@ -1014,12 +1031,74 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		}
 	} else {
 		logrus.Debug("CSI is disabled in StorageCluster")
+		if err := validateCsiContainerInPxPods(cluster.Namespace, csi, timeout, interval); err != nil {
+			return err
+		}
 
 		// Validate px-csi-ext deployment doesn't exist
 		if err := validateTerminatedDeployment(pxCsiDp, timeout, interval); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration) error {
+	logrus.Debug("Validating CSI container inside Portworx OCI Monitor pods")
+	listOptions := map[string]string{"name": "portworx"}
+
+	t := func() (interface{}, bool, error) {
+		var pxPodsWithCsiContainer []string
+
+		// Get Portworx pods
+		pods, err := coreops.Instance().GetPods(namespace, listOptions)
+		if err != nil {
+			return nil, false, err
+		}
+
+		podsReady := 0
+		for _, pod := range pods.Items {
+			for _, c := range pod.Status.InitContainerStatuses {
+				if !c.Ready {
+					continue
+				}
+			}
+			containerReady := 0
+			for _, c := range pod.Status.ContainerStatuses {
+				if c.Ready {
+					containerReady++
+					continue
+				}
+			}
+
+			if len(pod.Spec.Containers) == containerReady {
+				podsReady++
+			}
+
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "csi-node-driver-registrar" {
+					pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
+					break
+				}
+			}
+		}
+
+		if csi {
+			if len(pxPodsWithCsiContainer) != len(pods.Items) {
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX pods: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		} else {
+			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
