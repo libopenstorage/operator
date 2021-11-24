@@ -3,7 +3,6 @@ package utils
 import (
 	"path"
 	"testing"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -87,42 +86,40 @@ func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 		return nil, err
 	}
 
-	// TODO: This is required, because UpdateStorageCluster() doesn't always return the latest version of live StorageCluster
-	logrus.Debug("Sleeping for 3 seconds...")
-	time.Sleep(3 * time.Second)
-
-	latestLiveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if err != nil {
-		return nil, err
-	}
-	return latestLiveCluster, nil
+	return cluster, nil
 }
 
 // UpdateAndValidateStorageCluster update, validate and return new StorageCluster
-func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-
-	cluster, err := UpdateStorageCluster(cluster)
+func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	logrus.Infof("Validate StorageCluster %s", cluster.Name)
-	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	return cluster
+	logrus.Infof("Validate StorageCluster %s", latestLiveCluster.Name)
+	err = testutil.ValidateStorageCluster(pxSpecImages, latestLiveCluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
+	require.NoError(t, err)
+
+	return latestLiveCluster
 }
 
 // UpdateAndValidateStork update StorageCluster, validates Stork components only and return latest version of live StorageCluster
-func UpdateAndValidateStork(cluster *corev1.StorageCluster, pxSpecImages map[string]string, k8sVersion string, t *testing.T) *corev1.StorageCluster {
-	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-
-	cluster, err := UpdateStorageCluster(cluster)
+func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, k8sVersion string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
-	err = testutil.ValidateStork(pxSpecImages, cluster, k8sVersion, DefaultValidateStorkTimeout, DefaultValidateStorkRetryInterval)
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	return cluster
+	err = testutil.ValidateStork(pxSpecImages, latestLiveCluster, k8sVersion, DefaultValidateStorkTimeout, DefaultValidateStorkRetryInterval)
+	require.NoError(t, err)
+
+	return latestLiveCluster
 }
 
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion
