@@ -187,6 +187,9 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 				// Set defaults
 				portworx.SetPortworxDefaults(cluster)
 
+				err = ci_utils.ConstructStorageCluster(cluster, hopURL, specImages)
+				require.NoError(t, err)
+
 				// Update live StorageCluster
 				cluster, err = ci_utils.UpdateStorageCluster(cluster)
 				require.NoError(t, err)

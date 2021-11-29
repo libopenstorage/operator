@@ -411,7 +411,7 @@ func ValidateStorageCluster(
 }
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	var pxVersion string
+	var expectedPxVersion string
 
 	imageOverride := ""
 
@@ -428,15 +428,16 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		if len(cluster.Spec.Env) > 0 {
 			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
-					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
-					if pxVersion == "" {
-						return fmt.Errorf("failed to extract version from value of %s", PxReleaseManifestURLEnvVarName)
-					}
+					expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
 				}
 			}
 		}
 	} else {
-		pxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+		expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+	}
+
+	if expectedPxVersion == "" {
+		return fmt.Errorf("failed to get expected PX version")
 	}
 
 	t := func() (interface{}, bool, error) {
@@ -454,7 +455,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 			if imageOverride != "" {
 				logString += fmt.Sprintf("Running PX version: %s From image: %s", storageNode.Spec.Version, imageOverride)
 			} else {
-				logString += fmt.Sprintf("Expected PX version: %s Got: %s", pxVersion, storageNode.Spec.Version)
+				logString += fmt.Sprintf("Expected PX version: %s Got: %s", expectedPxVersion, storageNode.Spec.Version)
 			}
 			logrus.Debug(logString)
 
@@ -463,7 +464,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 				continue
 			}
 			// If we didn't specify a custom image, make sure it's running the expected version
-			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, pxVersion) {
+			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, expectedPxVersion) {
 				continue
 			}
 
