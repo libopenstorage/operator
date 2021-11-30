@@ -88,6 +88,7 @@ spec:
               mountPath: /opt/pwx
             - name: varlibosd
               mountPath: /var/lib/osd
+              mountPropagation: Bidirectional
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -149,7 +150,7 @@ spec:
             path: /opt/pwx
         - name: varlibosd
           hostPath:
-            path: /var/lib/osd           
+            path: /var/lib/osd
         - name: procmount
           hostPath:
             path: /proc
