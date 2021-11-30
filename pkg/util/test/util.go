@@ -428,16 +428,18 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 
 	// Construct PX Version string used to match to deployed expected PX version
 	if strings.Contains(pxImageList["version"], "_") {
-		if len(cluster.Spec.Env) > 0 {
+		if cluster.Spec.Env != nil {
 			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
 					// Looking for clear PX version before /version in the URL
 					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
 					if ver != nil {
 						expectedPxVersion = ver[1]
-					} else { // If the above regex found nothing, assuming it was a master version URL
+					} else {
+						// If the above regex found nothing, assuming it was a master version URL
 						expectedPxVersion = PxMasterVersion
 					}
+					break
 				}
 			}
 		}

@@ -166,7 +166,6 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 		var lastHopURL string
 		for i, hopURL := range ci_utils.PxUpgradeHopsURLList {
 			// Get versions from URL
-			logrus.Infof("Get component images from version URL")
 			specImages, err := testutil.GetImagesFromVersionURL(hopURL, ci_utils.K8sVersion)
 			require.NoError(t, err)
 			if i == 0 {
@@ -181,14 +180,11 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 				cluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 				require.NoError(t, err)
 
-				// Set Portworx Image
-				cluster.Spec.Image = specImages["version"]
+				err = ci_utils.ConstructStorageCluster(cluster, hopURL, specImages)
+				require.NoError(t, err)
 
 				// Set defaults
 				portworx.SetPortworxDefaults(cluster)
-
-				err = ci_utils.ConstructStorageCluster(cluster, hopURL, specImages)
-				require.NoError(t, err)
 
 				// Update live StorageCluster
 				cluster, err = ci_utils.UpdateStorageCluster(cluster)
