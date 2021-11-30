@@ -64,6 +64,9 @@ const (
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
 	PxImageEnvVarName = "PX_IMAGE"
+
+	// PxMasterVersion is a tag for Portworx master version
+	PxMasterVersion = "3.0.0.0"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -411,7 +414,7 @@ func ValidateStorageCluster(
 }
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	var pxVersion string
+	var expectedPxVersion string
 
 	imageOverride := ""
 
@@ -425,18 +428,27 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 
 	// Construct PX Version string used to match to deployed expected PX version
 	if strings.Contains(pxImageList["version"], "_") {
-		if len(cluster.Spec.Env) > 0 {
+		if cluster.Spec.Env != nil {
 			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
-					pxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
-					if pxVersion == "" {
-						return fmt.Errorf("failed to extract version from value of %s", PxReleaseManifestURLEnvVarName)
+					// Looking for clear PX version before /version in the URL
+					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
+					if ver != nil {
+						expectedPxVersion = ver[1]
+					} else {
+						// If the above regex found nothing, assuming it was a master version URL
+						expectedPxVersion = PxMasterVersion
 					}
+					break
 				}
 			}
 		}
 	} else {
-		pxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+		expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+	}
+
+	if expectedPxVersion == "" {
+		return fmt.Errorf("failed to get expected PX version")
 	}
 
 	t := func() (interface{}, bool, error) {
@@ -454,7 +466,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 			if imageOverride != "" {
 				logString += fmt.Sprintf("Running PX version: %s From image: %s", storageNode.Spec.Version, imageOverride)
 			} else {
-				logString += fmt.Sprintf("Expected PX version: %s Got: %s", pxVersion, storageNode.Spec.Version)
+				logString += fmt.Sprintf("Expected PX version: %s Got: %s", expectedPxVersion, storageNode.Spec.Version)
 			}
 			logrus.Debug(logString)
 
@@ -463,7 +475,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 				continue
 			}
 			// If we didn't specify a custom image, make sure it's running the expected version
-			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, pxVersion) {
+			if imageOverride == "" && !strings.Contains(storageNode.Spec.Version, expectedPxVersion) {
 				continue
 			}
 
