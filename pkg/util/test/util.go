@@ -64,6 +64,9 @@ const (
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
 	PxImageEnvVarName = "PX_IMAGE"
+
+	// PxMasterVersion is a tag for Portworx master version
+	PxMasterVersion = "3.0.0.0"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -428,7 +431,13 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		if len(cluster.Spec.Env) > 0 {
 			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
-					expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`\S+\/(\S+)\/version`).FindStringSubmatch(env.Value)[1])
+					// Looking for clear PX version before /version in the URL
+					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
+					if ver != nil {
+						expectedPxVersion = ver[1]
+					} else { // If the above regex found nothing, assuming it was a master version URL
+						expectedPxVersion = PxMasterVersion
+					}
 				}
 			}
 		}
