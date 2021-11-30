@@ -596,7 +596,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 	}
 
 	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
-		container.Name = "csi-node-driver-registrar"
+		container.Name = pxutil.CSIRegistrarContainerName
 		container.Image = util.GetImageURN(
 			t.cluster,
 			t.cluster.Status.DesiredImages.CSINodeDriverRegistrar,
@@ -628,7 +628,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 
 func (t *template) telemetryContainer() *v1.Container {
 	container := v1.Container{
-		Name: "telemetry",
+		Name: pxutil.TelemetryContainerName,
 		Image: util.GetImageURN(
 			t.cluster,
 			t.getDesiredTelemetryImage(t.cluster),

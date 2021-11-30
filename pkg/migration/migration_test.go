@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/task"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -191,6 +193,27 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 						Name:  "TEST_ENV_1",
 						Value: "value1",
 					},
+				},
+			},
+			FeatureGates: map[string]string{
+				"CSI": "false",
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
 				},
 			},
 			Placement: &corev1.PlacementSpec{
@@ -378,6 +401,27 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
 				},
 			},
+			FeatureGates: map[string]string{
+				"CSI": "false",
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
 			UpdateStrategy: corev1.StorageClusterUpdateStrategy{
 				Type: corev1.OnDeleteStorageClusterStrategyType,
 			},
@@ -466,6 +510,235 @@ func TestWhenPortworxDaemonsetIsNotPresent(t *testing.T) {
 	err := testutil.List(k8sClient, clusterList)
 	require.NoError(t, err)
 	require.Empty(t, clusterList.Items)
+}
+
+func TestStorageClusterSpecWithComponents(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+						{
+							Name: pxutil.CSIRegistrarContainerName,
+						},
+						{
+							Name: pxutil.TelemetryContainerName,
+						},
+					},
+				},
+			},
+		},
+	}
+	storkDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      storkDeploymentName,
+			Namespace: ds.Namespace,
+		},
+	}
+	autopilotDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.AutopilotDeploymentName,
+			Namespace: ds.Namespace,
+		},
+	}
+	pvcControllerDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.PVCDeploymentName,
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheusOpDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusOperatorDeploymentName,
+			Namespace: ds.Namespace,
+			Labels: map[string]string{
+				"k8s-app": prometheusOperatorDeploymentName,
+			},
+		},
+	}
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceMonitorName,
+			Namespace: ds.Namespace,
+		},
+	}
+	alertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.AlertManagerInstanceName,
+			Namespace: ds.Namespace,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(
+		ds, storkDeployment, autopilotDeployment,
+		pvcControllerDeployment, prometheusOpDeployment,
+		serviceMonitor, alertManager,
+	)
+	ctrl := &storagecluster.Controller{}
+	ctrl.SetKubernetesClient(k8sClient)
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				"CSI": "true",
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: true,
+					Enabled:       true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status, cluster.Status)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	pvcControllerDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.PVCDeploymentName,
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheusOpDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusOperatorDeploymentName,
+			Namespace: ds.Namespace,
+			Labels: map[string]string{
+				"k8s-app": prometheusOperatorDeploymentName,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds, pvcControllerDeployment, prometheusOpDeployment)
+	ctrl := &storagecluster.Controller{}
+	ctrl.SetKubernetesClient(k8sClient)
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+				pxutil.AnnotationPVCController:        "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			FeatureGates: map[string]string{
+				"CSI": "false",
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					// Prometheus is not enabled although the operator is present. This is because
+					// the portworx metrics are not exported not alert manager is running.
+					Enabled: false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status, cluster.Status)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
 }
 
 func TestSuccessfulMigration(t *testing.T) {

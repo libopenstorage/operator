@@ -309,9 +309,18 @@ func (h *Handler) createStorageCluster(
 ) (*corev1.StorageCluster, error) {
 	stc := h.constructStorageCluster(ds)
 
-	// TODO: Handle enable stork
-	// TODO: Handle enable autopilot
-	// TODO: Handle enable monitoring
+	if err := h.addStorkSpec(stc); err != nil {
+		return nil, err
+	}
+	if err := h.addAutopilotSpec(stc); err != nil {
+		return nil, err
+	}
+	if err := h.addPVCControllerSpec(stc); err != nil {
+		return nil, err
+	}
+	if err := h.addMonitoringSpec(stc); err != nil {
+		return nil, err
+	}
 
 	logrus.Infof("Creating StorageCluster %v/%v for migration", stc.Namespace, stc.Name)
 	err := h.client.Create(context.TODO(), stc)
@@ -613,13 +622,23 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 
 	// Enable CSI
+	csiEnabled := false
+	telemetryEnabled := false
 	for _, c := range ds.Spec.Template.Spec.Containers {
-		if c.Name == "csi-node-driver-registrar" {
-			cluster.Spec.FeatureGates = map[string]string{
-				"CSI": "true",
-			}
-			break
+		switch c.Name {
+		case pxutil.CSIRegistrarContainerName:
+			csiEnabled = true
+		case pxutil.TelemetryContainerName:
+			telemetryEnabled = true
 		}
+	}
+	cluster.Spec.FeatureGates = map[string]string{
+		"CSI": strconv.FormatBool(csiEnabled),
+	}
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: telemetryEnabled,
+		},
 	}
 
 	_, hasSystemKey := envMap["PORTWORX_AUTH_SYSTEM_KEY"]
