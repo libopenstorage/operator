@@ -76,9 +76,10 @@ var (
 			},
 		},
 		{
-			name:      "varlibosd",
-			hostPath:  "/var/lib/osd",
-			mountPath: "/var/lib/osd",
+			name:             "varlibosd",
+			hostPath:         "/var/lib/osd",
+			mountPath:        "/var/lib/osd",
+			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/lib/osd",
 			},
@@ -1493,6 +1494,10 @@ func boolPtr(val bool) *bool {
 }
 
 func hostPathTypePtr(val v1.HostPathType) *v1.HostPathType {
+	return &val
+}
+
+func mountPropagationModePtr(val v1.MountPropagationMode) *v1.MountPropagationMode {
 	return &val
 }
 

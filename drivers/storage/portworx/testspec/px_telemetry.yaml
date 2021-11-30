@@ -96,6 +96,7 @@ spec:
               mountPath: /opt/pwx
             - name: varlibosd
               mountPath: /var/lib/osd
+              mountPropagation: Bidirectional
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -154,6 +155,7 @@ spec:
               name: etcpwx
             - name: varlibosd
               mountPath: /var/lib/osd
+              mountPropagation: Bidirectional
             - mountPath: /var/run/log
               name: journalmount1
               readOnly: true
