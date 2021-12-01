@@ -60,6 +60,10 @@ func (c *monitoring) Initialize(
 	c.recorder = recorder
 }
 
+func (c *monitoring) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *monitoring) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&

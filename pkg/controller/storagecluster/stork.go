@@ -10,10 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
-	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
-
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -26,9 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
+	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
 )
 
 const (
@@ -64,6 +63,10 @@ const (
 func (c *Controller) syncStork(
 	cluster *corev1.StorageCluster,
 ) error {
+	if util.ComponentsPausedForMigration(cluster) {
+		return nil
+	}
+
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		_, err := c.Driver.GetStorkDriverName()
 		if err == nil {

@@ -77,6 +77,10 @@ func (c *lighthouse) Initialize(
 	c.k8sClient = k8sClient
 }
 
+func (c *lighthouse) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *lighthouse) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled
 }

@@ -83,6 +83,10 @@ func (c *prometheus) Initialize(
 	c.recorder = recorder
 }
 
+func (c *prometheus) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *prometheus) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&

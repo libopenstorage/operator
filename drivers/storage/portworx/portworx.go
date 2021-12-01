@@ -306,7 +306,9 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 	}
 
 	for _, comp := range component.GetAll() {
-		if comp.IsEnabled(cluster) {
+		if comp.IsPausedForMigration(cluster) {
+			continue
+		} else if comp.IsEnabled(cluster) {
 			err := comp.Reconcile(cluster)
 			if ce, ok := err.(*component.Error); ok &&
 				ce.Code() == component.ErrCritical {

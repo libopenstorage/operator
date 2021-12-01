@@ -95,6 +95,10 @@ func (c *security) Initialize(
 	c.resourceVersionCache = make(map[string]string)
 }
 
+func (c *security) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
 func (c *security) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.SecurityEnabled(cluster)

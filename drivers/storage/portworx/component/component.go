@@ -36,6 +36,9 @@ type PortworxComponent interface {
 	// Priority returns the priority of the component.
 	// Smaller the number, higher the priority.
 	Priority() int32
+	// IsPausedForMigration checks if the component is paused for migration. This ensures that
+	// the operator components do not interfere with the ongoing daemonset to operator migration.
+	IsPausedForMigration(cluster *corev1.StorageCluster) bool
 	// IsEnabled checks if the components needs to be enabled based on the StorageCluster
 	IsEnabled(cluster *corev1.StorageCluster) bool
 	// Reconcile reconciles the component to match the current state of the StorageCluster

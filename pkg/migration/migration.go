@@ -13,6 +13,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -135,6 +136,14 @@ func (h *Handler) processMigration(
 		return err
 	}
 
+	// TODO: This can be done using the storagecluster status. Once we have the status reported
+	// correctly as we go through different phases of migration we can use that instead of this
+	// internal annotation.
+	// Block the component migration until the portworx pod migration is finished.
+	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
+	if err := h.client.Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
+		return err
+	}
 	// Unblock operator reconcile loop to start managing the storagecluster
 	cluster.Status.Phase = constants.PhaseMigrationInProgress
 	if err := h.client.Status().Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
@@ -185,6 +194,26 @@ func (h *Handler) processMigration(
 		nodeLog.Infof("Portworx pod migration status: %s", node.Labels[constants.LabelPortworxDaemonsetMigration])
 	}
 
+	logrus.Infof("Starting migration of components")
+	logrus.Infof("Deleting old components")
+	if err := h.deleteComponents(cluster); err != nil {
+		return err
+	}
+
+	if cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace); err != nil {
+		return err
+	}
+	// Notify operator to start installing the new components
+	if _, exists := cluster.Annotations[constants.AnnotationPauseComponentMigration]; exists {
+		logrus.Infof("Starting operator managed components")
+		delete(cluster.Annotations, constants.AnnotationPauseComponentMigration)
+		if err := h.client.Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+
+	// TODO: Wait for all components to be up, before marking the migration as completed
+
 	logrus.Infof("Deleting portworx DaemonSet")
 	if err := h.deletePortworxDaemonSet(ds); err != nil {
 		return err
@@ -195,6 +224,12 @@ func (h *Handler) processMigration(
 		return err
 	}
 
+	// TODO: Remove the daemonset migration annotation, once we start adding the migration
+	// events and conditions in the status. That way there is a more permanent record that
+	// this cluster is a result of migration. After we have added that we can remove the
+	// migration-approved annotation after a successful migration.
+
+	logrus.Infof("Migration has completed successfully")
 	return nil
 }
 
