@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -53,6 +54,10 @@ func (p *pxrepo) Initialize(
 	_ record.EventRecorder,
 ) {
 	p.k8sClient = k8sClient
+}
+
+func (p *pxrepo) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
 }
 
 func (p *pxrepo) IsEnabled(cluster *corev1.StorageCluster) bool {

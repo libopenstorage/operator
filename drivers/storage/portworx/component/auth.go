@@ -95,6 +95,10 @@ func (a *auth) Initialize(
 	a.resourceVersionCache = make(map[string]string)
 }
 
+func (a *auth) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
 func (a *auth) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.AuthEnabled(&cluster.Spec)

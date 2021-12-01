@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-version"
@@ -249,4 +250,12 @@ func GetCustomAnnotations(
 		return annotations
 	}
 	return nil
+}
+
+// ComponentsPausedForMigration returns true if the daemonset migration is going on and
+// the components are waiting for storage pods to migrate first
+func ComponentsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	_, migrating := cluster.Annotations[constants.AnnotationMigrationApproved]
+	componentsPaused, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationPauseComponentMigration])
+	return migrating && err == nil && componentsPaused
 }

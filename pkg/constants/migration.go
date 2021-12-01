@@ -4,6 +4,8 @@ const (
 	// AnnotationMigrationApproved is used to take user's approval for portworx migration from
 	// old installation method to the operator managed method.
 	AnnotationMigrationApproved = "portworx.io/migration-approved"
+	// AnnotationPauseComponentMigration is used to control when to start component migration
+	AnnotationPauseComponentMigration = "portworx.io/pause-component-migration"
 
 	// LabelPortworxDaemonsetMigration is used as Kubernetes node label to mark the state
 	// of the node wrt portworx daemonSet migration

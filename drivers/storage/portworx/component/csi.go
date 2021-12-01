@@ -72,6 +72,10 @@ func (c *csi) Initialize(
 	c.k8sVersion = k8sVersion
 }
 
+func (c *csi) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *csi) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsCSIEnabled(cluster)
 }

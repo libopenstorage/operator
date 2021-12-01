@@ -37,6 +37,10 @@ func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion ver
 	p.k8sClient = k8sClient
 }
 
+func (p *podsecuritypolicies) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 func (p *podsecuritypolicies) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.PodSecurityPolicyEnabled(cluster)
 }

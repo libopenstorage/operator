@@ -5,6 +5,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,6 +61,10 @@ func (c *portworxStorageClass) Initialize(
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+}
+
+func (c *portworxStorageClass) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
 }
 
 func (c *portworxStorageClass) IsEnabled(cluster *corev1.StorageCluster) bool {

@@ -10,6 +10,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -52,6 +53,10 @@ func (c *disruptionBudget) Initialize(
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+}
+
+func (c *disruptionBudget) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
 }
 
 func (c *disruptionBudget) IsEnabled(cluster *corev1.StorageCluster) bool {

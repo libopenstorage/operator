@@ -73,6 +73,10 @@ func (c *pvcController) Initialize(
 	c.k8sVersion = k8sVersion
 }
 
+func (c *pvcController) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *pvcController) IsEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[pxutil.AnnotationPVCController])
 	if err == nil {
