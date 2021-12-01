@@ -46,6 +46,10 @@ func (c *portworxCRD) Initialize(
 	c.k8sVersion = k8sVersion
 }
 
+func (c *portworxCRD) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 func (c *portworxCRD) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster)
 }

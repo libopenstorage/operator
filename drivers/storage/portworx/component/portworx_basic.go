@@ -54,6 +54,10 @@ func (c *portworxBasic) Initialize(
 	c.k8sClient = k8sClient
 }
 
+func (c *portworxBasic) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 func (c *portworxBasic) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsPortworxEnabled(cluster)
 }

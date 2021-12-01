@@ -59,6 +59,10 @@ func (c *portworxProxy) Initialize(
 	c.k8sClient = k8sClient
 }
 
+func (c *portworxProxy) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 func (c *portworxProxy) IsEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[pxutil.AnnotationPortworxProxy])
 	// If annotation is not present or invalid, then portworx proxy is considered enabled

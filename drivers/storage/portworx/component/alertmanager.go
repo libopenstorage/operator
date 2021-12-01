@@ -64,6 +64,10 @@ func (c *alertManager) Initialize(
 	c.recorder = recorder
 }
 
+func (c *alertManager) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 func (c *alertManager) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Prometheus != nil &&

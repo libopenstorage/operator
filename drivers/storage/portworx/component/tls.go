@@ -41,6 +41,10 @@ func (t *tls) Initialize(
 ) {
 }
 
+func (t *tls) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
+}
+
 // IsEnabled checks if the components needs to be enabled based on the StorageCluster
 func (t *tls) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTLSEnabledOnCluster(&cluster.Spec)

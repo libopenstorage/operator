@@ -3,19 +3,18 @@ package component
 import (
 	"context"
 	"fmt"
-	"github.com/hashicorp/go-version"
 
+	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -80,6 +79,10 @@ func (t *telemetry) Priority() int32 {
 
 func (t *telemetry) Initialize(k8sClient client.Client, _ version.Version, _ *runtime.Scheme, _ record.EventRecorder) {
 	t.k8sClient = k8sClient
+}
+
+func (t *telemetry) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
+	return util.ComponentsPausedForMigration(cluster)
 }
 
 func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
