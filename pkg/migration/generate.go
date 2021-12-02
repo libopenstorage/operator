@@ -24,6 +24,7 @@ const (
 	storkDeploymentName              = "stork"
 	prometheusOperatorDeploymentName = "prometheus-operator"
 	serviceMonitorName               = "portworx-prometheus-sm"
+	prometheusInstanceName           = "prometheus"
 )
 
 func (h *Handler) createStorageCluster(
@@ -473,15 +474,26 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	// Check for prometheus operator
-	dep, err := h.getDeployment(prometheusOperatorDeploymentName, cluster.Namespace)
-	if err != nil {
+	// Check for prometheus
+	prometheus := &monitoringv1.Prometheus{}
+	err = h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      prometheusInstanceName,
+			Namespace: cluster.Namespace,
+		},
+		prometheus,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
 		return err
 	}
-	if dep != nil {
-		if dep.Labels["k8s-app"] != prometheusOperatorDeploymentName {
-			return nil
-		}
+
+	if prometheus.Spec.RuleSelector != nil &&
+		prometheus.Spec.RuleSelector.MatchLabels["prometheus"] == "portworx" &&
+		prometheus.Spec.ServiceMonitorSelector != nil &&
+		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
 	}
 

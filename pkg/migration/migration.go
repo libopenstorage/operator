@@ -13,7 +13,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -200,16 +199,15 @@ func (h *Handler) processMigration(
 		return err
 	}
 
-	if cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace); err != nil {
+	updatedCluster := &corev1.StorageCluster{}
+	if h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
 		return err
 	}
 	// Notify operator to start installing the new components
-	if _, exists := cluster.Annotations[constants.AnnotationPauseComponentMigration]; exists {
-		logrus.Infof("Starting operator managed components")
-		delete(cluster.Annotations, constants.AnnotationPauseComponentMigration)
-		if err := h.client.Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
-			return err
-		}
+	logrus.Infof("Starting operator managed components")
+	delete(updatedCluster.Annotations, constants.AnnotationPauseComponentMigration)
+	if err := h.client.Update(context.TODO(), updatedCluster, &client.UpdateOptions{}); err != nil {
+		return err
 	}
 
 	// TODO: Wait for all components to be up, before marking the migration as completed
@@ -228,8 +226,6 @@ func (h *Handler) processMigration(
 	// events and conditions in the status. That way there is a more permanent record that
 	// this cluster is a result of migration. After we have added that we can remove the
 	// migration-approved annotation after a successful migration.
-
-	logrus.Infof("Migration has completed successfully")
 	return nil
 }
 
