@@ -84,7 +84,7 @@ spec:
               mountPath: /var/cores
             - name: dockersock
               mountPath: /var/run/docker.sock
-            - name: containerdsock
+            - name: containerddir
               mountPath: /run/containerd
             - name: criosock
               mountPath: /var/run/crio
@@ -166,7 +166,7 @@ spec:
         - name: dockersock
           hostPath:
             path: /var/run/docker.sock
-        - name: containerdsock
+        - name: containerddir
           hostPath:
             path: /run/containerd
         - name: criosock
