@@ -160,6 +160,10 @@ const (
 	EnvKeyPortworxEssentials = "PORTWORX_ESSENTIALS"
 	// EnvKeyMarketplaceName env var for the name of the source marketplace
 	EnvKeyMarketplaceName = "MARKETPLACE_NAME"
+	// EnvKeyPortworxHTTPProxy env var to use http proxy
+	EnvKeyPortworxHTTPProxy = "PX_HTTP_PROXY"
+	// EnvKeyPortworxHTTPSProxy env var to use https proxy
+	EnvKeyPortworxHTTPSProxy = "PX_HTTPS_PROXY"
 
 	// SecurityPXSystemSecretsSecretName is the secret name for PX security system secrets
 	SecurityPXSystemSecretsSecretName = "px-system-secrets"
@@ -472,6 +476,20 @@ func GetClusterEnvVarValue(ctx context.Context, cluster *corev1.StorageCluster, 
 	}
 
 	return ""
+}
+
+// GetPxProxyEnvVarValue returns the PX_HTTP(S)_PROXY environment variable value for a cluster.
+// Note: we only expect one proxy for the telemetry CCM container but we prefer https over http if both are specified
+func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) string {
+	httpProxy := ""
+	for _, env := range cluster.Spec.Env {
+		if env.Name == EnvKeyPortworxHTTPSProxy {
+			return env.Value
+		} else if env.Name == EnvKeyPortworxHTTPProxy {
+			httpProxy = env.Value
+		}
+	}
+	return httpProxy
 }
 
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom

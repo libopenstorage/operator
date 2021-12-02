@@ -43,6 +43,7 @@ type volumeInfo struct {
 	name             string
 	hostPath         string
 	mountPath        string
+	subPath          string
 	readOnly         bool
 	mountPropagation *v1.MountPropagationMode
 	hostPathType     *v1.HostPathType
@@ -1199,6 +1200,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
 			MountPath:        v.mountPath,
+			SubPath:          v.subPath,
 			ReadOnly:         v.readOnly,
 			MountPropagation: v.mountPropagation,
 		}
@@ -1394,6 +1396,25 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 				mountPath: "/etc/localtime",
 			},
 			configVolume,
+		}
+
+		if pxutil.GetPxProxyEnvVarValue(t.cluster) != "" {
+			volumeInfoList = append(volumeInfoList, volumeInfo{
+				name:      "ccm-proxy-config",
+				mountPath: component.TelemetryCCMProxyFilePath,
+				subPath:   component.TelemetryCCMProxyFileName,
+				configMapType: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: component.TelemetryCCMProxyConfigMapName,
+					},
+					Items: []v1.KeyToPath{
+						{
+							Key:  component.TelemetryCCMProxyFileName,
+							Path: component.TelemetryCCMProxyFileName,
+						},
+					},
+				},
+			})
 		}
 
 		volumeInfoList = append(volumeInfoList, commonVolumeList...)

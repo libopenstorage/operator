@@ -28,6 +28,12 @@ const (
 	TelemetryComponentName = "Portworx Telemetry"
 	// TelemetryConfigMapName is the name of the config map that stores the telemetry configuration for CCM
 	TelemetryConfigMapName = "px-telemetry-config"
+	// TelemetryCCMProxyConfigMapName is the name of the config map that stores the PX_HTTP(S)_PROXY env var
+	TelemetryCCMProxyConfigMapName = "px-ccm-service-proxy-config"
+	// TelemetryCCMProxyFilePath path of the http proxy file
+	TelemetryCCMProxyFilePath = "/cache/network/http_proxy"
+	// TelemetryCCMProxyFileName name of the http proxy file
+	TelemetryCCMProxyFileName = "http_proxy"
 	// TelemetryPropertiesFilename is the name of the CCM properties file
 	TelemetryPropertiesFilename = "ccm.properties"
 	// TelemetryArcusLocationFilename is name of the file storing the location of arcus endpoint to use
@@ -85,6 +91,9 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := t.createConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
+	if err := t.reconcileCCMProxyConfigMap(cluster, ownerRef); err != nil {
+		return err
+	}
 
 	if err := t.deployMetricsCollector(cluster, ownerRef); err != nil {
 		return err
@@ -96,6 +105,10 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 
@@ -668,7 +681,7 @@ func (t *telemetry) createConfigMap(
         "use_appliance_id": "true"
       },
       "proxy": {
-        "path": "/dev/null"
+        "path": "/cache/network/http_proxy"
       }
     }
 `, cluster.Namespace, TelemetryArcusLocationFilename)
@@ -692,6 +705,32 @@ func (t *telemetry) createConfigMap(
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: data,
+		},
+		ownerRef,
+	)
+}
+
+func (t *telemetry) reconcileCCMProxyConfigMap(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	// Delete the existing config map if portworx proxy is empty
+	if proxy == "" {
+		return k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef)
+	}
+
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            TelemetryCCMProxyConfigMapName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				TelemetryCCMProxyFileName: proxy,
+			},
 		},
 		ownerRef,
 	)
