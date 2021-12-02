@@ -123,6 +123,14 @@ var testStorageClusterBasicCases = []types.TestCase{
 		}),
 		TestFunc: BasicStorkRegression,
 	},
+	{
+		TestName: "BasicAutopilotRegression",
+		TestrailCaseIDs: []string{"C57036", "C51237", "C58434", "	C58435", "C58433", "C51238", "C58432", "C51245"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: meta.ObjectMeta{Name: "autopilot-regression-test"},
+		}),
+		TestFunc: BasicAutopilotRegression,
+	},
 }
 
 func TestStorageClusterBasic(t *testing.T) {
@@ -405,6 +413,66 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 		}
 		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
 		require.True(t, cluster.Spec.Stork.Enabled, "failed to validate Stork is enabled: expected: true, actual: %v", cluster.Spec.Stork.Enabled)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// BasicAutopilotRegression test includes the following steps:
+// 1. Deploy PX and validate Autopilot components and images
+// 2. Validate Autopilot is disabled by default
+// 3. Enable Autopilot and validate Autopilot components and images
+// 4. Delete "autopilot" pod and validate it gets re-deployed
+// 5. Disable Autopilot and validate Autopilot components got successfully removed
+// 6. Delete StorageCluster and validate it got successfully removed
+func BasicAutopilotRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate Autopilot block is nil
+		require.Nil(t, cluster.Spec.Autopilot, "failed to validate Autopilot block, it should be nil by default, but it seems there is something set in there %+v", cluster.Spec.Autopilot)
+
+		logrus.Info("Enable Autopilot and validate StorageCluster")
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			// At this point this object should be <nil>
+			cluster.Spec.Autopilot = &corev1.AutopilotSpec{
+				Enabled: true,
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateAutopilot(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Autopilot, "failed to validate Autopilot block, it should not be nil here, but it is: %+v", cluster.Spec.Autopilot)
+		require.True(t, cluster.Spec.Autopilot.Enabled, "failed to validate Autopilot is enabled: expected: true, actual: %v", cluster.Spec.Autopilot.Enabled)
+
+		logrus.Info("Delete autopilot pod and validate it gets re-deployed")
+		err = appsops.Instance().DeleteDeploymentPods("autopilot", cluster.Namespace, 60*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateAutopilot(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateAutopilotTimeout, ci_utils.DefaultValidateAutopilotRetryInterval)
+		require.NoError(t, err)
+
+		logrus.Info("Disable Autopilot and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Autopilot.Enabled = false
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateAutopilot(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Autopilot, "failed to validate Autopilot block, it should not be nil here, but it is: %+v", cluster.Spec.Autopilot)
+		require.False(t, cluster.Spec.Autopilot.Enabled, "failed to validate Autopilot is enabled: expected: false, actual: %v", cluster.Spec.Autopilot.Enabled)
+
+		logrus.Info("Remove Autopilot block (set it to nil) and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Autopilot = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateAutopilot(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.Nil(t, cluster.Spec.Autopilot, "failed to validate Autopilot block, it should be nil here, but it is not: %+v", cluster.Spec.Autopilot)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
