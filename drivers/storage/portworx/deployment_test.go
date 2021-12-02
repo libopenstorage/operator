@@ -2289,6 +2289,31 @@ func TestPodWithTelemetry(t *testing.T) {
 
 	assertPodSpecEqual(t, expected, &actual)
 
+	// Add a proxy for CCM service
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry_with_proxy.yaml")
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPProxy,
+			Value: "https://username:password@hotstname:port",
+		},
+	}
+	driver = portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+
+	// Remove the proxy for CCM service
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
+	cluster.Spec.Env = nil
+	driver = portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected, &actual)
+
 	// Now disable telemetry
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
