@@ -122,6 +122,22 @@ func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.Stora
 	return latestLiveCluster
 }
 
+// UpdateAndValidateAutopilot update StorageCluster, validates Autopilot components only and return latest version of live StorageCluster
+func UpdateAndValidateAutopilot(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateAutopilot(pxSpecImages, latestLiveCluster, DefaultValidateAutopilotTimeout, DefaultValidateAutopilotRetryInterval)
+	require.NoError(t, err)
+
+	return latestLiveCluster
+}
+
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion
 func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testing.T) {
 	// Delete cluster

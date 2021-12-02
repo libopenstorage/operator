@@ -51,6 +51,10 @@ const (
 	DefaultValidateStorkTimeout = 10 * time.Minute
 	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
 	DefaultValidateStorkRetryInterval = 5 * time.Second
+	// DefaultValidateAutopilotTimeout is a default timeout for autopilot validation
+	DefaultValidateAutopilotTimeout = 3 * time.Minute
+	// DefaultValidateAutopilotRetryInterval is a default retry interval for autopilot validation
+	DefaultValidateAutopilotRetryInterval = 2 * time.Second
 
 	// LabelValueTrue value "true" for a label
 	LabelValueTrue = "true"

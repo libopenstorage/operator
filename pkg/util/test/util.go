@@ -28,6 +28,7 @@ import (
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
+	rbacops "github.com/portworx/sched-ops/k8s/rbac"
 	"github.com/portworx/sched-ops/task"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
@@ -805,29 +806,9 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
-	if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled {
-		autopilotDp := &appsv1.Deployment{}
-		autopilotDp.Name = "autopilot"
-		autopilotDp.Namespace = cluster.Namespace
-		if err = appops.Instance().ValidateDeployment(autopilotDp, timeout, interval); err != nil {
-			return err
-		}
-
-		var autopilotImageName string
-		if cluster.Spec.Autopilot.Image == "" {
-			if value, ok := pxImageList["autopilot"]; ok {
-				autopilotImageName = value
-			} else {
-				return fmt.Errorf("failed to find image for autopilot")
-			}
-		} else {
-			autopilotImageName = cluster.Spec.Autopilot.Image
-		}
-
-		autopilotImage := util.GetImageURN(cluster, autopilotImageName)
-		if err = validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": "autopilot"}); err != nil {
-			return err
-		}
+	// Validate Autopilot components and images
+	if err := ValidateAutopilot(pxImageList, cluster, timeout, interval); err != nil {
+		return err
 	}
 
 	if cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled {
@@ -931,6 +912,83 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 		// Validate stork-scheduler deployment is terminated or doesn't exist
 		if err := validateTerminatedDeployment(storkSchedulerDp, timeout, interval); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// ValidateAutopilot validates Autopilot components and images
+func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	autopilotDp := &appsv1.Deployment{}
+	autopilotDp.Name = "autopilot"
+	autopilotDp.Namespace = cluster.Namespace
+	autopilotConfigMapName := "autopilot-config"
+
+	if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled {
+		logrus.Debug("Autopilot is Enabled in StorageCluster")
+
+		// Validate autopilot deployment and pods
+		if err := validateDeployment(autopilotDp, timeout, interval); err != nil {
+			return err
+		}
+
+		var autopilotImageName string
+		if cluster.Spec.Autopilot.Image == "" {
+			if value, ok := pxImageList[autopilotDp.Name]; ok {
+				autopilotImageName = value
+			} else {
+				return fmt.Errorf("failed to find image for %s", autopilotDp.Name)
+			}
+		} else {
+			autopilotImageName = cluster.Spec.Autopilot.Image
+		}
+
+		autopilotImage := util.GetImageURN(cluster, autopilotImageName)
+		if err := validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": autopilotDp.Name}); err != nil {
+			return err
+		}
+
+		// Validate Autopilot ClusterRole
+		_, err := rbacops.Instance().GetClusterRole(autopilotDp.Name)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRole %s, Err: %v", autopilotDp.Name, err)
+		}
+
+		// Validate Autopilot ClusterRoleBinding
+		_, err = rbacops.Instance().GetClusterRoleBinding(autopilotDp.Name)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, Err: %v", autopilotDp.Name, err)
+		}
+
+		// Validate Autopilot ConfigMap
+		_, err = coreops.Instance().GetConfigMap(autopilotConfigMapName, autopilotDp.Namespace)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ConfigMap %s, Err: %v", autopilotConfigMapName, err)
+		}
+	} else {
+		logrus.Debug("Autopilot is Disabled in StorageCluster")
+		// Validate autopilot deployment is terminated or doesn't exist
+		if err := validateTerminatedDeployment(autopilotDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate Autopilot ClusterRole doesn't exist
+		_, err := rbacops.Instance().GetClusterRole(autopilotDp.Name)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRole %s, is found when shouldn't be", autopilotDp.Name)
+		}
+
+		// Validate Autopilot ClusterRoleBinding doesn't exist
+		_, err = rbacops.Instance().GetClusterRoleBinding(autopilotDp.Name)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, is found when shouldn't be", autopilotDp.Name)
+		}
+
+		// Validate Autopilot ConfigMap doesn't exist
+		_, err = coreops.Instance().GetConfigMap(autopilotConfigMapName, autopilotDp.Namespace)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ConfigMap %s, is found when shouldn't be", autopilotConfigMapName)
 		}
 	}
 
