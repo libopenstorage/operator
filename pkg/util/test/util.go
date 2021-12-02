@@ -811,31 +811,6 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
-	if cluster.Spec.UserInterface != nil && cluster.Spec.UserInterface.Enabled {
-		lighthouseDp := &appsv1.Deployment{}
-		lighthouseDp.Name = "px-lighthouse"
-		lighthouseDp.Namespace = cluster.Namespace
-		if err = appops.Instance().ValidateDeployment(lighthouseDp, timeout, interval); err != nil {
-			return err
-		}
-
-		var lighthouseImageName string
-		if cluster.Spec.UserInterface.Image == "" {
-			if value, ok := pxImageList["lighthouse"]; ok {
-				lighthouseImageName = value
-			} else {
-				return fmt.Errorf("failed to find image for lighthouse")
-			}
-		} else {
-			lighthouseImageName = cluster.Spec.UserInterface.Image
-		}
-
-		lhImage := util.GetImageURN(cluster, lighthouseImageName)
-		if err = validateImageOnPods(lhImage, cluster.Namespace, map[string]string{"name": "lighthouse"}); err != nil {
-			return err
-		}
-	}
-
 	// Validate CSI components and images
 	if validateCSI(pxImageList, cluster, timeout, interval); err != nil {
 		return err
