@@ -68,7 +68,7 @@ data:
             "use_appliance_id": "true"
           },
           "proxy": {
-            "path": "/dev/null"
+            "path": "/cache/network/http_proxy"
           }
         }
   location: internal

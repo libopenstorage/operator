@@ -11482,6 +11482,82 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestTelemetryCCMProxy(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	ccmProxyConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
+	require.Error(t, err)
+	require.True(t, errors.IsNotFound(err))
+
+	// Add PX_HTTP_PROXY environment variable and config map should be created
+	proxy := "http://username:password@hotstname:port"
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPProxy,
+			Value: proxy,
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.TelemetryCCMProxyConfigMapName, ccmProxyConfigMap.Name)
+	require.Equal(t, "kube-test", ccmProxyConfigMap.Namespace)
+	require.Equal(t, map[string]string{"http_proxy": proxy}, ccmProxyConfigMap.Data)
+
+	// Update the environment variable and config map should be updated
+	proxy = "http://username:password@hotstname2:port"
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPProxy,
+			Value: proxy,
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.TelemetryCCMProxyConfigMapName, ccmProxyConfigMap.Name)
+	require.Equal(t, "kube-test", ccmProxyConfigMap.Namespace)
+	require.Equal(t, map[string]string{"http_proxy": proxy}, ccmProxyConfigMap.Data)
+
+	// Remove the environment variable and config map should be gone
+	cluster.Spec.Env = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
+	require.Error(t, err)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {
