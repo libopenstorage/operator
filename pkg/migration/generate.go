@@ -9,6 +9,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -67,7 +68,9 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 		},
 		svcMonitor,
 	)
-	if errors.IsNotFound(err) {
+	if meta.IsNoMatchError(err) {
+		return nil
+	} else if errors.IsNotFound(err) {
 		svcMonitorFound = false
 	} else if err != nil {
 		return err
