@@ -67,7 +67,7 @@ spec:
               mountPath: /var/run/crio
             - name: crioconf
               mountPath: /etc/crictl.yaml
-            - name: containerdsock
+            - name: containerddir
               mountPath: /run/containerd
             - name: etcpwx
               mountPath: /etc/pwx
@@ -99,7 +99,7 @@ spec:
         - name: dockersock
           hostPath:
             path: /var/run/docker.sock
-        - name: containerdsock
+        - name: containerddir
           hostPath:
             path: /run/containerd
         - name: criosock

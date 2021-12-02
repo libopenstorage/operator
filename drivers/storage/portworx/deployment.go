@@ -949,11 +949,6 @@ func (t *template) getArguments() []string {
 		args = append(args, "--pull", string(t.imagePullPolicy))
 	}
 
-	// --keep-px-up is default on from px-enterprise from 2.1
-	if t.isPKS {
-		args = append(args, "--keep-px-up")
-	}
-
 	if t.cluster.Annotations[pxutil.AnnotationLogFile] != "" {
 		args = append(args, "--log", t.cluster.Annotations[pxutil.AnnotationLogFile])
 	}
@@ -1190,7 +1185,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := getDefaultVolumeInfoList()
 	extensions := []func() []volumeInfo{
-		t.getK3sVolumeInfoList, t.getBottleRocketVolumeInfoList,
+		t.getK3sVolumeInfoList, t.getPKSVolumeInfoList, t.getBottleRocketVolumeInfoList,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1241,6 +1236,7 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getCSIVolumeInfoList,
 		t.getTelemetryVolumeInfoList,
 		t.getK3sVolumeInfoList,
+		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 	}
 	for _, fn := range extensions {
@@ -1420,6 +1416,20 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 	}
 }
 
+func (t *template) getPKSVolumeInfoList() []volumeInfo {
+	if !t.isPKS {
+		return []volumeInfo{}
+	}
+
+	return []volumeInfo{
+		{
+			name:      "containerd-pks",
+			hostPath:  "/var/vcap/sys/run/containerd/containerd.sock",
+			mountPath: "/run/containerd/containerd.sock",
+		},
+	}
+}
+
 func (t *template) getBottleRocketVolumeInfoList() []volumeInfo {
 	if !t.isBottleRocketOS() {
 		return []volumeInfo{}
@@ -1516,12 +1526,9 @@ func getDefaultVolumeInfoList() []volumeInfo {
 			},
 		},
 		{
-			name:      "containerdsock",
+			name:      "containerddir",
 			hostPath:  "/run/containerd",
 			mountPath: "/run/containerd",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/sys/run/containerd",
-			},
 		},
 		{
 			name:      "criosock",

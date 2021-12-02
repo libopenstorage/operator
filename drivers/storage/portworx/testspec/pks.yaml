@@ -34,7 +34,7 @@ spec:
           image: portworx/oci-monitor:2.0.3.4
           imagePullPolicy: Always
           args:
-            ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b", "--keep-px-up",
+            ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b",
              "-x", "kubernetes"]
           env:
             - name: "PX_NAMESPACE"
@@ -77,7 +77,7 @@ spec:
               mountPath: /var/run/crio
             - name: crioconf
               mountPath: /etc/crictl.yaml
-            - name: containerdsock
+            - name: containerddir
               mountPath: /run/containerd
             - name: etcpwx
               mountPath: /etc/pwx
@@ -98,6 +98,8 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
+            - name: containerd-pks
+              mountPath: /run/containerd/containerd.sock
       restartPolicy: Always
       serviceAccountName: portworx
       volumes:
@@ -114,9 +116,9 @@ spec:
           hostPath:
             path: /var/vcap/store/crictl.yaml
             type: FileOrCreate
-        - name: containerdsock
+        - name: containerddir
           hostPath:
-            path: /var/vcap/sys/run/containerd
+            path: /run/containerd
         - name: etcpwx
           hostPath:
             path: /var/vcap/store/etc/pwx
@@ -141,3 +143,6 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
+        - name: containerd-pks
+          hostPath:
+            path: /var/vcap/sys/run/containerd/containerd.sock
