@@ -966,6 +966,12 @@ func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageClu
 		if errors.IsNotFound(err) {
 			return fmt.Errorf("failed to validate ConfigMap %s, Err: %v", autopilotConfigMapName, err)
 		}
+
+		// Validate Autopilot ServiceAccount
+		_, err = coreops.Instance().GetServiceAccount(autopilotDp.Name, autopilotDp.Namespace)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, Err: %v", autopilotDp.Name, err)
+		}
 	} else {
 		logrus.Debug("Autopilot is Disabled in StorageCluster")
 		// Validate autopilot deployment is terminated or doesn't exist
@@ -989,6 +995,12 @@ func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageClu
 		_, err = coreops.Instance().GetConfigMap(autopilotConfigMapName, autopilotDp.Namespace)
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to validate ConfigMap %s, is found when shouldn't be", autopilotConfigMapName)
+		}
+
+		// Validate Autopilot ServiceAccount doesn't exist
+		_, err = coreops.Instance().GetServiceAccount(autopilotDp.Name, autopilotDp.Namespace)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, is found when shouldn't be", autopilotDp.Name)
 		}
 	}
 

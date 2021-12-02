@@ -420,9 +420,9 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 }
 
 // BasicAutopilotRegression test includes the following steps:
-// 1. Deploy PX and validate Stork components and images
+// 1. Deploy PX and validate Autopilot components and images
 // 2. Validate Autopilot is disabled by default
-// 3. Enabled Autopilot and validate Autopilot components and images
+// 3. Enable Autopilot and validate Autopilot components and images
 // 4. Delete "autopilot" pod and validate it gets re-deployed
 // 5. Disable Autopilot and validate Autopilot components got successfully removed
 // 6. Delete StorageCluster and validate it got successfully removed
@@ -442,10 +442,9 @@ func BasicAutopilotRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Enable Autopilot and validate StorageCluster")
 		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			// At this point this object should be <nil>
-			if cluster.Spec.Autopilot == nil {
-				cluster.Spec.Autopilot = &corev1.AutopilotSpec{}
+			cluster.Spec.Autopilot = &corev1.AutopilotSpec{
+				Enabled: true,
 			}
-			cluster.Spec.Autopilot.Enabled = true
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateAutopilot(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
