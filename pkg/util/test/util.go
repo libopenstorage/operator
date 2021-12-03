@@ -1226,7 +1226,6 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 		return nil
 	}
 
-	pvcPort := annotations["portworx.io/pvc-controller-port"]
 	pvcSecurePort := annotations["portworx.io/pvc-controller-secure-port"]
 
 	t := func() (interface{}, bool, error) {
@@ -1238,22 +1237,12 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 		numberOfPods := 0
 		// Go through every PVC Controller pod and look for --port and --secure-port commands in portworx-pvc-controller-manager pods and match it to the pvc-controller-port and pvc-controller-secure-port passed in StorageCluster annotations
 		for _, pod := range pods {
-			portExist := false
 			securePortExist := false
 			for _, container := range pod.Spec.Containers {
 				if container.Name == "portworx-pvc-controller-manager" {
 					if len(container.Command) > 0 {
 						for _, containerCommand := range container.Command {
-							if strings.Contains(containerCommand, "--port") {
-								if len(pvcPort) == 0 {
-									return nil, true, fmt.Errorf("failed to validate port, port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
-								} else if pvcPort != strings.Split(containerCommand, "=")[1] {
-									return nil, true, fmt.Errorf("failed to validate port, wrong --port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcPort, strings.Split(containerCommand, "=")[1])
-								}
-								logrus.Debugf("Value for port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcPort, strings.Split(containerCommand, "=")[1])
-								portExist = true
-								//continue
-							} else if strings.Contains(containerCommand, "--secure-port") {
+							if strings.Contains(containerCommand, "--secure-port") {
 								if len(pvcSecurePort) == 0 {
 									return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
 								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
@@ -1261,14 +1250,12 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 								}
 								logrus.Debugf("Value for secure-port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								securePortExist = true
-								//continue
+								continue
 							}
 						}
 					}
 					// Validate that if PVC Controller ports are missing from StorageCluster, it is also not found in pods
-					if len(pvcPort) != 0 && !portExist {
-						return nil, true, fmt.Errorf("failed to validate port, port is found in StorageCluster annotations, but is missing from PVC Controller pod [%s]", pod.Name)
-					} else if len(pvcSecurePort) != 0 && !securePortExist {
+					if len(pvcSecurePort) != 0 && !securePortExist {
 						return nil, true, fmt.Errorf("failed to validate secure-port, port is found in StorageCluster annotations, but is missing from PVC Controller pod [%s]", pod.Name)
 					}
 					numberOfPods++
@@ -1276,8 +1263,9 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 			}
 		}
 
-		if numberOfPods != len(pods) {
-			return nil, true, fmt.Errorf("waiting for all PVC Controller pods, expected: %d, got: %d", len(pods), numberOfPods)
+		// TODO: Hardcoding this to 3 instead of len(pods), because the previous ValidateDeloyment() step might have not validated the updated deloyment
+		if numberOfPods != 3 {
+			return nil, true, fmt.Errorf("waiting for all PVC Controller pods, expected: %d, got: %d", 3, numberOfPods)
 		}
 		return nil, false, nil
 	}

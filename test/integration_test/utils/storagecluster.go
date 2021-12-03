@@ -3,7 +3,6 @@ package utils
 import (
 	"path"
 	"testing"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -116,9 +115,6 @@ func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*core
 
 	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
-
-	// TODO: Remove this when we figure out how to avoid this hardcoded timeout
-	time.Sleep(5 * time.Second)
 
 	err = testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, k8sVersion, DefaultValidateAutopilotTimeout, DefaultValidateAutopilotRetryInterval)
 	require.NoError(t, err)

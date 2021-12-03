@@ -492,7 +492,7 @@ func BasicAutopilotRegression(tc *types.TestCase) func(*testing.T) {
 // 2. Validate PVC Controller is not present in StorageCluster annotations by default
 // 3. Enable PVC Controller in StorageCluster annotations and validate components
 // 4. Delete PVC Controller pods and validate they get re-deployed
-// 5. Set custom PVC Controller port and secure-port in StorageCluster annotations and validate components
+// 5. Set custom PVC Controller secure-port in StorageCluster annotations and validate components
 // 6. Delete custom PVC Controller ports from StorageCluster annotations and validate components
 // 7. Disable PVC Controller in StorageCluster annotations and validate components
 // 8. Delete PVC Controller from StorageCluster annotations and validate components
@@ -527,24 +527,20 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 		err = testutil.ValidatePvcController(ci_utils.PxSpecImages, cluster, ci_utils.K8sVersion, ci_utils.DefaultValidateAutopilotTimeout, ci_utils.DefaultValidateAutopilotRetryInterval)
 		require.NoError(t, err)
 
-		logrus.Info("Set PVC Controller custom port and secure-port in the annotations and validate StorageCluster")
+		logrus.Info("Set PVC Controller custom secure-port in the annotations and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Annotations["portworx.io/pvc-controller-port"] = "1111"
-			cluster.Annotations["portworx.io/pvc-controller-secure-port"] = "2222"
+			cluster.Annotations["portworx.io/pvc-controller-secure-port"] = "1111"
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
-		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller-port"], "1111")
-		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller-secure-port"], "2222")
+		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller-secure-port"], "1111")
 
-		logrus.Info("Delete PVC Controller custom port and secure-port from the annotations and validate StorageCluster")
+		logrus.Info("Delete PVC Controller custom secure-port from the annotations and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			delete(cluster.Annotations, "portworx.io/pvc-controller-port")
 			delete(cluster.Annotations, "portworx.io/pvc-controller-secure-port")
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
-		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller-port"], "failed to validate portworx.io/pvc-controller annotation, it shouldn't be here, because it was deleted")
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller-secure-port"], "failed to validate portworx.io/pvc-controller-secure-port annotation, it shouldn't be here, because it was deleted")
 
 		logrus.Info("Disable PVC Controller annotation and validate StorageCluster")
