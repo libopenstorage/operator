@@ -5747,6 +5747,111 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
 }
 
+func TestCompleteInstallDuringMigration(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved:       "true",
+				constants.AnnotationPauseComponentMigration: "true",
+				pxutil.AnnotationPVCController:              "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:           "portworx/image:2.2",
+			ImagePullPolicy: v1.PullIfNotPresent,
+			UserInterface: &corev1.UserInterfaceSpec{
+				Enabled: true,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "cluster-uid",
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pvcDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	lhDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusOperatorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, prometheusOperatorDeployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, component.PxServiceMonitor, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	alertManager := &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, component.AlertManagerInstanceName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	collectorDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, collectorDeployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
 func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))

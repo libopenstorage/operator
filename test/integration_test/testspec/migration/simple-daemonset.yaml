@@ -1,4 +1,4 @@
-# SOURCE: https://install.portworx.com/?c=px-cluster&aut=false&stork=false
+# SOURCE: https://install.portworx.com/?c=px-cluster&aut=false&stork=false&csi=false
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -66,7 +66,7 @@ metadata:
   labels:
     name: portworx
   annotations:
-    portworx.com/install-source: "https://install.portworx.com/?c=px-cluster&aut=false&stork=false"
+    portworx.com/install-source: "https://install.portworx.com/?c=px-cluster&aut=false&stork=false&csi=false"
 spec:
   selector:
     matchLabels:

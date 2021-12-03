@@ -1393,7 +1393,7 @@ func validateImageOnPods(image, namespace string, listOptions map[string]string)
 		}
 
 		if !foundImage {
-			return fmt.Errorf("failed to validade image %s on pod: %v",
+			return fmt.Errorf("failed to validate image %s on pod: %v",
 				image, pod)
 		}
 	}
@@ -1413,7 +1413,7 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 				imageTag = imageSplit[1]
 			}
 			if imageTag != tag {
-				return fmt.Errorf("failed to validade image tag on pod %s container %s, Expected: %s Got: %s",
+				return fmt.Errorf("failed to validate image tag on pod %s container %s, Expected: %s Got: %s",
 					pod.Name, container.Name, tag, imageTag)
 			}
 		}

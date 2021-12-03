@@ -1,12 +1,12 @@
 package util
 
 import (
-	"github.com/libopenstorage/operator/pkg/constants"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
@@ -153,4 +153,23 @@ func TestGetCustomAnnotations(t *testing.T) {
 	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, "invalid-component"))
 	require.Nil(t, GetCustomAnnotations(cluster, "invalid-kind", componentName))
 	require.Equal(t, podPortworxAnnotations, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+}
+
+func TestComponentsPausedForMigration(t *testing.T) {
+	cluster := &corev1.StorageCluster{}
+	require.False(t, ComponentsPausedForMigration(cluster))
+
+	cluster.Annotations = map[string]string{
+		constants.AnnotationMigrationApproved: "true",
+	}
+	require.False(t, ComponentsPausedForMigration(cluster))
+
+	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "false"
+	require.False(t, ComponentsPausedForMigration(cluster))
+
+	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "invalid"
+	require.False(t, ComponentsPausedForMigration(cluster))
+
+	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
+	require.True(t, ComponentsPausedForMigration(cluster))
 }
