@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 	"reflect"
 	"regexp"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -48,7 +50,15 @@ var (
 
 // NewK8sClient returns a new controller runtime Kubernetes client
 func NewK8sClient(scheme *runtime.Scheme) (client.Client, error) {
-	config, err := rest.InClusterConfig()
+	var err error
+	var config *rest.Config
+
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if len(kubeconfig) > 0 {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	} else {
+		config, err = rest.InClusterConfig()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error getting Kubernetes config. %v", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -558,12 +559,21 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
-	prometheusOpDeployment := &appsv1.Deployment{
+	prometheus := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusOperatorDeploymentName,
+			Name:      prometheusInstanceName,
 			Namespace: ds.Namespace,
-			Labels: map[string]string{
-				"k8s-app": prometheusOperatorDeploymentName,
+		},
+		Spec: monitoringv1.PrometheusSpec{
+			RuleSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"prometheus": "portworx",
+				},
+			},
+			ServiceMonitorSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": serviceMonitorName,
+				},
 			},
 		},
 	}
@@ -582,7 +592,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 
 	k8sClient := testutil.FakeK8sClient(
 		ds, storkDeployment, autopilotDeployment,
-		pvcControllerDeployment, prometheusOpDeployment,
+		pvcControllerDeployment, prometheus,
 		serviceMonitor, alertManager,
 	)
 	ctrl := &storagecluster.Controller{}
@@ -670,17 +680,26 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
-	prometheusOpDeployment := &appsv1.Deployment{
+	prometheus := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusOperatorDeploymentName,
+			Name:      prometheusInstanceName,
 			Namespace: ds.Namespace,
-			Labels: map[string]string{
-				"k8s-app": prometheusOperatorDeploymentName,
+		},
+		Spec: monitoringv1.PrometheusSpec{
+			RuleSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"prometheus": "portworx",
+				},
+			},
+			ServiceMonitorSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": serviceMonitorName,
+				},
 			},
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient(ds, pvcControllerDeployment, prometheusOpDeployment)
+	k8sClient := testutil.FakeK8sClient(ds, pvcControllerDeployment, prometheus)
 	ctrl := &storagecluster.Controller{}
 	ctrl.SetKubernetesClient(k8sClient)
 	migrator := New(ctrl)
@@ -710,8 +729,8 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
 					ExportMetrics: false,
-					// Prometheus is not enabled although the operator is present. This is because
-					// the portworx metrics are not exported not alert manager is running.
+					// Prometheus is not enabled although prometheus is present. This is because
+					// the portworx metrics are not exported nor alert manager is running.
 					Enabled: false,
 					AlertManager: &corev1.AlertManagerSpec{
 						Enabled: false,
@@ -828,6 +847,12 @@ func TestSuccessfulMigration(t *testing.T) {
 	require.Equal(t, appsv1.OnDeleteDaemonSetStrategyType, currDaemonSet.Spec.UpdateStrategy.Type)
 	require.Equal(t, expectedDaemonSetAffinity(), currDaemonSet.Spec.Template.Spec.Affinity)
 
+	// Validate components have been paused
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "true", cluster.Annotations[constants.AnnotationPauseComponentMigration])
+
 	// Validate status of the nodes
 	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationStarting)
 	require.NoError(t, err)
@@ -874,6 +899,12 @@ func TestSuccessfulMigration(t *testing.T) {
 	currDaemonSet = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
 	require.True(t, errors.IsNotFound(err))
+
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+	require.False(t, annotationExists)
 }
 
 func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
@@ -1065,6 +1096,551 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 	currDaemonSet := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestOldComponentsAreDeleted(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	migrationRetryIntervalFunc = func() time.Duration {
+		return 2 * time.Second
+	}
+	defer func() {
+		migrationRetryIntervalFunc = getMigrationRetryInterval
+	}()
+
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-test",
+			UID:       "100",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	pxClusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-get-put-list-role",
+		},
+	}
+	pxClusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-role-binding",
+		},
+	}
+	pxRoleLocal := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-role",
+			Namespace: ds.Namespace,
+		},
+	}
+	pxRoleBindingLocal := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-role-binding",
+			Namespace: ds.Namespace,
+		},
+	}
+	pxRole := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-role",
+			Namespace: "portworx",
+		},
+	}
+	pxRoleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-role-binding",
+			Namespace: "portworx",
+		},
+	}
+	pxAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	pxSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-service",
+			Namespace: ds.Namespace,
+		},
+	}
+	pxAPIDaemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-api",
+			Namespace: ds.Namespace,
+		},
+	}
+	pxAPISvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-api",
+			Namespace: ds.Namespace,
+		},
+	}
+	storkDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork",
+			Namespace: ds.Namespace,
+		},
+	}
+	storkSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-service",
+			Namespace: ds.Namespace,
+		},
+	}
+	storkConfig := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-config",
+			Namespace: ds.Namespace,
+		},
+	}
+	storkRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "stork-role",
+		},
+	}
+	storkRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "stork-role-binding",
+		},
+	}
+	storkAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	schedDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-scheduler",
+			Namespace: ds.Namespace,
+		},
+	}
+	schedRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "stork-scheduler-role",
+		},
+	}
+	schedRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "stork-scheduler-role-binding",
+		},
+	}
+	schedAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-scheduler-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	autopilotDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "autopilot",
+			Namespace: ds.Namespace,
+		},
+	}
+	autopilotSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "autopilot",
+			Namespace: ds.Namespace,
+		},
+	}
+	autopilotConfig := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "autopilot-config",
+			Namespace: ds.Namespace,
+		},
+	}
+	autopilotRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "autopilot-role",
+		},
+	}
+	autopilotRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "autopilot-role-binding",
+		},
+	}
+	autopilotAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "autopilot-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	pvcDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-pvc-controller",
+			Namespace: ds.Namespace,
+		},
+	}
+	pvcRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "portworx-pvc-controller-role",
+		},
+	}
+	pvcRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "portworx-pvc-controller-role-binding",
+		},
+	}
+	pvcAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-pvc-controller-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	csiDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-csi-ext",
+			Namespace: ds.Namespace,
+		},
+	}
+	csiSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-csi-service",
+			Namespace: ds.Namespace,
+		},
+	}
+	csiRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "px-csi-role",
+		},
+	}
+	csiRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "px-csi-role-binding",
+		},
+	}
+	csiAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-csi-account",
+			Namespace: ds.Namespace,
+		},
+	}
+	promOpDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-operator",
+			Namespace: ds.Namespace,
+		},
+	}
+	promOpRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus-operator",
+		},
+	}
+	promOpRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus-operator",
+		},
+	}
+	promOpAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-operator",
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheus := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheusSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus",
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheusRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+	}
+	prometheusRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+	}
+	prometheusAccount := &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus",
+			Namespace: ds.Namespace,
+		},
+	}
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-prometheus-sm",
+			Namespace: ds.Namespace,
+		},
+	}
+	prometheusRule := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: ds.Namespace,
+		},
+	}
+	alertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: ds.Namespace,
+		},
+	}
+	alertManagerSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alertmanager-portworx",
+			Namespace: ds.Namespace,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(
+		ds, pxAPIDaemonSet, pxAPISvc,
+		pxClusterRole, pxClusterRoleBinding, pxRole, pxRoleBinding, pxRoleLocal, pxRoleBindingLocal, pxAccount,
+		storkDeployment, storkSvc, storkConfig, storkRole, storkRoleBinding, storkAccount,
+		schedDeployment, schedRole, schedRoleBinding, schedAccount,
+		autopilotDeployment, autopilotConfig, autopilotSvc, autopilotRole, autopilotRoleBinding, autopilotAccount,
+		pvcDeployment, pvcRole, pvcRoleBinding, pvcAccount,
+		csiDeployment, csiSvc, csiRole, csiRoleBinding, csiAccount,
+		serviceMonitor, prometheusRule, alertManager, alertManagerSvc,
+		prometheus, prometheusSvc, prometheusRole, prometheusRoleBinding, prometheusAccount,
+		promOpDeployment, promOpRole, promOpRoleBinding, promOpAccount,
+	)
+	driver := testutil.MockDriver(mockCtrl)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetKubernetesClient(k8sClient)
+
+	// Start the migration handler
+	migrator := New(ctrl)
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	// Check cluster's initial status before user approval
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+
+	// Approve migration
+	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	time.Sleep(1 * time.Second)
+
+	// Validate all components have been deleted
+	pxClusterRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, pxClusterRole, "node-get-put-list-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxClusterRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pxClusterRoleBinding, "node-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	pxRoleLocal = &rbacv1.Role{}
+	err = testutil.Get(k8sClient, pxRoleLocal, "px-role", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxRoleBindingLocal = &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, pxRoleBindingLocal, "px-role-binding", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxRole = &rbacv1.Role{}
+	err = testutil.Get(k8sClient, pxRole, "px-role", "portworx")
+	require.True(t, errors.IsNotFound(err))
+
+	pxRoleBinding = &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, pxRoleBinding, "px-role-binding", "portworx")
+	require.True(t, errors.IsNotFound(err))
+
+	pxAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pxAccount, "px-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxSvc, "portworx-service", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxAPIDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, pxAPIDaemonSet, "portworx-api", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pxAPISvc = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPISvc, "portworx-api", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkDeployment, "stork", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, storkSvc, "stork-service", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkConfig = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, storkConfig, "stork-config", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	storkRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, storkRole, "stork-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	storkRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, storkRoleBinding, "stork-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	storkAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, storkAccount, "stork-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, "stork-scheduler", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	schedRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, schedRole, "stork-scheduler-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	schedRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, schedRoleBinding, "stork-scheduler-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	schedAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, schedAccount, "stork-scheduler-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, "autopilot", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, autopilotSvc, "autopilot", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotConfig = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfig, "autopilot-config", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, autopilotRole, "autopilot-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, autopilotRoleBinding, "autopilot-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	autopilotAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, autopilotAccount, "autopilot-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pvcDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, pvcDeployment, "portworx-pvc-controller", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	pvcRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, pvcRole, "portworx-pvc-controller-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	pvcRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, pvcRoleBinding, "portworx-pvc-controller-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	pvcAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, pvcAccount, "portworx-pvc-controller-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	csiDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, "px-csi-ext", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	csiSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, csiSvc, "px-csi-service", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	csiRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, csiRole, "px-csi-role", "")
+	require.True(t, errors.IsNotFound(err))
+
+	csiRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, csiRoleBinding, "px-csi-role-binding", "")
+	require.True(t, errors.IsNotFound(err))
+
+	csiAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, csiAccount, "px-csi-account", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	promOpDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, promOpDeployment, "prometheus-operator", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	promOpRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, promOpRole, "prometheus-operator", "")
+	require.True(t, errors.IsNotFound(err))
+
+	promOpRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, promOpRoleBinding, "prometheus-operator", "")
+	require.True(t, errors.IsNotFound(err))
+
+	promOpAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, promOpAccount, "prometheus-operator", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, "prometheus", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, prometheusSvc, "prometheus", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusRole = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, prometheusRole, "prometheus", "")
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusRoleBinding = &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, prometheusRoleBinding, "prometheus", "")
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusAccount = &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, prometheusAccount, "prometheus", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	serviceMonitor = &monitoringv1.ServiceMonitor{}
+	err = testutil.Get(k8sClient, serviceMonitor, "portworx-prometheus-sm", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	prometheusRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, prometheusRule, "portworx", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	alertManager = &monitoringv1.Alertmanager{}
+	err = testutil.Get(k8sClient, alertManager, "portworx", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	alertManagerSvc = &v1.Service{}
+	err = testutil.Get(k8sClient, alertManagerSvc, "alertmanager-portworx", ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Validate the migration has completed
+	currDaemonSet := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+	require.False(t, annotationExists)
 }
 
 func validateMigrationIsInProgress(

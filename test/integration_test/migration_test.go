@@ -5,6 +5,7 @@ package integrationtest
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
@@ -52,6 +54,15 @@ var migrationTestCases = []types.TestCase{
 			return objects
 		},
 		TestFunc: MigrationWithoutNodeAffinity,
+	},
+	{
+		TestName: "AllComponentsEnabled",
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("migration/daemonset-with-all-components.yaml")
+			require.NoError(t, err)
+			return objects
+		},
+		TestFunc: MigrationWithAllComponents,
 	},
 }
 
@@ -94,8 +105,35 @@ func MigrationWithoutNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
+func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		objects, err := ci_utils.ParseSpecs("migration/prometheus-operator.yaml")
+		require.NoError(t, err)
+
+		logrus.Infof("Installing prometheus operator")
+		err = ci_utils.CreateObjects(objects)
+		require.NoError(t, err)
+
+		logrus.Infof("Waiting for prometheus operator to be ready")
+		dep := &appsv1.Deployment{}
+		dep.Name = "prometheus-operator"
+		dep.Namespace = apiscore.NamespaceSystem
+		err = appops.Instance().ValidateDeployment(dep, ci_utils.DefaultValidateDeployTimeout, 5*time.Second)
+		require.NoError(t, err)
+
+		MigrationWithoutNodeAffinity(tc)(t)
+
+		logrus.Infof("Validate old prometheus operator is removed as well")
+		err = ci_utils.ValidateObjectsAreTerminated(objects, true)
+		require.NoError(t, err)
+	}
+}
+
 func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet) {
 	err := ci_utils.AddPortworxImageToDaemonSet(ds)
+	require.NoError(t, err)
+
+	err = updateImagesWithKubernetesVersion(objects)
 	require.NoError(t, err)
 
 	logrus.Infof("Creating portworx objects")
@@ -140,10 +178,14 @@ func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet)
 			constants.LabelPortworxDaemonsetMigration, node.Name)
 	}
 
-	// TODO: We should not need this in future as the migration should
-	// take care of removing all the old portworx specs
+	logrus.Infof("Validate old portworx objects are removed")
+	err = ci_utils.ValidateObjectsAreTerminated(objects, true)
+	require.NoError(t, err)
+
 	logrus.Infof("Remove remaining portworx objects")
 	err = ci_utils.DeleteObjects(objects)
+	require.NoError(t, err)
+	err = ci_utils.ValidateObjectsAreTerminated(objects, false)
 	require.NoError(t, err)
 }
 
@@ -205,6 +247,21 @@ func extractPortworxDaemonSetFromObjects(objects []runtime.Object) (*appsv1.Daem
 		}
 	}
 	return pxDaemonSet, remainingObjects
+}
+
+func updateImagesWithKubernetesVersion(objects []runtime.Object) error {
+	k8sVersion, err := k8sutil.GetVersion()
+	if err != nil {
+		return err
+	}
+	for _, obj := range objects {
+		if dep, ok := obj.(*appsv1.Deployment); ok &&
+			(dep.Name == "stork-scheduler" || dep.Name == "portworx-pvc-controller") {
+			image := strings.Split(dep.Spec.Template.Spec.Containers[0].Image, ":")[0]
+			dep.Spec.Template.Spec.Containers[0].Image = image + ":v" + k8sVersion.String()
+		}
+	}
+	return nil
 }
 
 func restartPortworxOperator(t *testing.T) {
