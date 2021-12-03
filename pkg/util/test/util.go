@@ -788,17 +788,9 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
-	if isPVCControllerEnabled(cluster) {
-		pvcControllerDp := &appsv1.Deployment{}
-		pvcControllerDp.Name = "portworx-pvc-controller"
-		pvcControllerDp.Namespace = cluster.Namespace
-		if err = appops.Instance().ValidateDeployment(pvcControllerDp, timeout, interval); err != nil {
-			return err
-		}
-
-		if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "portworx-pvc-controller"}); err != nil {
-			return err
-		}
+	// Validate PVC Controller components and images
+	if err := ValidatePvcController(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
+		return err
 	}
 
 	// Validate Stork components and images
@@ -819,6 +811,74 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	// Validate Monitoring
 	if err = validateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// ValidatePvcController validates PVC Controller components and images
+func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+	pvcControllerDp := &appsv1.Deployment{}
+	pvcControllerDp.Name = "portworx-pvc-controller"
+	pvcControllerDp.Namespace = cluster.Namespace
+
+	if isPVCControllerEnabled(cluster) {
+		logrus.Debug("PVC Controller is Enabled")
+
+		if err := appops.Instance().ValidateDeployment(pvcControllerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		if err := validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "portworx-pvc-controller"}); err != nil {
+			return err
+		}
+
+		// Validate PVC Controller custom port, if any were set
+		if err := validatePvcControllerPorts(cluster.Annotations, pvcControllerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate PVC Controller ClusterRole
+		_, err := rbacops.Instance().GetClusterRole(pvcControllerDp.Name)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRole %s, Err: %v", pvcControllerDp.Name, err)
+		}
+
+		// Validate PVC Controller ClusterRoleBinding
+		_, err = rbacops.Instance().GetClusterRoleBinding(pvcControllerDp.Name)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, Err: %v", pvcControllerDp.Name, err)
+		}
+
+		// Validate PVC Controller ServiceAccount
+		_, err = coreops.Instance().GetServiceAccount(pvcControllerDp.Name, pvcControllerDp.Namespace)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, Err: %v", pvcControllerDp.Name, err)
+		}
+	} else {
+		logrus.Debug("PVC Controller is Disabled")
+		// Validate portworx-pvc-controller deployment is terminated or doesn't exist
+		if err := validateTerminatedDeployment(pvcControllerDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate VC Controller ClusterRole doesn't exist
+		_, err := rbacops.Instance().GetClusterRole(pvcControllerDp.Name)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRole %s, is found when shouldn't be", pvcControllerDp.Name)
+		}
+
+		// Validate VC Controller ClusterRoleBinding doesn't exist
+		_, err = rbacops.Instance().GetClusterRoleBinding(pvcControllerDp.Name)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, is found when shouldn't be", pvcControllerDp.Name)
+		}
+
+		// Validate VC Controller ServiceAccount doesn't exist
+		_, err = coreops.Instance().GetServiceAccount(pvcControllerDp.Name, pvcControllerDp.Namespace)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, is found when shouldn't be", pvcControllerDp.Name)
+		}
 	}
 
 	return nil
@@ -1148,6 +1208,76 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
 				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validatePvcControllerPorts(annotations map[string]string, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Debug("Validate PVC Controller custom ports")
+
+	if annotations == nil {
+		return nil
+	}
+
+	pvcPort := annotations["portworx.io/pvc-controller-port"]
+	pvcSecurePort := annotations["portworx.io/pvc-controller-secure-port"]
+
+	t := func() (interface{}, bool, error) {
+		pods, err := appops.Instance().GetDeploymentPods(pvcControllerDeployment)
+		if err != nil {
+			return nil, false, err
+		}
+
+		numberOfPods := 0
+		// Go through every PVC Controller pod and look for --port and --secure-port commands in portworx-pvc-controller-manager pods and match it to the pvc-controller-port and pvc-controller-secure-port passed in StorageCluster annotations
+		for _, pod := range pods {
+			portExist := false
+			securePortExist := false
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "portworx-pvc-controller-manager" {
+					if len(container.Command) > 0 {
+						for _, containerCommand := range container.Command {
+							if strings.Contains(containerCommand, "--port") {
+								if len(pvcPort) == 0 {
+									return nil, true, fmt.Errorf("failed to validate port, port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+								} else if pvcPort != strings.Split(containerCommand, "=")[1] {
+									return nil, true, fmt.Errorf("failed to validate port, wrong --port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcPort, strings.Split(containerCommand, "=")[1])
+								}
+								logrus.Debugf("Value for port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcPort, strings.Split(containerCommand, "=")[1])
+								portExist = true
+								//continue
+							} else if strings.Contains(containerCommand, "--secure-port") {
+								if len(pvcSecurePort) == 0 {
+									return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
+									return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
+								}
+								logrus.Debugf("Value for secure-port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
+								securePortExist = true
+								//continue
+							}
+						}
+					}
+					// Validate that if PVC Controller ports are missing from StorageCluster, it is also not found in pods
+					if len(pvcPort) != 0 && !portExist {
+						return nil, true, fmt.Errorf("failed to validate port, port is found in StorageCluster annotations, but is missing from PVC Controller pod [%s]", pod.Name)
+					} else if len(pvcSecurePort) != 0 && !securePortExist {
+						return nil, true, fmt.Errorf("failed to validate secure-port, port is found in StorageCluster annotations, but is missing from PVC Controller pod [%s]", pod.Name)
+					}
+					numberOfPods++
+				}
+			}
+		}
+
+		if numberOfPods != len(pods) {
+			return nil, true, fmt.Errorf("waiting for all PVC Controller pods, expected: %d, got: %d", len(pods), numberOfPods)
 		}
 		return nil, false, nil
 	}

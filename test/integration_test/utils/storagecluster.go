@@ -3,6 +3,7 @@ package utils
 import (
 	"path"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -101,6 +102,25 @@ func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, f func(*cor
 
 	logrus.Infof("Validate StorageCluster %s", latestLiveCluster.Name)
 	err = testutil.ValidateStorageCluster(pxSpecImages, latestLiveCluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
+	require.NoError(t, err)
+
+	return latestLiveCluster
+}
+
+// UpdateAndValidatePvcController update StorageCluster, validates PVC Controller components only and return latest version of live StorageCluster
+func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, k8sVersion string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
+	require.NoError(t, err)
+
+	// TODO: Remove this when we figure out how to avoid this hardcoded timeout
+	time.Sleep(5 * time.Second)
+
+	err = testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, k8sVersion, DefaultValidateAutopilotTimeout, DefaultValidateAutopilotRetryInterval)
 	require.NoError(t, err)
 
 	return latestLiveCluster
