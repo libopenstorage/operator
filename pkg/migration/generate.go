@@ -20,13 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const (
-	storkDeploymentName              = "stork"
-	prometheusOperatorDeploymentName = "prometheus-operator"
-	serviceMonitorName               = "portworx-prometheus-sm"
-	prometheusInstanceName           = "prometheus"
-)
-
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
