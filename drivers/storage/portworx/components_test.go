@@ -11534,11 +11534,15 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 
 	// Collector config map
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "metricsCollectorConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
 	// Collector role
 	role := &rbacv1.Role{}

@@ -1,0 +1,20 @@
+# Note the portworx endpoint port for openshift is 17001, non-openshift is 9001
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: px-collector-config
+  namespace: kube-test
+data:
+  portworx.yaml: |-
+
+    scrapeConfig:
+      interval: 10
+      k8sConfig:
+        pods:
+        - podSelector:
+          name: portworx
+          namespace: kube-test
+          endpoint: metrics
+          port: 9001
+    forwardConfig:
+      url: http://localhost:10000/metrics/1.0/pure1-metrics-pb
