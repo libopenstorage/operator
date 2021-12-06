@@ -153,7 +153,7 @@ spec:
             - name: registration-dir
               mountPath: /registration
         - name: telemetry
-          image: purestorage/ccm-service:3.0.3
+          image: purestorage/ccm-service:3.0.6
           imagePullPolicy: Always
           args:
             ["-Dserver.rest_server.core_pool_size=2"]
