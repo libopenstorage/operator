@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -53,12 +54,13 @@ const (
 	CollectorProxyConfigMapName = "px-collector-proxy-config"
 	// CollectorDeploymentName is name of metrics collector deployment.
 	CollectorDeploymentName = "px-metrics-collector"
-	// DefaultArcusLocation is the default arcus location.
-	DefaultArcusLocation = "rest.cloud-support.purestorage.com"
+	// ExternalArcusLocation is the external location customers use, pointing to prod.
+	ExternalArcusLocation = "rest.cloud-support.purestorage.com"
+	// InternalArcusLocation is for internal use only.
+	InternalArcusLocation = "rest.staging-cloud-support.purestorage.com"
 	// CollectorServiceAccountName is name of the metrics collector service account
 	CollectorServiceAccountName = "px-metrics-collector"
 
-	defaultAutopilotMetricsPort   = 9628
 	defaultCollectorMemoryRequest = "64Mi"
 	defaultCollectorMemoryLimit   = "128Mi"
 	defaultCollectorCPU           = "0.2"
@@ -459,8 +461,10 @@ func (t *telemetry) createProxyConfigMap(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	arcusLocation, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]
-	if !present || len(arcusLocation) == 0 {
-		arcusLocation = DefaultArcusLocation
+	if !present || len(arcusLocation) == 0 || strings.ToLower(arcusLocation) == "external" {
+		arcusLocation = ExternalArcusLocation
+	} else if strings.ToLower(arcusLocation) == "internal" {
+		arcusLocation = InternalArcusLocation
 	}
 
 	config := fmt.Sprintf(
@@ -565,7 +569,7 @@ func (t *telemetry) createCollectorConfigMap(
 	pxSelectorLabels := pxutil.SelectorLabels()
 	var selectorStr string
 	for k, v := range pxSelectorLabels {
-		selectorStr += fmt.Sprintf("        %s: %s\n", k, v)
+		selectorStr += fmt.Sprintf("\n      %s: %s", k, v)
 	}
 
 	port := pxutil.StartPort(cluster)
@@ -576,24 +580,15 @@ scrapeConfig:
   interval: 10
   k8sConfig:
     pods:
-    - podSelector:
-%s
-      namespace: %s
-      endpoint: metrics
-      port: %d
-    - podSelector:
-        name: autopilot
+    - podSelector:%s
       namespace: %s
       endpoint: metrics
       port: %d
 forwardConfig:
-  url: http://localhost:10000/metrics/1.0/pure1-metrics-pb
-    `,
+  url: http://localhost:10000/metrics/1.0/pure1-metrics-pb`,
 		selectorStr,
 		cluster.Namespace,
-		port,
-		cluster.Namespace,
-		defaultAutopilotMetricsPort)
+		port)
 
 	data := map[string]string{
 		CollectorConfigFileName: config,
