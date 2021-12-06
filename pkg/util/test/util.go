@@ -1658,14 +1658,16 @@ func GetImagesFromVersionURL(url, k8sVersion string) (map[string]string, error) 
 
 // ConstructVersionURL constructs Portworx version URL that contains component images
 func ConstructVersionURL(specGenURL, k8sVersion string) (string, error) {
-	versionURL := path.Join(specGenURL, fmt.Sprintf("version?kbver=%s", k8sVersion))
-	u, err := url.Parse(versionURL)
+	u, err := url.Parse(specGenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL [%s], Err: %v", specGenURL, err)
 	}
+	q := u.Query()
+	q.Set("kbver", k8sVersion)
+	u.Path = path.Join(u.Path, "version")
+	u.RawQuery = q.Encode()
 
-	// TODO Using strings.Replace to replace /// with //, because I coulnd't figure out how not to properly construct this URL without ///
-	return strings.Replace(u.String(), "///", "//", -1), nil
+	return u.String(), nil
 }
 
 // ConstructPxReleaseManifestURL constructs Portworx install URL
