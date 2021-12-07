@@ -11564,7 +11564,9 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "metricsCollectorDeployment.yaml")
-	require.True(t, util.DeploymentDeepEqual(expectedDeployment, deployment))
+	equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment)
+	require.True(t, equal)
+	require.NoError(t, err)
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false

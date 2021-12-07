@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-metrics-collector
+  namespace: kube-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: realtime-metrics-collector
+  template:
+    metadata:
+      labels:
+        role: realtime-metrics-collector
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+      containers:
+        - env:
+            - name: CONFIG
+              value: config/portworx.yaml
+          image: purestorage/realtime-metrics:latest
+          imagePullPolicy: Always
+          name: collector
+          resources:
+            requests:
+              cpu: 200m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          ports:
+            - containerPort: 80
+              name: collector
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /config
+              name: px-collector-config
+              readOnly: true
+        - args:
+            - envoy
+            - --config-path
+            - /config/envoy-config.yaml
+          image: envoyproxy/envoy:v1.19.1
+          imagePullPolicy: Always
+          name: envoy
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+            - mountPath: /config
+              name: px-collector-proxy-config
+              readOnly: true
+            - mountPath: /appliance-cert
+              name: pure-telemetry-certs
+              readOnly: true
+      schedulerName: default-scheduler
+      serviceAccount: px-metrics-collector
+      serviceAccountName: px-metrics-collector
+      volumes:
+        - configMap:
+            name: px-collector-config
+          name: px-collector-config
+        - configMap:
+            name: px-collector-proxy-config
+          name: px-collector-proxy-config
+        - name: pure-telemetry-certs
+          secret:
+            secretName: pure-telemetry-certs
