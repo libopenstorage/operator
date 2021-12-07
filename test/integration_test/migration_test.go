@@ -68,6 +68,7 @@ var migrationTestCases = []types.TestCase{
 
 func TestDaemonSetMigration(t *testing.T) {
 	for _, tc := range migrationTestCases {
+		tc.ShouldSkip = shouldSkipMigrationTests
 		tc.RunTest(t)
 	}
 }
@@ -276,4 +277,9 @@ func restartPortworxOperator(t *testing.T) {
 
 	err = appops.Instance().ValidateDeployment(dep, operatorRestartTimeout, operatorRestartRetryInterval)
 	require.NoError(t, err)
+}
+
+func shouldSkipMigrationTests(tc *types.TestCase) bool {
+	k8sVersion, _ := k8sutil.GetVersion()
+	return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22)
 }
