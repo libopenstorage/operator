@@ -36,7 +36,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:2.6.0",
+			Telemetry:                 "image/ccm-service:3.0.6",
 			MetricsCollector:          "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
