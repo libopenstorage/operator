@@ -3,6 +3,12 @@ kind: Deployment
 metadata:
   name: px-metrics-collector
   namespace: kube-test
+  ownerReferences:
+    - apiVersion: core.libopenstorage.org/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StorageCluster
+      name: px-cluster
 spec:
   replicas: 1
   selector:
@@ -70,7 +76,6 @@ spec:
             - mountPath: /appliance-cert
               name: pure-telemetry-certs
               readOnly: true
-      schedulerName: default-scheduler
       serviceAccount: px-metrics-collector
       serviceAccountName: px-metrics-collector
       volumes:

@@ -12,16 +12,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	appsops "github.com/portworx/sched-ops/k8s/apps"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/portworx/sched-ops/k8s/operator"
-
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	appsops "github.com/portworx/sched-ops/k8s/apps"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/portworx/sched-ops/k8s/operator"
 )
 
 const (

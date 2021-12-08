@@ -70,7 +70,6 @@ spec:
             - mountPath: /appliance-cert
               name: pure-telemetry-certs
               readOnly: true
-      schedulerName: default-scheduler
       serviceAccount: px-metrics-collector
       serviceAccountName: px-metrics-collector
       volumes:

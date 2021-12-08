@@ -11564,9 +11564,10 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "metricsCollectorDeployment.yaml")
-	equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment)
-	require.True(t, equal)
-	require.NoError(t, err)
+	// Revise unrelated fields so we can compare.
+	expectedDeployment.Spec.Template.Spec.DeprecatedServiceAccount = ""
+	deployment.ResourceVersion = ""
+	require.Equal(t, expectedDeployment, deployment)
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false

@@ -1530,7 +1530,9 @@ func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1
 
 // ValidateTelemetry validates telemetry component is installed/uninstalled as expected
 func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry.Enabled {
+	if cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Telemetry != nil &&
+		cluster.Spec.Monitoring.Telemetry.Enabled {
 		return ValidateTelemetryInstalled(pxImageList, cluster, timeout, interval)
 	}
 
@@ -1551,11 +1553,11 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
-	actualDeployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
+	deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
 	if err != nil {
 		return err
 	}
-	if equal, err := util.DeploymentDeepEqual(expectedDeployment, actualDeployment); !equal {
+	if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
 		return err
 	}
 
@@ -1600,11 +1602,6 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	imageName = util.GetImageURN(cluster, imageName)
-
-	deployment, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
-	if err != nil {
-		return err
-	}
 
 	if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
 		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
