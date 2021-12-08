@@ -4,7 +4,7 @@ metadata:
   name: portworx
   namespace: kube-system
   annotations:
-    portworx.com/install-source: "https://edge-install.portworx.com/2.1?mc=false&kbver=1.13.0&b=true&c=px-cluster-96bfaab8-c821-43de-99f6-41fe55e9dbe7&stork=true&lh=true&st=k8s&r=10001"
+    portworx.com/install-source: "https://install.portworx.com/?mc=false&kbver=1.12.3&b=true&c=px-cluster&st=k8s"
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -20,17 +20,12 @@ spec:
       hostPID: false
       containers:
         - name: portworx
-          image: portworx/oci-monitor:2.1.1
+          image: portworx/oci-monitor:2.9.1
           imagePullPolicy: Always
           args:
             ["-c", "px-cluster",
-             "-r", "10001",
              "-x", "kubernetes"]
           env:
-            - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
-              value: "1500"
-            - name: "PX_TEMPLATE_VERSION"
-              value: "v4"
             - name: "PX_NAMESPACE"
               value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"
@@ -40,19 +35,21 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+            - name: "PX_TEMPLATE_VERSION"
+              value: "v4"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
             httpGet:
               host: 127.0.0.1
               path: /status
-              port: 10001
+              port: 9001
           readinessProbe:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 10015
+              port: 9015
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
             privileged: true
@@ -61,16 +58,19 @@ spec:
               mountPath: /var/cores
             - name: dockersock
               mountPath: /var/run/docker.sock
-            - name: containerddir
-              mountPath: /run/containerd
             - name: criosock
               mountPath: /var/run/crio
             - name: crioconf
               mountPath: /etc/crictl.yaml
+            - name: containerddir
+              mountPath: /run/containerd
             - name: etcpwx
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
+            - name: varlibosd
+              mountPath: /var/lib/osd
+              mountPropagation: Bidirectional
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -105,15 +105,6 @@ spec:
         - name: etcpwx
           hostPath:
             path: /etc/pwx
-        - name: optpwx
-          hostPath:
-            path: /opt/pwx
-        - name: procmount
-          hostPath:
-            path: /proc
-        - name: sysdmount
-          hostPath:
-            path: /etc/systemd/system
         - name: journalmount1
           hostPath:
             path: /var/run/log
@@ -123,3 +114,15 @@ spec:
         - name: dbusmount
           hostPath:
             path: /var/run/dbus
+        - name: procmount
+          hostPath:
+            path: /proc
+        - name: sysdmount
+          hostPath:
+            path: /etc/systemd/system
+        - name: optpwx
+          hostPath:
+            path: /opt/pwx
+        - name: varlibosd
+          hostPath:
+            path: /var/lib/osd
