@@ -158,16 +158,35 @@ func HaveTolerationsChanged(
 }
 
 // DeploymentDeepEqual compares if two deployments are same.
-func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) bool {
+func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
 	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
-	return equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) &&
-		len(d1.Spec.Template.Spec.Volumes) == len(d2.Spec.Template.Spec.Volumes) &&
-		equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes) &&
-		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets) &&
-		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity) &&
-		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations) &&
-		equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName)
+	if !equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) {
+		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers)
+	}
+
+	if !(len(d1.Spec.Template.Spec.Volumes) == len(d2.Spec.Template.Spec.Volumes) &&
+		equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes)) {
+		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes)
+	}
+
+	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets) {
+		return false, fmt.Errorf("image pull secrets not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets)
+	}
+
+	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity) {
+		return false, fmt.Errorf("affinity not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity)
+	}
+
+	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations) {
+		return false, fmt.Errorf("tolerations not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations)
+	}
+
+	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName) {
+		return false, fmt.Errorf("service account name not equal, first: %s, second: %s", d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName)
+	}
+
+	return true, nil
 }
 
 // HasNodeAffinityChanged checks if the nodeAffinity in the cluster is same as the
