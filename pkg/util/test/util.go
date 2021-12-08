@@ -66,6 +66,8 @@ const (
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
 	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
 	PxImageEnvVarName = "PX_IMAGE"
+	// StorkNamespaceEnvVarName is the namespace where stork is deployed
+	StorkNamespaceEnvVarName = "STORK-NAMESPACE"
 
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
@@ -405,6 +407,11 @@ func ValidateStorageCluster(
 
 	// Validate Portworx nodes
 	if err = validatePortworxNodes(liveCluster, len(expectedPxNodeNameList)); err != nil {
+		return err
+	}
+
+	// Validate Portworx Service
+	if err = validatePortworxService(liveCluster.Namespace); err != nil {
 		return err
 	}
 
@@ -750,6 +757,15 @@ func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) er
 	return nil
 }
 
+func validatePortworxService(namespace string) error {
+	pxServiceName := "portworx-service"
+	_, err := coreops.Instance().GetService(pxServiceName, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to validate Service %s/%s, Err: %v", namespace, pxServiceName, err)
+	}
+	return nil
+}
+
 // GetExpectedPxNodeNameList will get the list of node names that should be included
 // in the given Portworx cluster, by seeing if each non-master node matches the given
 // node selectors and affinities.
@@ -811,6 +827,11 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 
 	// Validate Monitoring
 	if err = validateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	// Validate PortworxProxy
+	if err = ValidatePortworxProxy(cluster, timeout); err != nil {
 		return err
 	}
 
@@ -917,6 +938,11 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 		storkImage := util.GetImageURN(cluster, storkImageName)
 		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
 		if err != nil {
+			return err
+		}
+
+		// Validate stork namespace env var
+		if err := validateStorkNamespaceEnvVar(cluster.Namespace, storkDp, timeout, interval); err != nil {
 			return err
 		}
 
@@ -1043,6 +1069,76 @@ func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageClu
 	return nil
 }
 
+// ValidatePortworxProxy validates portworx proxy components
+func ValidatePortworxProxy(cluster *corev1.StorageCluster, timeout time.Duration) error {
+	proxyDs := &appsv1.DaemonSet{}
+	proxyDs.Name = "portworx-proxy"
+	proxyDs.Namespace = "kube-system"
+
+	pxService := &v1.Service{}
+	pxService.Name = "portworx-service"
+	pxService.Namespace = "kube-system"
+
+	if isPortworxProxyEnabled(cluster) {
+		logrus.Debug("Portworx proxy is enabled in StorageCluster")
+
+		// Validate Portworx proxy DaemonSet
+		if err := validateDaemonSet(proxyDs, timeout); err != nil {
+			return err
+		}
+
+		// Validate Portworx proxy ServiceAccount
+		_, err := coreops.Instance().GetServiceAccount(proxyDs.Name, proxyDs.Namespace)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, Err: %v", proxyDs.Name, err)
+		}
+
+		// Validate Portworx proxy ClusterRoleBinding
+		_, err = rbacops.Instance().GetClusterRoleBinding(proxyDs.Name)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, Err: %v", proxyDs.Name, err)
+		}
+
+		// Validate Portworx proxy Service in kube-system namespace
+		if err := validatePortworxService("kube-system"); err != nil {
+			return err
+		}
+		_, err = coreops.Instance().GetService(pxService.Name, pxService.Namespace)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate Service %s, Err: %v", pxService.Name, err)
+		}
+	} else {
+		logrus.Debug("Portworx proxy is disabled in StorageCluster")
+
+		// Validate Portworx proxy DaemonSet is terminated or doesn't exist
+		if err := validateTerminatedDaemonSet(proxyDs, timeout); err != nil {
+			return err
+		}
+
+		// Validate Portworx proxy Service doesn't exist if cluster is not deployed in kube-system namespace
+		if cluster.Namespace != "kube-system" {
+			_, err := coreops.Instance().GetService(pxService.Name, pxService.Namespace)
+			if !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to validate Service %s, is found when shouldn't be", pxService.Name)
+			}
+		}
+
+		// Validate Portworx proxy ClusterRoleBinding doesn't exist
+		_, err := rbacops.Instance().GetClusterRoleBinding(proxyDs.Name)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ClusterRoleBinding %s, is found when shouldn't be", proxyDs.Name)
+		}
+
+		// Validate Portworx proxy ServiceAccount doesn't exist
+		_, err = coreops.Instance().GetServiceAccount(proxyDs.Name, proxyDs.Namespace)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to validate ServiceAccount %s, is found when shouldn't be", proxyDs.Name)
+		}
+	}
+
+	return nil
+}
+
 func validateStorkWebhookController(webhookControllerArgs map[string]string, storkDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate Stork webhook-controller")
 
@@ -1109,7 +1205,42 @@ func validateStorkHostNetwork(hostNetwork *bool, storkDeployment *appsv1.Deploym
 			if pod.Spec.HostNetwork != hostNetworkValue {
 				return nil, true, fmt.Errorf("failed to validate Stork hostNetwork inside Stork pod [%s]: expected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
 			}
-			logrus.Debugf("Value for hostNetwork inside Stork pod [%s]: epxected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+			logrus.Debugf("Value for hostNetwork inside Stork pod [%s]: expected: %v, actual: %v", pod.Name, hostNetworkValue, pod.Spec.HostNetwork)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateStorkNamespaceEnvVar(namespace string, storkDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Debug("Validate Stork STORK-NAMESPACE env")
+
+	t := func() (interface{}, bool, error) {
+		pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
+		if err != nil {
+			return nil, false, err
+		}
+
+		for _, pod := range pods {
+			namespaceEnvVar := ""
+			for _, env := range pod.Spec.Containers[0].Env {
+				if env.Name == StorkNamespaceEnvVarName {
+					if env.Value != namespace {
+						return nil, true, fmt.Errorf("failed to validate Stork STORK-NAMESPACE env var inside Stork pod [%s]: expected: %s, actual: %s", pod.Name, namespace, env.Value)
+					}
+					namespaceEnvVar = env.Value
+					break
+				}
+			}
+			if namespaceEnvVar == "" {
+				return nil, true, fmt.Errorf("failed to validate Stork STORK-NAMESPACE env var as it's not found")
+			}
+			logrus.Debugf("Value for STORK-NAMESPACE env var in Stork pod [%s]: expected: %v, actual: %v", pod.Name, namespace, namespaceEnvVar)
 		}
 		return nil, false, nil
 	}
@@ -1276,6 +1407,16 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 	}
 
 	return nil
+}
+
+func validateDaemonSet(daemonset *appsv1.DaemonSet, timeout time.Duration) error {
+	logrus.Debugf("Validating DaemonSet %s/%s", daemonset.Namespace, daemonset.Name)
+	return appops.Instance().ValidateDaemonSet(daemonset.Name, daemonset.Namespace, timeout)
+}
+
+func validateTerminatedDaemonSet(daemonset *appsv1.DaemonSet, timeout time.Duration) error {
+	logrus.Debugf("Validating DaemonSet %s/%s is terminated or doesn't exist", daemonset.Namespace, daemonset.Name)
+	return appops.Instance().ValidateDaemonSetIsTerminated(daemonset.Name, daemonset.Namespace, timeout)
 }
 
 func validateDeployment(deployment *appsv1.Deployment, timeout, interval time.Duration) error {
@@ -1641,7 +1782,7 @@ func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
 	// only if Portworx service is not deployed in kube-system namespace.
 	if isPKS(cluster) || isEKS(cluster) ||
 		isGKE(cluster) || isAKS(cluster) ||
-		(isOpenshift(cluster) && cluster.Namespace != "kube-system") {
+		cluster.Namespace != "kube-system" {
 		return true
 	}
 	return false
@@ -1650,6 +1791,15 @@ func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
 func isPortworxEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations["operator.libopenstorage.org/disable-storage"])
 	return err != nil || !disabled
+}
+
+func isPortworxProxyEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/portworx-proxy"])
+	// If annotation is not present or invalid, then portworx proxy is considered enabled
+	return (err != nil || enabled) &&
+		cluster.Namespace != "kube-system" &&
+		startPort(cluster) != 9001 &&
+		isPortworxEnabled(cluster)
 }
 
 func isPKS(cluster *corev1.StorageCluster) bool {
@@ -1675,6 +1825,16 @@ func isEKS(cluster *corev1.StorageCluster) bool {
 func isOpenshift(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-openshift"])
 	return err == nil && enabled
+}
+
+func startPort(cluster *corev1.StorageCluster) int {
+	startPort := 9001
+	if cluster.Spec.StartPort != nil {
+		startPort = int(*cluster.Spec.StartPort)
+	} else if isOpenshift(cluster) {
+		startPort = 17001
+	}
+	return startPort
 }
 
 // GetK8SVersion gets and return K8S server version
