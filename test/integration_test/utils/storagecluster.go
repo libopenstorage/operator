@@ -6,6 +6,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -32,7 +34,9 @@ func CreateStorageClusterTestSpecFunc(cluster *corev1.StorageCluster) func(t *te
 // ConstructStorageCluster makes StorageCluster object and add all the common basic parameters that all StorageCluster should have
 func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, specImages map[string]string) error {
 	cluster.Spec.Image = specImages["version"]
-	cluster.Namespace = PxNamespace
+	if cluster.Namespace == "" {
+		cluster.Namespace = PxNamespace
+	}
 	env, err := addDefaultEnvVars(cluster.Spec.Env, specGenURL)
 	if err != nil {
 		return err
@@ -55,6 +59,16 @@ func CreateStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 // CreateStorageCluster creates the given storage cluster on k8s
 func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
+	if cluster.Namespace != PxNamespace {
+		ns := &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: cluster.Namespace,
+			},
+		}
+		if err := CreateObjects([]runtime.Object{ns}); err != nil {
+			return nil, err
+		}
+	}
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
@@ -165,6 +179,19 @@ func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testi
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
+
+	// Delete namespace if not kube-system
+	if cluster.Namespace != PxNamespace {
+		ns := &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: cluster.Namespace,
+			},
+		}
+		err = DeleteObjects([]runtime.Object{ns})
+		require.NoError(t, err)
+		err = ValidateObjectsAreTerminated([]runtime.Object{ns}, false)
+		require.NoError(t, err)
+	}
 }
 
 // ValidateStorageClusterComponents validates storage cluster components
