@@ -59,48 +59,6 @@ type pksVolumeInfo struct {
 }
 
 var (
-
-	// commonVolumeList is the common list of volumes across all containers
-	commonVolumeList = []volumeInfo{
-		{
-			name:      "diagsdump",
-			hostPath:  "/var/cores",
-			mountPath: "/var/cores",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/cores",
-			},
-		},
-		{
-			name:      "etcpwx",
-			hostPath:  "/etc/pwx",
-			mountPath: "/etc/pwx",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/etc/pwx",
-			},
-		},
-		{
-			name:             "varlibosd",
-			hostPath:         "/var/lib/osd",
-			mountPath:        "/var/lib/osd",
-			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/lib/osd",
-			},
-		},
-		{
-			name:      "journalmount1",
-			hostPath:  "/var/run/log",
-			mountPath: "/var/run/log",
-			readOnly:  true,
-		},
-		{
-			name:      "journalmount2",
-			hostPath:  "/var/log",
-			mountPath: "/var/log",
-			readOnly:  true,
-		},
-	}
-
 	// kvdbVolumeInfo has information of the volume needed for kvdb certs
 	kvdbVolumeInfo = volumeInfo{
 		name:      "kvdbcerts",
@@ -1214,9 +1172,12 @@ func (t *template) getEnvList() []v1.EnvVar {
 }
 
 func (t *template) getVolumeMounts() []v1.VolumeMount {
-	volumeInfoList := getDefaultVolumeInfoList()
+	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
-		t.getK3sVolumeInfoList, t.getPKSVolumeInfoList, t.getBottleRocketVolumeInfoList, t.GetVolumeInfoForTLSCerts,
+		t.getK3sVolumeInfoList,
+		t.getPKSVolumeInfoList,
+		t.getBottleRocketVolumeInfoList,
+		t.GetVolumeInfoForTLSCerts,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1263,7 +1224,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 }
 
 func (t *template) getVolumes() []v1.Volume {
-	volumeInfoList := getDefaultVolumeInfoList()
+	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
 		t.getCSIVolumeInfoList,
 		t.getTelemetryVolumeInfoList,
@@ -1462,7 +1423,7 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 			})
 		}
 
-		volumeInfoList = append(volumeInfoList, commonVolumeList...)
+		volumeInfoList = append(volumeInfoList, getCommonVolumeList(t.pxVersion)...)
 		return volumeInfoList
 	}
 	return []volumeInfo{}
@@ -1611,7 +1572,7 @@ func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &val
 }
 
-func getDefaultVolumeInfoList() []volumeInfo {
+func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 	list := []volumeInfo{
 		{
 			name:      "dockersock",
@@ -1668,7 +1629,66 @@ func getDefaultVolumeInfoList() []volumeInfo {
 		},
 	}
 
-	list = append(list, commonVolumeList...)
+	list = append(list, getCommonVolumeList(pxVersion)...)
+	return list
+}
+
+// getCommonVolumeList returns a common list of volumes across all containers
+func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
+	list := []volumeInfo{
+		{
+			name:      "diagsdump",
+			hostPath:  "/var/cores",
+			mountPath: "/var/cores",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/cores",
+			},
+		},
+		{
+			name:      "etcpwx",
+			hostPath:  "/etc/pwx",
+			mountPath: "/etc/pwx",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/etc/pwx",
+			},
+		},
+		{
+			name:      "journalmount1",
+			hostPath:  "/var/run/log",
+			mountPath: "/var/run/log",
+			readOnly:  true,
+		},
+		{
+			name:      "journalmount2",
+			hostPath:  "/var/log",
+			mountPath: "/var/log",
+			readOnly:  true,
+		},
+	}
+
+	pxVer2_9_1, _ := version.NewVersion("2.9.1")
+	var osdVolume volumeInfo
+	if pxVersion.LessThan(pxVer2_9_1) {
+		osdVolume = volumeInfo{
+			name: "pxlogs",
+			pks: &pksVolumeInfo{
+				mountPath: "/var/lib/osd/log",
+				hostPath:  "/var/vcap/store/lib/osd/log",
+			},
+		}
+	} else {
+		osdVolume = volumeInfo{
+			name:             "varlibosd",
+			hostPath:         "/var/lib/osd",
+			mountPath:        "/var/lib/osd",
+			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/lib/osd",
+			},
+		}
+	}
+
+	list = append(list, osdVolume)
 	return list
 }
 
