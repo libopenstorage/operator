@@ -572,7 +572,7 @@ func (t *telemetry) createCollectorConfigMap(
 	pxSelectorLabels := pxutil.SelectorLabels()
 	var selectorStr string
 	for k, v := range pxSelectorLabels {
-		selectorStr += fmt.Sprintf("\n      %s: %s", k, v)
+		selectorStr += fmt.Sprintf("\n        %s: %s", k, v)
 	}
 
 	port := pxutil.StartPort(cluster)

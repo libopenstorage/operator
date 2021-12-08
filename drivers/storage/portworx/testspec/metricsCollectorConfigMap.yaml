@@ -12,7 +12,7 @@ data:
       k8sConfig:
         pods:
         - podSelector:
-          name: portworx
+            name: portworx
           namespace: kube-test
           endpoint: metrics
           port: 9001
