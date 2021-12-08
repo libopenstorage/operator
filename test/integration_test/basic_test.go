@@ -41,6 +41,20 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicInstall,
 	},
 	{
+		TestName:        "InstallInCustomNamespaceWithShiftedPort",
+		TestrailCaseIDs: []string{"C52411", "C52430", "C53572"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "custom-ns-shifted-port",
+				Namespace: "custom-namespace",
+			},
+			Spec: corev1.StorageClusterSpec{
+				StartPort: func(val uint32) *uint32 { return &val }(17001),
+			},
+		}),
+		TestFunc: BasicInstall,
+	},
+	{
 		TestName:        "NodeAffinityLabels",
 		TestrailCaseIDs: []string{"C50962"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
@@ -136,8 +150,8 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicStorkRegression,
 	},
 	{
-		TestName: "BasicAutopilotRegression",
-		TestrailCaseIDs: []string{"C57036", "C51237", "C58434", "	C58435", "C58433", "C51238", "C58432", "C51245"},
+		TestName:        "BasicAutopilotRegression",
+		TestrailCaseIDs: []string{"C57036", "C51237", "C58434", "C58435", "C58433", "C51238", "C58432", "C51245"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "autopilot-regression-test"},
 		}),
