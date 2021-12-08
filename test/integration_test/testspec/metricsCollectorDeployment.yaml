@@ -3,12 +3,6 @@ kind: Deployment
 metadata:
   name: px-metrics-collector
   namespace: kube-test
-  ownerReferences:
-    - apiVersion: core.libopenstorage.org/v1
-      blockOwnerDeletion: true
-      controller: true
-      kind: StorageCluster
-      name: px-cluster
 spec:
   replicas: 1
   selector:

@@ -220,7 +220,10 @@ func (t *telemetry) createCollectorDeployment(
 		return err
 	}
 
-	modified := !util.DeploymentDeepEqual(deployment, existingDeployment)
+	modified := false
+	if equal, _ := util.DeploymentDeepEqual(deployment, existingDeployment); !equal {
+		modified = true
+	}
 
 	if !t.isCollectorDeploymentCreated || modified {
 		logrus.WithFields(logrus.Fields{

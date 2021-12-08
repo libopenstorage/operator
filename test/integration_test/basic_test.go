@@ -10,11 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -99,6 +97,20 @@ var testStorageClusterBasicCases = []types.TestCase{
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
 				},
+			}
+			trueVal := true
+			cluster.Spec.Storage = &corev1.StorageSpec{
+				UseAll:               nil,
+				UseAllWithPartitions: &trueVal,
+				ForceUseDisks:        &trueVal,
+				Devices:              nil,
+				CacheDevices:         nil,
+				JournalDevice:        nil,
+				SystemMdDevice:       nil,
+				KvdbDevice:           nil,
+			}
+			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			}
 			return cluster
 		},
@@ -228,25 +240,41 @@ func InstallWithTelemetry(tc *types.TestCase) func(*testing.T) {
 }
 
 func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
-	secret := testutil.GetExpectedSecret(t, "pure-telemetry-cert.yaml")
-	require.NotNil(t, secret)
-
-	_, err := coreops.Instance().GetSecret(component.TelemetryCertName, "kube-system")
-	require.True(t, err == nil || errors.IsNotFound(err))
-
-	if errors.IsNotFound(err) {
-		secret, err = coreops.Instance().CreateSecret(secret)
-		require.NoError(t, err)
-	} else {
-		secret, err = coreops.Instance().UpdateSecret(secret)
-		require.NoError(t, err)
-	}
-
 	// Deploy portworx with telemetry set to true
-	cluster, err = ci_utils.CreateStorageCluster(cluster)
+	cluster, err := ci_utils.CreateStorageCluster(cluster)
 	require.NoError(t, err)
 
-	err = testutil.ValidateTelemetry(
+	err = testutil.ValidateTelemetryInstalled(
+		ci_utils.PxSpecImages,
+		cluster,
+		ci_utils.DefaultValidateDeployTimeout,
+		ci_utils.DefaultValidateDeployRetryInterval)
+	require.NoError(t, err)
+
+	// Disable telemetry and validate un-installation
+	cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	cluster, err = ci_utils.UpdateStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateTelemetryUninstalled(
+		ci_utils.PxSpecImages,
+		cluster,
+		ci_utils.DefaultValidateDeployTimeout,
+		ci_utils.DefaultValidateDeployRetryInterval)
+	require.NoError(t, err)
+
+	// Enable it back and validate installation
+	cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster, err = ci_utils.UpdateStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateTelemetryInstalled(
 		ci_utils.PxSpecImages,
 		cluster,
 		ci_utils.DefaultValidateDeployTimeout,
@@ -256,7 +284,11 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 	// Delete and validate the deletion
 	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 
-	err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
+	err = testutil.ValidateTelemetryUninstalled(
+		ci_utils.PxSpecImages,
+		cluster,
+		ci_utils.DefaultValidateDeployTimeout,
+		ci_utils.DefaultValidateDeployRetryInterval)
 	require.NoError(t, err)
 }
 
