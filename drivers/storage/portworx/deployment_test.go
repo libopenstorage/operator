@@ -368,6 +368,40 @@ func TestAutoNodeRecoveryTimeoutEnvForPxVersion2_6(t *testing.T) {
 	require.NotContains(t, actual.Containers[0].Env, recoveryEnv)
 }
 
+func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.9.1",
+		},
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc_2.9.1.yaml")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assertPodSpecEqual(t, expected, &actual)
+
+	// PKS environment
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationIsPKS: "true",
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/pks_2.9.1.yaml")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assertPodSpecEqual(t, expected, &actual)
+
+}
+
 func TestPodSpecWithKvdbSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"

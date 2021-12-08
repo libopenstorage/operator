@@ -83,9 +83,8 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
-            - name: varlibosd
-              mountPath: /var/lib/osd
-              mountPropagation: Bidirectional
+            - name: pxlogs
+              mountPath: /var/lib/osd/log
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -125,9 +124,9 @@ spec:
         - name: optpwx
           hostPath:
             path: /var/vcap/store/opt/pwx
-        - name: varlibosd
+        - name: pxlogs
           hostPath:
-            path: /var/vcap/store/lib/osd
+            path: /var/vcap/store/lib/osd/log
         - name: procmount
           hostPath:
             path: /proc

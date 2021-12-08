@@ -94,9 +94,6 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
-            - mountPath: /var/lib/osd
-              name: varlibosd
-              mountPropagation: Bidirectional
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -148,9 +145,6 @@ spec:
               name: diagsdump
             - mountPath: /etc/pwx
               name: etcpwx
-            - name: varlibosd
-              mountPath: /var/lib/osd
-              mountPropagation: Bidirectional
             - mountPath: /var/run/log
               name: journalmount1
               readOnly: true
@@ -182,9 +176,6 @@ spec:
         - name: optpwx
           hostPath:
             path: /opt/pwx
-        - name: varlibosd
-          hostPath:
-            path: /var/lib/osd
         - name: procmount
           hostPath:
             path: /proc
