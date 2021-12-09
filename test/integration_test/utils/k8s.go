@@ -87,6 +87,8 @@ func CreateObjects(objects []runtime.Object) error {
 			_, err = coreops.Instance().CreateService(svc)
 		} else if cm, ok := obj.(*v1.ConfigMap); ok {
 			_, err = coreops.Instance().CreateConfigMap(cm)
+		} else if secret, ok := obj.(*v1.Secret); ok {
+			_, err = coreops.Instance().CreateSecret(secret)
 		} else if sa, ok := obj.(*v1.ServiceAccount); ok {
 			_, err = coreops.Instance().CreateServiceAccount(sa)
 		} else if role, ok := obj.(*rbacv1.Role); ok {
@@ -108,6 +110,10 @@ func CreateObjects(objects []runtime.Object) error {
 			_, err = prometheusops.Instance().CreateServiceMonitor(sm)
 		} else if pr, ok := obj.(*monitoringv1.PrometheusRule); ok {
 			_, err = prometheusops.Instance().CreatePrometheusRule(pr)
+		} else if prom, ok := obj.(*monitoringv1.Prometheus); ok {
+			_, err = prometheusops.Instance().CreatePrometheus(prom)
+		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
+			_, err = prometheusops.Instance().CreateAlertManager(am)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
 		}
@@ -132,6 +138,8 @@ func DeleteObjects(objects []runtime.Object) error {
 			err = coreops.Instance().DeleteService(svc.Name, svc.Namespace)
 		} else if cm, ok := obj.(*v1.ConfigMap); ok {
 			err = coreops.Instance().DeleteConfigMap(cm.Name, cm.Namespace)
+		} else if secret, ok := obj.(*v1.Secret); ok {
+			err = coreops.Instance().DeleteSecret(secret.Name, secret.Namespace)
 		} else if sa, ok := obj.(*v1.ServiceAccount); ok {
 			err = coreops.Instance().DeleteServiceAccount(sa.Name, sa.Namespace)
 		} else if role, ok := obj.(*rbacv1.Role); ok {
@@ -151,6 +159,10 @@ func DeleteObjects(objects []runtime.Object) error {
 			err = prometheusops.Instance().DeleteServiceMonitor(sm.Name, sm.Namespace)
 		} else if pr, ok := obj.(*monitoringv1.PrometheusRule); ok {
 			err = prometheusops.Instance().DeletePrometheusRule(pr.Name, pr.Namespace)
+		} else if prom, ok := obj.(*monitoringv1.Prometheus); ok {
+			err = prometheusops.Instance().DeletePrometheus(prom.Name, prom.Namespace)
+		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
+			err = prometheusops.Instance().DeleteAlertManager(am.Name, am.Namespace)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
 		}
@@ -183,6 +195,8 @@ func ValidateObjectsAreTerminated(objects []runtime.Object, skip bool) error {
 			err = validateObjectIsTerminated(k8sClient, svc.Name, svc.Namespace, svc, false)
 		} else if cm, ok := obj.(*v1.ConfigMap); ok {
 			err = validateObjectIsTerminated(k8sClient, cm.Name, cm.Namespace, cm, false)
+		} else if secret, ok := obj.(*v1.Secret); ok {
+			err = validateObjectIsTerminated(k8sClient, secret.Name, secret.Namespace, secret, false)
 		} else if sa, ok := obj.(*v1.ServiceAccount); ok {
 			err = validateObjectIsTerminated(k8sClient, sa.Name, sa.Namespace, sa, false)
 		} else if role, ok := obj.(*rbacv1.Role); ok {
@@ -202,6 +216,10 @@ func ValidateObjectsAreTerminated(objects []runtime.Object, skip bool) error {
 			err = validateObjectIsTerminated(k8sClient, sm.Name, sm.Namespace, sm, false)
 		} else if pr, ok := obj.(*monitoringv1.PrometheusRule); ok {
 			err = validateObjectIsTerminated(k8sClient, pr.Name, pr.Namespace, pr, false)
+		} else if prom, ok := obj.(*monitoringv1.Prometheus); ok {
+			err = validateObjectIsTerminated(k8sClient, prom.Name, prom.Namespace, prom, false)
+		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
+			err = validateObjectIsTerminated(k8sClient, am.Name, am.Namespace, am, false)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
 		}
@@ -269,6 +287,8 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 		return specObj, nil
 	} else if specObj, ok := in.(*v1.ConfigMap); ok {
 		return specObj, nil
+	} else if specObj, ok := in.(*v1.Secret); ok {
+		return specObj, nil
 	} else if specObj, ok := in.(*v1.ServiceAccount); ok {
 		return specObj, nil
 	} else if specObj, ok := in.(*rbacv1.Role); ok {
@@ -286,6 +306,10 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 	} else if specObj, ok := in.(*monitoringv1.ServiceMonitor); ok {
 		return specObj, nil
 	} else if specObj, ok := in.(*monitoringv1.PrometheusRule); ok {
+		return specObj, nil
+	} else if specObj, ok := in.(*monitoringv1.Prometheus); ok {
+		return specObj, nil
+	} else if specObj, ok := in.(*monitoringv1.Alertmanager); ok {
 		return specObj, nil
 	}
 	return nil, fmt.Errorf("unsupported object: %v", reflect.TypeOf(in))

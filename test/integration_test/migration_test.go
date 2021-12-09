@@ -122,7 +122,18 @@ func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
 		err = appops.Instance().ValidateDeployment(dep, ci_utils.DefaultValidateDeployTimeout, 5*time.Second)
 		require.NoError(t, err)
 
+		alertManagerSecret, err := ci_utils.ParseSpecs("migration/alertmanager-secret.yaml")
+		require.NoError(t, err)
+
+		logrus.Infof("Creating alert manager secret")
+		err = ci_utils.CreateObjects(alertManagerSecret)
+		require.NoError(t, err)
+
 		MigrationWithoutNodeAffinity(tc)(t)
+
+		logrus.Infof("Deleting alert manager secret")
+		err = ci_utils.DeleteObjects(alertManagerSecret)
+		require.NoError(t, err)
 
 		logrus.Infof("Validate old prometheus operator is removed as well")
 		err = ci_utils.ValidateObjectsAreTerminated(objects, true)
