@@ -10925,6 +10925,22 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Len(t, roleBinding.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
 
+	// Collector cluster role
+	expectedClusterRole := testutil.GetExpectedClusterRole(t, "metricsCollectorClusterRole.yaml")
+	clusterRole := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+	require.NoError(t, err)
+	clusterRole.ResourceVersion = ""
+	require.Equal(t, expectedClusterRole, clusterRole)
+
+	// Collector cluster role binding
+	expectedClusterRoleBinding := testutil.GetExpectedClusterRoleBinding(t, "metricsCollectorClusterRoleBinding.yaml")
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+	require.NoError(t, err)
+	clusterRoleBinding.ResourceVersion = ""
+	require.Equal(t, expectedClusterRoleBinding, clusterRoleBinding)
+
 	// Collector deployment
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
@@ -10955,6 +10971,12 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
