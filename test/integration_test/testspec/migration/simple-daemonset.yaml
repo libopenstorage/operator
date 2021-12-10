@@ -100,11 +100,19 @@ spec:
           imagePullPolicy: Always
           args:
             ["-c", "px-cluster", "-a", "-b",
+             "-r", "9002",
+             "-rt_opts", "limit_drives_per_pool=8,enable-failure-domain-awareness=1",
              "-x", "kubernetes"]
           env:
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
-
+            - name: "TEST_ENV1"
+              value: "test_value"
+            - name: "TEST_ENV2"
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks

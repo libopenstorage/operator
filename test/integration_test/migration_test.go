@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	apiscore "k8s.io/kubernetes/pkg/apis/core"
@@ -228,11 +230,16 @@ func validateStorageClusterIsCreatedForDaemonSet(ds *appsv1.DaemonSet) (*corev1.
 
 		return cluster, false, nil
 	}
-	cluster, err := task.DoRetryWithTimeout(t, clusterCreationTimeout, clusterCreationRetryInterval)
+	stc, err := task.DoRetryWithTimeout(t, clusterCreationTimeout, clusterCreationRetryInterval)
 	if err != nil {
 		return nil, err
 	}
-	return cluster.(*corev1.StorageCluster), nil
+	cluster := stc.(*corev1.StorageCluster)
+
+	if err := validateStorageClusterFromDaemonSet(cluster, ds); err != nil {
+		return nil, err
+	}
+	return cluster, nil
 }
 
 func getClusterNameFromDaemonSet(ds *appsv1.DaemonSet) string {
@@ -293,4 +300,88 @@ func restartPortworxOperator(t *testing.T) {
 func shouldSkipMigrationTests(tc *types.TestCase) bool {
 	k8sVersion, _ := k8sutil.GetVersion()
 	return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22)
+}
+
+func validateStorageClusterFromDaemonSet(
+	cluster *corev1.StorageCluster,
+	ds *appsv1.DaemonSet,
+) error {
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		var cerr error
+		switch c.Name {
+		case "portworx":
+			cerr = validateStorageClusterFromPortworxContainer(cluster, &c)
+		case "csi-node-driver-registrar":
+			if enabled, err := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"]); err != nil || !enabled {
+				cerr = fmt.Errorf("csi should have been enabled")
+			}
+		case "telemetry":
+			if cluster.Spec.Monitoring == nil ||
+				cluster.Spec.Monitoring.Telemetry == nil ||
+				!cluster.Spec.Monitoring.Telemetry.Enabled {
+				cerr = fmt.Errorf("telemetry should been enabled")
+			}
+		}
+		if cerr != nil {
+			return cerr
+		}
+	}
+	return nil
+}
+
+func validateStorageClusterFromPortworxContainer(
+	cluster *corev1.StorageCluster,
+	container *v1.Container,
+) error {
+	var startPort uint32
+	rtOpts := map[string]string{}
+	for i := 0; i < len(container.Args); i++ {
+		arg := container.Args[i]
+		if arg == "-r" {
+			port, err := strconv.Atoi(container.Args[i+1])
+			if err != nil {
+				return err
+			}
+			startPort = uint32(port)
+		} else if arg == "-rt_opts" {
+			opts := strings.Split(container.Args[i+1], ",")
+			for _, opt := range opts {
+				s := strings.Split(opt, "=")
+				rtOpts[s[0]] = s[1]
+			}
+			i++
+		}
+	}
+
+	if startPort != 0 {
+		if cluster.Spec.StartPort == nil {
+			return fmt.Errorf("start port do not match: expected: %d, actual: nil", startPort)
+		} else if *(cluster.Spec.StartPort) != startPort {
+			return fmt.Errorf("start port do not match: expected: %d, actual: %d", startPort, *cluster.Spec.StartPort)
+		}
+	}
+
+	if len(rtOpts) == 0 {
+		rtOpts = nil
+	}
+	if !reflect.DeepEqual(rtOpts, cluster.Spec.RuntimeOpts) {
+		return fmt.Errorf("runtime options do not match: expected: %+v, actual: %+v", rtOpts, cluster.Spec.RuntimeOpts)
+	}
+
+	envMap := map[string]*v1.EnvVar{}
+	for _, env := range cluster.Spec.Env {
+		envMap[env.Name] = env.DeepCopy()
+	}
+	for _, dsEnv := range container.Env {
+		if dsEnv.Name == "PX_TEMPLATE_VERSION" {
+			continue
+		}
+		if env, present := envMap[dsEnv.Name]; !present {
+			return fmt.Errorf("expected env: %s to be present in StorageCluster", env.Name)
+		} else if !reflect.DeepEqual(dsEnv, *env) {
+			return fmt.Errorf("environment variable do not match: expected: %+v, actual: %+v", dsEnv, env)
+		}
+	}
+
+	return nil
 }
