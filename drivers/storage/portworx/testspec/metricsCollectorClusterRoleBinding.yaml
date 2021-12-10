@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: px-metrics-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: px-metrics-collector
+subjects:
+  - kind: ServiceAccount
+    name: px-metrics-collector
+    namespace: kube-test
