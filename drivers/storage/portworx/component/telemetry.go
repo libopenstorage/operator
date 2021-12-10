@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
@@ -44,6 +45,10 @@ const (
 	CollectorRoleName = "px-metrics-collector"
 	// CollectorRoleBindingName is name of the role binding for metrics collector.
 	CollectorRoleBindingName = "px-metrics-collector"
+	// CollectorClusterRoleName name of the metrics collector cluster role
+	CollectorClusterRoleName = "px-metrics-collector"
+	// CollectorClusterRoleBindingName name of the metrics collector cluster role binding
+	CollectorClusterRoleBindingName = "px-metrics-collector"
 	// CollectorConfigFileName is file name of the collector pod config.
 	CollectorConfigFileName = "portworx.yaml"
 	// CollectorProxyConfigFileName is file name of envoy config.
@@ -155,6 +160,14 @@ func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.Ow
 		return err
 	}
 
+	if err := k8sutil.DeleteClusterRole(t.k8sClient, CollectorClusterRoleName); err != nil {
+		return err
+	}
+
+	if err := k8sutil.DeleteClusterRoleBinding(t.k8sClient, CollectorClusterRoleBindingName); err != nil {
+		return err
+	}
+
 	if err := k8sutil.DeleteDeployment(t.k8sClient, CollectorDeploymentName, namespace, *ownerRef); err != nil {
 		return err
 	}
@@ -191,11 +204,69 @@ func (t *telemetry) deployMetricsCollector(
 		return err
 	}
 
+	if err := t.createCollectorClusterRole(); err != nil {
+		return err
+	}
+
+	if err := t.createCollectorClusterRoleBinding(cluster.Namespace); err != nil {
+		return err
+	}
+
 	if err := t.createCollectorDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (t *telemetry) createCollectorClusterRole() error {
+	return k8sutil.CreateOrUpdateClusterRole(
+		t.k8sClient,
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CollectorClusterRoleName,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{"privileged"},
+					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.PrivilegedPSPName},
+					Verbs:         []string{"use"},
+				},
+			},
+		},
+	)
+}
+
+func (t *telemetry) createCollectorClusterRoleBinding(
+	clusterNamespace string,
+) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		t.k8sClient,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: CollectorClusterRoleBindingName,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      CollectorServiceAccountName,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     CollectorClusterRoleName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+	)
 }
 
 func (t *telemetry) createCollectorDeployment(
