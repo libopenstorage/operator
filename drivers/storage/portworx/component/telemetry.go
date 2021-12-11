@@ -381,6 +381,9 @@ func (t *telemetry) getCollectorDeployment(
 						{
 							Name:  "collector",
 							Image: collectorImage,
+							SecurityContext: &v1.SecurityContext{
+								RunAsUser: &runAsUser,
+							},
 							Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
 									v1.ResourceMemory: resource.MustParse(defaultCollectorMemoryRequest),
