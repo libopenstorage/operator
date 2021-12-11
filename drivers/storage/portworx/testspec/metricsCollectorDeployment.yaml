@@ -46,6 +46,8 @@ spec:
           image: purestorage/realtime-metrics:latest
           imagePullPolicy: Always
           name: collector
+          securityContext:
+            runAsUser: 1111
           resources:
             requests:
               cpu: 200m

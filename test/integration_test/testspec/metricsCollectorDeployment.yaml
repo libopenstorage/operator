@@ -3,6 +3,12 @@ kind: Deployment
 metadata:
   name: px-metrics-collector
   namespace: kube-test
+  ownerReferences:
+    - apiVersion: core.libopenstorage.org/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StorageCluster
+      name: px-cluster
 spec:
   replicas: 1
   selector:
@@ -40,6 +46,8 @@ spec:
           image: purestorage/realtime-metrics:latest
           imagePullPolicy: Always
           name: collector
+          securityContext:
+            runAsUser: 1111
           resources:
             requests:
               cpu: 200m
