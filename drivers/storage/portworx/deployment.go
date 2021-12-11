@@ -1559,7 +1559,18 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 
 // getCommonVolumeList returns a common list of volumes across all containers
 func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
-	list := []volumeInfo{
+	list := make([]volumeInfo, 0)
+	pxVer2_9_1, _ := version.NewVersion("2.9.1")
+	if pxVersion.GreaterThanOrEqual(pxVer2_9_1) {
+		list = append(list, volumeInfo{
+			name:             "varlibosd",
+			hostPath:         "/var/lib/osd",
+			mountPath:        "/var/lib/osd",
+			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+		})
+	}
+
+	list = append(list, []volumeInfo{
 		{
 			name:      "diagsdump",
 			hostPath:  "/var/cores",
@@ -1577,6 +1588,13 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 			},
 		},
 		{
+			name: "pxlogs",
+			pks: &pksVolumeInfo{
+				mountPath: "/var/lib/osd/log",
+				hostPath:  "/var/vcap/store/lib/osd/log",
+			},
+		},
+		{
 			name:      "journalmount1",
 			hostPath:  "/var/run/log",
 			mountPath: "/var/run/log",
@@ -1588,31 +1606,8 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 			mountPath: "/var/log",
 			readOnly:  true,
 		},
-	}
+	}...)
 
-	pxVer2_9_1, _ := version.NewVersion("2.9.1")
-	var osdVolume volumeInfo
-	if pxVersion.LessThan(pxVer2_9_1) {
-		osdVolume = volumeInfo{
-			name: "pxlogs",
-			pks: &pksVolumeInfo{
-				mountPath: "/var/lib/osd/log",
-				hostPath:  "/var/vcap/store/lib/osd/log",
-			},
-		}
-	} else {
-		osdVolume = volumeInfo{
-			name:             "varlibosd",
-			hostPath:         "/var/lib/osd",
-			mountPath:        "/var/lib/osd",
-			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/lib/osd",
-			},
-		}
-	}
-
-	list = append(list, osdVolume)
 	return list
 }
 
