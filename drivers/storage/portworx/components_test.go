@@ -6470,7 +6470,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.8",
+			Image:               "portworx/image:2.9.1",
 			CustomImageRegistry: customRegistry,
 			StartPort:           &startPort,
 			UserInterface: &corev1.UserInterfaceSpec{
@@ -7320,7 +7320,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.8",
+			Image:               "portworx/image:2.9.1",
 			CustomImageRegistry: customRepo,
 			StartPort:           &startPort,
 			UserInterface: &corev1.UserInterfaceSpec{
@@ -8159,7 +8159,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:               "portworx/image:2.8",
+			Image:               "portworx/image:2.9.1",
 			CustomImageRegistry: customRepo,
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "1",
@@ -8821,7 +8821,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:     "portworx/image:2.9",
+			Image:     "portworx/image:2.9.1",
 			StartPort: &startPort,
 			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
@@ -9342,7 +9342,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image:     "portworx/image:2.8",
+			Image:     "portworx/image:2.9.1",
 			StartPort: &startPort,
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
@@ -11483,6 +11483,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.9.1",
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
@@ -11612,6 +11613,65 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
 	require.True(t, errors.IsNotFound(err))
 
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationTelemetryArcusLocation: "internal",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.9.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	role := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	roleBinding := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	clusterRole := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+	require.True(t, errors.IsNotFound(err))
+
+	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
