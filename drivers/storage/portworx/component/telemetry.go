@@ -179,6 +179,13 @@ func (t *telemetry) deployMetricsCollector(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	pxVer2_9_1, _ := version.NewVersion("2.9.1")
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	if pxVersion.LessThan(pxVer2_9_1) {
+		// Run metrics collector only for portworx version 2.9.1+
+		return nil
+	}
+
 	if len(cluster.Status.ClusterUID) == 0 {
 		logrus.Warn("clusterUID is empty, wait for it to fill collector proxy config")
 		return nil
