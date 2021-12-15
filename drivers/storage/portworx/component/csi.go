@@ -139,8 +139,8 @@ func (c *csi) Reconcile(cluster *corev1.StorageCluster) error {
 		}
 		c.csiNodeInfoCRDCreated = true
 	}
-	if !c.csiSnapshotCRDsCreated && cluster.Spec.CSI.InstallSnapshotCRDs != nil && *cluster.Spec.CSI.InstallSnapshotCRDs {
-		if err := c.createCSISnapshotCRDs(&c.k8sVersion); err != nil {
+	if !c.csiSnapshotCRDsCreated {
+		if err := c.createCSISnapshotCRDs(); err != nil {
 			return err
 		}
 		c.csiSnapshotCRDsCreated = true
@@ -1036,14 +1036,14 @@ func createCSINodeInfoCRD() error {
 	return apiextensionsops.Instance().ValidateCRDV1beta1(resource, 1*time.Minute, 5*time.Second)
 }
 
-func (c *csi) createCSISnapshotCRDs(k8sVersion *version.Version) error {
+func (c *csi) createCSISnapshotCRDs() error {
 	// Detect which CRD to use
 	var snapshotCRDVersion string
 	switch {
-	case k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) && k8sVersion.LessThan(k8sutil.K8sVer1_20):
+	case c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) && c.k8sVersion.LessThan(k8sutil.K8sVer1_20):
 		snapshotCRDVersion = "v3"
 
-	case k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_20):
+	case c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_20):
 		snapshotCRDVersion = "v4"
 
 	default:

@@ -1014,9 +1014,6 @@ spec:
                   installSnapshotController:
                     type: boolean
                     description: Flag indicating whether CSI Snapshot Controller needs to be installed for the storage cluster.
-                  installSnapshotCRDs:
-                    type: boolean
-                    description: Flag indicating whether CSI Snapshot CRDs needs to be installed for the storage cluster.
               env:
                 type: array
                 description: List of environment variables used by the driver. This is an array of Kubernetes

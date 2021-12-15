@@ -195,11 +195,6 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		cv.IncludeSnapshotController = false
 	}
 
-	pxVer2_5, _ := version.NewVersion("2.5")
-	if g.pxVersion.GreaterThanOrEqual(pxVer2_5) {
-		cv.IncludeEphemeralSupport = true
-	}
-
 	return cv
 }
 

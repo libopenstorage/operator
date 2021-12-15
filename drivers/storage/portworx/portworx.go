@@ -748,14 +748,7 @@ func setCSISpecDefaults(toUpdate *corev1.StorageCluster) {
 			// Enabled by feature gate, but not spec
 			Enabled:                   pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates),
 			InstallSnapshotController: boolPtr(false),
-			InstallSnapshotCRDs:       boolPtr(false),
 		}
-	}
-
-	if toUpdate.Spec.CSI.Enabled && toUpdate.Spec.CSI.InstallSnapshotController == nil {
-		// Do not install snapshot controller by default
-		toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(false)
-		toUpdate.Spec.CSI.InstallSnapshotCRDs = boolPtr(false)
 	}
 }
 

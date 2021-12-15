@@ -182,7 +182,6 @@ type NodeSpec struct {
 type CSISpec struct {
 	Enabled                   bool  `json:"enabled,omitempty"`
 	InstallSnapshotController *bool `json:"installSnapshotController,omitempty"`
-	InstallSnapshotCRDs       *bool `json:"installSnapshotCRDs,omitempty"`
 }
 
 // SecuritySpec is used to define the security configuration for a cluster.

@@ -391,12 +391,6 @@ func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.CSI != nil && cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
 }
 
-// InstallCSISnapshotCRDs determines if the end user has indicated
-// whether or not to install the CSI snapshot CRDs
-func InstallCSISnapshotCRDs(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.CSI != nil && cluster.Spec.CSI.InstallSnapshotCRDs != nil && *cluster.Spec.CSI.InstallSnapshotCRDs
-}
-
 // GetPortworxVersion returns the Portworx version based on the image provided.
 // We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
 // env variable. If that is not present or invalid semvar, then we fallback to an

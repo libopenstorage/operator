@@ -890,7 +890,6 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Snapshot controller and CRDs not installed by default
-	require.False(t, *cluster.Spec.CSI.InstallSnapshotCRDs)
 	require.False(t, *cluster.Spec.CSI.InstallSnapshotController)
 
 	// Use images from release manifest if enabled
@@ -898,7 +897,6 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		string(pxutil.FeatureCSI): "true",
 	}
 	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
-	cluster.Spec.CSI.InstallSnapshotCRDs = boolPtr(true)
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)

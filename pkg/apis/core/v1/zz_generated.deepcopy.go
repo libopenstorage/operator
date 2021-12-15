@@ -126,11 +126,6 @@ func (in *CSISpec) DeepCopyInto(out *CSISpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.InstallSnapshotCRDs != nil {
-		in, out := &in.InstallSnapshotCRDs, &out.InstallSnapshotCRDs
-		*out = new(bool)
-		**out = **in
-	}
 	return
 }
 

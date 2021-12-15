@@ -3,11 +3,10 @@ package util
 import (
 	"testing"
 
-	"github.com/libopenstorage/operator/pkg/constants"
-
 	"github.com/stretchr/testify/require"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
@@ -16,7 +15,7 @@ func TestImageURN(t *testing.T) {
 	out := getImageURN("", "registry.io", "")
 	require.Equal(t, "", out)
 
-	// TestCase: Empty repo and registrypkg/util/util_test.go
+	// TestCase: Empty repo and registry
 	out = getImageURN("", "", "test/image")
 	require.Equal(t, "test/image", out)
 
