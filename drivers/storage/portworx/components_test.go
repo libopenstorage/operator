@@ -2834,8 +2834,20 @@ func TestAutopilotInstall(t *testing.T) {
 					"log-level":         "debug",
 				},
 			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
 		},
 	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2884,16 +2896,9 @@ func TestAutopilotInstall(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, expectedDeployment.Name, autopilotDeployment.Name)
-	require.Equal(t, expectedDeployment.Namespace, autopilotDeployment.Namespace)
-	require.Len(t, autopilotDeployment.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, autopilotDeployment.OwnerReferences[0].Name)
-	require.Equal(t, expectedDeployment.Labels, autopilotDeployment.Labels)
-	require.Equal(t, expectedDeployment.Annotations, autopilotDeployment.Annotations)
-	// Ignoring resource comparison as the parsing from string creates different objects
-	expectedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
-	autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
-	require.Equal(t, expectedDeployment.Spec, autopilotDeployment.Spec)
+
+	autopilotDeployment.ResourceVersion = ""
+	require.Equal(t, expectedDeployment, autopilotDeployment)
 }
 
 func TestAutopilotWithoutImage(t *testing.T) {

@@ -299,6 +299,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+	setDefaultAutopilotSecret(toUpdate)
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -796,6 +797,36 @@ func setDefaultAutopilotProviders(
 					"url": component.AutopilotDefaultProviderEndpoint,
 				},
 			},
+		}
+	}
+}
+
+func setDefaultAutopilotSecret(cluster *corev1.StorageCluster) {
+	if pxutil.AuthEnabled(&cluster.Spec) &&
+		cluster.Spec.Autopilot != nil &&
+		cluster.Spec.Autopilot.Enabled {
+		// Check env variable is not added yet.
+		exist := false
+		for _, env := range cluster.Spec.Autopilot.Env {
+			if env.Name == pxutil.EnvKeyAutopilotPXSharedSecret {
+				exist = true
+				break
+			}
+		}
+
+		if !exist {
+			cluster.Spec.Autopilot.Env = append(cluster.Spec.Autopilot.Env,
+				v1.EnvVar{
+					Name: pxutil.EnvKeyAutopilotPXSharedSecret,
+					ValueFrom: &v1.EnvVarSource{
+						SecretKeyRef: &v1.SecretKeySelector{
+							Key: pxutil.SecurityAppsSecretKey,
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: pxutil.SecurityPXSystemSecretsSecretName,
+							},
+						},
+					},
+				})
 		}
 	}
 }
