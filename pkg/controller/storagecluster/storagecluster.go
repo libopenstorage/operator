@@ -334,6 +334,12 @@ func (c *Controller) validateCustomAnnotations(current *corev1.StorageCluster) e
 	return nil
 }
 
+func (c *Controller) validateCloudStorage(cluster *corev1.StorageCluster) error {
+	if cluster.Spec.Nodes
+
+	return nil
+}
+
 // RegisterCRD registers and validates CRDs
 func (c *Controller) RegisterCRD() error {
 	k8sVersion, err := k8s.GetVersion()
