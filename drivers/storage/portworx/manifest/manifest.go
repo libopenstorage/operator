@@ -24,15 +24,15 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion = "2.7.4"
+	DefaultPortworxVersion = "2.8.1.2"
 	defaultStorkImage      = "openstorage/stork:2.7.0"
 	defaultAutopilotImage  = "portworx/autopilot:1.3.1"
 	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
-	defaultTelemetryImage  = "purestorage/ccm-service:3.0.6"
+	defaultTelemetryImage  = "purestorage/ccm-service:3.0.9"
 
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
-	defaultCollectorImage      = "purestorage/realtime-metrics:latest"
+	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
