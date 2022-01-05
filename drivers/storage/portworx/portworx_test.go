@@ -126,9 +126,9 @@ func TestGetStorkEnvMap(t *testing.T) {
 	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
 	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "apps.portworx.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -142,18 +142,18 @@ func TestGetStorkEnvMap(t *testing.T) {
 	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
 	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "apps.portworx.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Image = "portworx/image:2.5.0"
 	envVars = driver.GetStorkEnvMap(cluster)
 	require.Len(t, envVars, 4)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "stork.openstorage.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Security.Enabled = false
@@ -716,30 +716,6 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, 1, len(providers))
 	require.Equal(t, "prometheus", providers[0].Type)
 	require.Equal(t, component.AutopilotDefaultProviderEndpoint, providers[0].Params["url"])
-
-	// Shared secret should be added if security is enabled
-	cluster.Spec.Autopilot.Enabled = true
-	cluster.Spec.Security = &corev1.SecuritySpec{
-		Enabled: true,
-	}
-
-	// First verify before security is enabled, env is not set.
-	require.Equal(t, 0, len(cluster.Spec.Autopilot.Env))
-	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, 1, len(cluster.Spec.Autopilot.Env))
-	require.Equal(t,
-		cluster.Spec.Autopilot.Env[0],
-		v1.EnvVar{
-			Name: pxutil.EnvKeyAutopilotPXSharedSecret,
-			ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					Key: pxutil.SecurityAppsSecretKey,
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxutil.SecurityPXSystemSecretsSecretName,
-					},
-				},
-			},
-		})
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
