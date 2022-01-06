@@ -126,9 +126,9 @@ func TestGetStorkEnvMap(t *testing.T) {
 	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
 	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "apps.portworx.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -142,18 +142,18 @@ func TestGetStorkEnvMap(t *testing.T) {
 	require.Equal(t, cluster.Namespace, envVars[pxutil.EnvKeyPortworxNamespace].Value)
 	require.Equal(t, component.PxAPIServiceName, envVars[pxutil.EnvKeyPortworxServiceName].Value)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "apps.portworx.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Image = "portworx/image:2.5.0"
 	envVars = driver.GetStorkEnvMap(cluster)
 	require.Len(t, envVars, 4)
 	require.Equal(t, pxutil.SecurityPXSystemSecretsSecretName,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Name)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Name)
 	require.Equal(t, pxutil.SecurityAppsSecretKey,
-		envVars[pxutil.EnvKeyStorkPXSharedSecret].ValueFrom.SecretKeyRef.Key)
+		envVars[pxutil.EnvKeyPXSharedSecret].ValueFrom.SecretKeyRef.Key)
 	require.Equal(t, "stork.openstorage.io", envVars[pxutil.EnvKeyStorkPXJwtIssuer].Value)
 
 	cluster.Spec.Security.Enabled = false

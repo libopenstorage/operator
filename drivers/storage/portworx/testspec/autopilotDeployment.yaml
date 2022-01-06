@@ -7,6 +7,12 @@ metadata:
     tier: control-plane
   name: autopilot
   namespace: kube-test
+  ownerReferences:
+    - apiVersion: core.libopenstorage.org/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StorageCluster
+      name: px-cluster
 spec:
   selector:
     matchLabels:
@@ -35,7 +41,7 @@ spec:
         image: portworx/autopilot:1.1.1
         resources:
           requests:
-            cpu: '0.1'
+            cpu: 100m
         name: autopilot
         volumeMounts:
         - name: config-volume
@@ -43,8 +49,32 @@ spec:
         env:
         - name: PX_NAMESPACE
           value: kube-test
+        - name: PX_SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: apps-secret
+              name: px-system-secrets
       hostPID: false
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:

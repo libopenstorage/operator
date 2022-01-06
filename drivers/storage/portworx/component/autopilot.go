@@ -259,6 +259,26 @@ func (c *autopilot) createClusterRoleBinding(
 	)
 }
 
+func (c *autopilot) setDefaultAutopilotSecret(cluster *corev1.StorageCluster, envMap map[string]*v1.EnvVar) {
+	if !pxutil.AuthEnabled(&cluster.Spec) {
+		return
+	}
+
+	if _, exist := envMap[pxutil.EnvKeyPXSharedSecret]; !exist {
+		envMap[pxutil.EnvKeyPXSharedSecret] = &v1.EnvVar{
+			Name: pxutil.EnvKeyPXSharedSecret,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					Key: pxutil.SecurityAppsSecretKey,
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: pxutil.SecurityPXSystemSecretsSecretName,
+					},
+				},
+			},
+		}
+	}
+}
+
 func (c *autopilot) createDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
@@ -324,6 +344,8 @@ func (c *autopilot) createDeployment(
 	for _, env := range cluster.Spec.Autopilot.Env {
 		envMap[env.Name] = env.DeepCopy()
 	}
+
+	c.setDefaultAutopilotSecret(cluster, envMap)
 	finalEnvVars := make([]v1.EnvVar, 0, len(envMap))
 	for _, env := range envMap {
 		finalEnvVars = append(finalEnvVars, *env)
