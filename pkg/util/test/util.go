@@ -403,7 +403,10 @@ func ValidateStorageCluster(
 	}
 
 	// Validate Portworx pods
-	if err = validateStorageClusterPods(clusterSpec, expectedPxNodeNameList, timeout, interval); err != nil {
+	podTestFn := func(pod v1.Pod) bool {
+		return coreops.Instance().IsPodReady(pod)
+	}
+	if err = validateStorageClusterPods(clusterSpec, expectedPxNodeNameList, timeout, interval, podTestFn); err != nil {
 		return err
 	}
 
@@ -651,10 +654,13 @@ func ValidateUninstallStorageCluster(
 	return nil
 }
 
+type podTestFnType func(pod v1.Pod) bool
+
 func validateStorageClusterPods(
 	clusterSpec *corev1.StorageCluster,
 	expectedPxNodeNameList []string,
 	timeout, interval time.Duration,
+	podTestFn podTestFnType,
 ) error {
 	t := func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(clusterSpec.Name, clusterSpec.Namespace)
@@ -676,7 +682,8 @@ func validateStorageClusterPods(
 		var podsNotReady []string
 		var podsReady []string
 		for _, pod := range pods {
-			if !coreops.Instance().IsPodReady(pod) {
+			// if test-function fails, POD is considered as "not ready"
+			if !podTestFn(pod) {
 				podsNotReady = append(podsNotReady, pod.Name)
 			}
 			pxNodeNameList = append(pxNodeNameList, pod.Spec.NodeName)
@@ -738,6 +745,7 @@ func defaultPxNodeAffinityRules(runOnMaster bool) *v1.NodeAffinity {
 func validatePortworxNodes(cluster *corev1.StorageCluster, expectedNodes int) error {
 	conn, err := getSdkConnection(cluster)
 	if err != nil {
+		// CHECKME -- shouldn't we return err ?
 		return nil
 	}
 
@@ -2032,6 +2040,87 @@ func validateStorageClusterIsFailed(cluster *corev1.StorageCluster, timeout, int
 	if err != nil {
 		return fmt.Errorf("failed to wait for StorageNodes to be failed, Err: %v", err)
 	}
+	return nil
+}
+
+func validateStorageClusterIsInitializing(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	_, err := task.DoRetryWithTimeout(validateAllStorageNodesInState(cluster.Namespace, corev1.NodeInitStatus), timeout, interval)
+	if err != nil {
+		return fmt.Errorf("failed to wait for StorageNodes to be initializing, Err: %v", err)
+	}
+	return nil
+}
+
+// ValidateStorageClusterFailedEvents checks a StorageCluster installed, but has issues (logged events)
+func ValidateStorageClusterFailedEvents(
+	clusterSpec *corev1.StorageCluster,
+	timeout, interval time.Duration,
+	eventsFieldSelector string,
+	eventsNewerThan time.Time,
+	kubeconfig ...string,
+) error {
+	// Set kubeconfig
+	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
+		os.Setenv("KUBECONFIG", kubeconfig[0])
+	}
+
+	// Validate StorageCluster started Initializing  (note, will be stuck in this phase...)
+	err := validateStorageClusterIsInitializing(clusterSpec, timeout, interval)
+	if err != nil {
+		return err
+	}
+
+	// Get list of expected Portworx node names
+	expectedPxNodeNameList, err := GetExpectedPxNodeNameList(clusterSpec)
+	if err != nil {
+		return err
+	}
+
+	// Validate Portworx pods
+	// - we want POD in "Running" state, and have one container in READY=0/1 state
+	podTestFn := func(pod v1.Pod) bool {
+		if pod.Status.Phase != v1.PodRunning {
+			return false
+		}
+		for _, c := range pod.Status.ContainerStatuses {
+			if c.Started != nil && *c.Started && !c.Ready {
+				return true
+			}
+		}
+		return false
+	}
+	if err = validateStorageClusterPods(clusterSpec, expectedPxNodeNameList, timeout, interval, podTestFn); err != nil {
+		return err
+	}
+
+	// List newer events -- ensure requested `eventsFieldSelector` is listed
+	t := func() (interface{}, bool, error) {
+		tmout := int64(timeout.Seconds() / 2)
+		events, err := coreops.Instance().ListEvents(clusterSpec.Namespace, metav1.ListOptions{
+			FieldSelector:  eventsFieldSelector,
+			TimeoutSeconds: &tmout,
+			Limit:          100,
+		})
+		if err != nil {
+			return "", true, err
+		}
+		seen := make(map[string]bool)
+		v1Time := metav1.NewTime(eventsNewerThan)
+		for _, ev := range events.Items {
+			if ev.LastTimestamp.Before(&v1Time) {
+				continue
+			}
+			seen[ev.Source.Host] = true
+		}
+		if len(seen) <= 0 {
+			return "", true, fmt.Errorf("no %s events found", eventsFieldSelector)
+		}
+		return "", false, nil
+	}
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
