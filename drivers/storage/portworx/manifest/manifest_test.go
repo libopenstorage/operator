@@ -36,8 +36,8 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.6",
-			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			Telemetry:                 "image/ccm-service:3.0.9",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -74,7 +74,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -162,7 +162,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -249,7 +249,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -328,7 +328,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:latest",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
