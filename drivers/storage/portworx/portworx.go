@@ -115,8 +115,8 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 	}
 
 	if pxutil.SecurityEnabled(cluster) {
-		envMap[pxutil.EnvKeyStorkPXSharedSecret] = &v1.EnvVar{
-			Name: pxutil.EnvKeyStorkPXSharedSecret,
+		envMap[pxutil.EnvKeyPXSharedSecret] = &v1.EnvVar{
+			Name: pxutil.EnvKeyPXSharedSecret,
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{
