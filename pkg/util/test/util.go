@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
+
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -788,15 +790,47 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	for _, node := range nodeList.Items {
-		if coreops.Instance().IsNodeMaster(node) {
+		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() {
 			continue
 		}
+
 		if pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(dummyPod, &node) {
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
 
 	return nodeNameListWithPxPods, nil
+}
+
+// GetFullVersion returns the full kubernetes server version
+func GetFullVersion() (*version.Version, string, error) {
+	k8sVersion, err := coreops.Instance().GetVersion()
+	if err != nil {
+		return nil, "", fmt.Errorf("unable to get kubernetes version: %v", err)
+	}
+
+	kbVerRegex := regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
+	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
+	if len(matches) < 2 {
+		return nil, "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+	}
+
+	ver, err := version.NewVersion(matches[1])
+	if len(matches) == 3 {
+		return ver, matches[2], err
+	}
+	return ver, "", err
+}
+
+// IsK3sCluster returns true or false, based on this kubernetes cluster is k3s or not
+func IsK3sCluster() bool {
+	// Get k8s version ext
+	_, ext, _ := GetFullVersion()
+
+	if len(ext) > 0 {
+		return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
+	}
+	return false
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
