@@ -339,18 +339,11 @@ func (c *Controller) validateCustomAnnotations(current *corev1.StorageCluster) e
 	return nil
 }
 
-
-
 func getKeysFromNodeSelector(ns *corev1.NodeSelector) map[string]bool {
 	keys := make(map[string]bool)
 
-	// Use node name as selector.
-	if ns.NodeName != "" {
-		keys["NodeName"] = true
-	}
-
 	if ns.LabelSelector != nil {
-		for k, _ := range ns.LabelSelector.MatchLabels {
+		for k := range ns.LabelSelector.MatchLabels {
 			keys[k] = true
 		}
 
@@ -372,18 +365,17 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 		cluster.Spec.CloudStorage.NodePoolLabel != "" &&
 		key != "" &&
 		cluster.Spec.CloudStorage.NodePoolLabel != key {
-		return fmt.Errorf("node pool label key incorrect, expected %s, actual %s", cluster.Spec.CloudStorage.NodePoolLabel, key)
+		return fmt.Errorf("node pool label key incorrect, expected %s, actual %s", key, cluster.Spec.CloudStorage.NodePoolLabel)
 	}
 
 	return nil
 }
 
 func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Spec.Nodes == nil || len(cluster.Spec.Nodes) == 0 {
+	if len(cluster.Spec.Nodes) == 0 {
 		return "", nil
 	}
 
-	first := false
 	key := ""
 	for _, node := range cluster.Spec.Nodes {
 		if node.CloudStorage == nil {
@@ -392,16 +384,15 @@ func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (st
 
 		keys := getKeysFromNodeSelector(&node.Selector)
 		if len(keys) != 1 {
-			return "", fmt.Errorf("it's required to have 1 key in cloud storage node label selector, key(s) %v", keys)
+			return "", fmt.Errorf("it's required to have only 1 key in cloud storage node label selector, key(s) %v, node %+v", keys, node)
 		}
 
 		keyTemp := ""
-		for k, _ := range keys {
+		for k := range keys {
 			keyTemp = k
 		}
 
-		if !first {
-			first = true
+		if key == "" {
 			key = keyTemp
 		} else if key != keyTemp {
 			return "", fmt.Errorf("can not have different key in cloud storage node label selector: %s and %s", key, keyTemp)
@@ -1201,9 +1192,9 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		return err
 	}
 	if key != "" &&
-		(cluster.Spec.CloudStorage == nil || cluster.Spec.CloudStorage.NodePoolLabel == "") {
-		if cluster.Spec.CloudStorage == nil {
-			cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		(toUpdate.Spec.CloudStorage == nil || toUpdate.Spec.CloudStorage.NodePoolLabel == "") {
+		if toUpdate.Spec.CloudStorage == nil {
+			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 		}
 
 		toUpdate.Spec.CloudStorage.NodePoolLabel = key
