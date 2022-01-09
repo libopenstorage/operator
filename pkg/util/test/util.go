@@ -797,16 +797,16 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 		}
 
 		if IsK3sCluster() {
-			masterTolerationFound := false
+			masterTaintFound := false
 			for _, t := range dummyPod.Spec.Tolerations {
 				if t.Key == "node-role.kubernetes.io/master" &&
 					t.Effect == v1.TaintEffectNoSchedule {
-					masterTolerationFound = true
+					masterTaintFound = true
 					break
 				}
 			}
 
-			if !masterTolerationFound {
+			if !masterTaintFound {
 				dummyPod.Spec.Tolerations = append(dummyPod.Spec.Tolerations,
 					v1.Toleration{
 						Key:    "node-role.kubernetes.io/master",
