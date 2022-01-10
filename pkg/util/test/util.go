@@ -703,22 +703,30 @@ func validateStorageClusterPods(
 }
 
 // Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
-func defaultPxNodeAffinityRules() *v1.NodeAffinity {
+func defaultPxNodeAffinityRules(runOnMaster bool) *v1.NodeAffinity {
+	selectorRequirements := []v1.NodeSelectorRequirement{
+		{
+			Key:      "px/enabled",
+			Operator: v1.NodeSelectorOpNotIn,
+			Values:   []string{"false"},
+		},
+	}
+
+	if !runOnMaster {
+		selectorRequirements = append(
+			selectorRequirements,
+			v1.NodeSelectorRequirement{
+				Key:      "node-role.kubernetes.io/master",
+				Operator: v1.NodeSelectorOpDoesNotExist,
+			},
+		)
+	}
+
 	nodeAffinity := &v1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 			NodeSelectorTerms: []v1.NodeSelectorTerm{
 				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "px/enabled",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"false"},
-						},
-						{
-							Key:      "node-role.kubernetes.io/master",
-							Operator: v1.NodeSelectorOpDoesNotExist,
-						},
-					},
+					MatchExpressions: selectorRequirements,
 				},
 			},
 		},
@@ -785,7 +793,27 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 		}
 	} else {
 		dummyPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: defaultPxNodeAffinityRules(),
+			NodeAffinity: defaultPxNodeAffinityRules(IsK3sCluster()),
+		}
+
+		if IsK3sCluster() {
+			masterTaintFound := false
+			for _, t := range dummyPod.Spec.Tolerations {
+				if t.Key == "node-role.kubernetes.io/master" &&
+					t.Effect == v1.TaintEffectNoSchedule {
+					masterTaintFound = true
+					break
+				}
+			}
+
+			if !masterTaintFound {
+				dummyPod.Spec.Tolerations = append(dummyPod.Spec.Tolerations,
+					v1.Toleration{
+						Key:    "node-role.kubernetes.io/master",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				)
+			}
 		}
 	}
 
