@@ -42,6 +42,7 @@ import (
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -1755,7 +1756,11 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 		return err
 	}
 
-	expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
+	expectedDeployment, err := createMetrixCollectorDeploymentObject(cluster, pxImageList)
+	if err != nil {
+		return err
+	}
+
 	deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
 	if err != nil {
 		return err
@@ -1827,6 +1832,195 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 
 	logrus.Infof("Telemetry successfully installed")
 	return nil
+}
+
+func createMetrixCollectorDeploymentObject(cluster *corev1.StorageCluster, pxImageList map[string]string) (*appsv1.Deployment, error) {
+	blockOwnerDeletion := true
+	controller := true
+	replicas := int32(1)
+	runAsUser := int64(1111)
+	cpuQuantity, err := resource.ParseQuantity("0.2")
+	if err != nil {
+		return nil, err
+	}
+
+	collectorImageName, ok := pxImageList["metricsCollector"]
+	if !ok {
+		return nil, fmt.Errorf("failed to find image for collector container")
+	}
+
+	envoyImageName, ok := pxImageList["metricsCollector"]
+	if !ok {
+		return nil, fmt.Errorf("failed to find image for envoy container")
+	}
+
+	expectedDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-metrics-collector",
+			Namespace: cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "core.libopenstorage.org/v1",
+					BlockOwnerDeletion: &blockOwnerDeletion,
+					Controller:         &controller,
+					Kind:               "StorageCluster",
+					Name:               cluster.Name,
+				},
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"role": "realtime-metrics-collector",
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"role": "realtime-metrics-collector",
+					},
+				},
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "px/enabled",
+												Operator: v1.NodeSelectorOpNotIn,
+												Values:   []string{"false"},
+											},
+											{
+												Key:      "node-role.kubernetes.io/master",
+												Operator: v1.NodeSelectorOpDoesNotExist,
+											},
+										},
+									},
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "px/enabled",
+												Operator: v1.NodeSelectorOpNotIn,
+												Values:   []string{"false"},
+											},
+											{
+												Key:      "node-role.kubernetes.io/master",
+												Operator: v1.NodeSelectorOpExists,
+											},
+											{
+												Key:      "node-role.kubernetes.io/worker",
+												Operator: v1.NodeSelectorOpExists,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					Containers: []v1.Container{
+						{
+							Name:            "collector",
+							Image:           collectorImageName,
+							ImagePullPolicy: v1.PullAlways,
+							SecurityContext: &v1.SecurityContext{
+								RunAsUser: &runAsUser,
+							},
+							Ports: []v1.ContainerPort{
+								{
+									Name:          "collector",
+									ContainerPort: int32(80),
+									Protocol:      v1.ProtocolTCP,
+								},
+							},
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceMemory: resource.MustParse("64Mi"),
+									v1.ResourceCPU:    cpuQuantity,
+								},
+								Limits: v1.ResourceList{
+									v1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+							Env: []v1.EnvVar{
+								{
+									Name:  "CONFIG",
+									Value: "config/portworx.yaml",
+								},
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									MountPath: "/config",
+									Name:      "px-collector-config",
+									ReadOnly:  true,
+								},
+							},
+						},
+						{
+							Name:            "envoy",
+							Image:           envoyImageName,
+							ImagePullPolicy: v1.PullAlways,
+							Args: []string{
+								"envoy",
+								"--config-path",
+								"/config/envoy-config.yaml",
+							},
+							SecurityContext: &v1.SecurityContext{
+								RunAsUser: &runAsUser,
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									MountPath: "/config",
+									Name:      "px-collector-proxy-config",
+									ReadOnly:  true,
+								},
+								{
+									MountPath: "/appliance-cert",
+									Name:      "pure-telemetry-certs",
+									ReadOnly:  true,
+								},
+							},
+						},
+					},
+					ServiceAccountName: "px-metrics-collector",
+					Volumes: []v1.Volume{
+						{
+							Name: "px-collector-config",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "px-collector-config",
+									},
+								},
+							},
+						},
+						{
+							Name: "px-collector-proxy-config",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "px-collector-proxy-config",
+									},
+								},
+							},
+						},
+						{
+							Name: "pure-telemetry-certs",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "pure-telemetry-certs",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return expectedDeployment, nil
 }
 
 func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
