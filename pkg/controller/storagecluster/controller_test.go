@@ -433,6 +433,9 @@ func TestCloudStorageLabelSelector(t *testing.T) {
 			CloudStorage: getCloudStorageSpec("type2"),
 		},
 	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
 	err := controller.validateCloudStorageLabelKey(cluster)
 	require.Error(t, err)
 
@@ -825,6 +828,8 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 		Driver:            driver,
 	}
 
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
 	driver.EXPECT().Validate().Return(fmt.Errorf("daemonset is present"))
 
 	request := reconcile.Request{

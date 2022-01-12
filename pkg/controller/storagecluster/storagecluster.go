@@ -356,6 +356,17 @@ func getKeysFromNodeSelector(ns *corev1.NodeSelector) map[string]bool {
 }
 
 func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster) error {
+	storagePods, err := c.getStoragePods(cluster)
+	if err != nil {
+		return err
+	}
+
+	// This is to prevent an existing cluster from running into failure due to the validation.
+	if len(storagePods) > 0 {
+		logrus.Debug("existing storage pod found, skipping cloud storage node selector validation")
+		return nil
+	}
+
 	key, err := c.getCloudStorageLabelKey(cluster)
 	if err != nil {
 		return err
@@ -380,6 +391,10 @@ func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (st
 	for _, node := range cluster.Spec.Nodes {
 		if node.CloudStorage == nil {
 			continue
+		}
+
+		if node.Selector.NodeName != "" {
+			return "", fmt.Errorf("should not use nodeName as cloud storage node selector")
 		}
 
 		keys := getKeysFromNodeSelector(&node.Selector)
