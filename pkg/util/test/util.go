@@ -1755,14 +1755,20 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 		return err
 	}
 
+	/* TODO: We need to make this work for spawn
 	expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
+	*/
+
 	deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
 	if err != nil {
 		return err
 	}
+
+	/* TODO: We need to make this work for spawn
 	if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
 		return err
 	}
+	*/
 
 	_, err = rbacops.Instance().GetRole("px-metrics-collector", cluster.Namespace)
 	if err != nil {
