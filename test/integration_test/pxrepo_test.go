@@ -22,10 +22,10 @@ var (
 	pxVer2_10, _ = version.NewVersion("2.10")
 )
 
-var zoxTestCases = []types.TestCase{
+var pxrepoTestCases = []types.TestCase{
 	{
 		TestName:        "InstallAirGapped",
-		TestrailCaseIDs: []string{"TODO", "TODO2"},
+		TestrailCaseIDs: []string{"C58604", "C58605"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
 			cluster.Name = "px-repo-test-negative"
@@ -83,14 +83,13 @@ var zoxTestCases = []types.TestCase{
 
 	{
 		TestName:        "InstallAirGappedWithPXRepo",
-		TestrailCaseIDs: []string{"TODO", "TODO2"},
+		TestrailCaseIDs: []string{"C58604", "C58605"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
 			cluster.Name = "px-repo-included"
 			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 			require.NoError(t, err)
 			testEnv := []string{
-				"PX_IMAGE=docker.io/zoxpx/enterprise:2.9.1-fixd",
 				// $TEST_SKIP_EXTRACT_PX_MODULE prevents unpacking of internal KO-archive
 				"TEST_SKIP_EXTRACT_PX_MODULE=true",
 				// set up pre-exec to clean up various px.ko module locations
@@ -123,7 +122,7 @@ var zoxTestCases = []types.TestCase{
 }
 
 func TestPxRepo(t *testing.T) {
-	for _, testCase := range zoxTestCases {
+	for _, testCase := range pxrepoTestCases {
 		testCase.RunTest(t)
 	}
 }
