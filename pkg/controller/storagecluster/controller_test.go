@@ -395,6 +395,223 @@ func TestSingleClusterValidation(t *testing.T) {
 	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 }
 
+func TestCloudStorageLabelSelector(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	getCloudStorageSpec := func(devType string) *corev1.CloudStorageNodeSpec {
+		return &corev1.CloudStorageNodeSpec{
+			CloudStorageCommon: corev1.CloudStorageCommon{
+				DeviceSpecs: stringSlicePtr([]string{fmt.Sprintf("type=" + devType)}),
+			},
+		}
+	}
+
+	// NodeName selector
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				NodeName: "Test",
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
+	err := controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
+	// Empty selector
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector:     corev1.NodeSelector{},
+			CloudStorage: getCloudStorageSpec("type2"),
+		},
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
+	// Two keys in one selector
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test":  "node2",
+						"test2": "node3",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type2"),
+		},
+	}
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
+	// Different keys in selectors
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test2": "node3",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type2"),
+		},
+	}
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
+	// One node does not have cloud storage
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test2": "node3",
+					},
+				},
+			},
+		},
+	}
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.NoError(t, err)
+
+	// Selector key is different from NodePoolLabel
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"key": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"key": "node2",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type2"),
+		},
+	}
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		NodePoolLabel: "key2",
+	}
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
+	// Validation skipped if storage pods are present
+	podLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  "mockDriverName",
+	}
+	storagePod := createStoragePod(cluster, "running-pod", "testNodeName", podLabels)
+	controller.client.Create(context.TODO(), storagePod)
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.NoError(t, err)
+	controller.client.Delete(context.TODO(), storagePod)
+
+	// Node pool label correct
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"key": "node1",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"key": "node2",
+					},
+				},
+			},
+			CloudStorage: getCloudStorageSpec("type2"),
+		},
+	}
+	cluster.Spec.CloudStorage.NodePoolLabel = "key"
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.NoError(t, err)
+
+	// Node pool label empty
+	cluster.Spec.CloudStorage.NodePoolLabel = ""
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.NoError(t, err)
+
+	// Node pool label get set by default
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	cluster.Spec.CloudStorage.NodePoolLabel = ""
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Spec.CloudStorage.NodePoolLabel, "key")
+}
+
 func TestStorageClusterDefaults(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -637,6 +854,8 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 		Driver:            driver,
 	}
 
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
 	driver.EXPECT().Validate().Return(fmt.Errorf("daemonset is present"))
 
 	request := reconcile.Request{
@@ -1126,7 +1345,11 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		{
 			// Match using node name
 			Selector: corev1.NodeSelector{
-				NodeName: "k8s-node-1",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node1",
+					},
+				},
 			},
 			CommonConfig: corev1.CommonConfig{
 				Storage: &corev1.StorageSpec{
@@ -1168,24 +1391,12 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			},
 		},
 		{
-			// Duplicate selector with same node name. If the node has already
-			// matched a previous spec, then this spec will not be used by that node.
-			Selector: corev1.NodeSelector{
-				NodeName: "k8s-node-1",
-			},
-			CommonConfig: corev1.CommonConfig{
-				Storage: &corev1.StorageSpec{
-					Devices: stringSlicePtr([]string{"unused"}),
-				},
-			},
-		},
-		{
 			// Even though the labels match a valid node, if the node has already
 			// matched a previous spec, then this spec will not be used by that node.
 			Selector: corev1.NodeSelector{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"test2": "node2",
+						"test": "node2",
 					},
 				},
 			},
@@ -5742,7 +5953,14 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// Should not restart the pod as the node level configuration is unchanged.
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["extra"] = "label"
+	delete(cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels, "test")
+	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchExpressions = []metav1.LabelSelectorRequirement{
+		{
+			Key:      "test",
+			Operator: metav1.LabelSelectorOpIn,
+			Values:   []string{"foo", "foo2"},
+		},
+	}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 

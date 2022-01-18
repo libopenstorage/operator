@@ -29,12 +29,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/drivers/storage"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudprovider"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -59,6 +53,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/libopenstorage/operator/drivers/storage"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -262,9 +263,13 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCustomAnnotations(cluster); err != nil {
 		return err
 	}
+	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
+		return err
+	}
 	if err := c.Driver.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -332,6 +337,84 @@ func (c *Controller) validateCustomAnnotations(current *corev1.StorageCluster) e
 	}
 
 	return nil
+}
+
+func getKeysFromNodeSelector(ns *corev1.NodeSelector) map[string]bool {
+	keys := make(map[string]bool)
+
+	if ns.LabelSelector != nil {
+		for k := range ns.LabelSelector.MatchLabels {
+			keys[k] = true
+		}
+
+		for _, r := range ns.LabelSelector.MatchExpressions {
+			keys[r.Key] = true
+		}
+	}
+
+	return keys
+}
+
+func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster) error {
+	storagePods, err := c.getStoragePods(cluster)
+	if err != nil {
+		return err
+	}
+
+	// This is to prevent an existing cluster from running into failure due to the validation.
+	if len(storagePods) > 0 {
+		logrus.Debug("existing storage pod found, skipping cloud storage node selector validation")
+		return nil
+	}
+
+	key, err := c.getCloudStorageLabelKey(cluster)
+	if err != nil {
+		return err
+	}
+
+	if cluster.Spec.CloudStorage != nil &&
+		cluster.Spec.CloudStorage.NodePoolLabel != "" &&
+		key != "" &&
+		cluster.Spec.CloudStorage.NodePoolLabel != key {
+		return fmt.Errorf("node pool label key incorrect, expected %s, actual %s", key, cluster.Spec.CloudStorage.NodePoolLabel)
+	}
+
+	return nil
+}
+
+func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (string, error) {
+	if len(cluster.Spec.Nodes) == 0 {
+		return "", nil
+	}
+
+	key := ""
+	for _, node := range cluster.Spec.Nodes {
+		if node.CloudStorage == nil {
+			continue
+		}
+
+		if node.Selector.NodeName != "" {
+			return "", fmt.Errorf("should not use nodeName as cloud storage node selector")
+		}
+
+		keys := getKeysFromNodeSelector(&node.Selector)
+		if len(keys) != 1 {
+			return "", fmt.Errorf("it's required to have only 1 key in cloud storage node label selector, key(s) %v, node %+v", keys, node)
+		}
+
+		keyTemp := ""
+		for k := range keys {
+			keyTemp = k
+		}
+
+		if key == "" {
+			key = keyTemp
+		} else if key != keyTemp {
+			return "", fmt.Errorf("can not have different key in cloud storage node label selector: %s and %s", key, keyTemp)
+		}
+	}
+
+	return key, nil
 }
 
 // RegisterCRD registers and validates CRDs
@@ -1117,6 +1200,19 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 	}
 	if !foundDeleteFinalizer {
 		toUpdate.Finalizers = append(toUpdate.Finalizers, deleteFinalizerName)
+	}
+
+	key, err := c.getCloudStorageLabelKey(cluster)
+	if err != nil {
+		return err
+	}
+	if key != "" &&
+		(toUpdate.Spec.CloudStorage == nil || toUpdate.Spec.CloudStorage.NodePoolLabel == "") {
+		if toUpdate.Spec.CloudStorage == nil {
+			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+
+		toUpdate.Spec.CloudStorage.NodePoolLabel = key
 	}
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
