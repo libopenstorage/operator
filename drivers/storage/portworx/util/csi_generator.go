@@ -48,6 +48,8 @@ type CSIConfiguration struct {
 	IncludeResizer bool
 	// IncludeSnapshotter dicates whether or not to include the snapshotter sidecar.
 	IncludeSnapshotter bool
+	// IncludeSnapshotController is used to install the snapshot-controller and dependencies
+	IncludeSnapshotController bool
 	// IncludeCsiDriverInfo dictates whether or not to add the CSIDriver object.
 	IncludeCsiDriverInfo bool
 	// IncludeConfigMapsForLeases is used only in Kubernetes 1.13 for leader election.
@@ -60,21 +62,23 @@ type CSIConfiguration struct {
 
 // CSIImages holds the images of all the CSI sidecar containers
 type CSIImages struct {
-	NodeRegistrar string
-	Registrar     string
-	Provisioner   string
-	Attacher      string
-	Snapshotter   string
-	Resizer       string
+	NodeRegistrar      string
+	Registrar          string
+	Provisioner        string
+	Attacher           string
+	Snapshotter        string
+	Resizer            string
+	SnapshotController string
 }
 
 // CSIGenerator contains information needed to generate CSI side car versions
 type CSIGenerator struct {
-	kubeVersion             version.Version
-	pxVersion               version.Version
-	useDeprecatedDriverName bool
-	disableAlpha            bool
-	kubeletPath             string
+	kubeVersion               version.Version
+	pxVersion                 version.Version
+	useDeprecatedDriverName   bool
+	disableAlpha              bool
+	kubeletPath               string
+	includeSnapshotController bool
 }
 
 // NewCSIGenerator returns a version generator
@@ -84,13 +88,15 @@ func NewCSIGenerator(
 	useDeprecatedDriverName bool,
 	disableAlpha bool,
 	kubeletPath string,
+	includeSnapshotController bool,
 ) *CSIGenerator {
 	return &CSIGenerator{
-		kubeVersion:             kubeVersion,
-		pxVersion:               pxVersion,
-		useDeprecatedDriverName: useDeprecatedDriverName,
-		disableAlpha:            disableAlpha,
-		kubeletPath:             kubeletPath,
+		kubeVersion:               kubeVersion,
+		pxVersion:                 pxVersion,
+		useDeprecatedDriverName:   useDeprecatedDriverName,
+		disableAlpha:              disableAlpha,
+		kubeletPath:               kubeletPath,
+		includeSnapshotController: includeSnapshotController,
 	}
 }
 
@@ -181,6 +187,14 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		cv.IncludeEphemeralSupport = true
 	}
 
+	// User decides to add the snapshot-controller.
+	// Only added for k8s 1.17 or greater.
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_17) {
+		cv.IncludeSnapshotController = g.includeSnapshotController
+	} else {
+		cv.IncludeSnapshotController = false
+	}
+
 	return cv
 }
 
@@ -235,25 +249,30 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "docker.io/openstorage/csi-provisioner:v1.6.1-1"
-	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v4.0.0"
+	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.0.0-1"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v4.2.1"
+	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v4.2.1"
 
-	// For k8s 1.19 and earlier, use older version
+	// For k8s 1.19 and earlier, use older versions
 	if g.kubeVersion.LessThan(k8sVer1_20) {
+		provisionerImage = "docker.io/openstorage/csi-provisioner:v2.2.2-1"
 		snapshotterImage = "k8s.gcr.io/sig-storage/csi-snapshotter:v3.0.3"
+		snapshotControllerImage = "k8s.gcr.io/sig-storage/snapshot-controller:v3.0.3"
 	}
 
 	// For k8s 1.16 and earlier, use older version
 	if g.kubeVersion.LessThan(k8sVer1_17) {
 		provisionerImage = "docker.io/openstorage/csi-provisioner:v1.6.1-1"
+		snapshotterImage = "docker.io/openstorage/csi-snapshotter:v1.2.2-1"
 	}
 
 	return &CSIImages{
-		Attacher:      "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar: "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
-		Provisioner:   provisionerImage,
-		Snapshotter:   snapshotterImage,
-		Resizer:       "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
+		Attacher:           "docker.io/openstorage/csi-attacher:v1.2.1-1",
+		NodeRegistrar:      "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
+		Provisioner:        provisionerImage,
+		Snapshotter:        snapshotterImage,
+		Resizer:            "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
+		SnapshotController: snapshotControllerImage,
 	}
 }
 

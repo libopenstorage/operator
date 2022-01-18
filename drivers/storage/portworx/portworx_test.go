@@ -369,7 +369,7 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 
 	// No defaults should be set
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Empty(t, cluster.Spec)
+	require.Equal(t, corev1.StorageClusterSpec{}, cluster.Spec)
 
 	// Use default component versions if components are enabled
 	cluster.Spec.Stork = &corev1.StorkSpec{
@@ -846,10 +846,14 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
+	// Snapshot controller and CRDs not installed by default
+	require.False(t, *cluster.Spec.CSI.InstallSnapshotController)
+
 	// Use images from release manifest if enabled
 	cluster.Spec.FeatureGates = map[string]string{
 		string(pxutil.FeatureCSI): "true",
 	}
+	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)
@@ -863,6 +867,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		cluster.Status.DesiredImages.CSIResizer)
 	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 		cluster.Status.DesiredImages.CSISnapshotter)
+	require.Equal(t, "quay.io/k8scsi/snapshot-controller:v1.2.3",
+		cluster.Status.DesiredImages.CSISnapshotController)
 
 	// Use images from release manifest if desired was reset
 	cluster.Status.DesiredImages.CSIProvisioner = ""
@@ -903,6 +909,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 
 	// Reset desired images if CSI has been disabled
 	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
 	require.Empty(t, cluster.Status.DesiredImages.CSIAttacher)
@@ -6832,6 +6839,7 @@ func (m *fakeManifest) GetVersions(
 			CSINodeDriverRegistrar:    "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
 			CSISnapshotter:            "quay.io/k8scsi/csi-snapshotter:v1.2.3",
 			CSIResizer:                "quay.io/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:     "quay.io/k8scsi/snapshot-controller:v1.2.3",
 			Prometheus:                "quay.io/prometheus/prometheus:v1.2.3",
 			PrometheusOperator:        "quay.io/coreos/prometheus-operator:v1.2.3",
 			PrometheusConfigReloader:  "quay.io/coreos/prometheus-config-reloader:v1.2.3",

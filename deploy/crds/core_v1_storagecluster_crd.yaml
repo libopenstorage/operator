@@ -936,6 +936,16 @@ spec:
                             type: string
                             description: Shared secret is the name of the Kubernetes secret containing the shared key
                               used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
+              csi:
+                type: object
+                description: Contains CSI configuration for the storage cluster.
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Flag indicating whether CSI needs to be installed for the storage cluster.
+                  installSnapshotController:
+                    type: boolean
+                    description: Flag indicating whether CSI Snapshot Controller needs to be installed for the storage cluster.
               env:
                 type: array
                 description: List of environment variables used by the driver. This is an array of Kubernetes
@@ -1336,6 +1346,9 @@ spec:
                   csiSnapshotter:
                     type: string
                     description: Desired image for CSI snapshotter.
+                  csiSnapshotController:
+                    type: string
+                    description: Desired image for CSI snapshot controller.
                   prometheusOperator:
                     type: string
                     description: Desired image for Prometheus operator.

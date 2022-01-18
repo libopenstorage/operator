@@ -4357,6 +4357,56 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
+			FeatureGates: map[string]string{
+				string(pxutil.FeatureCSI): "true",
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Enable snapshot controller
+	cluster.Spec.CSI.Enabled = true
+	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Should have volumesnapshot CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshots.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	// Should have volumesnapshotclass CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshotclasses.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	// Should have volumesnapshotcontent CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshotcontents.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+}
+
 func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -4407,6 +4457,32 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Enable snapshot controller
+	cluster.Spec.CSI.Enabled = true
+	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Should have snapshot controller
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_with_snapcontroller.yaml")
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Should have volumesnapshot CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshots.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	// Should have volumesnapshotclass CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshotclasses.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	// Should have volumesnapshotcontent CRDs
+	_, err = apiextensionsops.Instance().GetCRD("volumesnapshotcontents.snapshot.storage.k8s.io", metav1.GetOptions{})
+	require.NoError(t, err)
 }
 
 func TestCSIInstallWithPKS(t *testing.T) {
@@ -5459,6 +5535,10 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
+	pxutil.SpecsBaseDir = func() string {
+		return pxutil.PortworxSpecsDir
+	}
+
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
@@ -5571,8 +5651,10 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 		"prometheusrules.monitoring.coreos.com",
 		"servicemonitors.monitoring.coreos.com",
 		"thanosrulers.monitoring.coreos.com",
+		"volumesnapshots.snapshot.storage.k8s.io",
+		"volumesnapshotclasses.snapshot.storage.k8s.io",
+		"volumesnapshotcontents.snapshot.storage.k8s.io",
 	}
-
 	crds, err := fakeExtClient.ApiextensionsV1().
 		CustomResourceDefinitions().
 		List(context.TODO(), metav1.ListOptions{})

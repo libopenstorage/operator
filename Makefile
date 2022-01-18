@@ -71,6 +71,8 @@ PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-19.0.1
 PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/prometheus-community/helm-charts/$(PROMETHEUS_OPERATOR_HELM_CHARTS_TAG)/charts/kube-prometheus-stack/crds
+CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v3.0.3/client/config/crd
+CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v4.2.1/client/config/crd
 
 BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
 RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
@@ -248,6 +250,12 @@ getconfigs: cleanconfigs
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-prometheusrules.yaml' -O bin/configs/prometheus-crd-prometheusrules.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-servicemonitors.yaml' -O bin/configs/prometheus-crd-servicemonitors.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-thanosrulers.yaml' -O bin/configs/prometheus-crd-thanosrulers.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshots.yaml' -O bin/configs/csi-crd-v3-volumesnapshot.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotcontents.yaml' -O bin/configs/csi-crd-v3-volumesnapshotcontent.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotclasses.yaml' -O bin/configs/csi-crd-v3-volumesnapshotclass.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshots.yaml' -O bin/configs/csi-crd-v4-volumesnapshot.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotcontents.yaml' -O bin/configs/csi-crd-v4-volumesnapshotcontent.yaml
+	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotclasses.yaml' -O bin/configs/csi-crd-v4-volumesnapshotclass.yaml
 
 clean-release-manifest:
 	rm -rf manifests
