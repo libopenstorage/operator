@@ -15,12 +15,13 @@ import (
 )
 
 func TestRemoteManifestWithProxy(t *testing.T) {
-	// Do not run the test by default. Change httpProxy below to a working proxy.
+	// The test is not enabled by default, to manually run the test remove this check and
+	// set httpProxy below to a working proxy.
 	if true {
 		return
 	}
 
-	httpProxy := "10.90.40.235:8888"
+	proxy := "10.90.40.235:8888"
 
 	pxVersion := "2.9.0"
 	k8sVersion, _ := version.NewSemver("1.20.0")
@@ -34,7 +35,7 @@ func TestRemoteManifestWithProxy(t *testing.T) {
 	cluster.Spec.Env = []v1.EnvVar{
 		{
 			Name:  util.EnvKeyPortworxHTTPSProxy,
-			Value: httpProxy,
+			Value: proxy,
 		},
 	}
 

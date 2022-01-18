@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	httpPrefix = "http://"
+	httpPrefix  = "http://"
+	httpsPrefix = "https://"
 )
 
 // Methods to override for testing
@@ -30,7 +31,9 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 		// Add the http prefix so we can parse the URL:
 		// Wrong format: url.Parse("127.0.0.1:3213")
 		// Correct format: url.Parse("http://127.0.0.1:3213")
-		if !strings.HasPrefix(strings.ToLower(proxy), httpPrefix) {
+		// If no http or https prefix is given, we assume it is http.
+		if !strings.HasPrefix(strings.ToLower(proxy), httpPrefix) &&
+			!strings.HasPrefix(strings.ToLower(proxy), httpsPrefix) {
 			proxy = httpPrefix + proxy
 		}
 
