@@ -67,6 +67,7 @@ type Release struct {
 	CSIAttacher               string `yaml:"csiAttacher,omitempty"`
 	CSIResizer                string `yaml:"csiResizer,omitempty"`
 	CSISnapshotter            string `yaml:"csiSnapshotter,omitempty"`
+	CSISnapshotController     string `yaml:"csiSnapshotController,omitempty"`
 	Prometheus                string `yaml:"prometheus,omitempty"`
 	AlertManager              string `yaml:"alertManager,omitempty"`
 	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
@@ -235,7 +236,7 @@ func fillCSIDefaults(
 
 	logrus.Debugf("CSI images not found in manifest, using default")
 	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
-	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "")
+	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "", true)
 	csiImages := csiGenerator.GetCSIImages()
 
 	rel.Components.CSIProvisioner = csiImages.Provisioner
@@ -244,6 +245,7 @@ func fillCSIDefaults(
 	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
 	rel.Components.CSIResizer = csiImages.Resizer
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
+	rel.Components.CSISnapshotController = csiImages.SnapshotController
 }
 
 func fillPrometheusDefaults(

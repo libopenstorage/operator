@@ -105,8 +105,9 @@ func newTemplate(
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
 	kubeletPath := pxutil.KubeletPath(cluster)
+	includeSnapshotController := pxutil.IncludeCSISnapshotController(cluster)
 	csiGenerator := pxutil.NewCSIGenerator(*t.k8sVersion, *t.pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath)
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, includeSnapshotController)
 
 	// Enable CSI by default. Allow the user to disable if necessary.
 	if pxutil.IsCSIEnabled(cluster) {

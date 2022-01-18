@@ -235,6 +235,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
 			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
 			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
+			toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
@@ -289,6 +290,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.CSIAttacher = ""
 		toUpdate.Status.DesiredImages.CSIResizer = ""
 		toUpdate.Status.DesiredImages.CSISnapshotter = ""
+		toUpdate.Status.DesiredImages.CSISnapshotController = ""
+
 	}
 
 	if toUpdate.Spec.Monitoring == nil ||
@@ -308,6 +311,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+	if pxutil.IsCSIEnabled(toUpdate) {
+		setCSISpecDefaults(toUpdate)
+	}
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -753,6 +759,16 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs
+}
+
+func setCSISpecDefaults(toUpdate *corev1.StorageCluster) {
+	if toUpdate.Spec.CSI == nil {
+		toUpdate.Spec.CSI = &corev1.CSISpec{
+			// Enabled by feature gate, but not spec
+			Enabled:                   pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates),
+			InstallSnapshotController: boolPtr(false),
+		}
+	}
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
