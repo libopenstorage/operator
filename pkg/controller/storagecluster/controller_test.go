@@ -416,6 +416,21 @@ func TestCloudStorageLabelSelector(t *testing.T) {
 		}
 	}
 
+	// NodeName selector
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				NodeName: "Test",
+			},
+			CloudStorage: getCloudStorageSpec("type1"),
+		},
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
+	err := controller.validateCloudStorageLabelKey(cluster)
+	require.Error(t, err)
+
 	// Empty selector
 	cluster.Spec.Nodes = []corev1.NodeSpec{
 		{
@@ -436,7 +451,7 @@ func TestCloudStorageLabelSelector(t *testing.T) {
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
-	err := controller.validateCloudStorageLabelKey(cluster)
+	err = controller.validateCloudStorageLabelKey(cluster)
 	require.Error(t, err)
 
 	// Two keys in one selector
@@ -545,6 +560,17 @@ func TestCloudStorageLabelSelector(t *testing.T) {
 	}
 	err = controller.validateCloudStorageLabelKey(cluster)
 	require.Error(t, err)
+
+	// Validation skipped if storage pods are present
+	podLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  "mockDriverName",
+	}
+	storagePod := createStoragePod(cluster, "running-pod", "testNodeName", podLabels)
+	controller.client.Create(context.TODO(), storagePod)
+	err = controller.validateCloudStorageLabelKey(cluster)
+	require.NoError(t, err)
+	controller.client.Delete(context.TODO(), storagePod)
 
 	// Node pool label correct
 	cluster.Spec.Nodes = []corev1.NodeSpec{
