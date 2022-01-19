@@ -65,7 +65,7 @@ func (m *remote) downloadVersionManifest(
 	params.Add("kbver", m.k8sVersion.String())
 	u.RawQuery = params.Encode()
 
-	body, err := getManifestFromURL(u.String())
+	body, err := getManifestFromURL(u.String(), pxutil.GetPxProxyEnvVarValue(m.cluster))
 	if err != nil {
 		return nil, err
 	}

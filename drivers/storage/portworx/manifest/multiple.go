@@ -8,9 +8,9 @@ import (
 	"path"
 	"sort"
 
-	version "github.com/hashicorp/go-version"
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -156,7 +156,7 @@ func downloadManifest() (*releaseManifest, error) {
 		manifestURL = url
 	}
 
-	body, err := getManifestFromURL(manifestURL)
+	body, err := getManifestFromURL(manifestURL, "")
 	if err != nil {
 		return nil, err
 	}

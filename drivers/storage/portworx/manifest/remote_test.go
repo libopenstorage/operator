@@ -8,10 +8,41 @@ import (
 	"testing"
 
 	version "github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
 )
+
+func TestRemoteManifestWithProxy(t *testing.T) {
+	// The test is not enabled by default, to manually run the test remove this check and
+	// set httpProxy below to a working proxy.
+	if true {
+		return
+	}
+
+	proxy := "10.90.40.235:8888"
+
+	pxVersion := "2.9.0"
+	k8sVersion, _ := version.NewSemver("1.20.0")
+
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:" + pxVersion,
+		},
+	}
+
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  util.EnvKeyPortworxHTTPSProxy,
+			Value: proxy,
+		},
+	}
+
+	r, err := newRemoteManifest(cluster, k8sVersion).Get()
+	require.NoError(t, err)
+	require.Equal(t, pxVersion, r.PortworxVersion)
+}
 
 func TestRemoteManifestWithMatchingVersion(t *testing.T) {
 	pxVersion := "3.2.1"
