@@ -1417,6 +1417,9 @@ spec:
                   csiSnapshotController:
                     type: string
                     description: Desired image for CSI snapshot controller.
+                  csiHealthMonitorController:
+                    type: string
+                    description: Desired image for CSI health monitor controller.
                   prometheusOperator:
                     type: string
                     description: Desired image for Prometheus operator.
