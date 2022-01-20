@@ -57,25 +57,26 @@ var (
 
 // Release is a single release object with images for different components
 type Release struct {
-	Stork                     string `yaml:"stork,omitempty"`
-	Lighthouse                string `yaml:"lighthouse,omitempty"`
-	Autopilot                 string `yaml:"autopilot,omitempty"`
-	NodeWiper                 string `yaml:"nodeWiper,omitempty"`
-	CSIDriverRegistrar        string `yaml:"csiDriverRegistrar,omitempty"`
-	CSINodeDriverRegistrar    string `yaml:"csiNodeDriverRegistrar,omitempty"`
-	CSIProvisioner            string `yaml:"csiProvisioner,omitempty"`
-	CSIAttacher               string `yaml:"csiAttacher,omitempty"`
-	CSIResizer                string `yaml:"csiResizer,omitempty"`
-	CSISnapshotter            string `yaml:"csiSnapshotter,omitempty"`
-	CSISnapshotController     string `yaml:"csiSnapshotController,omitempty"`
-	Prometheus                string `yaml:"prometheus,omitempty"`
-	AlertManager              string `yaml:"alertManager,omitempty"`
-	PrometheusOperator        string `yaml:"prometheusOperator,omitempty"`
-	PrometheusConfigMapReload string `yaml:"prometheusConfigMapReload,omitempty"`
-	PrometheusConfigReloader  string `yaml:"prometheusConfigReloader,omitempty"`
-	Telemetry                 string `yaml:"telemetry,omitempty"`
-	MetricsCollector          string `yaml:"metricsCollector,omitempty"`
-	MetricsCollectorProxy     string `yaml:"metricsCollectorProxy,omitempty"`
+	Stork                      string `yaml:"stork,omitempty"`
+	Lighthouse                 string `yaml:"lighthouse,omitempty"`
+	Autopilot                  string `yaml:"autopilot,omitempty"`
+	NodeWiper                  string `yaml:"nodeWiper,omitempty"`
+	CSIDriverRegistrar         string `yaml:"csiDriverRegistrar,omitempty"`
+	CSINodeDriverRegistrar     string `yaml:"csiNodeDriverRegistrar,omitempty"`
+	CSIProvisioner             string `yaml:"csiProvisioner,omitempty"`
+	CSIAttacher                string `yaml:"csiAttacher,omitempty"`
+	CSIResizer                 string `yaml:"csiResizer,omitempty"`
+	CSISnapshotter             string `yaml:"csiSnapshotter,omitempty"`
+	CSISnapshotController      string `yaml:"csiSnapshotController,omitempty"`
+	CSIHealthMonitorController string `yaml:"csiHealthMonitorController,omitempty"`
+	Prometheus                 string `yaml:"prometheus,omitempty"`
+	AlertManager               string `yaml:"alertManager,omitempty"`
+	PrometheusOperator         string `yaml:"prometheusOperator,omitempty"`
+	PrometheusConfigMapReload  string `yaml:"prometheusConfigMapReload,omitempty"`
+	PrometheusConfigReloader   string `yaml:"prometheusConfigReloader,omitempty"`
+	Telemetry                  string `yaml:"telemetry,omitempty"`
+	MetricsCollector           string `yaml:"metricsCollector,omitempty"`
+	MetricsCollectorProxy      string `yaml:"metricsCollectorProxy,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -246,6 +247,7 @@ func fillCSIDefaults(
 	rel.Components.CSIResizer = csiImages.Resizer
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
 	rel.Components.CSISnapshotController = csiImages.SnapshotController
+	rel.Components.CSIHealthMonitorController = csiImages.HealthMonitorController
 }
 
 func fillPrometheusDefaults(

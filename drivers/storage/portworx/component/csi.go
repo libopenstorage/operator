@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -43,11 +44,12 @@ const (
 	// CSIApplicationName name of the CSI application (deployment/statefulset)
 	CSIApplicationName = "px-csi-ext"
 
-	csiProvisionerContainerName        = "csi-external-provisioner"
-	csiAttacherContainerName           = "csi-attacher"
-	csiSnapshotterContainerName        = "csi-snapshotter"
-	csiResizerContainerName            = "csi-resizer"
-	csiSnapshotControllerContainerName = "csi-snapshot-controller"
+	csiProvisionerContainerName             = "csi-external-provisioner"
+	csiAttacherContainerName                = "csi-attacher"
+	csiSnapshotterContainerName             = "csi-snapshotter"
+	csiResizerContainerName                 = "csi-resizer"
+	csiSnapshotControllerContainerName      = "csi-snapshot-controller"
+	csiHealthMonitorControllerContainerName = "csi-health-monitor-controller"
 
 	// CSI CRD config files
 	csiCRDPrefix                      = "csi-crd"
@@ -273,7 +275,7 @@ func (c *csi) createClusterRole(
 			{
 				APIGroups: []string{""},
 				Resources: []string{"events"},
-				Verbs:     []string{"list", "watch", "create", "update", "patch"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 			},
 			{
 				APIGroups: []string{""},
@@ -423,16 +425,18 @@ func (c *csi) createDeployment(
 	}
 
 	var (
-		existingProvisionerImage        = k8sutil.GetImageFromDeployment(existingDeployment, csiProvisionerContainerName)
-		existingAttacherImage           = k8sutil.GetImageFromDeployment(existingDeployment, csiAttacherContainerName)
-		existingSnapshotterImage        = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotterContainerName)
-		existingResizerImage            = k8sutil.GetImageFromDeployment(existingDeployment, csiResizerContainerName)
-		existingSnapshotControllerImage = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotControllerContainerName)
-		provisionerImage                string
-		attacherImage                   string
-		snapshotterImage                string
-		resizerImage                    string
-		snapshotControllerImage         string
+		existingProvisionerImage                     = k8sutil.GetImageFromDeployment(existingDeployment, csiProvisionerContainerName)
+		existingAttacherImage                        = k8sutil.GetImageFromDeployment(existingDeployment, csiAttacherContainerName)
+		existingSnapshotterImage                     = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotterContainerName)
+		existingResizerImage                         = k8sutil.GetImageFromDeployment(existingDeployment, csiResizerContainerName)
+		existingSnapshotControllerImage              = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotControllerContainerName)
+		existingHealthMonitorControllerContainerName = k8sutil.GetImageFromDeployment(existingDeployment, csiHealthMonitorControllerContainerName)
+		provisionerImage                             string
+		attacherImage                                string
+		snapshotterImage                             string
+		resizerImage                                 string
+		snapshotControllerImage                      string
+		healthMonitorControllerImage                 string
 	)
 
 	provisionerImage = util.GetImageURN(
@@ -467,18 +471,26 @@ func (c *csi) createDeployment(
 		)
 	}
 
+	if csiConfig.IncludeHealthMonitorController && cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
+		healthMonitorControllerImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSIHealthMonitorController,
+		)
+	}
+
 	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		snapshotterImage != existingSnapshotterImage ||
 		resizerImage != existingResizerImage ||
 		snapshotControllerImage != existingSnapshotControllerImage ||
+		healthMonitorControllerImage != existingHealthMonitorControllerContainerName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
 		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef,
-			provisionerImage, attacherImage, snapshotterImage, resizerImage, snapshotControllerImage)
+			provisionerImage, attacherImage, snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -494,6 +506,7 @@ func getCSIDeploymentSpec(
 	provisionerImage, attacherImage string,
 	snapshotterImage, resizerImage string,
 	snapshotControllerImage string,
+	healthMonitorControllerImage string,
 ) *appsv1.Deployment {
 	replicas := int32(3)
 	labels := map[string]string{
@@ -681,6 +694,54 @@ func getCSIDeploymentSpec(
 				Args: []string{
 					"--v=3",
 					"--leader-election=true",
+				},
+			},
+		)
+	}
+
+	if csiConfig.IncludeHealthMonitorController && healthMonitorControllerImage != "" {
+		deployment.Spec.Template.Spec.Containers = append(
+			deployment.Spec.Template.Spec.Containers,
+			v1.Container{
+				Name:            csiHealthMonitorControllerContainerName,
+				Image:           healthMonitorControllerImage,
+				ImagePullPolicy: imagePullPolicy,
+				Args: []string{
+					"--v=3",
+					"--csi-address=$(ADDRESS)",
+					"--leader-election",
+					"--http-endpoint=:8080",
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "ADDRESS",
+						Value: "/csi/csi.sock",
+					},
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "socket-dir",
+						MountPath: "/csi",
+					},
+				},
+				Ports: []v1.ContainerPort{
+					{
+						Name:          "http-endpoint",
+						ContainerPort: 8080,
+						Protocol:      v1.ProtocolTCP,
+					},
+				},
+				LivenessProbe: &v1.Probe{
+					FailureThreshold: 1,
+					Handler: v1.Handler{
+						HTTPGet: &v1.HTTPGetAction{
+							Path: "/healthz/leader-election",
+							Port: intstr.FromString("http-endpoint"),
+						},
+					},
+					InitialDelaySeconds: 10,
+					TimeoutSeconds:      10,
+					PeriodSeconds:       20,
 				},
 			},
 		)
