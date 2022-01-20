@@ -537,24 +537,25 @@ type StorageClusterStatus struct {
 
 // ComponentImages is a collection of all the images managed by the operator
 type ComponentImages struct {
-	Stork                     string `json:"stork,omitempty"`
-	UserInterface             string `json:"userInterface,omitempty"`
-	Autopilot                 string `json:"autopilot,omitempty"`
-	CSINodeDriverRegistrar    string `json:"csiNodeDriverRegistrar,omitempty"`
-	CSIDriverRegistrar        string `json:"csiDriverRegistrar,omitempty"`
-	CSIProvisioner            string `json:"csiProvisioner,omitempty"`
-	CSIAttacher               string `json:"csiAttacher,omitempty"`
-	CSIResizer                string `json:"csiResizer,omitempty"`
-	CSISnapshotter            string `json:"csiSnapshotter,omitempty"`
-	CSISnapshotController     string `json:"csiSnapshotController,omitempty"`
-	PrometheusOperator        string `json:"prometheusOperator,omitempty"`
-	PrometheusConfigMapReload string `json:"prometheusConfigMapReload,omitempty"`
-	PrometheusConfigReloader  string `json:"prometheusConfigReloader,omitempty"`
-	Prometheus                string `json:"prometheus,omitempty"`
-	AlertManager              string `json:"alertManager,omitempty"`
-	Telemetry                 string `json:"telemetry,omitempty"`
-	MetricsCollector          string `json:"metricsCollector,omitempty"`
-	MetricsCollectorProxy     string `json:"metricsCollectorProxy,omitempty"`
+	Stork                      string `json:"stork,omitempty"`
+	UserInterface              string `json:"userInterface,omitempty"`
+	Autopilot                  string `json:"autopilot,omitempty"`
+	CSINodeDriverRegistrar     string `json:"csiNodeDriverRegistrar,omitempty"`
+	CSIDriverRegistrar         string `json:"csiDriverRegistrar,omitempty"`
+	CSIProvisioner             string `json:"csiProvisioner,omitempty"`
+	CSIAttacher                string `json:"csiAttacher,omitempty"`
+	CSIResizer                 string `json:"csiResizer,omitempty"`
+	CSISnapshotter             string `json:"csiSnapshotter,omitempty"`
+	CSISnapshotController      string `json:"csiSnapshotController,omitempty"`
+	CSIHealthMonitorController string `json:"csiHealthMonitorController,omitempty"`
+	PrometheusOperator         string `json:"prometheusOperator,omitempty"`
+	PrometheusConfigMapReload  string `json:"prometheusConfigMapReload,omitempty"`
+	PrometheusConfigReloader   string `json:"prometheusConfigReloader,omitempty"`
+	Prometheus                 string `json:"prometheus,omitempty"`
+	AlertManager               string `json:"alertManager,omitempty"`
+	Telemetry                  string `json:"telemetry,omitempty"`
+	MetricsCollector           string `json:"metricsCollector,omitempty"`
+	MetricsCollectorProxy      string `json:"metricsCollectorProxy,omitempty"`
 }
 
 // Storage represents cluster storage details

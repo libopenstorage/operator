@@ -236,6 +236,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
 			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 			toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
+			toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
@@ -291,6 +292,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.CSIResizer = ""
 		toUpdate.Status.DesiredImages.CSISnapshotter = ""
 		toUpdate.Status.DesiredImages.CSISnapshotController = ""
+		toUpdate.Status.DesiredImages.CSIHealthMonitorController = ""
 
 	}
 

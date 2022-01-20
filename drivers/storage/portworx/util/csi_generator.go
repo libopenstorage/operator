@@ -20,9 +20,11 @@ var (
 	k8sVer1_16, _ = version.NewVersion("1.16")
 	k8sVer1_17, _ = version.NewVersion("1.17")
 	k8sVer1_20, _ = version.NewVersion("1.20")
+	k8sVer1_21, _ = version.NewVersion("1.21")
 	pxVer2_1, _   = version.NewVersion("2.1")
 	pxVer2_2, _   = version.NewVersion("2.2")
 	pxVer2_5, _   = version.NewVersion("2.5")
+	pxVer2_10, _  = version.NewVersion("2.10")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
@@ -46,6 +48,8 @@ type CSIConfiguration struct {
 	IncludeAttacher bool
 	// IncludeResizer dicates whether or not to include the resizer sidecar.
 	IncludeResizer bool
+	// IncludeHealthMonitorController dicates whether or not to include the health monitor controller sidecar.
+	IncludeHealthMonitorController bool
 	// IncludeSnapshotter dicates whether or not to include the snapshotter sidecar.
 	IncludeSnapshotter bool
 	// IncludeSnapshotController is used to install the snapshot-controller and dependencies
@@ -62,13 +66,14 @@ type CSIConfiguration struct {
 
 // CSIImages holds the images of all the CSI sidecar containers
 type CSIImages struct {
-	NodeRegistrar      string
-	Registrar          string
-	Provisioner        string
-	Attacher           string
-	Snapshotter        string
-	Resizer            string
-	SnapshotController string
+	NodeRegistrar           string
+	Registrar               string
+	Provisioner             string
+	Attacher                string
+	Snapshotter             string
+	Resizer                 string
+	SnapshotController      string
+	HealthMonitorController string
 }
 
 // CSIGenerator contains information needed to generate CSI side car versions
@@ -195,6 +200,11 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		cv.IncludeSnapshotController = false
 	}
 
+	// IncludeExternalHealthMonitor only with PX 2.8.0+ and k8s 1.21+
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_21) && g.pxVersion.GreaterThanOrEqual(pxVer2_10) {
+		cv.IncludeHealthMonitorController = true
+	}
+
 	return cv
 }
 
@@ -267,12 +277,13 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 	}
 
 	return &CSIImages{
-		Attacher:           "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar:      "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
-		Provisioner:        provisionerImage,
-		Snapshotter:        snapshotterImage,
-		Resizer:            "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
-		SnapshotController: snapshotControllerImage,
+		Attacher:                "docker.io/openstorage/csi-attacher:v1.2.1-1",
+		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0",
+		Provisioner:             provisionerImage,
+		Snapshotter:             snapshotterImage,
+		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.1.0",
+		SnapshotController:      snapshotControllerImage,
+		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.4.0",
 	}
 }
 
