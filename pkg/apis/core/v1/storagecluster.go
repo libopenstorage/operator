@@ -596,6 +596,7 @@ type ComponentImages struct {
 	Telemetry                  string `json:"telemetry,omitempty"`
 	MetricsCollector           string `json:"metricsCollector,omitempty"`
 	MetricsCollectorProxy      string `json:"metricsCollectorProxy,omitempty"`
+	PxRepo                     string `json:"pxrepo,omitempty"`
 }
 
 // Storage represents cluster storage details

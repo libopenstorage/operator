@@ -219,6 +219,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
 		}
 
+		if autoUpdatePxRepo(toUpdate) &&
+			(toUpdate.Status.DesiredImages.PxRepo == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
+			toUpdate.Status.DesiredImages.PxRepo = release.Components.PxRepo
+		}
+
 		if pxutil.IsCSIEnabled(toUpdate) &&
 			(toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
 				pxVersionChanged ||
@@ -273,6 +280,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.Telemetry = ""
 		toUpdate.Status.DesiredImages.MetricsCollector = ""
 		toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
+	}
+
+	if !autoUpdatePxRepo(toUpdate) {
+		toUpdate.Status.DesiredImages.PxRepo = ""
 	}
 
 	if !pxutil.IsCSIEnabled(toUpdate) {
@@ -874,7 +885,8 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasTelemetryChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
-		p.hasPrometheusVersionChanged(cluster)
+		p.hasPrometheusVersionChanged(cluster) ||
+		hasPxRepoChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1.StorageCluster) bool {
@@ -896,6 +908,10 @@ func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateTelemetry(cluster) && cluster.Status.DesiredImages.Telemetry == ""
+}
+
+func hasPxRepoChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdatePxRepo(cluster) && cluster.Status.DesiredImages.PxRepo == ""
 }
 
 func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
@@ -934,6 +950,11 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
 		cluster.Spec.Monitoring.Telemetry.Image == ""
+}
+
+func autoUpdatePxRepo(cluster *corev1.StorageCluster) bool {
+	return pxutil.IsPxRepoEnabled(cluster.Spec) &&
+		cluster.Spec.PxRepo.Image == ""
 }
 
 func autoUpdateLighthouse(cluster *corev1.StorageCluster) bool {
