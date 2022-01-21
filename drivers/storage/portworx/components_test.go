@@ -10879,6 +10879,18 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, cluster.Name, telemetryConfigMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
 
+	// This cert is created by ccm container outside of operator, let's simulate it.
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
 	// without location
 	delete(cluster.Annotations, "portworx.io/arcus-location")
 	expectedConfigMap.Data["location"] = "external"
@@ -10953,6 +10965,10 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	deployment.ResourceVersion = ""
 	require.Equal(t, expectedDeployment, deployment)
 
+	secret := v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
 
@@ -10981,6 +10997,9 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
