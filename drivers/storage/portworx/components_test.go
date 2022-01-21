@@ -950,7 +950,7 @@ func TestDisablePortworx(t *testing.T) {
 
 	pxProxySvc = &v1.Service{}
 	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
-	require.True(t, errors.IsNotFound(err))
+	require.False(t, errors.IsNotFound(err))
 
 	pxProxyDS = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
