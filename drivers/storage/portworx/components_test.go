@@ -10968,6 +10968,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	secret := v1.Secret{}
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
+	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
@@ -10999,8 +11000,9 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
+	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 }
 
 func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {

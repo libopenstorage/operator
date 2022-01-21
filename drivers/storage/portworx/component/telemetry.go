@@ -159,10 +159,6 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	if err := k8sutil.DeleteSecret(t.k8sClient, TelemetryCertName, cluster.Namespace, *ownerRef); err != nil {
-		return nil
-	}
-
 	if err := t.deleteMetricsCollector(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
