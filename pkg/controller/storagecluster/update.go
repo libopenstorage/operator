@@ -408,18 +408,21 @@ func (c *Controller) getUnavailableNumbers(
 			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 	}
 
-	storageNodeList, err := c.Driver.GetStorageNodes(cluster)
-	if err != nil {
-		return -1, -1, fmt.Errorf("couldn't get list of storage nodes during rolling "+
-			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
-	}
 	storageNodeMap := make(map[string]*storageapi.StorageNode)
 	var nonK8sStorageNodes []*storageapi.StorageNode
-	for _, storageNode := range storageNodeList {
-		if len(storageNode.SchedulerNodeName) == 0 {
-			nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
-		} else {
-			storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			return -1, -1, fmt.Errorf("couldn't get list of storage nodes during rolling "+
+				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
+		}
+		for _, storageNode := range storageNodeList {
+			if len(storageNode.SchedulerNodeName) == 0 {
+				nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
+			} else {
+				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+			}
 		}
 	}
 
