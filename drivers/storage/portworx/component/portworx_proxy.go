@@ -101,8 +101,13 @@ func (c *portworxProxy) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, PxProxyClusterRoleBindingName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, api.NamespaceSystem); err != nil {
-		return err
+	if pxutil.IsPortworxEnabled(cluster) {
+		// Do not delete the portworx-service when portworx is explicitly disabled. This is only
+		// used by px-central to enable monitoring stack when portworx is deployed with daemonset.
+		// This avoids the daemonset's portworx-service from getting deleted.
+		if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxServiceName, api.NamespaceSystem); err != nil {
+			return err
+		}
 	}
 	if err := k8sutil.DeleteDaemonSet(c.k8sClient, PxProxyDaemonSetName, api.NamespaceSystem); err != nil {
 		return err

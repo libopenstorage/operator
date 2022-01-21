@@ -3217,6 +3217,20 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 
 	require.Empty(t, podControl.DeletePodName)
 
+	// TestCase: K8s node should not run storage pod, but storage is disabled,
+	// so we cannot get the storage node information - upgrade should continue.
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Annotations = map[string]string{constants.AnnotationDisableStorage: "true"}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.NotEmpty(t, podControl.DeletePodName)
+
 	// TestCase: There is a k8s node should not run storage pod, but healthy storage node exists,
 	// without any pod - upgrade should continue.
 	storageNodes[3].Status = storageapi.Status_STATUS_OK
