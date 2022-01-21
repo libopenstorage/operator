@@ -104,7 +104,7 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := t.reconcileCCMProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.SetTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
+	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
 		return err
 	}
 
@@ -117,7 +117,7 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 
 // Pure-telemetry-certs is created by ccm container outside of operator, we shall
 // set owner ref to StorageCluster so it gets deleted.
-func (t *telemetry) SetTelemetryCertOwnerRef(
+func (t *telemetry) setTelemetryCertOwnerRef(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference) error {
 
@@ -159,7 +159,7 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	if err := k8sutil.DeleteSecret(t.k8sClient, TelemetryCertName, cluster.Namespace); err != nil {
+	if err := k8sutil.DeleteSecret(t.k8sClient, TelemetryCertName, cluster.Namespace, *ownerRef); err != nil {
 		return nil
 	}
 
