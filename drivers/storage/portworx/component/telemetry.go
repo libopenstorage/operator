@@ -104,12 +104,49 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := t.reconcileCCMProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
+	if err := t.SetTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
+		return err
+	}
 
 	if err := t.deployMetricsCollector(cluster, ownerRef); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Pure-telemetry-certs is created by ccm container outside of operator, we shall
+// set owner ref to StorageCluster so it gets deleted.
+func (t *telemetry) SetTelemetryCertOwnerRef(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference) error {
+
+	secret := &v1.Secret{}
+	err := t.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      TelemetryCertName,
+			Namespace: cluster.Namespace,
+		},
+		secret,
+	)
+
+	// The cert is created after ccm container starts, so we may not have it for a while.
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	for _, o := range secret.OwnerReferences {
+		if o.UID == ownerRef.UID {
+			return nil
+		}
+	}
+
+	secret.OwnerReferences = append(secret.OwnerReferences, *ownerRef)
+
+	return t.k8sClient.Update(context.TODO(), secret)
 }
 
 func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
@@ -120,6 +157,10 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
+	}
+
+	if err := k8sutil.DeleteSecret(t.k8sClient, TelemetryCertName, cluster.Namespace); err != nil {
+		return nil
 	}
 
 	if err := t.deleteMetricsCollector(cluster.Namespace, ownerRef); err != nil {
