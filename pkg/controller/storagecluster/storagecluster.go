@@ -248,8 +248,21 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 }
 
 func (c *Controller) waitingForMigrationApproval(cluster *corev1.StorageCluster) bool {
-	_, migrationLabelPresent := cluster.Annotations[constants.AnnotationMigrationApproved]
-	return (migrationLabelPresent && cluster.Status.Phase == "") ||
+	label, migrationLabelPresent := cluster.Annotations[constants.AnnotationMigrationApproved]
+	if !migrationLabelPresent {
+		return false
+	}
+
+	approved, err := strconv.ParseBool(label)
+	if err != nil {
+		// Wait until valid boolean value is provided
+		return true
+	}
+
+	// Even if the migration is approved, wait for the status to come out of initial
+	// or waiting migration approval state. This gives time to the migration routine,
+	// to prepare the cluster for migration after the approval.
+	return !approved || cluster.Status.Phase == "" ||
 		cluster.Status.Phase == constants.PhaseAwaitingApproval
 }
 

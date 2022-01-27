@@ -395,6 +395,156 @@ func TestSingleClusterValidation(t *testing.T) {
 	require.Equal(t, "Failed", updatedCluster.Status.Phase)
 }
 
+func TestWaitForMigrationApproval(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "invalid",
+			},
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	// TestCase: Migration annotation has invalid value
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%s %s To proceed with the migration, set the %s annotation on the "+
+			"StorageCluster to 'true'", v1.EventTypeNormal, util.MigrationPendingReason,
+			constants.AnnotationMigrationApproved))
+
+	currentCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 0)
+
+	// TestCase: Migration is not approved
+	currentCluster.Annotations[constants.AnnotationMigrationApproved] = "false"
+	err = k8sClient.Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%s %s To proceed with the migration, set the %s annotation on the "+
+			"StorageCluster to 'true'", v1.EventTypeNormal, util.MigrationPendingReason,
+			constants.AnnotationMigrationApproved))
+
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 0)
+
+	// TestCase: Migration is approved but status is not yet updated
+	currentCluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = k8sClient.Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%s %s To proceed with the migration, set the %s annotation on the "+
+			"StorageCluster to 'true'", v1.EventTypeNormal, util.MigrationPendingReason,
+			constants.AnnotationMigrationApproved))
+
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 0)
+
+	// TestCase: Migration is approved but status is still in AwaitingMigrationApproval phase
+	currentCluster.Status.Phase = constants.PhaseAwaitingApproval
+	err = k8sClient.Status().Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%s %s To proceed with the migration, set the %s annotation on the "+
+			"StorageCluster to 'true'", v1.EventTypeNormal, util.MigrationPendingReason,
+			constants.AnnotationMigrationApproved))
+
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 0)
+
+	// TestCase: Migration is approved and status shows migration in progress
+	currentCluster.Status.Phase = constants.PhaseMigrationInProgress
+	err = k8sClient.Status().Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, recorder.Events, 0)
+
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 1)
+
+	// TestCase: Migration is approved and status shows Failed
+	currentCluster.Finalizers = nil
+	err = k8sClient.Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+	currentCluster.Status.Phase = "Failed"
+	err = k8sClient.Status().Update(context.TODO(), currentCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, recorder.Events, 0)
+
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, currentCluster.Finalizers, 1)
+}
+
 func TestCloudStorageLabelSelector(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
