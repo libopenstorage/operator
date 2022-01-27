@@ -31,6 +31,7 @@ import (
 
 const (
 	flagLeaderElect              = "leader-elect"
+	flagMigration                = "migration"
 	flagLeaderElectLockName      = "leader-elect-lock-name"
 	flagLeaderElectLockNamespace = "leader-elect-lock-namespace"
 	flagMetricsPort              = "metrics-port"
@@ -73,6 +74,10 @@ func main() {
 			Name:  flagMetricsPort,
 			Usage: "Port on which the operator metrics are to be exposed",
 			Value: defaultMetricsPort,
+		},
+		cli.BoolFlag{
+			Name:  flagMigration,
+			Usage: "Enable Portworx DaemonSet migration (default: false)",
 		},
 	}
 
@@ -189,8 +194,10 @@ func run(c *cli.Context) {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
-	migrationHandler := migration.New(&storageClusterController)
-	go migrationHandler.Start()
+	if c.Bool(flagMigration) {
+		migrationHandler := migration.New(&storageClusterController)
+		go migrationHandler.Start()
+	}
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
