@@ -90,7 +90,7 @@ type StorageClusterSpec struct {
 	// UserInterface contains details of a user interface for the storage driver
 	UserInterface *UserInterfaceSpec `json:"userInterface,omitempty"`
 	// PxRepo contains configuration for apt repository. Portworx uses it to install dependency modules.
-	PxRepo *PxRepoSpec `json:"pxrepo,omitempty"`
+	PxRepo *PxRepoSpec `json:"pxRepo,omitempty"`
 	// Stork contains STORK related parameters. For more information about STORK,
 	// check https://github.com/libopenstorage/stork
 	Stork *StorkSpec `json:"stork,omitempty"`
@@ -596,7 +596,7 @@ type ComponentImages struct {
 	Telemetry                  string `json:"telemetry,omitempty"`
 	MetricsCollector           string `json:"metricsCollector,omitempty"`
 	MetricsCollectorProxy      string `json:"metricsCollectorProxy,omitempty"`
-	PxRepo                     string `json:"pxrepo,omitempty"`
+	PxRepo                     string `json:"pxRepo,omitempty"`
 }
 
 // Storage represents cluster storage details
