@@ -639,14 +639,14 @@ func TestStorageClusterDefaultsForPxRepo(t *testing.T) {
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
-	cluster.Status.DesiredImages.Autopilot = "portworx/px-repo:old"
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.PxRepo.Image)
 	require.Equal(t, "portworx/px-repo:"+newCompVersion(), cluster.Status.DesiredImages.PxRepo)
 
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
-	cluster.Status.DesiredImages.Autopilot = "portworx/px-repo:old"
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.PxRepo.Image)
 	require.Equal(t, "portworx/px-repo:"+newCompVersion(), cluster.Status.DesiredImages.PxRepo)
