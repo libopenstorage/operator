@@ -39,6 +39,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:3.0.9",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -76,6 +77,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			Telemetry:                 "image/ccm-service:2.6.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
 
@@ -164,6 +166,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:2.6.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -251,6 +254,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:2.6.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -330,6 +334,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:2.6.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
 	cluster := &corev1.StorageCluster{

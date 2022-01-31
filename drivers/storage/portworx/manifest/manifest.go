@@ -24,15 +24,15 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion = "2.8.1.2"
-	defaultStorkImage      = "openstorage/stork:2.7.0"
-	defaultAutopilotImage  = "portworx/autopilot:1.3.1"
-	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
-	defaultTelemetryImage  = "purestorage/ccm-service:3.0.9"
-
+	DefaultPortworxVersion     = "2.8.1.2"
+	defaultStorkImage          = "openstorage/stork:2.7.0"
+	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
+	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
+	defaultNodeWiperImage      = "portworx/px-node-wiper:2.5.0"
+	defaultTelemetryImage      = "purestorage/ccm-service:3.0.9"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
+	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
@@ -77,6 +77,7 @@ type Release struct {
 	Telemetry                  string `yaml:"telemetry,omitempty"`
 	MetricsCollector           string `yaml:"metricsCollector,omitempty"`
 	MetricsCollectorProxy      string `yaml:"metricsCollectorProxy,omitempty"`
+	PxRepo                     string `yaml:"pxRepo,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -191,6 +192,7 @@ func defaultRelease(
 			Telemetry:             defaultTelemetryImage,
 			MetricsCollector:      defaultCollectorImage,
 			MetricsCollectorProxy: defaultCollectorProxyImage,
+			PxRepo:                defaultPxRepoImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
@@ -222,6 +224,9 @@ func fillDefaults(
 	}
 	if rel.Components.MetricsCollectorProxy == "" {
 		rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
+	}
+	if rel.Components.PxRepo == "" {
+		rel.Components.PxRepo = defaultPxRepoImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
