@@ -931,6 +931,12 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 		spec.Monitoring.Telemetry.Enabled
 }
 
+// IsPxRepoEnabled returns true is pxRepo is enabled
+func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
+	return spec.PxRepo != nil &&
+		spec.PxRepo.Enabled
+}
+
 // ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component
 // Which includes:
 //   namespace

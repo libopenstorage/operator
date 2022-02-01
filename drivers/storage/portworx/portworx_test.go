@@ -572,6 +572,121 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 }
 
+func TestStorageClusterDefaultsForPxRepo(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	// Don't enable by default
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo)
+	require.Empty(t, cluster.Status.DesiredImages.PxRepo)
+
+	// Don't use default image if disabled
+	cluster.Spec.PxRepo = &corev1.PxRepoSpec{
+		Enabled: false,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Empty(t, cluster.Status.DesiredImages.PxRepo)
+
+	// Use image from release manifest if no image present
+	cluster.Spec.PxRepo.Enabled = true
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+compVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Use given spec image if specified and reset desired image in status
+	cluster.Spec.PxRepo = &corev1.PxRepoSpec{
+		Enabled: true,
+		Image:   "custom/pxrepo-image:1.2.3",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "custom/pxrepo-image:1.2.3", cluster.Spec.PxRepo.Image)
+	require.Empty(t, cluster.Status.DesiredImages.PxRepo)
+
+	// Use image from release manifest if spec image is reset
+	cluster.Spec.PxRepo.Image = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+compVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Use image from release manifest if desired was reset
+	cluster.Status.DesiredImages.PxRepo = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-repo:"+compVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Do not overwrite desired image if nothing has changed
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-repo:old", cluster.Status.DesiredImages.PxRepo)
+
+	// Do not overwrite desired image even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, "portworx/px-repo:old", cluster.Status.DesiredImages.PxRepo)
+
+	// Change desired image if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+newCompVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Change desired image if px image has changed
+	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+newCompVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Change desired image if auto update of components is always enabled
+	updateStrategy := corev1.AlwaysAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+compVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Change desired image if auto update of components is enabled once
+	updateStrategy = corev1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:"+newCompVersion(), cluster.Status.DesiredImages.PxRepo)
+
+	// Don't change desired image if auto update of components is never
+	updateStrategy = corev1.NeverAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &updateStrategy
+	cluster.Status.DesiredImages.PxRepo = "portworx/px-repo:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:old", cluster.Status.DesiredImages.PxRepo)
+
+	// Don't change desired image if auto update of components is not set
+	cluster.Spec.AutoUpdateComponents = nil
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.PxRepo.Image)
+	require.Equal(t, "portworx/px-repo:old", cluster.Status.DesiredImages.PxRepo)
+
+	// Reset desired image if component is disabled
+	cluster.Spec.PxRepo.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.PxRepo)
+}
+
 func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
@@ -7035,6 +7150,7 @@ func (m *fakeManifest) GetVersions(
 			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
 			MetricsCollector:           "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
+			PxRepo:                     "portworx/px-repo:" + compVersion,
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
