@@ -28,6 +28,7 @@ spec:
               - key: node-role.kubernetes.io/master
                 operator: DoesNotExist
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       hostPID: false
       containers:
         - name: portworx
