@@ -852,19 +852,25 @@ func (c *csi) createCSIDriver(
 			volumeLifecycleModes = append(volumeLifecycleModes, storagev1.VolumeLifecycleEphemeral)
 		}
 
-		return k8sutil.CreateOrUpdateCSIDriver(
-			c.k8sClient,
-			&storagev1.CSIDriver{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: csiConfig.DriverName,
-				},
-				Spec: storagev1.CSIDriverSpec{
-					AttachRequired:       boolPtr(false),
-					PodInfoOnMount:       boolPtr(true),
-					VolumeLifecycleModes: volumeLifecycleModes,
-				},
+		csiDriver := &storagev1.CSIDriver{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: csiConfig.DriverName,
 			},
-		)
+			Spec: storagev1.CSIDriverSpec{
+				AttachRequired:       boolPtr(false),
+				PodInfoOnMount:       boolPtr(true),
+				VolumeLifecycleModes: volumeLifecycleModes,
+			},
+		}
+
+		// This field is beta in Kubernetes 1.20 and GA in Kubernetes 1.23
+		if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_20) {
+			fsGroupPolicy := storagev1.FileFSGroupPolicy
+			csiDriver.Spec.FSGroupPolicy = &fsGroupPolicy
+		}
+
+		return k8sutil.CreateOrUpdateCSIDriver(c.k8sClient, csiDriver)
+
 	}
 
 	volumeLifecycleModes := []storagev1beta1.VolumeLifecycleMode{
