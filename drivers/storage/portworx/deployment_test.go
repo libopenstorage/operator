@@ -1497,7 +1497,6 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-
 	assertPodSpecEqual(t, expected, &actual)
 
 	// Don't set the start port if same as default start port
@@ -3477,6 +3476,7 @@ func getExpectedPodSpec(t *testing.T, podSpecFileName string) *v1.PodSpec {
 func assertPodSpecEqual(t *testing.T, expected, actual *v1.PodSpec) {
 	assert.Equal(t, expected.Affinity, actual.Affinity)
 	assert.Equal(t, expected.HostNetwork, actual.HostNetwork)
+	assert.Equal(t, expected.DNSPolicy, actual.DNSPolicy)
 	assert.Equal(t, expected.RestartPolicy, actual.RestartPolicy)
 	assert.Equal(t, expected.ServiceAccountName, actual.ServiceAccountName)
 	assert.Equal(t, expected.ImagePullSecrets, actual.ImagePullSecrets)
