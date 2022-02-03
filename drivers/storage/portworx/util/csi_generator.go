@@ -200,7 +200,7 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 		cv.IncludeSnapshotController = false
 	}
 
-	// IncludeExternalHealthMonitor only with PX 2.8.0+ and k8s 1.21+
+	// IncludeExternalHealthMonitor only with PX 2.10.0+ and k8s 1.21+
 	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_21) && g.pxVersion.GreaterThanOrEqual(pxVer2_10) {
 		cv.IncludeHealthMonitorController = true
 	}
