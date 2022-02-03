@@ -4702,6 +4702,7 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	require.Empty(t, csiDriver.OwnerReferences)
 	require.False(t, *csiDriver.Spec.AttachRequired)
 	require.True(t, *csiDriver.Spec.PodInfoOnMount)
+	require.Nil(t, csiDriver.Spec.FSGroupPolicy)
 
 	csiDriver = &storagev1beta1.CSIDriver{}
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
@@ -4800,6 +4801,7 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	err = testutil.Get(k8sClient, csiDriver, pxutil.CSIDriverName, "")
 	require.False(t, errors.IsNotFound(err))
 	require.Equal(t, "storage.k8s.io/v1", csiDriver.TypeMeta.APIVersion)
+	require.Equal(t, *csiDriver.Spec.FSGroupPolicy, storagev1.FileFSGroupPolicy)
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
 }
