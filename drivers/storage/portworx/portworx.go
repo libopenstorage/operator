@@ -28,7 +28,7 @@ import (
 
 const (
 	storkDriverName                   = "pxd"
-	defaultPortworxImage              = "portworx/oci-monitor"
+	defaultPortworxImage              = "docker.io/portworx/oci-monitor"
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"

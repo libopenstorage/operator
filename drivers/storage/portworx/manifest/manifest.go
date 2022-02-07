@@ -25,14 +25,14 @@ const (
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
 	DefaultPortworxVersion     = "2.8.1.2"
-	defaultStorkImage          = "openstorage/stork:2.7.0"
-	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
-	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage      = "portworx/px-node-wiper:2.5.0"
-	defaultTelemetryImage      = "purestorage/ccm-service:3.0.9"
-	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
-	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
-	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
+	defaultStorkImage          = "docker.io/openstorage/stork:2.7.0"
+	defaultAutopilotImage      = "docker.io/portworx/autopilot:1.3.1"
+	defaultLighthouseImage     = "docker.io/portworx/px-lighthouse:2.0.7"
+	defaultNodeWiperImage      = "docker.io/portworx/px-node-wiper:2.5.0"
+	defaultTelemetryImage      = "docker.io/purestorage/ccm-service:3.0.9"
+	defaultCollectorProxyImage = "docker.io/envoyproxy/envoy:v1.19.1"
+	defaultCollectorImage      = "docker.io/purestorage/realtime-metrics:1.0.0"
+	defaultPxRepoImage         = "docker.io/portworx/px-repo:1.1.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
