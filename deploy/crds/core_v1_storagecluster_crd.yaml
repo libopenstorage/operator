@@ -82,6 +82,10 @@ spec:
                 type: string
                 description: Image pull secret is a reference to secret in the same namespace as the
                   StorageCluster. It is used for pulling all images used by the StorageCluster.
+              prependRegistryToImages:
+                type: boolean
+                description: Set this to true to prepend `docker.io/` to images without a registry in their
+                  path. This mitigates an issue where GetImageURN swallows part of the image tag.
               customImageRegistry:
                 type: string
                 description: >-

@@ -102,11 +102,36 @@ func TestImageURN(t *testing.T) {
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
 }
 
-func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
+func TestImageURNPrepended(t *testing.T) {
+	// TestCase: Empty repo and registry
+	out := getImageURNPrepended("", "", "portworx/oci-monitor")
+	require.Equal(t, "docker.io/portworx/oci-monitor", out)
+
+	// TestCase: Registry without repo but image with repo
+	out = getImageURNPrepended("", "registry.io", "portworx/oci-monitor")
+	require.Equal(t, "registry.io/portworx/oci-monitor", out)
+
+	// TestCase: Common registry, custom registry, image
+	out = getImageURNPrepended("docker.io", "registry.io/", "portworx/oci-monitor")
+	require.Equal(t, "registry.io/portworx/oci-monitor", out)
+}
+
+func setUpCluster(commonRegistries string, customImageRegistry string, image string) corev1.StorageCluster {
 	cluster := corev1.StorageCluster{}
 	cluster.Annotations = make(map[string]string)
 	cluster.Annotations[constants.AnnotationCommonImageRegistries] = commonRegistries
 	cluster.Spec.CustomImageRegistry = customImageRegistry
+	return cluster
+}
+
+func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	return GetImageURN(&cluster, image)
+}
+
+func getImageURNPrepended(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	cluster.Spec.PrependRegistryToImages = true
 	return GetImageURN(&cluster, image)
 }
 

@@ -47,6 +47,17 @@ var (
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
 	}
+	imagesWithoutRegistry = [...]string{
+		"portworx/oci-monitor",
+		"openstorage/stork",
+		"portworx/autopilot",
+		"portworx/px-lighthouse",
+		"portworx/px-node-wiper",
+		"purestorage/ccm-service",
+		"envoyproxy/envoy",
+		"purestorage/realtime-metrics",
+		"portworx/px-repo",
+	}
 )
 
 func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
@@ -77,6 +88,15 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 
 	registryAndRepo := cluster.Spec.CustomImageRegistry
 	mergedCommonRegistries := getMergedCommonRegistries(cluster)
+	prependRegistryToImages := cluster.Spec.PrependRegistryToImages
+
+	if prependRegistryToImages {
+		for i := 0; i < len(imagesWithoutRegistry); i++ {
+			if strings.HasPrefix(image, imagesWithoutRegistry[i]) {
+				image = "docker.io/" + image
+			}
+		}
+	}
 
 	omitRepo := false
 	if strings.HasSuffix(registryAndRepo, "//") {

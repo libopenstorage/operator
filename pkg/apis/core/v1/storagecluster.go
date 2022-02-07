@@ -72,6 +72,9 @@ type StorageClusterSpec struct {
 	// repository) that will be used instead of index.docker.io to download Docker
 	// images. (Example: myregistry.net:5443 or myregistry.com/myrepository)
 	CustomImageRegistry string `json:"customImageRegistry,omitempty"`
+	// This hack is to fix an issue where images without a registry get part of the
+	// image tag removed when using a customImageRegistry
+	PrependRegistryToImages bool `json:"prependRegistryToImages,omitempty"`
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
