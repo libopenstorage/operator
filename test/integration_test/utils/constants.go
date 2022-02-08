@@ -47,14 +47,11 @@ const (
 	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
 	DefaultValidateUninstallRetryInterval = 20 * time.Second
-	// DefaultValidateStorkTimeout is a default timeout for stork validation
-	DefaultValidateStorkTimeout = 10 * time.Minute
-	// DefaultValidateStorkRetryInterval is a default retry interval for stork validation
-	DefaultValidateStorkRetryInterval = 5 * time.Second
-	// DefaultValidateAutopilotTimeout is a default timeout for autopilot validation
-	DefaultValidateAutopilotTimeout = 3 * time.Minute
-	// DefaultValidateAutopilotRetryInterval is a default retry interval for autopilot validation
-	DefaultValidateAutopilotRetryInterval = 2 * time.Second
+
+	// DefaultValidateComponentTimeout is a default timeout for component validation
+	DefaultValidateComponentTimeout = 10 * time.Minute
+	// DefaultValidateComponentRetryInterval is a default retry interval for component validation
+	DefaultValidateComponentRetryInterval = 5 * time.Second
 
 	// LabelValueTrue value "true" for a label
 	LabelValueTrue = "true"
