@@ -180,10 +180,19 @@ var testStorageClusterBasicCases = []types.TestCase{
 				},
 			},
 		}),
+
 		TestFunc: InstallWithCustomLabels,
 		ShouldSkip: func(tc *types.TestCase) bool {
 			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_8)
 		},
+	},
+	{
+		TestName:        "BasicAlertManagerRegression",
+		TestrailCaseIDs: []string{"C57120", "C57683", "C57121", "C57122", "C58871", "C57124"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-regression-test"},
+		}),
+		TestFunc: AlertManagerRegression,
 	},
 }
 
@@ -528,7 +537,7 @@ func BasicAutopilotRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Delete autopilot pod and validate it gets re-deployed")
 		err = appsops.Instance().DeleteDeploymentPods("autopilot", cluster.Namespace, 60*time.Second)
 		require.NoError(t, err)
-		err = testutil.ValidateAutopilot(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateAutopilotTimeout, ci_utils.DefaultValidateAutopilotRetryInterval)
+		err = testutil.ValidateAutopilot(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
 		require.NoError(t, err)
 
 		logrus.Info("Disable Autopilot and validate StorageCluster")
@@ -590,7 +599,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Delete portworx-pvc-controller pods and validate it gets re-deployed")
 		err = appsops.Instance().DeleteDeploymentPods("portworx-pvc-controller", cluster.Namespace, 60*time.Second)
 		require.NoError(t, err)
-		err = testutil.ValidatePvcController(ci_utils.PxSpecImages, cluster, ci_utils.K8sVersion, ci_utils.DefaultValidateAutopilotTimeout, ci_utils.DefaultValidateAutopilotRetryInterval)
+		err = testutil.ValidatePvcController(ci_utils.PxSpecImages, cluster, ci_utils.K8sVersion, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
 		require.NoError(t, err)
 
 		logrus.Info("Set PVC Controller custom secure-port in the annotations and validate StorageCluster")
@@ -658,6 +667,105 @@ func InstallWithCustomLabels(tc *types.TestCase) func(*testing.T) {
 		}
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
+		// Delete service/portworx-api labels
+		logrus.Info("Delete custom labels and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Metadata.Labels["service/portworx-api"] = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// AlertManagerRegression test includes the following steps:
+// 1. Deploy PX and validate AlertManager is not enabled by default
+// 2. Create AlertManager secret
+// 3. Enable AlertManager without Prometheus and validate it is not getting deployed
+// 4. Enable AlertManager with Prometheus and validate it gets deployed
+// 5. Delete AlertManager pods and validate they get re-deployed
+// 6. Disable AlertManager in StorageCluster and validate components
+// 7. Delete AlertManager secret
+// 8. Delete StorageCluster and validate it got successfully removed
+func AlertManagerRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate AlertManager is not enabled by default
+		logrus.Info("Validate ALertManager is not enabled by default")
+		if cluster.Spec.Monitoring != nil {
+			if cluster.Spec.Monitoring.Prometheus != nil {
+				if cluster.Spec.Monitoring.Prometheus.Enabled {
+					if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
+						if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+							require.False(t, cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled, "failed to validate AlertManager is enabled: expected: false, actual: %v", cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled)
+						}
+					}
+				}
+			}
+		}
+
+		// Create AlertManager secret
+		testutil.CreateAlertManagerSecret(cluster.Namespace)
+		require.NoError(t, err)
+
+		// Enable AlertManager without Prometheus and validate it does't get deployed
+		logrus.Info("Enable AlertManager without Prometheus and validate it doesn't get deployed")
+		var monitoring *corev1.MonitoringSpec
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			if cluster.Spec.Monitoring == nil {
+				monitoring = &corev1.MonitoringSpec{
+					Prometheus: &corev1.PrometheusSpec{
+						AlertManager: &corev1.AlertManagerSpec{
+							Enabled: true,
+						},
+					},
+				}
+				cluster.Spec.Monitoring = monitoring
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
+
+		// Enable AlertManager with Prometheus and validate it gets deployed
+		logrus.Info("Enable AlertManager with Prometheus and validate it gets deployed")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Prometheus.Enabled = true
+			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = true
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
+
+		// Delete pods and validate they get redeployed
+		logrus.Info("Delete alertmanager-portworx statefulset pods and validate they gets re-deployed")
+		err = appsops.Instance().DeleteStatefulSetPods("alertmanager-portworx", cluster.Namespace, 60*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateMonitoring(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
+		require.NoError(t, err)
+
+		// Disable AlertManager and validate
+		logrus.Info("Disable AlertManager and validate")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
+
+		// Delete AlertManager secret
+		err = coreops.Instance().DeleteSecret("alertmanager-portworx", cluster.Namespace)
+		require.NoError(t, err)
+
+		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
