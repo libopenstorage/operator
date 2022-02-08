@@ -119,6 +119,8 @@ const (
 	// AnnotationTelemetryArcusLocation annotation indicates the location (internal/external) of Arcus
 	// that CCM should use
 	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
+	// AnnotationHostPid configures hostPid flag for portworx pod.
+	AnnotationHostPid = pxAnnotationPrefix + "/host-pid"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -270,6 +272,12 @@ func IsIKS(cluster *corev1.StorageCluster) bool {
 // IsOpenshift returns true if the annotation has an OpenShift annotation and is true value
 func IsOpenshift(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOpenshift])
+	return err == nil && enabled
+}
+
+// IsHostPidEnabled returns if hostPid should be set to true for portworx pod.
+func IsHostPidEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationHostPid])
 	return err == nil && enabled
 }
 
