@@ -867,7 +867,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate Monitoring
-	if err = validateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
+	if err = ValidateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1624,7 +1624,25 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 	return nil
 }
 
-func validateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateMonitoring validates all PX Monitoring components
+func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	if err := ValidatePrometheus(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	if err := ValidateTelemetry(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidatePrometheus validates all Prometheus components
+func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	if cluster.Spec.Monitoring != nil &&
 		((cluster.Spec.Monitoring.EnableMetrics != nil && *cluster.Spec.Monitoring.EnableMetrics) ||
 			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
@@ -1671,11 +1689,6 @@ func validateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 			return err
 		}
-	}
-
-	err := ValidateTelemetry(pxImageList, cluster, timeout, interval)
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -1726,7 +1739,7 @@ func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1
 		return err
 	}
 
-	logrus.Infof("Telemetry successfully uninstalled.")
+	logrus.Infof("Telemetry is disabled")
 	return nil
 }
 
@@ -1739,6 +1752,149 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	}
 
 	return ValidateTelemetryUninstalled(pxImageList, cluster, timeout, interval)
+}
+
+// ValidateAlertManager validates alertManager components
+func ValidateAlertManager(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Prometheus != nil {
+		if cluster.Spec.Monitoring.Prometheus.Enabled {
+			logrus.Infof("Prometheus is enabled")
+			if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+				logrus.Infof("AlertManager is enabled")
+				return ValidateAlertManagerEnabled(pxImageList, cluster, timeout, interval)
+			}
+			logrus.Infof("Prometheus is not enabled, validating AlertManager is not deployed")
+			return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
+		}
+	}
+
+	logrus.Infof("AlertManager is disabled")
+	return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
+}
+
+// CreateAlertManagerSecret creates secret required for AlertManager component
+func CreateAlertManagerSecret(secretNamespace string) error {
+	// This is fake alertManager secret data, it's only to make the pods not fail
+	secretContent := `global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'webhook'
+receivers:
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://alertmanagerwh:30500/'`
+
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alertmanager-portworx",
+			Namespace: secretNamespace,
+		},
+		Data: map[string][]byte{"alertManager.yaml": []byte(secretContent)},
+	}
+
+	_, err := coreops.Instance().GetSecret(secret.Name, secret.Namespace)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("secret alertmanager-portworx already exists, Err: %s", err)
+		}
+	}
+
+	if _, err := coreops.Instance().CreateSecret(secret); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateAlertManagerEnabled validates alert manager components are enabled/installed as expected
+func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	// Wait for the statefulset to become online
+	sset := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alertmanager-portworx",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateStatefulSet(&sset, timeout); err != nil {
+		return err
+	}
+
+	statefulSet, err := appops.Instance().GetStatefulSet(sset.Name, sset.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify alert manager services
+	if _, err := coreops.Instance().GetService("alertmanager-portworx", cluster.Namespace); err != nil {
+		return fmt.Errorf("failed to get service alertmanager-portworx")
+	}
+
+	if _, err := coreops.Instance().GetService("alertmanager-operated", cluster.Namespace); err != nil {
+		return fmt.Errorf("failed to get service alertmanager-operated")
+	}
+
+	// Verify alert manager image
+	imageName, ok := pxImageList["alertManager"]
+	if !ok {
+		return fmt.Errorf("failed to find image for alert manager")
+	}
+
+	imageName = util.GetImageURN(cluster, imageName)
+
+	if statefulSet.Spec.Template.Spec.Containers[0].Image != imageName {
+		return fmt.Errorf("alertmanager image mismatch, image: %s, expected: %s",
+			statefulSet.Spec.Template.Spec.Containers[0].Image,
+			imageName)
+	}
+
+	// Verify prometheus config reloader image
+	imageName, ok = pxImageList["prometheusConfigReloader"]
+	if !ok {
+		return fmt.Errorf("failed to find image for prometheus config reloader")
+	}
+
+	imageName = util.GetImageURN(cluster, imageName)
+	if statefulSet.Spec.Template.Spec.Containers[1].Image != imageName {
+		return fmt.Errorf("config-reloader image mismatch, image: %s, expected: %s",
+			statefulSet.Spec.Template.Spec.Containers[1].Image,
+			imageName)
+	}
+
+	logrus.Infof("Alert manager is enabled and deployed")
+	return nil
+}
+
+// ValidateAlertManagerDisabled validates alert manager components are disabled/uninstalled as expected
+func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		if _, err := appops.Instance().GetStatefulSet("alertmanager-portworx", cluster.Namespace); !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("wait for stateful alertmanager-portworx deletion, err %v", err)
+		}
+
+		if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
+			_, err := coreops.Instance().GetService("alertmanager-portworx", cluster.Namespace)
+			if !cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled && !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("wait for service alertmanager-portworx deletion, err %v", err)
+			}
+		}
+
+		if _, err := coreops.Instance().GetService("alertmanager-operated", cluster.Namespace); !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("wait for service alertmanager-operated deletion, err %v", err)
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Infof("Alert manager components do not exist")
+	return nil
 }
 
 // ValidateTelemetryInstalled validates telemetry component is running as expected
@@ -1797,7 +1953,7 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 		return err
 	}
 
-	// Verify collector image
+	// Verify metrics collector image
 	imageName, ok := pxImageList["metricsCollector"]
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector")
@@ -1811,10 +1967,10 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 			imageName)
 	}
 
-	// Verify collector proxy image
+	// Verify metrics collector proxy image
 	imageName, ok = pxImageList["metricsCollectorProxy"]
 	if !ok {
-		return fmt.Errorf("failed to find image for metrics collector")
+		return fmt.Errorf("failed to find image for metrics collector proxy")
 	}
 
 	imageName = util.GetImageURN(cluster, imageName)
@@ -1824,7 +1980,7 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 			imageName)
 	}
 
-	logrus.Infof("Telemetry successfully installed")
+	logrus.Infof("Telemetry is enabled")
 	return nil
 }
 

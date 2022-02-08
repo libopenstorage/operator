@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/portworx/sched-ops/k8s/common"
@@ -70,6 +71,8 @@ type PodOps interface {
 	ValidatePod(pod *corev1.Pod, timeout, retryInterval time.Duration) error
 	// WatchPods sets up a watcher that listens for the changes to pods in given namespace
 	WatchPods(namespace string, fn WatchFunc, listOptions metav1.ListOptions) error
+	// GetPodLogs returns the logs of a POD as a string
+	GetPodLog(podName string, namespace string, podLogOptions *corev1.PodLogOptions) (string, error)
 }
 
 // CreatePod creates the given pod.
@@ -482,6 +485,29 @@ func (c *Client) RunCommandInPod(cmds []string, podName, containerName, namespac
 	}
 
 	return execOut.String(), nil
+}
+
+// GetPodLog returns the logs of a POD as a string
+func (c *Client) GetPodLog(podName string, ns string, podLogOptions *corev1.PodLogOptions) (string, error) {
+	if err := c.initClient(); err != nil {
+		return "", err
+	}
+
+	l := c.kubernetes.CoreV1().Pods(ns).GetLogs(podName, podLogOptions)
+	buf := new(bytes.Buffer)
+	stream, err := l.Stream(context.TODO())
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	_, err = io.Copy(buf, stream)
+	if err != nil {
+		return "", err
+	}
+	str := buf.String()
+
+	return str, err
 }
 
 // isAnyVolumeUsingVolumePlugin returns true if any of the given volumes is using a storage class for the given plugin
