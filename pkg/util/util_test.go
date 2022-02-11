@@ -110,11 +110,48 @@ func TestImageURN(t *testing.T) {
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
 }
 
-func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
+func TestImageURNPreserved(t *testing.T) {
+	// Ensure original behaviour remains
+	out := getImageURNPreserved("", "registry.io", "")
+	require.Equal(t, "", out)
+
+	// Ensure original behaviour remains
+	out = getImageURNPreserved("", "", "test/image")
+	require.Equal(t, "test/image", out)
+
+	// Ensure original behaviour remains
+	out = getImageURNPreserved("", "registry.io", "test/image")
+	require.Equal(t, "registry.io/test/image", out)
+
+	// Ensure original behaviour remains
+	out = getImageURNPreserved("", "registry.io/", "test/image")
+	require.Equal(t, "registry.io/test/image", out)
+
+	// TestCase: Image without registry, registry with / in it
+	out = getImageURNPreserved("", "registry.io/public", "test/image")
+	require.Equal(t, "registry.io/public/test/image", out)
+
+	// TestCase: Image with registry, registry with / in it
+	out = getImageURNPreserved("", "registry.io/public", "docker.io/test/image")
+	require.Equal(t, "registry.io/public/test/image", out)
+}
+
+func setUpCluster(commonRegistries string, customImageRegistry string, image string) corev1.StorageCluster {
 	cluster := corev1.StorageCluster{}
 	cluster.Annotations = make(map[string]string)
 	cluster.Annotations[constants.AnnotationCommonImageRegistries] = commonRegistries
 	cluster.Spec.CustomImageRegistry = customImageRegistry
+	return cluster
+}
+
+func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	return GetImageURN(&cluster, image)
+}
+
+func getImageURNPreserved(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	cluster.Spec.PreserveFullCustomRegistryPath = true
 	return GetImageURN(&cluster, image)
 }
 
