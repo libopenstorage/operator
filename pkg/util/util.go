@@ -274,6 +274,23 @@ func GetCustomAnnotations(
 	return nil
 }
 
+// GetCustomLabels returns custom labels for different StorageCluster components from spec
+func GetCustomLabels(
+	cluster *corev1.StorageCluster,
+	k8sObjKind string,
+	componentName string,
+) map[string]string {
+	if cluster.Spec.Metadata == nil || cluster.Spec.Metadata.Labels == nil {
+		return nil
+	}
+	// Use kind/component to locate the custom labels, e.g. service/portworx-api
+	key := fmt.Sprintf("%s/%s", k8sObjKind, componentName)
+	if labels, ok := cluster.Spec.Metadata.Labels[key]; ok && len(labels) != 0 {
+		return labels
+	}
+	return nil
+}
+
 // ComponentsPausedForMigration returns true if the daemonset migration is going on and
 // the components are waiting for storage pods to migrate first
 func ComponentsPausedForMigration(cluster *corev1.StorageCluster) bool {

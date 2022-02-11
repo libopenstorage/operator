@@ -37,7 +37,8 @@ import (
 
 // Constants for k8s object kinds
 const (
-	Pod = "pod"
+	Pod     = "pod"
+	Service = "service"
 )
 
 var (

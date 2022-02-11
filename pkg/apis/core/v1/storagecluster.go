@@ -39,6 +39,8 @@ type StorageClusterList struct {
 type Metadata struct {
 	// Annotations that will be passed to different StorageCluster components
 	Annotations map[string]map[string]string `json:"annotations,omitempty"`
+	// Labels that will be passed to different StorageCluster components
+	Labels map[string]map[string]string `json:"labels,omitempty"`
 }
 
 // StorageClusterSpec is the spec used to define a storage cluster
