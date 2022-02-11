@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.6.1
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.7.0
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -56,7 +56,7 @@ ifeq ($(BUILD_TYPE),debug)
 BUILDFLAGS += -gcflags "-N -l"
 endif
 
-RELEASE_VER := 1.7.0
+RELEASE_VER := 1.7.1
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
@@ -193,7 +193,7 @@ verify-bundle-dir:
 		-v $(BASE_DIR)/deploy:/deploy \
 		python:3 bash -c "pip3 install operator-courier==2.1.11 && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
 
-bundle: clean-bundle build-bundle deploy-bundle validate-bundle
+bundle: clean-bundle build-bundle deploy-bundle #validate-bundle
 
 build-bundle:
 	@rm -rf $(RELEASE_BUNDLE_DIR)/manifests $(RELEASE_BUNDLE_DIR)/metadata $(RELEASE_BUNDLE_DIR)/bundle.Dockerfile
