@@ -77,6 +77,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 
 	registryAndRepo := cluster.Spec.CustomImageRegistry
 	mergedCommonRegistries := getMergedCommonRegistries(cluster)
+	preserveFullCustomImageRegistry := cluster.Spec.PreserveFullCustomRegistryPath
 
 	omitRepo := false
 	if strings.HasSuffix(registryAndRepo, "//") {
@@ -97,11 +98,13 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 		}
 	}
 
-	// if we have '/' in the registryAndRepo, return <registry/repository/><only-image>
-	// else (registry only) -- return <registry/><image-with-repository>
-	if strings.Contains(registryAndRepo, "/") || omitRepo {
-		// advance to the last element, skipping image's repository
-		imgParts = imgParts[len(imgParts)-1:]
+	if !preserveFullCustomImageRegistry {
+		// if we have '/' in the registryAndRepo, return <registry/repository/><only-image>
+		// else (registry only) -- return <registry/><image-with-repository>
+		if strings.Contains(registryAndRepo, "/") || omitRepo {
+			// advance to the last element, skipping image's repository
+			imgParts = imgParts[len(imgParts)-1:]
+		}
 	}
 	return registryAndRepo + "/" + path.Join(imgParts...)
 }
