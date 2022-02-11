@@ -90,6 +90,14 @@ func (c *portworxAPI) createService(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	labels := getPortworxAPIServiceLabels()
+	if customLabels := util.GetCustomLabels(cluster, k8sutil.Service, PxAPIServiceName); customLabels != nil {
+		for k, v := range customLabels {
+			// Custom labels should not overwrite builtin portworx labels
+			if _, ok := labels[k]; !ok {
+				labels[k] = v
+			}
+		}
+	}
 
 	startPort := pxutil.StartPort(cluster)
 	sdkTargetPort := 9020
@@ -107,7 +115,7 @@ func (c *portworxAPI) createService(
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: v1.ServiceSpec{
-			Selector: labels,
+			Selector: getPortworxAPIServiceLabels(),
 			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				{

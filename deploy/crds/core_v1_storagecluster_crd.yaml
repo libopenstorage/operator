@@ -55,6 +55,14 @@ spec:
                       storage cluster components. The key specifies component in format of "kind/component",
                       e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
                       string that contains custom annotation key and value pairs.
+                  labels:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    description: >-
+                      The labels section of spec is a map of map to pass custom labels to different storage cluster
+                      components. The key specifies component in format of "kind/component", e.g. "service/portworx-api"
+                      to pass custom labels to portworx-api service. The value is a map of string that contains custom
+                      label key and value pairs.
               resources:
                 type: object
                 description: Specifies the compute resource requirements for the storage pod.
