@@ -11929,6 +11929,95 @@ func TestTelemetryCCMProxy(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestPortworxAPIServiceCustomLabels(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+		},
+	}
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Validate Portworx API Service without custom labels
+	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService.yaml")
+	pxAPIService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Custom labels of other components should not appear in service/portworx-api
+	customLabels := map[string]string{
+		"custom-label-key": "custom-label-val",
+	}
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Labels: map[string]map[string]string{
+			"service/stork-service": customLabels,
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Add custom labels to service/portworx-api
+	cluster.Spec.Metadata.Labels["service/portworx-api"] = customLabels
+	expectedPxAPIService.Labels["custom-label-key"] = "custom-label-val"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Update custom label value
+	cluster.Spec.Metadata.Labels["service/portworx-api"]["custom-label-key"] = "custom-label-new-val"
+	expectedPxAPIService.Labels["custom-label-key"] = "custom-label-new-val"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Remove custom labels
+	cluster.Spec.Metadata.Labels = nil
+	expectedPxAPIService = testutil.GetExpectedService(t, "portworxAPIService.yaml")
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {
