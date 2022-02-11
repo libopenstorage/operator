@@ -155,6 +155,31 @@ func TestGetCustomAnnotations(t *testing.T) {
 	require.Equal(t, podPortworxAnnotations, GetCustomAnnotations(cluster, k8s.Pod, componentName))
 }
 
+func TestGetCustomLabels(t *testing.T) {
+	// To avoid loop import, define the component name directly
+	componentName := "portworx-api"
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{},
+	}
+	require.Nil(t, GetCustomLabels(cluster, k8s.Service, componentName))
+
+	cluster.Spec.Metadata = &corev1.Metadata{}
+	require.Nil(t, GetCustomLabels(cluster, k8s.Service, componentName))
+
+	cluster.Spec.Metadata.Labels = make(map[string]map[string]string)
+	require.Nil(t, GetCustomLabels(cluster, k8s.Pod, componentName))
+
+	portworxAPIServiceLabels := map[string]string{
+		"portworx-api-service-key": "portworx-api-service-val",
+	}
+	cluster.Spec.Metadata.Labels = map[string]map[string]string{
+		"service/portworx-api": portworxAPIServiceLabels,
+	}
+	require.Nil(t, GetCustomLabels(cluster, k8s.Service, "invalid-component"))
+	require.Nil(t, GetCustomLabels(cluster, "invalid-kind", componentName))
+	require.Equal(t, portworxAPIServiceLabels, GetCustomLabels(cluster, k8s.Service, componentName))
+}
+
 func TestComponentsPausedForMigration(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	require.False(t, ComponentsPausedForMigration(cluster))

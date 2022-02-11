@@ -165,6 +165,26 @@ var testStorageClusterBasicCases = []types.TestCase{
 		}),
 		TestFunc: BasicPvcControllerRegression,
 	},
+	{
+		TestName:        "InstallWithCustomLabels",
+		TestrailCaseIDs: []string{"C59042"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "custom-label-test"},
+			Spec: corev1.StorageClusterSpec{
+				Metadata: &corev1.Metadata{
+					Labels: map[string]map[string]string{
+						"service/portworx-api": {
+							"custom-portworx-api-label-key": "custom-portworx-api-label-val",
+						},
+					},
+				},
+			},
+		}),
+		TestFunc: InstallWithCustomLabels,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_8)
+		},
+	},
 }
 
 func TestStorageClusterBasic(t *testing.T) {
@@ -606,6 +626,38 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller"], "failed to validate portworx.io/pvc-controller annotation, it shouldn't be here, because it was deleted")
 
 		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+func InstallWithCustomLabels(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		logrus.Info("Install with custom labels and validate StorageCluster")
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Update service/portworx-api labels
+		logrus.Info("Update custom labels and validate StorageCluster")
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Metadata.Labels["service/portworx-api"] = map[string]string{
+				"custom-portworx-api-label-key":     "custom-portworx-api-label-val-updated",
+				"custom-portworx-api-label-key-new": "custom-portworx-api-label-val-new",
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+
+		// Delete service/portworx-api labels
+		logrus.Info("Delete custom labels and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Metadata.Labels["service/portworx-api"] = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }

@@ -415,6 +415,11 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate Portworx API Service
+	if err = validatePortworxAPIService(liveCluster, timeout, interval); err != nil {
+		return err
+	}
+
 	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
 		return err
 	}
@@ -763,6 +768,42 @@ func validatePortworxService(namespace string) error {
 	if err != nil {
 		return fmt.Errorf("failed to validate Service %s/%s, Err: %v", namespace, pxServiceName, err)
 	}
+	return nil
+}
+
+func validatePortworxAPIService(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		pxAPIServiceName := "portworx-api"
+		service, err := coreops.Instance().GetService(pxAPIServiceName, cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to validate Service %s/%s, Err: %v", cluster.Namespace, pxAPIServiceName, err)
+		}
+		if cluster.Spec.Metadata != nil && cluster.Spec.Metadata.Labels != nil {
+			for k, expectedVal := range cluster.Spec.Metadata.Labels["service/portworx-api"] {
+				if actualVal, ok := service.Labels[k]; !ok || actualVal != expectedVal {
+					return nil, true, fmt.Errorf("failed to validate Service %s/%s custom labels, label %s doesn't exist or value doesn't match", cluster.Namespace, pxAPIServiceName, k)
+				}
+			}
+			for k := range service.Labels {
+				if k == "name" {
+					continue
+				}
+				if labels, ok := cluster.Spec.Metadata.Labels["service/portworx-api"]; ok {
+					if _, ok := labels[k]; !ok {
+						return nil, true, fmt.Errorf("failed to validate Service %s/%s custom labels, found unexpected label %s", cluster.Namespace, pxAPIServiceName, k)
+					}
+				} else {
+					return nil, true, fmt.Errorf("failed to validate Service %s/%s custom labels, found unexpected label %s", cluster.Namespace, pxAPIServiceName, k)
+				}
+			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
