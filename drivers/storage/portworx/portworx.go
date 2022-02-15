@@ -919,10 +919,7 @@ func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateTelemetry(cluster) &&
-		(cluster.Status.DesiredImages.Telemetry == "" ||
-			cluster.Status.DesiredImages.MetricsCollector == "" ||
-			cluster.Status.DesiredImages.MetricsCollectorProxy == "")
-
+		cluster.Status.DesiredImages.Telemetry == ""
 }
 
 func hasMetricsCollectorChanged(cluster *corev1.StorageCluster) bool {
