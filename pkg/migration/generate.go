@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"path"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,7 @@ func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
 	stc := h.constructStorageCluster(ds)
+	h.driver.SetDefaultsOnStorageCluster(stc)
 
 	if err := h.addStorkSpec(stc); err != nil {
 		return nil, err
@@ -34,17 +36,37 @@ func (h *Handler) createStorageCluster(
 	if err := h.addPVCControllerSpec(stc); err != nil {
 		return nil, err
 	}
-	if err := h.addMonitoringSpec(stc); err != nil {
+	if err := h.addMonitoringSpec(stc, ds); err != nil {
 		return nil, err
 	}
 
 	logrus.Infof("Creating StorageCluster %v/%v for migration", stc.Namespace, stc.Name)
+	stc.Status.DesiredImages = nil
 	err := h.client.Create(context.TODO(), stc)
 	if err == nil {
 		stc.Status.Phase = constants.PhaseAwaitingApproval
 		err = h.client.Status().Update(context.TODO(), stc)
 	}
 	return stc, err
+}
+
+func (h *Handler) parseCustomImageRegistry(image string) (string, string) {
+	imageParts := strings.Split(image, "/")
+
+	// This should not happen.
+	if len(imageParts) <= 1 {
+		return "", image
+	}
+
+	// default format, such as portworx/oci-monitor:2.9.0
+	if len(imageParts) == 2 && imageParts[0] == "portworx" {
+		return "", image
+	}
+
+	imageOnly := imageParts[len(imageParts)-1]
+	paths := imageParts[:len(imageParts)-1]
+
+	return path.Join(paths...), imageOnly
 }
 
 func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageCluster {
@@ -58,7 +80,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 
 	c := getPortworxContainer(ds)
-	cluster.Spec.Image = c.Image
+	cluster.Spec.CustomImageRegistry, cluster.Spec.Image = h.parseCustomImageRegistry(c.Image)
 	cluster.Spec.ImagePullPolicy = c.ImagePullPolicy
 	if len(ds.Spec.Template.Spec.ImagePullSecrets) > 0 {
 		cluster.Spec.ImagePullSecret = stringPtr(ds.Spec.Template.Spec.ImagePullSecrets[0].Name)
@@ -407,6 +429,19 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	return cluster
 }
 
+func (h *Handler) removeCustomImageRegistry(image, customImageRegistry string) string {
+	if image == "" || customImageRegistry == "" {
+		return image
+	}
+
+	if !strings.HasPrefix(image, customImageRegistry) {
+		logrus.Warningf("image %s does not have custom image registry prefix %s", image, customImageRegistry)
+		return image
+	}
+
+	return strings.TrimPrefix(image, customImageRegistry+"/")
+}
+
 func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 	dep, err := h.getDeployment(storkDeploymentName, cluster.Namespace)
 	if err != nil {
@@ -414,6 +449,10 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 	}
 	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: dep != nil,
+	}
+
+	if dep != nil && cluster.Status.DesiredImages.Stork != dep.Spec.Template.Spec.Containers[0].Image {
+		cluster.Spec.Stork.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, dep.Spec.Template.Spec.Containers[0].Image)
 	}
 	return nil
 }
@@ -425,6 +464,10 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 	}
 	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: dep != nil,
+	}
+
+	if dep != nil && cluster.Status.DesiredImages.Autopilot != dep.Spec.Template.Spec.Containers[0].Image {
+		cluster.Spec.Autopilot.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, dep.Spec.Template.Spec.Containers[0].Image)
 	}
 	return nil
 }
@@ -441,10 +484,11 @@ func (h *Handler) addPVCControllerSpec(cluster *corev1.StorageCluster) error {
 	if cluster.Namespace == "kube-system" {
 		cluster.Annotations[pxutil.AnnotationPVCController] = "true"
 	}
+
 	return nil
 }
 
-func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
+func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
 	// Check if metrics need to be exported
 	svcMonitorFound := true
 	svcMonitor := &monitoringv1.ServiceMonitor{}
@@ -516,6 +560,24 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 		prometheus.Spec.ServiceMonitorSelector != nil &&
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
+	}
+
+	// Check for telemetry
+	telemetryImage := ""
+	for _, container := range ds.Spec.Template.Spec.Containers {
+		if strings.Contains(container.Image, "ccm-service") {
+			telemetryImage = container.Image
+			break
+		}
+	}
+	if telemetryImage != "" {
+		cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+			Enabled: true,
+		}
+
+		if cluster.Status.DesiredImages.Telemetry != telemetryImage {
+			cluster.Spec.Monitoring.Telemetry.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, telemetryImage)
+		}
 	}
 
 	return nil

@@ -188,6 +188,7 @@ func (mr *MockDriverMockRecorder) PreInstall(arg0 interface{}) *gomock.Call {
 // SetDefaultsOnStorageCluster mocks base method.
 func (m *MockDriver) SetDefaultsOnStorageCluster(arg0 *v1.StorageCluster) {
 	m.ctrl.T.Helper()
+	arg0.Status.DesiredImages = &v1.ComponentImages{}
 	m.ctrl.Call(m, "SetDefaultsOnStorageCluster", arg0)
 }
 
