@@ -11779,6 +11779,19 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
+
+	// Now enabled again with custom telemetry image.
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster.Spec.Monitoring.Telemetry.Image = "myimage"
+	cluster.Status = corev1.StorageClusterStatus{
+		ClusterUID: "test-clusteruid",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, cluster.Status.DesiredImages.MetricsCollector, "")
+	require.NotEqual(t, cluster.Status.DesiredImages.MetricsCollectorProxy, "")
 }
 
 func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
