@@ -214,6 +214,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
+		}
+
+		if autoUpdateMetricsCollector(toUpdate) &&
+			(toUpdate.Status.DesiredImages.MetricsCollector == "" ||
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
 			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
 		}
@@ -268,6 +275,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if !autoUpdateTelemetry(toUpdate) {
 		toUpdate.Status.DesiredImages.Telemetry = ""
+	}
+
+	if !autoUpdateMetricsCollector(toUpdate) {
 		toUpdate.Status.DesiredImages.MetricsCollector = ""
 		toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
 	}
@@ -853,6 +863,7 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasLighthouseChanged(cluster) ||
 		hasCSIChanged(cluster) ||
 		hasTelemetryChanged(cluster) ||
+		hasMetricsCollectorChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster)
@@ -876,7 +887,14 @@ func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 }
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
-	return autoUpdateTelemetry(cluster) && cluster.Status.DesiredImages.Telemetry == ""
+	return autoUpdateTelemetry(cluster) &&
+		cluster.Status.DesiredImages.Telemetry == ""
+}
+
+func hasMetricsCollectorChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateMetricsCollector(cluster) &&
+		(cluster.Status.DesiredImages.MetricsCollector == "" ||
+			cluster.Status.DesiredImages.MetricsCollectorProxy == "")
 }
 
 func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
@@ -915,6 +933,10 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
 		cluster.Spec.Monitoring.Telemetry.Image == ""
+}
+
+func autoUpdateMetricsCollector(cluster *corev1.StorageCluster) bool {
+	return pxutil.IsTelemetryEnabled(cluster.Spec)
 }
 
 func autoUpdateLighthouse(cluster *corev1.StorageCluster) bool {
