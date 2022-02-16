@@ -702,18 +702,20 @@ func AlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Validate ALertManager is not enabled by default")
 		if cluster.Spec.Monitoring != nil {
 			if cluster.Spec.Monitoring.Prometheus != nil {
-				if cluster.Spec.Monitoring.Prometheus.Enabled {
-					if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
-						if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
-							require.False(t, cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled, "failed to validate AlertManager is enabled: expected: false, actual: %v", cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled)
-						}
+				if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
+					if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+						require.False(t, cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled, "failed to validate AlertManager is enabled: expected: false, actual: %v", cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled)
 					}
 				}
 			}
 		}
 
 		// Create AlertManager secret
-		testutil.CreateAlertManagerSecret(cluster.Namespace)
+		alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret.yaml")
+		require.NoError(t, err)
+
+		logrus.Infof("Creating alert manager secret")
+		err = ci_utils.CreateObjects(alertManagerSecret)
 		require.NoError(t, err)
 
 		// Enable AlertManager without Prometheus and validate it does't get deployed
