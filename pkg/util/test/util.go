@@ -1822,44 +1822,6 @@ func ValidateAlertManager(pxImageList map[string]string, cluster *corev1.Storage
 	return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
 }
 
-// CreateAlertManagerSecret creates secret required for AlertManager component
-func CreateAlertManagerSecret(secretNamespace string) error {
-	// This is fake alertManager secret data, it's only to make the pods not fail
-	secretContent := `global:
-  resolve_timeout: 5m
-route:
-  group_by: ['job']
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 12h
-  receiver: 'webhook'
-receivers:
-- name: 'webhook'
-  webhook_configs:
-  - url: 'http://alertmanagerwh:30500/'`
-
-	secret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "alertmanager-portworx",
-			Namespace: secretNamespace,
-		},
-		Data: map[string][]byte{"alertManager.yaml": []byte(secretContent)},
-	}
-
-	_, err := coreops.Instance().GetSecret(secret.Name, secret.Namespace)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("secret alertmanager-portworx already exists, Err: %s", err)
-		}
-	}
-
-	if _, err := coreops.Instance().CreateSecret(secret); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // ValidateAlertManagerEnabled validates alert manager components are enabled/installed as expected
 func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	// Wait for the statefulset to become online
