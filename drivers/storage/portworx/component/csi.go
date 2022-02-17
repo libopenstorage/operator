@@ -58,6 +58,12 @@ const (
 	csiCRDSuffixVolumeSnapshotClass   = "volumesnapshotclass.yaml"
 )
 
+var (
+	csiDeploymentTemplateLabels = map[string]string{
+		"app": "px-csi-driver",
+	}
+)
+
 type csi struct {
 	isCreated              bool
 	csiNodeInfoCRDCreated  bool
@@ -478,6 +484,11 @@ func (c *csi) createDeployment(
 		)
 	}
 
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateLabels)
+	if err != nil {
+		return err
+	}
+
 	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		snapshotterImage != existingSnapshotterImage ||
@@ -486,11 +497,13 @@ func (c *csi) createDeployment(
 		healthMonitorControllerImage != existingHealthMonitorControllerContainerName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
+		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isCreated || modified {
-		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef,
-			provisionerImage, attacherImage, snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage)
+		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
+			snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage, updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -507,12 +520,9 @@ func getCSIDeploymentSpec(
 	snapshotterImage, resizerImage string,
 	snapshotControllerImage string,
 	healthMonitorControllerImage string,
+	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *appsv1.Deployment {
 	replicas := int32(3)
-	labels := map[string]string{
-		"app": "px-csi-driver",
-	}
-
 	leaderElectionType := "leases"
 	provisionerLeaderElectionType := "leases"
 	if csiConfig.IncludeEndpointsAndConfigMapsForLeases {
@@ -548,11 +558,11 @@ func getCSIDeploymentSpec(
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: csiDeploymentTemplateLabels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: csiDeploymentTemplateLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,
@@ -772,6 +782,10 @@ func getCSIDeploymentSpec(
 				)
 			}
 		}
+	}
+
+	if len(topologySpreadConstraints) != 0 {
+		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
 	}
 
 	return deployment

@@ -3,7 +3,15 @@ package util
 import (
 	"testing"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -197,4 +205,95 @@ func TestComponentsPausedForMigration(t *testing.T) {
 
 	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
 	require.True(t, ComponentsPausedForMigration(cluster))
+}
+
+func TestHaveTopologySpreadConstraintsChanged(t *testing.T) {
+	regionConstraint := v1.TopologySpreadConstraint{
+		MaxSkew:           1,
+		TopologyKey:       "topology.kubernetes.io/region",
+		WhenUnsatisfiable: v1.ScheduleAnyway,
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"key": "value",
+			},
+		},
+	}
+	zoneConstraint := v1.TopologySpreadConstraint{
+		MaxSkew:           1,
+		TopologyKey:       "topology.kubernetes.io/zone",
+		WhenUnsatisfiable: v1.ScheduleAnyway,
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"key": "value",
+			},
+		},
+	}
+	var updatedConstraints, existingConstraints []v1.TopologySpreadConstraint
+	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	// Add region constraint
+	updatedConstraints = append(updatedConstraints, *regionConstraint.DeepCopy())
+	require.True(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	existingConstraints = append(existingConstraints, *regionConstraint.DeepCopy())
+	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	// Change labels
+	updatedConstraints[0].LabelSelector.MatchLabels["key"] = "new-val"
+	require.True(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	existingConstraints[0].LabelSelector.MatchLabels["key"] = "new-val"
+	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	// Add zone constraint
+	updatedConstraints = append(updatedConstraints, *zoneConstraint.DeepCopy())
+	require.True(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	existingConstraints = append(existingConstraints, *zoneConstraint.DeepCopy())
+	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	// Remove constraints
+	updatedConstraints = nil
+	require.True(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+	existingConstraints = nil
+	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
+}
+
+func TestGetTopologySpreadConstraints(t *testing.T) {
+	fakeNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node0",
+			Labels: map[string]string{
+				"topology.kubernetes.io/region": "region0",
+				"topology.kubernetes.io/zone":   "zone0",
+				"other.label.key":               "value",
+			},
+		},
+	}
+	k8sClient := fakeK8sClient(fakeNode)
+	templateLabels := map[string]string{
+		"key": "value",
+	}
+	expectedConstraints := []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/region",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: templateLabels,
+			},
+		},
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/zone",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: templateLabels,
+			},
+		},
+	}
+	constraints, err := GetTopologySpreadConstraints(k8sClient, templateLabels)
+	require.NoError(t, err)
+	require.Equal(t, expectedConstraints, constraints)
+}
+
+func fakeK8sClient(initObjects ...runtime.Object) client.Client {
+	s := scheme.Scheme
+	corev1.AddToScheme(s)
+	monitoringv1.AddToScheme(s)
+	cluster_v1alpha1.AddToScheme(s)
+	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }

@@ -4,13 +4,14 @@ import (
 	"testing"
 	"time"
 
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
 func TestIsNodeBeingDeleted(t *testing.T) {
