@@ -3,6 +3,7 @@
 package integrationtest
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -193,6 +194,22 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-regression-test"},
 		}),
 		TestFunc: AlertManagerRegression,
+	},
+	{
+		TestName:        "InstallWithNodeTopologyLabels",
+		TestrailCaseIDs: []string{"C59259", "C59260", "C59261"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pod-topology-spread-constraints-test",
+				Annotations: map[string]string{
+					"portworx.io/pvc-controller": "true",
+				},
+			},
+		}),
+		TestFunc: InstallWithNodeTopologyLabels,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_8)
+		},
 	},
 }
 
@@ -769,5 +786,88 @@ func AlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// InstallWithNodeTopologyLabels includes the following steps:
+// 1. backup all node topology labels
+// 2. divide all k8s nodes with topology key 'topology.kubernetes.io/region' into 2 regions
+// 3. install StorageCluster with stork, csi, pvc controller enabled
+// 4. validate deployment.spec.template.spec.topologySpreadConstraints matches the expected constraints
+// 5. add a new label 'topology.kubernetes.io/zone' to all nodes, then validate new constraint should be added to deployments
+// 6. remove all topology labels, then validate all topology constraints should be removed
+// 7. uninstall the cluster and recover node topology labels
+func InstallWithNodeTopologyLabels(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		regionKey := "topology.kubernetes.io/region"
+		zoneKey := "topology.kubernetes.io/zone"
+		// Backup existing topology labels
+		logrus.Infof("Backing up cluster topology labels")
+		nodeList, err := coreops.Instance().GetNodes()
+		require.NoError(t, err)
+		for _, node := range nodeList.Items {
+			region := ""
+			zone := ""
+			if val, ok := node.Labels[regionKey]; ok {
+				region = val
+			}
+			if val, ok := node.Labels[zoneKey]; ok {
+				zone = val
+			}
+			logrus.Infof("node %s: %s=%s, %s=%s", node.Name, regionKey, region, zoneKey, zone)
+		}
+
+		// Add/overwrite region topology label to all nodes, divide all nodes into 2 regions
+		for i, node := range nodeList.Items {
+			val := fmt.Sprintf("region%v", i%2)
+			logrus.Infof("Label node %s with %s=%s", node.Name, regionKey, val)
+			err := coreops.Instance().AddLabelOnNode(node.Name, regionKey, val)
+			require.NoError(t, err)
+		}
+
+		// Install the cluster and do validations
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Add zone label to all nodes, now constraint changed so new pods should be created
+		for i, node := range nodeList.Items {
+			val := fmt.Sprintf("zone%v", i)
+			logrus.Infof("Label node %s with %s=%s", node.Name, zoneKey, val)
+			err := coreops.Instance().AddLabelOnNode(node.Name, zoneKey, val)
+			require.NoError(t, err)
+		}
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster,
+			ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Remove topology labels from all nodes and validate pod topology spread constraints
+		for _, node := range nodeList.Items {
+			ci_utils.RemoveLabelFromNode(t, node.Name, regionKey)
+			ci_utils.RemoveLabelFromNode(t, node.Name, zoneKey)
+		}
+		logrus.Infof("Validate StorageCluster %s", cluster.Name)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster,
+			ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
+		// Uninstall storage cluster and recover labels
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+		logrus.Infof("Recovering cluster topology labels")
+		for _, node := range nodeList.Items {
+			if val, ok := node.Labels[regionKey]; ok {
+				logrus.Infof("Label node %s with %s=%s", node.Name, regionKey, val)
+				err := coreops.Instance().AddLabelOnNode(node.Name, regionKey, val)
+				require.NoError(t, err)
+			}
+			if val, ok := node.Labels[zoneKey]; ok {
+				logrus.Infof("Label node %s with %s=%s", node.Name, zoneKey, val)
+				err := coreops.Instance().AddLabelOnNode(node.Name, zoneKey, val)
+				require.NoError(t, err)
+			}
+		}
 	}
 }
