@@ -988,6 +988,11 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		if errors.IsNotFound(err) {
 			return fmt.Errorf("failed to validate ServiceAccount %s, Err: %v", pvcControllerDp.Name, err)
 		}
+
+		// Validate PVC controller deployment pod topology spread constraints
+		if err := validatePodTopologySpreadConstraints(pvcControllerDp, timeout, interval); err != nil {
+			return err
+		}
 	} else {
 		logrus.Debug("PVC Controller is Disabled")
 		// Validate portworx-pvc-controller deployment is terminated or doesn't exist
@@ -1073,6 +1078,16 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 
 		// Validate hostNetwork parameter
 		if err := validateStorkHostNetwork(cluster.Spec.Stork.HostNetwork, storkDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate stork deployment pod topology spread constraints
+		if err := validatePodTopologySpreadConstraints(storkDp, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate stork scheduler deployment pod topology spread constraints
+		if err := validatePodTopologySpreadConstraints(storkSchedulerDp, timeout, interval); err != nil {
 			return err
 		}
 	} else {
@@ -1387,6 +1402,11 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 
 		// Validate CSI container images inside px-csi-ext pods
 		if err := validateCsiExtImages(cluster.Namespace, pxImageList); err != nil {
+			return err
+		}
+
+		// Validate CSI deployment pod topology spread constraints
+		if err := validatePodTopologySpreadConstraints(pxCsiDp, timeout, interval); err != nil {
 			return err
 		}
 	} else {
@@ -1999,6 +2019,37 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	logrus.Infof("Telemetry is enabled")
+	return nil
+}
+
+// validatePodTopologySpreadConstraints validates pod topology spread constraints
+func validatePodTopologySpreadConstraints(deployment *appsv1.Deployment, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		nodeList, err := coreops.Instance().GetNodes()
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get k8s nodes")
+		}
+		existingDeployment, err := appops.Instance().GetDeployment(deployment.Name, deployment.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get deployment %s/%s", deployment.Namespace, deployment.Name)
+		}
+		expectedConstraints, err := util.GetTopologySpreadConstraintsFromNodes(nodeList, existingDeployment.Spec.Template.Labels)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get expected pod topology spread constraints from %s/%s deployment template",
+				deployment.Namespace, deployment.Name)
+		}
+		existingConstraints := existingDeployment.Spec.Template.Spec.TopologySpreadConstraints
+		if !reflect.DeepEqual(expectedConstraints, existingConstraints) {
+			return nil, true, fmt.Errorf("failed to validate deployment pod topology spread constraints for %s/%s, expected constraints: %+v, actual constraints: %+v",
+				deployment.Namespace, deployment.Name, expectedConstraints, existingConstraints)
+		}
+		return nil, false, nil
+	}
+
+	logrus.Infof("validating deployment %s/%s pod topology spread constraints", deployment.Namespace, deployment.Name)
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
 	return nil
 }
 
