@@ -49,6 +49,13 @@ const (
 	AksPVCControllerSecurePort = "10261"
 )
 
+var (
+	pvcControllerDeploymentTemplateLabels = map[string]string{
+		"name": PVCDeploymentName,
+		"tier": "control-plane",
+	}
+)
+
 type pvcController struct {
 	isCreated  bool
 	k8sClient  client.Client
@@ -342,15 +349,23 @@ func (c *pvcController) createDeployment(
 		}
 	}
 
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, pvcControllerDeploymentTemplateLabels)
+	if err != nil {
+		return err
+	}
+
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
+		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isCreated || modified {
-		deployment := c.getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
+		deployment := c.getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity,
+			updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -365,6 +380,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	imageName string,
 	command []string,
 	cpuQuantity resource.Quantity,
+	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *appsv1.Deployment {
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
@@ -387,11 +403,6 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		healthCheckPort = AksPVCControllerInsecurePort
 	}
 
-	labels := map[string]string{
-		"name": PVCDeploymentName,
-		"tier": "control-plane",
-	}
-
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            PVCDeploymentName,
@@ -406,7 +417,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: pvcControllerDeploymentTemplateLabels,
 			},
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
@@ -418,7 +429,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: pvcControllerDeploymentTemplateLabels,
 					Annotations: map[string]string{
 						"scheduler.alpha.kubernetes.io/critical-pod": "",
 					},
@@ -501,6 +512,10 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 				)
 			}
 		}
+	}
+
+	if len(topologySpreadConstraints) != 0 {
+		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
 	}
 
 	return deployment

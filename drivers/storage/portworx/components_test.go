@@ -11437,6 +11437,123 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
 }
 
+func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testing.T) {
+	fakeNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node0",
+			Labels: map[string]string{
+				"topology.kubernetes.io/region": "region0",
+			},
+		},
+	}
+	versionClient := fakek8sclient.NewSimpleClientset(fakeNode)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient(fakeNode)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI deployment topology constraints
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedConstraints := []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/region",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "px-csi-driver",
+				},
+			},
+		},
+	}
+	require.Equal(t, expectedConstraints, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+
+	// PVC controller deployment topology constraints
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedConstraints = []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/region",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": component.PVCDeploymentName,
+					"tier": "control-plane",
+				},
+			},
+		},
+	}
+	require.Equal(t, expectedConstraints, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+}
+
+func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI deployment topology constraints
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+
+	// PVC controller deployment topology constraints
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {
