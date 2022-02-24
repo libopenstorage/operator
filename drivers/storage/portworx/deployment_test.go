@@ -1497,7 +1497,6 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-
 	assertPodSpecEqual(t, expected, &actual)
 
 	// Don't set the start port if same as default start port
@@ -1516,6 +1515,41 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 
 	actual, _ = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
+func TestPodSpecWithHostPid(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.12.8",
+	}
+
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationHostPid: "true",
+			},
+		},
+	}
+	driver := portworx{}
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assert.Equal(t, podSpec.HostPID, true)
+
+	cluster.Annotations[pxutil.AnnotationHostPid] = "false"
+	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assert.Equal(t, podSpec.HostPID, false)
+
+	cluster.Annotations[pxutil.AnnotationHostPid] = "invalid"
+	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assert.Equal(t, podSpec.HostPID, false)
 }
 
 func TestPodSpecWithLogAnnotation(t *testing.T) {
@@ -3477,6 +3511,7 @@ func getExpectedPodSpec(t *testing.T, podSpecFileName string) *v1.PodSpec {
 func assertPodSpecEqual(t *testing.T, expected, actual *v1.PodSpec) {
 	assert.Equal(t, expected.Affinity, actual.Affinity)
 	assert.Equal(t, expected.HostNetwork, actual.HostNetwork)
+	assert.Equal(t, expected.DNSPolicy, actual.DNSPolicy)
 	assert.Equal(t, expected.RestartPolicy, actual.RestartPolicy)
 	assert.Equal(t, expected.ServiceAccountName, actual.ServiceAccountName)
 	assert.Equal(t, expected.ImagePullSecrets, actual.ImagePullSecrets)
