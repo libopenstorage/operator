@@ -613,7 +613,17 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 
 	// If no storage spec is provided, initialize one where Portworx takes all available drives
 	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
-		toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		// Only initialize storage spec when there's no node level cloud storage spec specified
+		initializeStorageSpec := true
+		for _, nodeSpec := range toUpdate.Spec.Nodes {
+			if nodeSpec.CloudStorage != nil {
+				initializeStorageSpec = false
+				break
+			}
+		}
+		if initializeStorageSpec {
+			toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		}
 	}
 	if toUpdate.Spec.Storage != nil {
 		if toUpdate.Spec.Storage.Devices == nil &&
