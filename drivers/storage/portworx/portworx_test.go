@@ -1327,6 +1327,17 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
 	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
 
+	// Do not set default storage spec if node cloud storage spec exists
+	cluster.Spec.Storage = nil
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			CloudStorage: &corev1.CloudStorageNodeSpec{},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Nil(t, cluster.Spec.Storage)
+	require.Nil(t, cluster.Spec.Nodes[0].Storage)
+
 	// Set node spec cloudstorage fields from cluster cloudstorage spec, if empty at node level
 	clusterDeviceSpecs := []string{"type=dev1", "type=dev2"}
 	maxStorageNodes := uint32(3)
