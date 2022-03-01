@@ -5631,7 +5631,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
-func TestUpdateStorageClusterFeatureGates(t *testing.T) {
+func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -5685,9 +5685,9 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	}
 	k8sClient.Create(context.TODO(), oldPod)
 
-	// TestCase: Add spec.featureGates
-	cluster.Spec.FeatureGates = map[string]string{
-		"feature1": "enabled",
+	// TestCase: Add spec.CSI.Enbled
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled: true,
 	}
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -5705,8 +5705,45 @@ func TestUpdateStorageClusterFeatureGates(t *testing.T) {
 	// is detected to be updated.
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: Change spec.featureGates
-	cluster.Spec.FeatureGates["feature1"] = "disabled"
+	// TestCase: Change spec.CSI.Enabled to false
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled: false,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.CSI back to true
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled: true,
+	}
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: Change spec.CSI to nil
+	cluster.Spec.CSI = nil
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
+	// TestCase: No spec.CSI changes
+	cluster.Spec.CSI = nil
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil

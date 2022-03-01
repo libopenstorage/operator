@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -663,14 +664,36 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 		}
 	}
 
-	if t.isK3s || toUpdate.Spec.Version == "" {
-		// Enable CSI if running in k3s environment or
-		// if this is a new Portworx installation
-		if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
-			if toUpdate.Spec.FeatureGates == nil {
-				toUpdate.Spec.FeatureGates = make(map[string]string)
+	// Check if feature gate is set. If it is, honor the flag here and remove it.
+	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
+	if featureGateSet {
+		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
+		if err != nil {
+			csiEnabled = true
+		}
+
+		// Feature flag set, but CSI spec is not defined. In this case,
+		// we want to use the feature flag value in the CSI spec.
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: csiEnabled,
 			}
-			toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
+		} else {
+			// Set CSI spec as enabled if it's already enabled OR the flag is true.
+			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
+		}
+
+		// Always remove the feature flag.
+		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
+	}
+
+	// Enable CSI if running in k3s environment or
+	// if this is a new Portworx installation
+	if t.isK3s || toUpdate.Spec.Version == "" {
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: true,
+			}
 		}
 	}
 
@@ -772,6 +795,8 @@ func setCSISpecDefaults(toUpdate *corev1.StorageCluster) {
 			Enabled:                   pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates),
 			InstallSnapshotController: boolPtr(false),
 		}
+	} else if toUpdate.Spec.CSI.InstallSnapshotController == nil {
+		toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(false)
 	}
 }
 

@@ -348,8 +348,11 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			telemetryEnabled = true
 		}
 	}
-	cluster.Spec.FeatureGates = map[string]string{
-		"CSI": strconv.FormatBool(csiEnabled),
+	// Install snapshot controller, as Daemonset spec generator
+	// always included snapshot controller.
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled:                   csiEnabled,
+		InstallSnapshotController: boolPtr(true),
 	}
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{

@@ -990,8 +990,12 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
+	// Feature gate should be removed when CSI is enabled
+	require.NotContains(t, cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
+
 	// Don't enable CSI by default for existing cluster
 	cluster.Spec.FeatureGates = nil
+	cluster.Spec.CSI = nil
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.False(t, pxutil.IsCSIEnabled(cluster))
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
@@ -1066,7 +1070,6 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Reset desired images if CSI has been disabled
-	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
 	cluster.Spec.CSI.Enabled = false
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
@@ -1075,6 +1078,26 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.CSINodeDriverRegistrar)
 	require.Empty(t, cluster.Status.DesiredImages.CSIResizer)
 	require.Empty(t, cluster.Status.DesiredImages.CSISnapshotter)
+
+	// If CSI feature flag is true and CSI Spec is false, honor feature flag true
+	cluster.Spec.CSI.Enabled = false
+	cluster.Spec.FeatureGates = map[string]string{
+		string(pxutil.FeatureCSI): "true",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, pxutil.IsCSIEnabled(cluster))
+	require.True(t, cluster.Spec.CSI.Enabled)
+	require.NotContains(t, cluster.Spec.FeatureGates, pxutil.FeatureCSI)
+
+	// If CSI feature flag is false and CSI Spec is false, honor feature flag false
+	cluster.Spec.CSI.Enabled = false
+	cluster.Spec.FeatureGates = map[string]string{
+		string(pxutil.FeatureCSI): "false",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.False(t, pxutil.IsCSIEnabled(cluster))
+	require.False(t, cluster.Spec.CSI.Enabled)
+	require.NotContains(t, cluster.Spec.FeatureGates, pxutil.FeatureCSI)
 }
 
 func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
@@ -4698,8 +4721,8 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 					ExportMetrics: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
@@ -4988,8 +5011,8 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 					ExportMetrics: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
@@ -5604,8 +5627,8 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 					ExportMetrics: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,

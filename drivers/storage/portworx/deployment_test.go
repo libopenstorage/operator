@@ -2023,8 +2023,8 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			ImagePullPolicy: v1.PullIfNotPresent,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "True",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -2438,8 +2438,8 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -2483,8 +2483,8 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -2527,8 +2527,8 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -2600,8 +2600,8 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -2679,8 +2679,8 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.1.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -2753,8 +2753,8 @@ func TestPodSpecForPKSWithCSI(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.5.5",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{

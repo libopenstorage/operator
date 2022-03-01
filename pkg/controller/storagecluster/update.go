@@ -694,8 +694,6 @@ func matchSelectedFields(
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.StartPort, currentSpec.StartPort) {
 		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.FeatureGates, currentSpec.FeatureGates) {
-		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.Network, currentSpec.Network) {
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.Storage, currentSpec.Storage) {
@@ -703,6 +701,8 @@ func matchSelectedFields(
 	} else if !reflect.DeepEqual(oldSpec.RuntimeOpts, currentSpec.RuntimeOpts) {
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.Resources, currentSpec.Resources) {
+		return false, nil
+	} else if !reflect.DeepEqual(oldSpec.CSI, currentSpec.CSI) {
 		return false, nil
 	} else if !elementsMatch(oldSpec.Env, currentSpec.Env) {
 		return false, nil
@@ -732,7 +732,28 @@ func doesTelemetryMatch(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 
 // isBounceRequired handles miscellaneous fields that requrie a pod bounce
 func isBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
-	return isSecurityBounceRequired(oldSpec, currentSpec)
+	return isSecurityBounceRequired(oldSpec, currentSpec) || isCSIBoundRequired(oldSpec, currentSpec)
+}
+
+// isCSIBoundRequired handles CSI fields that requrie a pod bounce
+func isCSIBoundRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
+	// CSI spec defined before and after, but flag has changed
+	if oldSpec.CSI != nil && currentSpec.CSI != nil {
+		return oldSpec.CSI.Enabled == currentSpec.CSI.Enabled
+	}
+
+	// New CSI spec added to cluster. If enabled, pod will bounce
+	if oldSpec.CSI == nil && currentSpec.CSI != nil {
+		return currentSpec.CSI.Enabled
+	}
+
+	// CSI spec was set, but is removed. If old CSI spec was enabled, pod will bounce
+	if oldSpec.CSI != nil && currentSpec.CSI == nil {
+		return oldSpec.CSI.Enabled
+	}
+
+	// Both old and new CSI spec are nil, no change required
+	return false
 }
 
 // isSecurityBounceRequired specific security spec fields that require a pod bounce
