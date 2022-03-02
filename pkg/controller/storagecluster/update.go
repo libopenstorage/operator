@@ -702,8 +702,6 @@ func matchSelectedFields(
 		return false, nil
 	} else if !reflect.DeepEqual(oldSpec.Resources, currentSpec.Resources) {
 		return false, nil
-	} else if !reflect.DeepEqual(oldSpec.CSI, currentSpec.CSI) {
-		return false, nil
 	} else if !elementsMatch(oldSpec.Env, currentSpec.Env) {
 		return false, nil
 	} else if !elementsMatch(oldSpec.Volumes, currentSpec.Volumes) {
@@ -732,14 +730,14 @@ func doesTelemetryMatch(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 
 // isBounceRequired handles miscellaneous fields that requrie a pod bounce
 func isBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
-	return isSecurityBounceRequired(oldSpec, currentSpec) || isCSIBoundRequired(oldSpec, currentSpec)
+	return isSecurityBounceRequired(oldSpec, currentSpec) || isCSIBounceRequired(oldSpec, currentSpec)
 }
 
-// isCSIBoundRequired handles CSI fields that requrie a pod bounce
-func isCSIBoundRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
+// isCSIBounceRequired handles CSI fields that requrie a pod bounce
+func isCSIBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 	// CSI spec defined before and after, but flag has changed
 	if oldSpec.CSI != nil && currentSpec.CSI != nil {
-		return oldSpec.CSI.Enabled == currentSpec.CSI.Enabled
+		return oldSpec.CSI.Enabled != currentSpec.CSI.Enabled
 	}
 
 	// New CSI spec added to cluster. If enabled, pod will bounce

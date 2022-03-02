@@ -990,7 +990,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
-	// Feature gate should be removed when CSI is enabled
+	// Feature gate should not be set when CSI is enabled
 	require.NotContains(t, cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
 
 	// Don't enable CSI by default for existing cluster
@@ -1009,7 +1009,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Snapshot controller and CRDs not installed by default
-	require.False(t, *cluster.Spec.CSI.InstallSnapshotController)
+	require.Nil(t, cluster.Spec.CSI.InstallSnapshotController)
 
 	// Use images from release manifest if enabled
 	cluster.Spec.FeatureGates = map[string]string{
@@ -1098,6 +1098,16 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.False(t, pxutil.IsCSIEnabled(cluster))
 	require.False(t, cluster.Spec.CSI.Enabled)
 	require.NotContains(t, cluster.Spec.FeatureGates, pxutil.FeatureCSI)
+
+	// If CSI feature flag is true and CSI Spec is empty, honor feature flag true and create CSI spec.
+	cluster.Spec.CSI = nil
+	cluster.Spec.FeatureGates = map[string]string{
+		string(pxutil.FeatureCSI): "true",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.True(t, pxutil.IsCSIEnabled(cluster))
+	require.True(t, cluster.Spec.CSI.Enabled)
+	require.Nil(t, cluster.Spec.FeatureGates)
 }
 
 func TestStorageClusterDefaultsForPrometheus(t *testing.T) {

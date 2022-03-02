@@ -2334,8 +2334,8 @@ func TestPodWithTelemetry(t *testing.T) {
 					Image:   "portworx/px-telemetry:2.1.2",
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "false",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
 			},
 		},
 	}

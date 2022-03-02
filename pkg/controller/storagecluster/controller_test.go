@@ -5685,7 +5685,7 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	}
 	k8sClient.Create(context.TODO(), oldPod)
 
-	// TestCase: Add spec.CSI.Enbled
+	// TestCase: Add spec.CSI.Enabled
 	cluster.Spec.CSI = &corev1.CSISpec{
 		Enabled: true,
 	}
@@ -5706,9 +5706,11 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change spec.CSI.Enabled to false
-	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled: false,
-	}
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.CSI.Enabled = false
 	k8sClient.Update(context.TODO(), cluster)
 
 	podControl.DeletePodName = nil
@@ -5719,11 +5721,12 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change spec.CSI back to true
-	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled: true,
-	}
-	k8sClient.Update(context.TODO(), cluster)
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 
+	cluster.Spec.CSI.Enabled = true
+	k8sClient.Update(context.TODO(), cluster)
 	podControl.DeletePodName = nil
 
 	result, err = controller.Reconcile(context.TODO(), request)
@@ -5731,7 +5734,24 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
-	// TestCase: Change spec.CSI to nil
+	// TestCase: Snapshot controller installed should not bounce pods
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	trueBool := true
+	cluster.Spec.CSI.InstallSnapshotController = &trueBool
+	k8sClient.Update(context.TODO(), cluster)
+
+	podControl.DeletePodName = nil
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Equal(t, []string(nil), podControl.DeletePodName)
+
+	// TestCase: Change spec.CSI to nil, pods should bounce
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
 	cluster.Spec.CSI = nil
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -5743,6 +5763,10 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: No spec.CSI changes
+	_ = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
 	cluster.Spec.CSI = nil
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -5751,7 +5775,7 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+	require.Equal(t, []string(nil), podControl.DeletePodName)
 }
 
 func TestUpdateStorageClusterNodeSpec(t *testing.T) {

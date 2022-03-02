@@ -326,9 +326,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
-	if pxutil.IsCSIEnabled(toUpdate) {
-		setCSISpecDefaults(toUpdate)
-	}
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -683,8 +680,11 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
 		}
 
-		// Always remove the feature flag.
+		// Always remove the feature flag. Clear the feature gates map if none are set.
 		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
+		if len(toUpdate.Spec.FeatureGates) == 0 {
+			toUpdate.Spec.FeatureGates = nil
+		}
 	}
 
 	// Enable CSI if running in k3s environment or
@@ -786,18 +786,6 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs
-}
-
-func setCSISpecDefaults(toUpdate *corev1.StorageCluster) {
-	if toUpdate.Spec.CSI == nil {
-		toUpdate.Spec.CSI = &corev1.CSISpec{
-			// Enabled by feature gate, but not spec
-			Enabled:                   pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates),
-			InstallSnapshotController: boolPtr(false),
-		}
-	} else if toUpdate.Spec.CSI.InstallSnapshotController == nil {
-		toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(false)
-	}
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {

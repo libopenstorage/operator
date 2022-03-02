@@ -351,8 +351,10 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	// Install snapshot controller, as Daemonset spec generator
 	// always included snapshot controller.
 	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled:                   csiEnabled,
-		InstallSnapshotController: boolPtr(true),
+		Enabled: csiEnabled,
+	}
+	if csiEnabled {
+		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
 	}
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{

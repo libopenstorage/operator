@@ -354,7 +354,7 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate CSI is enabled by default
-		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "true")
+		require.Equal(t, cluster.Spec.CSI.Enabled, true)
 
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
@@ -370,19 +370,19 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 
 		logrus.Info("Disable CSI and validate StorageCluster")
 		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Spec.FeatureGates = map[string]string{"CSI": "false"}
+			cluster.Spec.CSI.Enabled = false
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
-		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "false")
+		require.Equal(t, cluster.Spec.CSI.Enabled, false)
 
 		logrus.Info("Enable CSI and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Spec.FeatureGates = map[string]string{"CSI": "true"}
+			cluster.Spec.CSI.Enabled = true
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
-		require.Equal(t, cluster.Spec.FeatureGates["CSI"], "true")
+		require.Equal(t, cluster.Spec.CSI.Enabled, true)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
