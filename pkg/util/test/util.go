@@ -1809,11 +1809,11 @@ func ValidateAlertManager(pxImageList map[string]string, cluster *corev1.Storage
 	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Prometheus != nil {
 		if cluster.Spec.Monitoring.Prometheus.Enabled {
 			logrus.Infof("Prometheus is enabled")
-			if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+			if cluster.Spec.Monitoring.Prometheus.AlertManager != nil && cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
 				logrus.Infof("AlertManager is enabled")
 				return ValidateAlertManagerEnabled(pxImageList, cluster, timeout, interval)
 			}
-			logrus.Infof("Prometheus is not enabled, validating AlertManager is not deployed")
+			logrus.Infof("AlertManager is not enabled")
 			return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
 		}
 	}
