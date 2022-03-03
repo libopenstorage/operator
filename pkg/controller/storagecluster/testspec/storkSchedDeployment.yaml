@@ -13,11 +13,13 @@ spec:
     matchLabels:
       component: scheduler
       tier: control-plane
+      name: stork-scheduler
   template:
     metadata:
       labels:
         component: scheduler
         tier: control-plane
+        name: stork-scheduler
       name: stork-scheduler
     spec:
       containers:
