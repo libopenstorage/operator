@@ -236,7 +236,7 @@ func IsPortworxEnabled(cluster *corev1.StorageCluster) bool {
 
 // IsCSIEnabled returns true if CSI is not disabled by the feature flag
 func IsCSIEnabled(cluster *corev1.StorageCluster) bool {
-	return IsPortworxEnabled(cluster) && FeatureCSI.IsEnabled(cluster.Spec.FeatureGates)
+	return IsPortworxEnabled(cluster) && cluster.Spec.CSI != nil && cluster.Spec.CSI.Enabled
 }
 
 // IsPKS returns true if the annotation has a PKS annotation and is true value
