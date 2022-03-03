@@ -846,15 +846,10 @@ func getStorkSchedDeploymentSpec(
 	cpuQuantity resource.Quantity,
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
-	templateLabels := map[string]string{
+	labels := map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
-	}
-	deploymentLabels := map[string]string{
-		"name": storkSchedDeploymentName,
-	}
-	for k, v := range templateLabels {
-		deploymentLabels[k] = v
+		"name":      storkSchedDeploymentName,
 	}
 
 	replicas := int32(3)
@@ -863,18 +858,18 @@ func getStorkSchedDeploymentSpec(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            storkSchedDeploymentName,
 			Namespace:       cluster.Namespace,
-			Labels:          deploymentLabels,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: templateLabels,
+				MatchLabels: labels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   storkSchedDeploymentName,
-					Labels: templateLabels,
+					Labels: labels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkSchedServiceAccountName,
