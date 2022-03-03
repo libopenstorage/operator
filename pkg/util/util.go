@@ -77,7 +77,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 
 	registryAndRepo := cluster.Spec.CustomImageRegistry
 	mergedCommonRegistries := getMergedCommonRegistries(cluster)
-	preserveFullCustomImageRegistry := cluster.Spec.PreserveFullCustomRegistryPath
+	preserveFullCustomImageRegistry := cluster.Spec.PreserveFullCustomImageRegistry
 
 	omitRepo := false
 	if strings.HasSuffix(registryAndRepo, "//") {

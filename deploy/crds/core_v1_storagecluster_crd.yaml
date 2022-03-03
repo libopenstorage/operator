@@ -96,7 +96,7 @@ spec:
                   Custom container image registry server that will be used instead of
                   index.docker.io to download Docker images. This may include the repository as well.
                   (Example: myregistry.net:5443 or myregistry.com/myrepository)
-              preserveFullCustomRegistryPath:
+              preserveFullCustomImageRegistry:
                 type: boolean
                 description: >-
                   Setting this to true this stops part of the image tag being swallowed when setting a
