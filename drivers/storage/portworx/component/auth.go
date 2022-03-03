@@ -32,6 +32,8 @@ const (
 	AuthTokenBufferLength = time.Minute * 1
 	// AuthSystemGuestRoleName is the role name to maintain for the guest role
 	AuthSystemGuestRoleName = "system.guest"
+	// AnnotationSkipResource stork annotation to skip a resource from a backup
+	AnnotationSkipResource = "stork.libopenstorage.org/skip-resource"
 )
 
 // GuestRoleEnabled is the default configuration for the guest role
@@ -250,6 +252,9 @@ func (a *auth) createPrivateKeysSecret(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
 			Namespace: cluster.Namespace,
+			Annotations: map[string]string{
+				AnnotationSkipResource: "true",
+			},
 		}, Data: map[string][]byte{
 			pxutil.SecuritySharedSecretKey: []byte(sharedSecretKey),
 		},
@@ -258,6 +263,9 @@ func (a *auth) createPrivateKeysSecret(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.SecurityPXSystemSecretsSecretName,
 			Namespace: cluster.Namespace,
+			Annotations: map[string]string{
+				AnnotationSkipResource: "true",
+			},
 		}, Data: map[string][]byte{
 			pxutil.SecuritySystemSecretKey: []byte(internalSystemSecretKey),
 			pxutil.SecurityAppsSecretKey:   []byte(appsSecretKey),
@@ -361,8 +369,11 @@ func (a *auth) maintainAuthTokenSecret(
 		// Store new token
 		secret := &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            authTokenSecretName,
-				Namespace:       cluster.Namespace,
+				Name:      authTokenSecretName,
+				Namespace: cluster.Namespace,
+				Annotations: map[string]string{
+					AnnotationSkipResource: "true",
+				},
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: map[string][]byte{
