@@ -77,7 +77,7 @@ type StorageClusterSpec struct {
 	// This is a hack to stop GetImageURN from swallowing part of the image tag.
 	// Without it having a customImageRegistry with a / in it means that an image
 	// `portworx/oci-monitor` becomes just `oci-monitor`
-	PreserveFullCustomImageRegistry bool `json:"preserveFullCustomImageRegistry"`
+	PreserveFullCustomImageRegistry bool `json:"preserveFullCustomImageRegistry,omitempty"`
 	// Kvdb is the information of kvdb that storage driver uses
 	Kvdb *KvdbSpec `json:"kvdb,omitempty"`
 	// CloudStorage details of storage in cloud environment.
