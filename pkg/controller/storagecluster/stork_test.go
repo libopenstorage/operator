@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -2337,6 +2338,96 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	require.Len(t, storkConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
 	require.Equal(t, string(modifiedPolicyBytes), storkConfigMap.Data["policy.cfg"])
+}
+
+func TestStorkSchedulerWithMissingLabelsFromSelector(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:              k8sClient,
+		Driver:              driver,
+		kubernetesVersion:   k8sVersion,
+		lastPodCreationTime: make(map[string]time.Time),
+	}
+
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	// TestCase: name label should be present in the deployment selector and pod metadata
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	schedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, schedDeployment.Spec.Selector.MatchLabels, 3)
+	require.Equal(t, storkSchedDeploymentName, schedDeployment.Spec.Selector.MatchLabels["name"])
+	require.Len(t, schedDeployment.Spec.Template.Labels, 3)
+	require.Equal(t, storkSchedDeploymentName, schedDeployment.Spec.Template.Labels["name"])
+
+	// TestCase: Set selector to empty and check the resource version
+	schedDeployment.Spec.Selector = nil
+	err = testutil.Update(k8sClient, schedDeployment)
+	require.NoError(t, err)
+	prevResourceVersion := schedDeployment.ResourceVersion
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, prevResourceVersion, schedDeployment.ResourceVersion)
+
+	// TestCase: Selector does not have the name label. A new deployment should
+	// be created as selector is an immutable field.
+	schedDeployment.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"tier":      "control-plane",
+			"component": "scheduler",
+		},
+	}
+	schedDeployment.Spec.Template.Labels = schedDeployment.Spec.Selector.MatchLabels
+	err = testutil.Update(k8sClient, schedDeployment)
+	require.NoError(t, err)
+	prevResourceVersion = schedDeployment.ResourceVersion
+	rv, _ := strconv.Atoi(prevResourceVersion)
+	require.True(t, rv > 1)
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.NotEqual(t, prevResourceVersion, schedDeployment.ResourceVersion)
+	// Resource version is reset to 1, indicating a new deployment has been created
+	require.Equal(t, "1", schedDeployment.ResourceVersion)
 }
 
 func TestDisableStork(t *testing.T) {
