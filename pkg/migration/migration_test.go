@@ -196,8 +196,8 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 					},
 				},
 			},
-			FeatureGates: map[string]string{
-				"CSI": "false",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
 			},
 			Stork: &corev1.StorkSpec{
 				Enabled: false,
@@ -402,8 +402,8 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
 				},
 			},
-			FeatureGates: map[string]string{
-				"CSI": "false",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
 			},
 			Stork: &corev1.StorkSpec{
 				Enabled: false,
@@ -611,8 +611,9 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				"CSI": "true",
+			CSI: &corev1.CSISpec{
+				Enabled:                   true,
+				InstallSnapshotController: boolPtr(true),
 			},
 			Stork: &corev1.StorkSpec{
 				Enabled: true,
@@ -717,8 +718,8 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				"CSI": "false",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
 			},
 			Stork: &corev1.StorkSpec{
 				Enabled: false,
