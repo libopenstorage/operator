@@ -8,7 +8,7 @@ import (
 type Feature string
 
 const (
-	// FeatureCSI is used to indicate CSI feature
+	// FeatureCSI is DEPRECATED. Use spec.CSI.Enabled instead.
 	FeatureCSI Feature = "CSI"
 )
 

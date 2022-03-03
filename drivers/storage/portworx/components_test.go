@@ -4167,8 +4167,8 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -4280,8 +4280,8 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -4377,8 +4377,8 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4427,8 +4427,8 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4505,9 +4505,6 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.10.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
-			},
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
@@ -4563,8 +4560,8 @@ func TestCSIInstallWithPKS(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.5.5",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -4626,8 +4623,8 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4736,8 +4733,8 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -4799,8 +4796,8 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -4951,8 +4948,8 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4991,8 +4988,8 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5100,8 +5097,8 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5167,8 +5164,8 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5274,8 +5271,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			ImagePullSecret: &imagePullSecret,
 		},
@@ -5373,8 +5370,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
@@ -5508,8 +5505,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
@@ -5928,8 +5925,8 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -6029,8 +6026,8 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 					},
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -6184,8 +6181,8 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{ClusterUID: "test-uid"},
@@ -6692,8 +6689,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -6834,8 +6831,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -6992,8 +6989,8 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 				},
 				Telemetry: &corev1.TelemetrySpec{Enabled: true},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -7596,8 +7593,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRepo,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -7766,8 +7763,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.9.1",
 			CustomImageRegistry: customRepo,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
@@ -8028,8 +8025,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -8418,8 +8415,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -8900,8 +8897,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -9617,8 +9614,8 @@ func TestDisableCSI_0_3(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -9648,7 +9645,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -9716,8 +9713,8 @@ func TestDisableCSI_1_0(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.5.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -9751,7 +9748,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
