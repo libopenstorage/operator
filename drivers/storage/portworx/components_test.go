@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -3441,6 +3442,8 @@ func TestSecurityInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, sharedSecret.OwnerReferences)
+	require.Len(t, sharedSecret.Annotations, 1)
+	require.Equal(t, "true", sharedSecret.Annotations[component.AnnotationSkipResource])
 	require.Equal(t, 64, len(sharedSecret.Data[pxutil.SecuritySharedSecretKey]))
 	oldSharedSecret := sharedSecret.Data[pxutil.SecuritySharedSecretKey]
 
@@ -3448,6 +3451,8 @@ func TestSecurityInstall(t *testing.T) {
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, systemSecret.OwnerReferences)
+	require.Len(t, systemSecret.Annotations, 1)
+	require.Equal(t, "true", systemSecret.Annotations[component.AnnotationSkipResource])
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
 	oldSystemSecret := systemSecret.Data[pxutil.SecuritySystemSecretKey]
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecurityAppsSecretKey]))
@@ -3475,6 +3480,8 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, adminSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, adminSecret.OwnerReferences[0].Name)
+	require.Len(t, adminSecret.Annotations, 1)
+	require.Equal(t, "true", adminSecret.Annotations[component.AnnotationSkipResource])
 	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups := jwtClaims["groups"].([]interface{})
@@ -3492,6 +3499,8 @@ func TestSecurityInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, userSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, userSecret.OwnerReferences[0].Name)
+	require.Len(t, userSecret.Annotations, 1)
+	require.Equal(t, "true", userSecret.Annotations[component.AnnotationSkipResource])
 	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups = jwtClaims["groups"].([]interface{})
@@ -3699,11 +3708,10 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	newSharedSecretName := "newsharedsecret"
 	sharedSecret.Name = newSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
+	sharedSecret.Annotations = map[string]string{component.AnnotationSkipResource: "true"}
 	sharedSecret.Data = make(map[string][]byte)
-	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
-	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte("mynewsecret_in_different_location")
-	sharedSecret.StringData[pxutil.SecuritySharedSecretKey] = "mynewsecret_in_different_location"
+	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte(fmt.Sprintf("mynewsecret_in_different_location%d", rand.Intn(100000)))
 	err = k8sClient.Create(context.TODO(), sharedSecret)
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = &newSharedSecretName
@@ -3715,7 +3723,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
-	require.NotEqual(t, oldUserToken, newUserToken)
+	require.NotEqual(t, string(oldUserToken), string(newUserToken))
 
 	// no changes, token remains the same.
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
@@ -3729,6 +3737,109 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	require.NoError(t, err)
 	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
 	require.Equal(t, oldUserToken, newUserToken)
+}
+
+func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
+	// auth enabled through security.enabled
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
+						TokenLifetime: stringPtr("1h"),
+					},
+				},
+			},
+		},
+	}
+
+	sharedSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-shared-secret",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecuritySharedSecretKey: []byte("shared-secret"),
+		},
+	}
+	systemSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-system-secrets",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecuritySystemSecretKey: []byte("system-secret"),
+			pxutil.SecurityAppsSecretKey:   []byte("apps-secret"),
+		},
+	}
+	adminToken := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-admin-token",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecurityAuthTokenKey: []byte("admin-token"),
+		},
+	}
+	userToken := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-user-token",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecurityAuthTokenKey: []byte("user-token"),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(sharedSecret, systemSecret, adminToken, userToken)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	SetPortworxDefaults(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	updatedSharedSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedSharedSecret, pxutil.SecurityPXSharedSecretSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		sharedSecret.Data[pxutil.SecuritySharedSecretKey],
+		updatedSharedSecret.Data[pxutil.SecuritySharedSecretKey],
+	)
+	require.Len(t, updatedSharedSecret.Annotations, 1)
+	require.Equal(t, "true", updatedSharedSecret.Annotations[component.AnnotationSkipResource])
+
+	updatedSystemSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedSystemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		systemSecret.Data[pxutil.SecuritySystemSecretKey],
+		updatedSystemSecret.Data[pxutil.SecuritySystemSecretKey],
+	)
+	require.Len(t, updatedSystemSecret.Annotations, 1)
+	require.Equal(t, "true", updatedSystemSecret.Annotations[component.AnnotationSkipResource])
+
+	updatedAdminToken := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedAdminToken, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, updatedAdminToken.Annotations, 1)
+	require.Equal(t, "true", updatedAdminToken.Annotations[component.AnnotationSkipResource])
+
+	updatedUserToken := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedUserToken, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, updatedUserToken.Annotations, 1)
+	require.Equal(t, "true", updatedUserToken.Annotations[component.AnnotationSkipResource])
 }
 
 func TestGuestAccessSecurity(t *testing.T) {
