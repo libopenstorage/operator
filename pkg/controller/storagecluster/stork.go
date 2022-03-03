@@ -832,6 +832,12 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
+	// To add the missing 'name: stork-scheduler' label from older deployments,
+	// we need to re-create the deployment as the field is immutable.
+	if err = c.checkForMissingSelectorLabel(existingDeployment); err != nil {
+		return err
+	}
+
 	var existingImage string
 	var existingCommand []string
 	var existingCPUQuantity resource.Quantity
@@ -983,6 +989,30 @@ func getStorkSchedDeploymentSpec(
 	}
 
 	return deployment
+}
+
+func (c *Controller) checkForMissingSelectorLabel(existingDeployment *apps.Deployment) error {
+	if existingDeployment.Spec.Selector == nil {
+		return nil
+	}
+
+	found := false
+	for k, v := range existingDeployment.Spec.Selector.MatchLabels {
+		if k == "name" && v == storkSchedDeploymentName {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		err := c.client.Delete(context.TODO(), existingDeployment)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		c.isStorkSchedDeploymentCreated = false
+	}
+
+	return nil
 }
 
 func getDesiredStorkImage(cluster *corev1.StorageCluster) string {
