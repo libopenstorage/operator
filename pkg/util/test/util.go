@@ -1309,7 +1309,7 @@ func validateStorkNamespaceEnvVar(namespace string, storkDeployment *appsv1.Depl
 }
 
 func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	csi, _ := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"])
+	csi := cluster.Spec.CSI.Enabled
 	pxCsiDp := &appsv1.Deployment{}
 	pxCsiDp.Name = "px-csi-ext"
 	pxCsiDp.Namespace = cluster.Namespace
