@@ -2971,7 +2971,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-	require.Equal(t, int64(2), revisions.Items[1].Revision)
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 
 	// The old pod should be marked for deletion
 	require.Empty(t, podControl.Templates)
@@ -3004,7 +3004,15 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 
 	// New revision's hash should match that of the new pod.
 	require.Len(t, podControl.Templates, 1)
-	require.Equal(t, revisions.Items[1].Labels[defaultStorageClusterUniqueLabelKey],
+	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
+	// New revision's hash should match that of the new pod.
+	var revision2 *appsv1.ControllerRevision = nil
+	for i, rev := range revisions.Items {
+		if rev.Revision == 2 {
+			revision2 = &revisions.Items[i]
+		}
+	}
+	require.Equal(t, revision2.Labels[defaultStorageClusterUniqueLabelKey],
 		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
 }
 
