@@ -42,10 +42,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	daemonutil "k8s.io/kubernetes/pkg/controller/daemon/util"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"k8s.io/utils/integer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -1025,36 +1023,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 		return false, true, nil
 	}
 
-	newPod, err := c.newSimulationPod(cluster, node.Name)
-	if err != nil {
-		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
-		return false, false, err
-	}
-
-	taints := node.Spec.Taints
-	fitsNodeName, fitsNodeAffinity, fitsTaints := checkPredicates(newPod, node, taints)
-	if !fitsNodeName || !fitsNodeAffinity {
-		logrus.WithFields(logrus.Fields{
-			"nodeName":         node.Name,
-			"fitsNodeName":     fitsNodeName,
-			"fitsNodeAffinity": fitsNodeAffinity,
-		}).Debug("pod does not fit")
-		return false, false, nil
-	}
-
-	if !fitsTaints {
-		// Scheduled storage pods should continue running if they tolerate NoExecute taint
-		shouldContinueRunning := v1helper.TolerationsTolerateTaintsWithFilter(newPod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
-			return t.Effect == v1.TaintEffectNoExecute
-		})
-		logrus.WithFields(logrus.Fields{
-			"nodeName":              node.Name,
-			"shouldContinueRunning": shouldContinueRunning,
-		}).Debug("pod does not fit taints")
-		return false, shouldContinueRunning, nil
-	}
-
-	return true, true, nil
+	return k8s.CheckPredicatesForStoragePod(node, cluster, c.StorageClusterSelectorLabels(cluster))
 }
 
 func (c *Controller) createPodTemplate(
@@ -1095,86 +1064,6 @@ func (c *Controller) createPodTemplate(
 		newTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
 	}
 	return newTemplate, nil
-}
-
-func (c *Controller) newSimulationPod(
-	cluster *corev1.StorageCluster,
-	nodeName string,
-) (*v1.Pod, error) {
-	newPod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: cluster.Namespace,
-			Labels:    c.StorageClusterSelectorLabels(cluster),
-		},
-		Spec: v1.PodSpec{
-			NodeName: nodeName,
-		},
-	}
-
-	if cluster.Spec.Placement != nil {
-		if cluster.Spec.Placement.NodeAffinity != nil {
-			newPod.Spec.Affinity = &v1.Affinity{
-				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-			}
-		}
-		if len(cluster.Spec.Placement.Tolerations) > 0 {
-			newPod.Spec.Tolerations = make([]v1.Toleration, 0)
-			for _, t := range cluster.Spec.Placement.Tolerations {
-				newPod.Spec.Tolerations = append(newPod.Spec.Tolerations, *(t.DeepCopy()))
-			}
-		}
-	}
-
-	// Add constraints that are used for migration. We should remove this whenever we
-	// remove the migration code
-	addMigrationConstraints(&newPod.Spec)
-
-	// Add default tolerations for StorageCluster pods
-	k8s.AddOrUpdateStoragePodTolerations(&newPod.Spec)
-	return newPod, nil
-}
-
-func addMigrationConstraints(podSpec *v1.PodSpec) {
-	if podSpec.Affinity == nil {
-		podSpec.Affinity = &v1.Affinity{}
-	}
-	if podSpec.Affinity.NodeAffinity == nil {
-		podSpec.Affinity.NodeAffinity = &v1.NodeAffinity{}
-	}
-	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
-		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{}
-	}
-	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms == nil {
-		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{{}}
-	}
-
-	selectorTerms := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-	for i, term := range selectorTerms {
-		if term.MatchExpressions == nil {
-			term.MatchExpressions = make([]v1.NodeSelectorRequirement, 0)
-		}
-		selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
-			Key:      constants.LabelPortworxDaemonsetMigration,
-			Operator: v1.NodeSelectorOpNotIn,
-			Values: []string{
-				constants.LabelValueMigrationPending,
-				constants.LabelValueMigrationStarting,
-			},
-		})
-	}
-	podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = selectorTerms
-}
-
-// checkPredicates checks if a StorageCluster pod can run on a node
-func checkPredicates(
-	pod *v1.Pod, node *v1.Node, taints []v1.Taint,
-) (fitsNodeName, fitsNodeAffinity, fitsTaints bool) {
-	fitsNodeName = len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
-	fitsNodeAffinity = pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
-	fitsTaints = v1helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
-		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
-	})
-	return
 }
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
