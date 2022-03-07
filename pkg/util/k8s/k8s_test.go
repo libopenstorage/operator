@@ -961,6 +961,70 @@ func TestDeleteDaemonSet(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestCreateOrAppendToSecret(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	expectedSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"key1": []byte("value1"),
+		},
+	}
+
+	err := CreateOrAppendToSecret(k8sClient, expectedSecret, nil)
+	require.NoError(t, err)
+
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "value1", string(actualSecret.Data["key1"]))
+
+	// TestCase: Add new secret key
+	expectedSecret.Data["key2"] = []byte("value2")
+	err = CreateOrAppendToSecret(k8sClient, expectedSecret, nil)
+	require.NoError(t, err)
+
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, "test", "test-ns")
+	require.NoError(t, err)
+	require.Len(t, actualSecret.Data, 2)
+	require.Equal(t, "value2", string(actualSecret.Data["key2"]))
+
+	// TestCase: Add annotation
+	expectedSecret.Annotations = map[string]string{"foo": "bar"}
+	err = CreateOrAppendToSecret(k8sClient, expectedSecret, nil)
+	require.NoError(t, err)
+
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, "test", "test-ns")
+	require.NoError(t, err)
+	require.Len(t, actualSecret.Annotations, 1)
+	require.Equal(t, "bar", actualSecret.Annotations["foo"])
+
+	// TestCase: Change annotation value
+	expectedSecret.Annotations = map[string]string{"foo": "baz"}
+	err = CreateOrAppendToSecret(k8sClient, expectedSecret, nil)
+	require.NoError(t, err)
+
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, "test", "test-ns")
+	require.NoError(t, err)
+	require.Len(t, actualSecret.Annotations, 1)
+	require.Equal(t, "baz", actualSecret.Annotations["foo"])
+
+	// TestCase: Remove annotation
+	expectedSecret.Annotations = nil
+	err = CreateOrAppendToSecret(k8sClient, expectedSecret, nil)
+	require.NoError(t, err)
+
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, "test", "test-ns")
+	require.NoError(t, err)
+	require.Empty(t, actualSecret.Annotations)
+}
+
 func TestUpdateStorageClusterStatus(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	cluster := &corev1.StorageCluster{

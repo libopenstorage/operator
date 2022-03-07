@@ -60,6 +60,24 @@ const (
 	userVolumeNamePrefix    = "user-"
 )
 
+var (
+	storkServiceLabels = map[string]string{
+		"name": "stork",
+	}
+	storkDeploymentLabels = map[string]string{
+		"tier": "control-plane",
+	}
+	storkTemplateLabels = map[string]string{
+		"name": "stork",
+		"tier": "control-plane",
+	}
+	storkSchedulerDeploymentLabels = map[string]string{
+		"tier":      "control-plane",
+		"component": "scheduler",
+		"name":      storkSchedDeploymentName,
+	}
+)
+
 func (c *Controller) syncStork(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -477,7 +495,7 @@ func (c *Controller) createStorkService(
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Spec: v1.ServiceSpec{
-				Selector: getStorkServiceLabels(),
+				Selector: storkServiceLabels,
 				Ports: []v1.ServicePort{
 					{
 						Name:       "extender",
@@ -597,6 +615,11 @@ func (c *Controller) createStorkDeployment(
 	existingVolumes := append([]v1.Volume{}, existingDeployment.Spec.Template.Spec.Volumes...)
 	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkTemplateLabels)
+	if err != nil {
+		return err
+	}
+
 	// Check if image, envs, cpu or args are modified
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
@@ -607,11 +630,13 @@ func (c *Controller) createStorkDeployment(
 		existingDeployment.Spec.Template.Spec.HostNetwork != hostNetwork ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
+		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isStorkDeploymentCreated || modified {
 		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
-			command, envVars, volumes, volumeMounts, targetCPUQuantity)
+			command, envVars, volumes, volumeMounts, targetCPUQuantity, updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -629,16 +654,9 @@ func (c *Controller) getStorkDeploymentSpec(
 	volumes []v1.Volume,
 	volumeMounts []v1.VolumeMount,
 	cpuQuantity resource.Quantity,
+	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
-	deploymentLabels := map[string]string{
-		"tier": "control-plane",
-	}
-	templateLabels := getStorkServiceLabels()
-	for k, v := range deploymentLabels {
-		templateLabels[k] = v
-	}
-
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
@@ -650,7 +668,7 @@ func (c *Controller) getStorkDeploymentSpec(
 			Annotations: map[string]string{
 				"scheduler.alpha.kubernetes.io/critical-pod": "",
 			},
-			Labels:          deploymentLabels,
+			Labels:          storkDeploymentLabels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: apps.DeploymentSpec{
@@ -662,7 +680,7 @@ func (c *Controller) getStorkDeploymentSpec(
 				},
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: templateLabels,
+				MatchLabels: storkTemplateLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
@@ -670,7 +688,7 @@ func (c *Controller) getStorkDeploymentSpec(
 					Annotations: map[string]string{
 						"scheduler.alpha.kubernetes.io/critical-pod": "",
 					},
-					Labels: templateLabels,
+					Labels: storkTemplateLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkServiceAccountName,
@@ -750,6 +768,10 @@ func (c *Controller) getStorkDeploymentSpec(
 		deployment.Spec.Template.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
 
+	if len(topologySpreadConstraints) != 0 {
+		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
+	}
+
 	return deployment
 }
 
@@ -810,6 +832,12 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
+	// To add the missing 'name: stork-scheduler' label from older deployments,
+	// we need to re-create the deployment as the field is immutable.
+	if err = c.checkForMissingSelectorLabel(existingDeployment); err != nil {
+		return err
+	}
+
 	var existingImage string
 	var existingCommand []string
 	var existingCPUQuantity resource.Quantity
@@ -821,15 +849,22 @@ func (c *Controller) createStorkSchedDeployment(
 		}
 	}
 
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkSchedulerDeploymentLabels)
+	if err != nil {
+		return err
+	}
+
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
+		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
+		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isStorkSchedDeploymentCreated || modified {
-		deployment := getStorkSchedDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity)
+		deployment := getStorkSchedDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity, updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -844,37 +879,27 @@ func getStorkSchedDeploymentSpec(
 	imageName string,
 	command []string,
 	cpuQuantity resource.Quantity,
+	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
-	templateLabels := map[string]string{
-		"tier":      "control-plane",
-		"component": "scheduler",
-	}
-	deploymentLabels := map[string]string{
-		"name": storkSchedDeploymentName,
-	}
-	for k, v := range templateLabels {
-		deploymentLabels[k] = v
-	}
-
 	replicas := int32(3)
 
 	deployment := &apps.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            storkSchedDeploymentName,
 			Namespace:       cluster.Namespace,
-			Labels:          deploymentLabels,
+			Labels:          storkSchedulerDeploymentLabels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: templateLabels,
+				MatchLabels: storkSchedulerDeploymentLabels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   storkSchedDeploymentName,
-					Labels: templateLabels,
+					Labels: storkSchedulerDeploymentLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkSchedServiceAccountName,
@@ -959,7 +984,35 @@ func getStorkSchedDeploymentSpec(
 		}
 	}
 
+	if len(topologySpreadConstraints) != 0 {
+		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
+	}
+
 	return deployment
+}
+
+func (c *Controller) checkForMissingSelectorLabel(existingDeployment *apps.Deployment) error {
+	if existingDeployment.Spec.Selector == nil {
+		return nil
+	}
+
+	found := false
+	for k, v := range existingDeployment.Spec.Selector.MatchLabels {
+		if k == "name" && v == storkSchedDeploymentName {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		err := c.client.Delete(context.TODO(), existingDeployment)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		c.isStorkSchedDeploymentCreated = false
+	}
+
+	return nil
 }
 
 func getDesiredStorkImage(cluster *corev1.StorageCluster) string {
@@ -985,12 +1038,6 @@ func getDesiredStorkVolumesAndMounts(
 	sort.Sort(k8sutil.VolumeByName(volumes))
 	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
 	return volumes, volumeMounts
-}
-
-func getStorkServiceLabels() map[string]string {
-	return map[string]string{
-		"name": "stork",
-	}
 }
 
 func imagePullPolicy(cluster *corev1.StorageCluster) v1.PullPolicy {

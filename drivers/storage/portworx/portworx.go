@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -325,9 +326,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
-	if pxutil.IsCSIEnabled(toUpdate) {
-		setCSISpecDefaults(toUpdate)
-	}
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -615,7 +613,17 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 
 	// If no storage spec is provided, initialize one where Portworx takes all available drives
 	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
-		toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		// Only initialize storage spec when there's no node level cloud storage spec specified
+		initializeStorageSpec := true
+		for _, nodeSpec := range toUpdate.Spec.Nodes {
+			if nodeSpec.CloudStorage != nil {
+				initializeStorageSpec = false
+				break
+			}
+		}
+		if initializeStorageSpec {
+			toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		}
 	}
 	if toUpdate.Spec.Storage != nil {
 		if toUpdate.Spec.Storage.Devices == nil &&
@@ -663,14 +671,39 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 		}
 	}
 
-	if t.isK3s || toUpdate.Spec.Version == "" {
-		// Enable CSI if running in k3s environment or
-		// if this is a new Portworx installation
-		if _, ok := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]; !ok {
-			if toUpdate.Spec.FeatureGates == nil {
-				toUpdate.Spec.FeatureGates = make(map[string]string)
+	// Check if feature gate is set. If it is, honor the flag here and remove it.
+	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
+	if featureGateSet {
+		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
+		if err != nil {
+			csiEnabled = true
+		}
+
+		// Feature flag set, but CSI spec is not defined. In this case,
+		// we want to use the feature flag value in the CSI spec.
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: csiEnabled,
 			}
-			toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "true"
+		} else {
+			// Set CSI spec as enabled if it's already enabled OR the flag is true.
+			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
+		}
+
+		// Always remove the feature flag. Clear the feature gates map if none are set.
+		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
+		if len(toUpdate.Spec.FeatureGates) == 0 {
+			toUpdate.Spec.FeatureGates = nil
+		}
+	}
+
+	// Enable CSI if running in k3s environment or
+	// if this is a new Portworx installation
+	if t.isK3s || toUpdate.Spec.Version == "" {
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: true,
+			}
 		}
 	}
 
@@ -763,16 +796,6 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs
-}
-
-func setCSISpecDefaults(toUpdate *corev1.StorageCluster) {
-	if toUpdate.Spec.CSI == nil {
-		toUpdate.Spec.CSI = &corev1.CSISpec{
-			// Enabled by feature gate, but not spec
-			Enabled:                   pxutil.FeatureCSI.IsEnabled(toUpdate.Spec.FeatureGates),
-			InstallSnapshotController: boolPtr(false),
-		}
-	}
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {

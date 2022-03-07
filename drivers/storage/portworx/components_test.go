@@ -3691,7 +3691,6 @@ func TestAutopilotVolumesChange(t *testing.T) {
 
 func TestSecurityInstall(t *testing.T) {
 	// auth enabled through security.enabled
-	logrus.SetLevel(logrus.TraceLevel)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -3738,6 +3737,8 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	err = testutil.Get(k8sClient, sharedSecret, *cluster.Spec.Security.Auth.SelfSigned.SharedSecret, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, sharedSecret.OwnerReferences)
+	require.Len(t, sharedSecret.Annotations, 1)
+	require.Equal(t, "true", sharedSecret.Annotations[component.AnnotationSkipResource])
 	require.Equal(t, 64, len(sharedSecret.Data[pxutil.SecuritySharedSecretKey]))
 	oldSharedSecret := sharedSecret.Data[pxutil.SecuritySharedSecretKey]
 
@@ -3745,6 +3746,8 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	err = testutil.Get(k8sClient, systemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, systemSecret.OwnerReferences)
+	require.Len(t, systemSecret.Annotations, 1)
+	require.Equal(t, "true", systemSecret.Annotations[component.AnnotationSkipResource])
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecuritySystemSecretKey]))
 	oldSystemSecret := systemSecret.Data[pxutil.SecuritySystemSecretKey]
 	require.Equal(t, 64, len(systemSecret.Data[pxutil.SecurityAppsSecretKey]))
@@ -3772,6 +3775,8 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NoError(t, err)
 	require.Len(t, adminSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, adminSecret.OwnerReferences[0].Name)
+	require.Len(t, adminSecret.Annotations, 1)
+	require.Equal(t, "true", adminSecret.Annotations[component.AnnotationSkipResource])
 	_, _, err = new(jwt.Parser).ParseUnverified(string(adminSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups := jwtClaims["groups"].([]interface{})
@@ -3789,6 +3794,8 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NoError(t, err)
 	require.Len(t, userSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, userSecret.OwnerReferences[0].Name)
+	require.Len(t, userSecret.Annotations, 1)
+	require.Equal(t, "true", userSecret.Annotations[component.AnnotationSkipResource])
 	_, _, err = new(jwt.Parser).ParseUnverified(string(userSecret.Data[pxutil.SecurityAuthTokenKey]), &jwtClaims)
 	require.NoError(t, err)
 	groups = jwtClaims["groups"].([]interface{})
@@ -3919,7 +3926,6 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 }
 
 func TestTLSSpecValidation(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	caCertFileName := stringPtr("/etc/pwx/testCA.crt")
 	serverCertFileName := stringPtr("/etc/pwx/testServer.crt")
 	serverKeyFileName := stringPtr("/etc/pwx/testServer.key")
@@ -4148,11 +4154,10 @@ func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageC
 	newSharedSecretName := fmt.Sprintf("newsharedsecret%d", rand.Intn(100000))
 	sharedSecret.Name = newSharedSecretName
 	sharedSecret.Namespace = cluster.Namespace
+	sharedSecret.Annotations = map[string]string{component.AnnotationSkipResource: "true"}
 	sharedSecret.Data = make(map[string][]byte)
-	sharedSecret.StringData = make(map[string]string)
 	sharedSecret.Type = v1.SecretTypeOpaque
 	sharedSecret.Data[pxutil.SecuritySharedSecretKey] = []byte(fmt.Sprintf("mynewsecret_in_different_location%d", rand.Intn(100000)))
-	sharedSecret.StringData[pxutil.SecuritySharedSecretKey] = fmt.Sprintf("mynewsecret_in_different_location%d", rand.Intn(100000))
 	err = k8sClient.Create(context.TODO(), sharedSecret)
 	require.NoError(t, err)
 	cluster.Spec.Security.Auth.SelfSigned.SharedSecret = &newSharedSecretName
@@ -4164,7 +4169,7 @@ func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageC
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
-	require.NotEqual(t, oldUserToken, newUserToken)
+	require.NotEqual(t, string(oldUserToken), string(newUserToken))
 
 	// no changes, token remains the same.
 	err = testutil.Get(k8sClient, userSecret, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
@@ -4178,6 +4183,109 @@ func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageC
 	require.NoError(t, err)
 	newUserToken = userSecret.Data[pxutil.SecurityAuthTokenKey]
 	require.Equal(t, oldUserToken, newUserToken)
+}
+
+func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
+	// auth enabled through security.enabled
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					GuestAccess: guestAccessTypePtr(corev1.GuestRoleManaged),
+					SelfSigned: &corev1.SelfSignedSpec{
+						TokenLifetime: stringPtr("1h"),
+					},
+				},
+			},
+		},
+	}
+
+	sharedSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-shared-secret",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecuritySharedSecretKey: []byte("shared-secret"),
+		},
+	}
+	systemSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-system-secrets",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecuritySystemSecretKey: []byte("system-secret"),
+			pxutil.SecurityAppsSecretKey:   []byte("apps-secret"),
+		},
+	}
+	adminToken := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-admin-token",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecurityAuthTokenKey: []byte("admin-token"),
+		},
+	}
+	userToken := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-user-token",
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			pxutil.SecurityAuthTokenKey: []byte("user-token"),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(sharedSecret, systemSecret, adminToken, userToken)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	SetPortworxDefaults(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	updatedSharedSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedSharedSecret, pxutil.SecurityPXSharedSecretSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		sharedSecret.Data[pxutil.SecuritySharedSecretKey],
+		updatedSharedSecret.Data[pxutil.SecuritySharedSecretKey],
+	)
+	require.Len(t, updatedSharedSecret.Annotations, 1)
+	require.Equal(t, "true", updatedSharedSecret.Annotations[component.AnnotationSkipResource])
+
+	updatedSystemSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedSystemSecret, pxutil.SecurityPXSystemSecretsSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t,
+		systemSecret.Data[pxutil.SecuritySystemSecretKey],
+		updatedSystemSecret.Data[pxutil.SecuritySystemSecretKey],
+	)
+	require.Len(t, updatedSystemSecret.Annotations, 1)
+	require.Equal(t, "true", updatedSystemSecret.Annotations[component.AnnotationSkipResource])
+
+	updatedAdminToken := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedAdminToken, pxutil.SecurityPXAdminTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, updatedAdminToken.Annotations, 1)
+	require.Equal(t, "true", updatedAdminToken.Annotations[component.AnnotationSkipResource])
+
+	updatedUserToken := &v1.Secret{}
+	err = testutil.Get(k8sClient, updatedUserToken, pxutil.SecurityPXUserTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, updatedUserToken.Annotations, 1)
+	require.Equal(t, "true", updatedUserToken.Annotations[component.AnnotationSkipResource])
 }
 
 func TestGuestAccessSecurity(t *testing.T) {
@@ -4616,8 +4724,8 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -4729,8 +4837,8 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -4826,8 +4934,8 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4876,8 +4984,8 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.6.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -4954,9 +5062,6 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.10.1",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
-			},
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
@@ -5012,8 +5117,8 @@ func TestCSIInstallWithPKS(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.5.5",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
@@ -5075,8 +5180,8 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5185,8 +5290,8 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -5248,8 +5353,8 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -5400,8 +5505,8 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5440,8 +5545,8 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5549,8 +5654,8 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5616,8 +5721,8 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -5723,8 +5828,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			ImagePullSecret: &imagePullSecret,
 		},
@@ -5822,8 +5927,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				Tolerations: tolerations,
@@ -5957,8 +6062,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.1.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: nodeAffinity,
@@ -6377,8 +6482,8 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -6478,8 +6583,8 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 					},
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -6633,8 +6738,8 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
@@ -7181,8 +7286,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -7323,8 +7428,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRegistry,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -7481,8 +7586,8 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 				},
 				Telemetry: &corev1.TelemetrySpec{Enabled: true},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
@@ -8134,8 +8239,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.2",
 			CustomImageRegistry: customRepo,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -8304,8 +8409,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			Image:               "portworx/image:2.9.1",
 			CustomImageRegistry: customRepo,
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
@@ -8566,8 +8671,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
@@ -8988,8 +9093,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
@@ -9509,8 +9614,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
@@ -10255,8 +10360,8 @@ func TestDisableCSI_0_3(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -10286,7 +10391,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -10354,8 +10459,8 @@ func TestDisableCSI_1_0(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.5.0",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
@@ -10389,7 +10494,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	require.NoError(t, err)
 
 	// Disable CSI
-	cluster.Spec.FeatureGates[string(pxutil.FeatureCSI)] = "false"
+	cluster.Spec.CSI.Enabled = false
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -12016,6 +12121,123 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
 	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+}
+
+func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testing.T) {
+	fakeNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node0",
+			Labels: map[string]string{
+				"topology.kubernetes.io/region": "region0",
+			},
+		},
+	}
+	versionClient := fakek8sclient.NewSimpleClientset(fakeNode)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient(fakeNode)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI deployment topology constraints
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedConstraints := []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/region",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "px-csi-driver",
+				},
+			},
+		},
+	}
+	require.Equal(t, expectedConstraints, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+
+	// PVC controller deployment topology constraints
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	expectedConstraints = []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/region",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": component.PVCDeploymentName,
+					"tier": "control-plane",
+				},
+			},
+		},
+	}
+	require.Equal(t, expectedConstraints, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+}
+
+func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.17.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI deployment topology constraints
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+
+	// PVC controller deployment topology constraints
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
 }
 
 func contains(slice []string, val string) bool {

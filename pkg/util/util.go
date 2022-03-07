@@ -1,21 +1,23 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-version"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-
 	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
-
-	appsv1 "k8s.io/api/apps/v1"
 )
 
 // Reasons for controller events
@@ -46,6 +48,11 @@ var (
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
+	}
+	// podTopologySpreadConstraintKeys is a list of topology keys considered for pod spread constraints
+	podTopologySpreadConstraintKeys = []string{
+		"topology.kubernetes.io/region",
+		"topology.kubernetes.io/zone",
 	}
 )
 
@@ -297,4 +304,58 @@ func ComponentsPausedForMigration(cluster *corev1.StorageCluster) bool {
 	_, migrating := cluster.Annotations[constants.AnnotationMigrationApproved]
 	componentsPaused, err := strconv.ParseBool(cluster.Annotations[constants.AnnotationPauseComponentMigration])
 	return migrating && err == nil && componentsPaused
+}
+
+// HaveTopologySpreadConstraintsChanged checks if the deployment has pod topology spread constraints changed
+func HaveTopologySpreadConstraintsChanged(
+	updatedTopologySpreadConstraints []v1.TopologySpreadConstraint,
+	existingTopologySpreadConstraints []v1.TopologySpreadConstraint,
+) bool {
+	return !reflect.DeepEqual(updatedTopologySpreadConstraints, existingTopologySpreadConstraints)
+}
+
+// GetTopologySpreadConstraints returns pod topology spread constraints spec
+func GetTopologySpreadConstraints(
+	k8sClient client.Client,
+	labels map[string]string,
+) ([]v1.TopologySpreadConstraint, error) {
+	nodeList := &v1.NodeList{}
+	err := k8sClient.List(context.TODO(), nodeList)
+	if err != nil {
+		return nil, err
+	}
+	return GetTopologySpreadConstraintsFromNodes(nodeList, labels)
+}
+
+// GetTopologySpreadConstraintsFromNodes returns pod topology spread constraints spec
+func GetTopologySpreadConstraintsFromNodes(
+	nodeList *v1.NodeList,
+	labels map[string]string,
+) ([]v1.TopologySpreadConstraint, error) {
+	topologyKeySet := make(map[string]bool)
+	for _, key := range podTopologySpreadConstraintKeys {
+		for _, node := range nodeList.Items {
+			if _, ok := node.Labels[key]; ok {
+				topologyKeySet[key] = true
+			}
+		}
+	}
+	var keys []string
+	for k := range topologyKeySet {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	// Construct topology spread constraints
+	var constraints []v1.TopologySpreadConstraint
+	for _, key := range keys {
+		constraints = append(constraints, v1.TopologySpreadConstraint{
+			MaxSkew:           1,
+			TopologyKey:       key,
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		})
+	}
+	return constraints, nil
 }

@@ -3,9 +3,10 @@ package utils
 import (
 	"testing"
 
-	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 // AddLabelToRandomNode adds the given label to a random worker node
