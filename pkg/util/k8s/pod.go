@@ -1,8 +1,14 @@
 package k8s
 
 import (
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper"
+	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 )
 
 // AddOrUpdateStoragePodTolerations adds tolerations to the given pod spec that are required for running storage pods
@@ -85,4 +91,121 @@ func (e VolumeMountByName) Len() int      { return len(e) }
 func (e VolumeMountByName) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 func (e VolumeMountByName) Less(i, j int) bool {
 	return e[i].Name < e[j].Name
+}
+
+// newSimulationPod returns a pod template given storage cluster spec
+func newSimulationPod(
+	cluster *corev1.StorageCluster,
+	nodeName string,
+	selectorLabels map[string]string,
+) (*v1.Pod, error) {
+	newPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: cluster.Namespace,
+			Labels:    selectorLabels,
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+	}
+
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			newPod.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			newPod.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, t := range cluster.Spec.Placement.Tolerations {
+				newPod.Spec.Tolerations = append(newPod.Spec.Tolerations, *(t.DeepCopy()))
+			}
+		}
+	}
+
+	// Add constraints that are used for migration. We should remove this whenever we
+	// remove the migration code
+	addMigrationConstraints(&newPod.Spec)
+
+	// Add default tolerations for StorageCluster pods
+	AddOrUpdateStoragePodTolerations(&newPod.Spec)
+	return newPod, nil
+}
+
+func addMigrationConstraints(podSpec *v1.PodSpec) {
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &v1.Affinity{}
+	}
+	if podSpec.Affinity.NodeAffinity == nil {
+		podSpec.Affinity.NodeAffinity = &v1.NodeAffinity{}
+	}
+	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{}
+	}
+	if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms == nil {
+		podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{{}}
+	}
+
+	selectorTerms := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	for i, term := range selectorTerms {
+		if term.MatchExpressions == nil {
+			term.MatchExpressions = make([]v1.NodeSelectorRequirement, 0)
+		}
+		selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
+			Key:      constants.LabelPortworxDaemonsetMigration,
+			Operator: v1.NodeSelectorOpNotIn,
+			Values: []string{
+				constants.LabelValueMigrationPending,
+				constants.LabelValueMigrationStarting,
+			},
+		})
+	}
+	podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = selectorTerms
+}
+
+// CheckPredicatesForStoragePod checks if a StorageCluster pod can run on a node
+// Returned booleans are:
+// * shouldRun:
+//     Returns true when a pod should run on the node if a storage pod is not already
+//     running on that node.
+// * shouldContinueRunning:
+//     Returns true when the pod should continue running on a node if a storage pod is
+//     already running on that node.
+func CheckPredicatesForStoragePod(
+	node *v1.Node,
+	cluster *corev1.StorageCluster,
+	selectorLabels map[string]string,
+) (bool, bool, error) {
+	pod, err := newSimulationPod(cluster, node.Name, selectorLabels)
+	if err != nil {
+		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
+		return false, false, err
+	}
+
+	taints := node.Spec.Taints
+	fitsNodeName := len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
+	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
+	fitsTaints := helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
+	})
+	if !fitsNodeName || !fitsNodeAffinity {
+		logrus.WithFields(logrus.Fields{
+			"nodeName":         node.Name,
+			"fitsNodeName":     fitsNodeName,
+			"fitsNodeAffinity": fitsNodeAffinity,
+		}).Debug("pod does not fit")
+		return false, false, nil
+	}
+	if !fitsTaints {
+		// Scheduled storage pods should continue running if they tolerate NoExecute taint
+		shouldContinueRunning := helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+			return t.Effect == v1.TaintEffectNoExecute
+		})
+		logrus.WithFields(logrus.Fields{
+			"nodeName":              node.Name,
+			"shouldContinueRunning": shouldContinueRunning,
+		}).Debug("pod does not fit taints")
+		return false, shouldContinueRunning, nil
+	}
+	return true, true, nil
 }
