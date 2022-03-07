@@ -151,7 +151,7 @@ func getImageURN(commonRegistries string, customImageRegistry string, image stri
 
 func getImageURNPreserved(commonRegistries string, customImageRegistry string, image string) string {
 	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
-	cluster.Spec.PreserveFullCustomRegistryPath = true
+	cluster.Spec.PreserveFullCustomImageRegistry = true
 	return GetImageURN(&cluster, image)
 }
 
