@@ -10249,7 +10249,18 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	defer mockSdk.Stop()
 
-	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+	}}
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1"},
+		},
+	}
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
 		Return(expectedNodeEnumerateResp, nil).
@@ -10279,7 +10290,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, fakeK8sNodes)
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -10320,8 +10331,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	// TestCase: Do not create storage PDB if total nodes with storage is less than 3
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -10335,11 +10346,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	// TestCase: Create storage PDB if total nodes with storage is at least 3
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -10356,11 +10367,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	// TestCase: Update storage PDB if count of nodes with storage changes
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}},
-		{Pools: []*osdapi.StoragePool{{ID: 4}}},
-		{Pools: []*osdapi.StoragePool{{ID: 5}}},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -10373,6 +10384,125 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+}
+
+func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "node3"},
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{Type: v1.NodeHostName, Address: "node3"},
+				},
+			}},
+		{ObjectMeta: metav1.ObjectMeta{
+			Name: "node4",
+			Labels: map[string]string{
+				"px/enabled": "false",
+			},
+		}},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "node5"},
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{
+					{Effect: v1.TaintEffectNoExecute},
+				},
+			},
+		},
+	}}
+	// StorageNode with ID 1,2,3 will run on the cluster
+	// k8s node4 doesn't meet affinity and node5 is tainted
+	// StorageNode with ID 6 and 7 don't belong to this cluster
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3"},
+			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
+			{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
+			{Pools: []*osdapi.StoragePool{{ID: 6}}, SchedulerNodeName: "metro-dr-node1"},
+			{Pools: []*osdapi.StoragePool{{ID: 7}}, SchedulerNodeName: "metro-dr-node2"},
+			{Pools: []*osdapi.StoragePool{}},
+			{},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterOnline),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
 }
 
 func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
@@ -10511,11 +10641,16 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	defer mockSdk.Stop()
 
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -10549,7 +10684,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, fakeK8sNodes)
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -10710,11 +10845,16 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	defer mockSdk.Stop()
 
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -10749,7 +10889,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, fakeK8sNodes)
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
