@@ -25,31 +25,124 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/mock"
 )
 
 type ImageConfig struct {
 	CustomImageRegistry string
-	PortworxImage string
-	Components manifest.Release
+	PortworxImage       string
+	Components          manifest.Release
 }
 
 func TestImageMigration(t *testing.T) {
+	// Test without custom image registry.
 	dsImages := ImageConfig{
 		PortworxImage: "portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:                      "openstorage/stork:2.7.0",
-			Autopilot:                  "portworx/autopilot:1.3.1",
-			Telemetry:                  "purestorage/ccm-service:3.0.9",
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
 		},
 	}
 
 	expectedStcImages := ImageConfig{
-		PortworxImage: "portworx/oci-monitor:2.9.1",
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "",
 		Components: manifest.Release{
-			Stork:                      "",
-			Autopilot:                  "",
-			Telemetry:                  "",
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages)
+
+	// Test with custom image registry. Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:     "test/a/stork:2.7.0",
+			Autopilot: "test/b/autopilot:1.3.1",
+			Telemetry: "test/c/ccm-service:3.0.9",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages)
+
+	// Test with custom image registry, and oci-monitor image has "portworx/" prefix
+	// Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:     "test/a/stork:2.7.0",
+			Autopilot: "test/b/autopilot:1.3.1",
+			Telemetry: "test/c/ccm-service:3.0.9",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages)
+
+	// Test with custom image registry that has / in path, and oci-monitor image has "portworx/" prefix
+	// Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/customRegistry/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:     "test/customRegistry/a/stork:2.7.0",
+			Autopilot: "test/customRegistry/b/autopilot:1.3.1",
+			Telemetry: "test/customRegistry/c/ccm-service:3.0.9",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test/customRegistry",
+		Components: manifest.Release{
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages)
+
+	// Test with custom image registry, but component images do not have custom registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:     "a/stork:2.7.0",
+			Autopilot: "b/autopilot:1.3.1",
+			Telemetry: "c/ccm-service:3.0.9",
 		},
 	}
 
@@ -68,14 +161,14 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig) {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Name: "portworx",
+							Name:  "portworx",
 							Image: dsImages.PortworxImage,
 							Args: []string{
 								"-c", clusterName,
 							},
 						},
 						{
-							Name: pxutil.TelemetryContainerName,
+							Name:  pxutil.TelemetryContainerName,
 							Image: dsImages.Components.Telemetry,
 						},
 					},
@@ -122,30 +215,36 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig) {
 		ds, storkDeployment, autopilotDeployment,
 	)
 
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	migrator := New(ctrl)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
 
+	migrator := New(ctrl)
+
 	go migrator.Start()
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	cluster := &corev1.StorageCluster{}
 	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, cluster.Spec.Image, expectedStcImages.PortworxImage)
-	require.Equal(t, cluster.Spec.CustomImageRegistry, expectedStcImages.CustomImageRegistry)
-	require.Equal(t, cluster.Spec.Stork.Image, expectedStcImages.Components.Stork)
-	require.Equal(t, cluster.Spec.Autopilot.Image, expectedStcImages.Components.Autopilot)
-	require.Equal(t, cluster.Spec.Monitoring.Telemetry.Image, expectedStcImages.Components.Telemetry)
+	require.Equal(t, expectedStcImages.PortworxImage, cluster.Spec.Image)
+	require.Equal(t, expectedStcImages.CustomImageRegistry, cluster.Spec.CustomImageRegistry)
+	require.Equal(t, expectedStcImages.Components.Stork, cluster.Status.DesiredImages.Stork)
+	require.Equal(t, expectedStcImages.Components.Autopilot, cluster.Status.DesiredImages.Autopilot)
+	require.Equal(t, expectedStcImages.Components.Telemetry, cluster.Status.DesiredImages.Telemetry)
+
+	cm := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, cm, manifest.DefaultConfigMapName, ds.Namespace)
+	require.NoError(t, err)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -247,13 +346,16 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -396,7 +498,7 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -491,13 +593,15 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	migrator := New(ctrl)
 
@@ -613,7 +717,7 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -702,7 +806,7 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -742,13 +846,15 @@ func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds, existingCluster)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	migrator := New(ctrl)
 
@@ -769,13 +875,16 @@ func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 
 func TestWhenPortworxDaemonsetIsNotPresent(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -820,11 +929,33 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Name:      storkDeploymentName,
 			Namespace: ds.Namespace,
 		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "portworx/stork:2.7.0",
+						},
+					},
+				},
+			},
+		},
 	}
 	autopilotDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      component.AutopilotDeploymentName,
 			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "/autopilot:1.3.1",
+						},
+					},
+				},
+			},
 		},
 	}
 	pvcControllerDeployment := &appsv1.Deployment{
@@ -869,13 +1000,16 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 		pvcControllerDeployment, prometheus,
 		serviceMonitor, alertManager,
 	)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -933,7 +1067,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -988,13 +1122,16 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds, pvcControllerDeployment, prometheus)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -1102,13 +1239,16 @@ func TestSuccessfulMigration(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
 
@@ -1262,6 +1402,9 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
@@ -1492,6 +1635,17 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 			Name:      storkDeploymentName,
 			Namespace: ds.Namespace,
 		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "portworx/stork:2.7.0",
+						},
+					},
+				},
+			},
+		},
 	}
 	storkSvc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1547,6 +1701,17 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autopilotDeploymentName,
 			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "/autopilot:1.3.1",
+						},
+					},
+				},
+			},
 		},
 	}
 	autopilotSvc := &v1.Service{
@@ -1714,13 +1879,15 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 		prometheus, prometheusSvc, prometheusRole, prometheusRoleBinding, prometheusAccount,
 		promOpDeployment, promOpRole, promOpRoleBinding, promOpAccount,
 	)
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
-
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	// Start the migration handler
 	migrator := New(ctrl)

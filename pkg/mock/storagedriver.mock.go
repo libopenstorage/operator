@@ -5,16 +5,17 @@
 package mock
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	api "github.com/libopenstorage/openstorage/api"
-	storage "github.com/libopenstorage/operator/drivers/storage"
-	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/openstorage/api"
 	v10 "k8s.io/api/core/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
-	record "k8s.io/client-go/tools/record"
-	client "sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/operator/drivers/storage"
+	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 )
 
 // MockDriver is a mock of Driver interface.
@@ -188,7 +189,6 @@ func (mr *MockDriverMockRecorder) PreInstall(arg0 interface{}) *gomock.Call {
 // SetDefaultsOnStorageCluster mocks base method.
 func (m *MockDriver) SetDefaultsOnStorageCluster(arg0 *v1.StorageCluster) {
 	m.ctrl.T.Helper()
-	arg0.Status.DesiredImages = &v1.ComponentImages{}
 	m.ctrl.Call(m, "SetDefaultsOnStorageCluster", arg0)
 }
 

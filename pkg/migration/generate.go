@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +27,6 @@ func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
 	stc := h.constructStorageCluster(ds)
-	h.driver.SetDefaultsOnStorageCluster(stc)
 
 	if err := h.addStorkSpec(stc); err != nil {
 		return nil, err
@@ -40,8 +41,11 @@ func (h *Handler) createStorageCluster(
 		return nil, err
 	}
 
+	if err := h.createManifestConfigMap(stc); err != nil {
+		return nil, err
+	}
+
 	logrus.Infof("Creating StorageCluster %v/%v for migration", stc.Namespace, stc.Name)
-	stc.Status.DesiredImages = nil
 	err := h.client.Create(context.TODO(), stc)
 	if err == nil {
 		stc.Status.Phase = constants.PhaseAwaitingApproval
@@ -66,6 +70,12 @@ func (h *Handler) parseCustomImageRegistry(image string) (string, string) {
 	imageOnly := imageParts[len(imageParts)-1]
 	paths := imageParts[:len(imageParts)-1]
 
+	// If the full image path is "registry.io/portworx/oci-monitor", then the registry path is just "registry.io"
+	if paths[len(paths)-1] == "portworx" {
+		paths = paths[:len(paths)-1]
+		imageOnly = "portworx/" + imageOnly
+	}
+
 	return path.Join(paths...), imageOnly
 }
 
@@ -76,6 +86,9 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			Annotations: map[string]string{
 				constants.AnnotationMigrationApproved: "false",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 
@@ -391,6 +404,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			csiEnabled = true
 		case pxutil.TelemetryContainerName:
 			telemetryEnabled = true
+
 		}
 	}
 	// Install snapshot controller, as Daemonset spec generator
@@ -403,7 +417,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{
-			Enabled: telemetryEnabled,
+		Enabled: telemetryEnabled,
 		},
 	}
 
@@ -451,9 +465,10 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 		Enabled: dep != nil,
 	}
 
-	if dep != nil && cluster.Status.DesiredImages.Stork != dep.Spec.Template.Spec.Containers[0].Image {
-		cluster.Spec.Stork.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, dep.Spec.Template.Spec.Containers[0].Image)
+	if dep != nil {
+		cluster.Status.DesiredImages.Stork = h.removeCustomImageRegistry(dep.Spec.Template.Spec.Containers[0].Image, cluster.Spec.CustomImageRegistry)
 	}
+
 	return nil
 }
 
@@ -466,9 +481,10 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 		Enabled: dep != nil,
 	}
 
-	if dep != nil && cluster.Status.DesiredImages.Autopilot != dep.Spec.Template.Spec.Containers[0].Image {
-		cluster.Spec.Autopilot.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, dep.Spec.Template.Spec.Containers[0].Image)
+	if dep != nil {
+		cluster.Status.DesiredImages.Autopilot = h.removeCustomImageRegistry(dep.Spec.Template.Spec.Containers[0].Image, cluster.Spec.CustomImageRegistry)
 	}
+
 	return nil
 }
 
@@ -489,6 +505,26 @@ func (h *Handler) addPVCControllerSpec(cluster *corev1.StorageCluster) error {
 }
 
 func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
+	if cluster.Spec.Monitoring == nil {
+		cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
+	}
+
+	// Check for telemetry
+	telemetryImage := ""
+	for _, container := range ds.Spec.Template.Spec.Containers {
+		if strings.Contains(container.Image, "ccm-service") {
+			telemetryImage = container.Image
+			break
+		}
+	}
+	if telemetryImage != "" {
+		cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+			Enabled: true,
+		}
+
+		cluster.Status.DesiredImages.Telemetry = h.removeCustomImageRegistry(telemetryImage, cluster.Spec.CustomImageRegistry)
+	}
+
 	// Check if metrics need to be exported
 	svcMonitorFound := true
 	svcMonitor := &monitoringv1.ServiceMonitor{}
@@ -507,9 +543,7 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 	} else if err != nil {
 		return err
 	}
-	if cluster.Spec.Monitoring == nil {
-		cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
-	}
+
 	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{
 		ExportMetrics: svcMonitorFound,
 	}
@@ -560,24 +594,6 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 		prometheus.Spec.ServiceMonitorSelector != nil &&
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
-	}
-
-	// Check for telemetry
-	telemetryImage := ""
-	for _, container := range ds.Spec.Template.Spec.Containers {
-		if strings.Contains(container.Image, "ccm-service") {
-			telemetryImage = container.Image
-			break
-		}
-	}
-	if telemetryImage != "" {
-		cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
-			Enabled: true,
-		}
-
-		if cluster.Status.DesiredImages.Telemetry != telemetryImage {
-			cluster.Spec.Monitoring.Telemetry.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, telemetryImage)
-		}
 	}
 
 	return nil
@@ -651,4 +667,70 @@ func uint32Ptr(strValue string) *uint32 {
 
 func guestAccessTypePtr(value corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &value
+}
+
+func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error {
+	// This is not air-gapped env, there is no need to create the configmap.
+	if manifest.Instance().CanAccessRemoteManifest(cluster) {
+		return nil
+	}
+
+	versionCM := &v1.ConfigMap{}
+	err := h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      manifest.DefaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		versionCM,
+	)
+
+	// configmap exists, it could be created manually, let's do nothing.
+	if err == nil {
+		return nil
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	splits := strings.Split(cluster.Spec.Image, ":")
+	ver := manifest.Version{
+		PortworxVersion: splits[len(splits)-1],
+		Components: manifest.Release{
+			Stork:                      cluster.Status.DesiredImages.Stork,
+			Lighthouse:                 "",
+			Autopilot:                  cluster.Status.DesiredImages.Autopilot,
+			NodeWiper:                  "",
+			CSIDriverRegistrar:         cluster.Status.DesiredImages.CSIDriverRegistrar,
+			CSINodeDriverRegistrar:     cluster.Status.DesiredImages.CSINodeDriverRegistrar,
+			CSIProvisioner:             cluster.Status.DesiredImages.CSIProvisioner,
+			CSIAttacher:                cluster.Status.DesiredImages.CSIAttacher,
+			CSIResizer:                 cluster.Status.DesiredImages.CSIResizer,
+			CSISnapshotter:             cluster.Status.DesiredImages.CSISnapshotter,
+			CSISnapshotController:      cluster.Status.DesiredImages.CSISnapshotController,
+			CSIHealthMonitorController: cluster.Status.DesiredImages.CSIHealthMonitorController,
+			Prometheus:                 cluster.Status.DesiredImages.Prometheus,
+			AlertManager:               cluster.Status.DesiredImages.AlertManager,
+			PrometheusOperator:         cluster.Status.DesiredImages.PrometheusOperator,
+			PrometheusConfigMapReload:  cluster.Status.DesiredImages.PrometheusConfigMapReload,
+			PrometheusConfigReloader:   cluster.Status.DesiredImages.PrometheusConfigReloader,
+			Telemetry:                  cluster.Status.DesiredImages.Telemetry,
+			MetricsCollector:           cluster.Status.DesiredImages.MetricsCollector,
+			MetricsCollectorProxy:      cluster.Status.DesiredImages.MetricsCollectorProxy,
+			PxRepo:                     "",
+		},
+	}
+
+	bytes, err := yaml.Marshal(ver)
+	if err != nil {
+		return err
+	}
+
+	versionCM.Name = manifest.DefaultConfigMapName
+	versionCM.Namespace = cluster.Namespace
+	versionCM.Data = make(map[string]string)
+	versionCM.Data[manifest.VersionConfigMapKey] = string(bytes)
+	return h.client.Create(
+		context.TODO(),
+		versionCM,
+	)
 }
