@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -14,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
-
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -24,6 +23,21 @@ const (
 )
 
 func (h *Handler) backup(namespace string) error {
+	logrus.Info("Start backup")
+	existingConfigMap := &v1.ConfigMap{}
+	err := h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      BackupConfigMapName,
+			Namespace: namespace,
+		},
+		existingConfigMap,
+	)
+	// Only proceed when the configmap does not exist.
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
 	var objs []client.Object
 	if err := h.getDaemonSetComponent(namespace, &objs); err != nil {
 		return err
@@ -61,24 +75,21 @@ func (h *Handler) backup(namespace string) error {
 		}
 
 		sb.WriteString(string(bytes))
-		sb.WriteString("\n")
+		sb.WriteString("---\n")
 	}
 
 	data := map[string]string{
 		"backup": sb.String(),
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
-		h.client,
+	return h.client.Create(context.TODO(),
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      BackupConfigMapName,
 				Namespace: namespace,
 			},
 			Data: data,
-		},
-		nil,
-	)
+		})
 }
 
 func (h *Handler) addObject(
@@ -100,14 +111,17 @@ func (h *Handler) addObject(
 		return err
 	}
 
-	newObjs := append(*objs, obj)
-	*objs = newObjs
+	*objs = append(*objs, obj)
 
 	return nil
 }
 
 func (h *Handler) getDaemonSetComponent(namespace string, objs *[]client.Object) error {
 	if err := h.addObject(portworxDaemonSetName, namespace, &appsv1.DaemonSet{}, objs); err != nil {
+		return err
+	}
+
+	if err := h.addObject(pxServiceName, namespace, &v1.Service{}, objs); err != nil {
 		return err
 	}
 

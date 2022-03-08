@@ -82,13 +82,13 @@ func (h *Handler) Start() {
 			return false, nil
 		}
 
-		err = h.backup(cluster.Namespace)
-		if err != nil {
-			logrus.Errorf("Failed to backup daemonset components. %v", err)
+		if !h.isMigrationApproved(cluster) {
 			return false, nil
 		}
 
-		if !h.isMigrationApproved(cluster) {
+		err = h.backup(cluster.Namespace)
+		if err != nil {
+			logrus.Errorf("Failed to backup daemonset components. %v", err)
 			return false, nil
 		}
 
