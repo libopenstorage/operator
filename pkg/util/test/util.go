@@ -1896,10 +1896,23 @@ func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.
 			imageName)
 	}
 
-	// Verify prometheus config reloader image
-	imageName, ok = pxImageList["prometheusConfigReloader"]
-	if !ok {
-		return fmt.Errorf("failed to find image for prometheus config reloader")
+	K8sVer1_22, _ := version.NewVersion("1.22")
+	kubeVersion, _, err := GetFullVersion()
+	if err != nil {
+		return err
+	}
+
+	// NOTE: Prometheus uses different images for k8s 1.22 and up then for 1.21 and below
+	if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+		imageName, ok = pxImageList["prometheusConfigReloader"]
+		if !ok {
+			return fmt.Errorf("failed to find image for prometheus config reloader")
+		}
+	} else {
+		imageName, ok = pxImageList["prometheusConfigMapReload"]
+		if !ok {
+			return fmt.Errorf("failed to find image for prometheus configmap reloader")
+		}
 	}
 
 	imageName = util.GetImageURN(cluster, imageName)
