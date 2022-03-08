@@ -397,14 +397,11 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 
 	// Enable CSI
 	csiEnabled := false
-	telemetryEnabled := false
 	for _, c := range ds.Spec.Template.Spec.Containers {
 		switch c.Name {
 		case pxutil.CSIRegistrarContainerName:
 			csiEnabled = true
-		case pxutil.TelemetryContainerName:
-			telemetryEnabled = true
-
+			cluster.Status.DesiredImages.CSINodeDriverRegistrar = c.Image
 		}
 	}
 	// Install snapshot controller, as Daemonset spec generator
@@ -414,11 +411,6 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 	if csiEnabled {
 		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
-	}
-	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-		Telemetry: &corev1.TelemetrySpec{
-		Enabled: telemetryEnabled,
-		},
 	}
 
 	_, hasSystemKey := envMap["PORTWORX_AUTH_SYSTEM_KEY"]
@@ -517,13 +509,10 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 			break
 		}
 	}
-	if telemetryImage != "" {
-		cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
-			Enabled: true,
-		}
-
-		cluster.Status.DesiredImages.Telemetry = h.removeCustomImageRegistry(telemetryImage, cluster.Spec.CustomImageRegistry)
+	cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+		Enabled: telemetryImage != "",
 	}
+	cluster.Status.DesiredImages.Telemetry = h.removeCustomImageRegistry(telemetryImage, cluster.Spec.CustomImageRegistry)
 
 	// Check if metrics need to be exported
 	svcMonitorFound := true
@@ -567,6 +556,9 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{
 		Enabled: alertManagerFound,
 	}
+	if alertManagerFound {
+		cluster.Status.DesiredImages.AlertManager = *alertManager.Spec.Image
+	}
 
 	if !cluster.Spec.Monitoring.Prometheus.ExportMetrics &&
 		!cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
@@ -594,6 +586,7 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 		prometheus.Spec.ServiceMonitorSelector != nil &&
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
+		cluster.Status.DesiredImages.Prometheus = *prometheus.Spec.Image
 	}
 
 	return nil

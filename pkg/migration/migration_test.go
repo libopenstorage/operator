@@ -56,7 +56,7 @@ func TestImageMigration(t *testing.T) {
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages)
+	testImageMigration(t, dsImages, expectedStcImages, false)
 
 	// Test with custom image registry. Component images should not have custom image registry prefix.
 	dsImages = ImageConfig{
@@ -78,7 +78,7 @@ func TestImageMigration(t *testing.T) {
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages)
+	testImageMigration(t, dsImages, expectedStcImages, false)
 
 	// Test with custom image registry, and oci-monitor image has "portworx/" prefix
 	// Component images should not have custom image registry prefix.
@@ -101,7 +101,7 @@ func TestImageMigration(t *testing.T) {
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages)
+	testImageMigration(t, dsImages, expectedStcImages, false)
 
 	// Test with custom image registry that has / in path, and oci-monitor image has "portworx/" prefix
 	// Component images should not have custom image registry prefix.
@@ -124,7 +124,7 @@ func TestImageMigration(t *testing.T) {
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages)
+	testImageMigration(t, dsImages, expectedStcImages, true)
 
 	// Test with custom image registry, but component images do not have custom registry prefix.
 	dsImages = ImageConfig{
@@ -146,10 +146,10 @@ func TestImageMigration(t *testing.T) {
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages)
+	testImageMigration(t, dsImages, expectedStcImages, true)
 }
 
-func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig) {
+func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, airGapped bool) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -223,7 +223,7 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig) {
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
-	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(!airGapped).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
@@ -244,7 +244,11 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig) {
 
 	cm := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, cm, manifest.DefaultConfigMapName, ds.Namespace)
-	require.NoError(t, err)
+	if airGapped {
+		require.NoError(t, err)
+	} else {
+		require.True(t, errors.IsNotFound(err))
+	}
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -918,6 +922,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 						},
 						{
 							Name: pxutil.TelemetryContainerName,
+							Image: "image/ccm-service:2.6.0",
 						},
 					},
 				},
@@ -964,12 +969,14 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	prometheusImage := "testPrometheusImage"
 	prometheus := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prometheusInstanceName,
 			Namespace: ds.Namespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			Image: &prometheusImage,
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": "portworx",
@@ -988,10 +995,14 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	testAlertmanagerImage := "testAlertmanagerImage"
 	alertManager := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      component.AlertManagerInstanceName,
 			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &testAlertmanagerImage,
 		},
 	}
 
@@ -1854,10 +1865,14 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	testAlertmanagerImage := "testAlertmanagerImage"
 	alertManager := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      alertManagerName,
 			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &testAlertmanagerImage,
 		},
 	}
 	alertManagerSvc := &v1.Service{
