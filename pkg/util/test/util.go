@@ -1067,8 +1067,21 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 			return err
 		}
 
-		if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+		K8sVer1_22, _ := version.NewVersion("1.22")
+		kubeVersion, _, err := GetFullVersion()
+		if err != nil {
 			return err
+		}
+
+		if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+			// TODO Image tag for stork-scheduler is hardcoded to v1.21.4 for clusters 1.22 and up
+			if err = validateImageTag("v1.21.4", cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+				return err
+			}
+		} else {
+			if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
+				return err
+			}
 		}
 
 		// Validate webhook-controller arguments
