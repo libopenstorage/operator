@@ -921,7 +921,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 							Name: pxutil.CSIRegistrarContainerName,
 						},
 						{
-							Name: pxutil.TelemetryContainerName,
+							Name:  pxutil.TelemetryContainerName,
 							Image: "image/ccm-service:2.6.0",
 						},
 					},

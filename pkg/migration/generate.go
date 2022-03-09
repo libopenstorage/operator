@@ -41,6 +41,10 @@ func (h *Handler) createStorageCluster(
 		return nil, err
 	}
 
+	if err := h.handleCustomImageRegistry(stc); err != nil {
+		return nil, err
+	}
+
 	if err := h.createManifestConfigMap(stc); err != nil {
 		return nil, err
 	}
@@ -54,29 +58,33 @@ func (h *Handler) createStorageCluster(
 	return stc, err
 }
 
-func (h *Handler) parseCustomImageRegistry(image string) (string, string) {
-	imageParts := strings.Split(image, "/")
+func (h *Handler) parseCustomImageRegistry(pxImage, componentImage string) string {
+	imageParts := strings.Split(pxImage, "/")
 
 	// This should not happen.
 	if len(imageParts) <= 1 {
-		return "", image
+		return ""
 	}
 
 	// default format, such as portworx/oci-monitor:2.9.0
 	if len(imageParts) == 2 && imageParts[0] == "portworx" {
-		return "", image
+		return ""
 	}
 
-	imageOnly := imageParts[len(imageParts)-1]
 	paths := imageParts[:len(imageParts)-1]
 
-	// If the full image path is "registry.io/portworx/oci-monitor", then the registry path is just "registry.io"
+	// If the full image path is "registry.io/portworx/oci-monitor", then we look at other image
+	// - if component image has "registry.io/portworx" prefix then registry is registry.io/portworx
+	// - Otherwise registry is registry.io
 	if paths[len(paths)-1] == "portworx" {
-		paths = paths[:len(paths)-1]
-		imageOnly = "portworx/" + imageOnly
+		registry := path.Join(paths...)
+
+		if !strings.HasPrefix(componentImage, registry) {
+			paths = paths[:len(paths)-1]
+		}
 	}
 
-	return path.Join(paths...), imageOnly
+	return path.Join(paths...)
 }
 
 func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageCluster {
@@ -93,7 +101,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 
 	c := getPortworxContainer(ds)
-	cluster.Spec.CustomImageRegistry, cluster.Spec.Image = h.parseCustomImageRegistry(c.Image)
+	cluster.Spec.Image = c.Image
 	cluster.Spec.ImagePullPolicy = c.ImagePullPolicy
 	if len(ds.Spec.Template.Spec.ImagePullSecrets) > 0 {
 		cluster.Spec.ImagePullSecret = stringPtr(ds.Spec.Template.Spec.ImagePullSecrets[0].Name)
@@ -435,7 +443,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	return cluster
 }
 
-func (h *Handler) removeCustomImageRegistry(image, customImageRegistry string) string {
+func (h *Handler) removeCustomImageRegistry(customImageRegistry, image string) string {
 	if image == "" || customImageRegistry == "" {
 		return image
 	}
@@ -458,7 +466,7 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 	}
 
 	if dep != nil {
-		cluster.Status.DesiredImages.Stork = h.removeCustomImageRegistry(dep.Spec.Template.Spec.Containers[0].Image, cluster.Spec.CustomImageRegistry)
+		cluster.Status.DesiredImages.Stork = dep.Spec.Template.Spec.Containers[0].Image
 	}
 
 	return nil
@@ -474,7 +482,7 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 	}
 
 	if dep != nil {
-		cluster.Status.DesiredImages.Autopilot = h.removeCustomImageRegistry(dep.Spec.Template.Spec.Containers[0].Image, cluster.Spec.CustomImageRegistry)
+		cluster.Status.DesiredImages.Autopilot = dep.Spec.Template.Spec.Containers[0].Image
 	}
 
 	return nil
@@ -512,7 +520,7 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 	cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
 		Enabled: telemetryImage != "",
 	}
-	cluster.Status.DesiredImages.Telemetry = h.removeCustomImageRegistry(telemetryImage, cluster.Spec.CustomImageRegistry)
+	cluster.Status.DesiredImages.Telemetry = telemetryImage
 
 	// Check if metrics need to be exported
 	svcMonitorFound := true
@@ -660,6 +668,44 @@ func uint32Ptr(strValue string) *uint32 {
 
 func guestAccessTypePtr(value corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &value
+}
+
+func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) error {
+	var componentImage string
+	if cluster.Status.DesiredImages.Stork != "" {
+		componentImage = cluster.Status.DesiredImages.Stork
+	} else if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
+		componentImage = cluster.Status.DesiredImages.CSINodeDriverRegistrar
+	} else if cluster.Status.DesiredImages.Telemetry != "" {
+		componentImage = cluster.Status.DesiredImages.Telemetry
+	}
+
+	cluster.Spec.CustomImageRegistry = h.parseCustomImageRegistry(cluster.Spec.Image, componentImage)
+
+	cluster.Spec.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Spec.Image)
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Stork:                      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Stork),
+		UserInterface:              h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.UserInterface),
+		Autopilot:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Autopilot),
+		CSINodeDriverRegistrar:     h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSINodeDriverRegistrar),
+		CSIDriverRegistrar:         h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIDriverRegistrar),
+		CSIProvisioner:             h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIProvisioner),
+		CSIAttacher:                h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIAttacher),
+		CSIResizer:                 h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIResizer),
+		CSISnapshotter:             h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSISnapshotter),
+		CSISnapshotController:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSISnapshotController),
+		CSIHealthMonitorController: h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIHealthMonitorController),
+		PrometheusOperator:         h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusOperator),
+		PrometheusConfigMapReload:  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusConfigMapReload),
+		PrometheusConfigReloader:   h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusConfigReloader),
+		Prometheus:                 h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Prometheus),
+		AlertManager:               h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.AlertManager),
+		Telemetry:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Telemetry),
+		MetricsCollector:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollector),
+		MetricsCollectorProxy:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollectorProxy),
+		PxRepo:                     h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PxRepo),
+	}
+	return nil
 }
 
 func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error {
