@@ -194,6 +194,10 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 						Name:  "TEST_ENV_1",
 						Value: "value1",
 					},
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
 				},
 			},
 			CSI: &corev1.CSISpec{
@@ -315,6 +319,10 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 									Name:  "TEST_ENV_1",
 									Value: "value1",
 								},
+								{
+									Name:  "PX_SECRETS_NAMESPACE",
+									Value: "custom-secrets-namespace",
+								},
 							},
 						},
 					},
@@ -394,6 +402,10 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 						Name:  "TEST_ENV_1",
 						Value: "value1",
 					},
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "custom-secrets-namespace",
+					},
 				},
 			},
 			Security: &corev1.SecuritySpec{
@@ -425,6 +437,95 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 			},
 			UpdateStrategy: corev1.StorageClusterUpdateStrategy{
 				Type: corev1.OnDeleteStorageClusterStrategyType,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status, cluster.Status)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "portworx",
+							Image: "portworx/test:version",
+							Args: []string{
+								"-c", clusterName,
+							},
+							Env: []v1.EnvVar{
+								{
+									Name:  "PX_SECRETS_NAMESPACE",
+									Value: "kube-system",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	ctrl := &storagecluster.Controller{}
+	ctrl.SetKubernetesClient(k8sClient)
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/test:version",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -633,6 +734,14 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 					Enabled: true,
 				},
 			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
 		},
 		Status: corev1.StorageClusterStatus{
 			Phase: constants.PhaseAwaitingApproval,
@@ -739,6 +848,14 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 				},
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: false,
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
 				},
 			},
 		},
