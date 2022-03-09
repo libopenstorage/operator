@@ -31,6 +31,7 @@ import (
 const (
 	portworxDaemonSetName          = "portworx"
 	portworxContainerName          = "portworx"
+	defaultSecretsNamespace        = "portworx"
 	migrationRetryInterval         = 30 * time.Second
 	podWaitInterval                = 10 * time.Second
 	daemonSetPodTerminationTimeout = 5 * time.Minute
@@ -128,10 +129,6 @@ func (h *Handler) processMigration(
 	cluster *corev1.StorageCluster,
 	ds *appsv1.DaemonSet,
 ) error {
-	// TODO: Implement this
-	// 1. Backup existing specs
-	// 2. Migrate components
-
 	nodeList := &v1.NodeList{}
 	if err := h.client.List(context.TODO(), nodeList, &client.ListOptions{}); err != nil {
 		return err
@@ -225,6 +222,7 @@ func (h *Handler) processMigration(
 		return err
 	}
 
+	// Unmark the nodes after the daemonset has been deleted, else it will create pods again
 	logrus.Infof("Removing migration label from all nodes")
 	if err := h.unmarkAllDoneNodes(); err != nil {
 		return err

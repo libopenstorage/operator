@@ -287,10 +287,19 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 		}
 	}
 
+	secretsNamespaceProvided := false
 	// Populate env variables from args and env vars of portworx container
 	for _, env := range c.Env {
 		if env.Name == "PX_TEMPLATE_VERSION" {
 			continue
+		}
+		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
+			secretsNamespaceProvided = true
+			if env.Value == cluster.Namespace {
+				// No need to add this to StorageCluster as it will be added automatically
+				// to the pod by the operator.
+				continue
+			}
 		}
 		envMap[env.Name] = env.DeepCopy()
 	}
@@ -299,6 +308,16 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	}
 	for _, env := range envMap {
 		cluster.Spec.Env = append(cluster.Spec.Env, *env)
+	}
+
+	// Use default secrets namespace if not provided as Portworx assumes the namespace
+	// to be 'portworx' in daemonset, while operator passes the StorageCluster's
+	// namespace as the default secrets namespace.
+	if !secretsNamespaceProvided {
+		cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+			Name:  pxutil.EnvKeyPortworxSecretsNamespace,
+			Value: defaultSecretsNamespace,
+		})
 	}
 
 	if len(miscArgs) > 0 {
