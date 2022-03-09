@@ -86,6 +86,12 @@ func (h *Handler) Start() {
 			return false, nil
 		}
 
+		err = h.backup(cluster.Namespace)
+		if err != nil {
+			logrus.Errorf("Failed to backup daemonset components. %v", err)
+			return false, nil
+		}
+
 		if err := h.processMigration(cluster, pxDaemonSet); err != nil {
 			logrus.Errorf("Migration failed, will retry in %v. %v", migrationRetryIntervalFunc(), err)
 			return false, nil
@@ -212,6 +218,8 @@ func (h *Handler) processMigration(
 
 	// TODO: Wait for all components to be up, before marking the migration as completed
 
+	// TODO: once daemonset is deleted, if we restart operator all code after this line
+	// will not be re-executed, so we should delete daemonset after everything is finished.
 	logrus.Infof("Deleting portworx DaemonSet")
 	if err := h.deletePortworxDaemonSet(ds); err != nil {
 		return err
