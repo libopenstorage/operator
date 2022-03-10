@@ -316,6 +316,30 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 									Value: "v3",
 								},
 								{
+									Name:  "PORTWORX_CSIVERSION",
+									Value: "0.3",
+								},
+								{
+									Name:  "CSI_ENDPOINT",
+									Value: "unix:///var/lib/kubelet/plugins/pxd.portworx.com/csi.sock",
+								},
+								{
+									Name: "NODE_NAME",
+									ValueFrom: &v1.EnvVarSource{
+										FieldRef: &v1.ObjectFieldSelector{
+											FieldPath: "spec.nodeName",
+										},
+									},
+								},
+								{
+									Name: "PX_NAMESPACE",
+									ValueFrom: &v1.EnvVarSource{
+										FieldRef: &v1.ObjectFieldSelector{
+											FieldPath: "metadata.namespace",
+										},
+									},
+								},
+								{
 									Name:  "TEST_ENV_1",
 									Value: "value1",
 								},
