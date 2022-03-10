@@ -290,7 +290,11 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	secretsNamespaceProvided := false
 	// Populate env variables from args and env vars of portworx container
 	for _, env := range c.Env {
-		if env.Name == "PX_TEMPLATE_VERSION" {
+		if env.Name == "PX_TEMPLATE_VERSION" ||
+			env.Name == "PORTWORX_CSIVERSION" ||
+			env.Name == "CSI_ENDPOINT" ||
+			env.Name == "NODE_NAME" ||
+			env.Name == pxutil.EnvKeyPortworxNamespace {
 			continue
 		}
 		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
