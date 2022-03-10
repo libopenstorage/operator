@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -735,22 +736,30 @@ func isBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
 
 // isCSIBounceRequired handles CSI fields that requrie a pod bounce
 func isCSIBounceRequired(oldSpec, currentSpec *corev1.StorageClusterSpec) bool {
-	// CSI spec defined before and after, but flag has changed
-	if oldSpec.CSI != nil && currentSpec.CSI != nil {
-		return oldSpec.CSI.Enabled != currentSpec.CSI.Enabled
+	// Spec changed from enabled -> disabled or vice versa
+	return isCSIEnabled(oldSpec) != isCSIEnabled(currentSpec)
+}
+
+// isCSIEnabled checks if CSI is enabled with CSI spec
+// or deprecated CSI feature gate
+func isCSIEnabled(spec *corev1.StorageClusterSpec) bool {
+	// Check if enabled in spec
+	if spec.CSI != nil && spec.CSI.Enabled {
+		return true
 	}
 
-	// New CSI spec added to cluster. If enabled, pod will bounce
-	if oldSpec.CSI == nil && currentSpec.CSI != nil {
-		return currentSpec.CSI.Enabled
+	// Even though feature gate is deprecated, we must check
+	// its previous value to determine if a bounce is required.
+	if len(spec.FeatureGates) > 0 {
+		csiFeatureFlag, featureGateSet := spec.FeatureGates[string(util.FeatureCSI)]
+		if featureGateSet {
+			csiFeatureFlagEnabled, _ := strconv.ParseBool(csiFeatureFlag)
+			if csiFeatureFlagEnabled {
+				return true
+			}
+		}
 	}
 
-	// CSI spec was set, but is removed. If old CSI spec was enabled, pod will bounce
-	if oldSpec.CSI != nil && currentSpec.CSI == nil {
-		return oldSpec.CSI.Enabled
-	}
-
-	// Both old and new CSI spec are nil, no change required
 	return false
 }
 

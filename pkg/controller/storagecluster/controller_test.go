@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-version"
 	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
@@ -5637,6 +5638,9 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	cluster.Spec.FeatureGates = map[string]string{
+		string(pxutil.FeatureCSI): "true",
+	}
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
@@ -5685,9 +5689,13 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	}
 	k8sClient.Create(context.TODO(), oldPod)
 
-	// TestCase: Add spec.CSI.Enabled
+	// TestCase: Add spec.CSI.Enabled. Since feature gate was enabled,
+	// this should not bounce pods
+	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled: true,
+		Enabled: false,
 	}
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -5698,18 +5706,18 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 		},
 	}
 	result, err := controller.Reconcile(context.TODO(), request)
+
 	require.NoError(t, err)
 	require.Empty(t, result)
-
-	// The old pod should be marked for deletion, which means the pod
-	// is detected to be updated.
-	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+	// The old pod should NOT be marked for deletion, which means the pod
+	// is detected to not be updated.
+	require.Equal(t, []string(nil), podControl.DeletePodName)
 
 	// TestCase: Change spec.CSI.Enabled to false
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-
+	cluster.Spec.FeatureGates = nil
 	cluster.Spec.CSI.Enabled = false
 	k8sClient.Update(context.TODO(), cluster)
 
@@ -5718,15 +5726,17 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
+	// The old pod should be marked for deletion, which means the pod
+	// is detected to be updated.
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// TestCase: Change spec.CSI back to true
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-
 	cluster.Spec.CSI.Enabled = true
 	k8sClient.Update(context.TODO(), cluster)
+
 	podControl.DeletePodName = nil
 
 	result, err = controller.Reconcile(context.TODO(), request)
@@ -5736,6 +5746,9 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 
 	// TestCase: Snapshot controller installed should not bounce pods
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
 	trueBool := true
 	cluster.Spec.CSI.InstallSnapshotController = &trueBool
 	k8sClient.Update(context.TODO(), cluster)
@@ -5748,6 +5761,7 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 	require.Equal(t, []string(nil), podControl.DeletePodName)
 
 	// TestCase: Change spec.CSI to nil, pods should bounce
+	// GG 3rd condition
 	oldPod = replaceOldPod(oldPod, cluster, &controller, podControl)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
