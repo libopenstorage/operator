@@ -226,18 +226,24 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
 		}
 
-		if pxutil.IsCSIEnabled(toUpdate) &&
-			(toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
+		if pxutil.IsCSIEnabled(toUpdate) {
+			if toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
 				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
-			toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
-			toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
-			toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
-			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
-			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
-			toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
-			toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
+				autoUpdateComponents(toUpdate) {
+				toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
+				toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
+				toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
+				toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
+				toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
+				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
+				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
+			}
+			if autoUpdateCSISnapshotController(toUpdate) &&
+				(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
+					pxVersionChanged ||
+					autoUpdateComponents(toUpdate)) {
+				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
+			}
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
@@ -294,7 +300,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.CSISnapshotter = ""
 		toUpdate.Status.DesiredImages.CSISnapshotController = ""
 		toUpdate.Status.DesiredImages.CSIHealthMonitorController = ""
-
+	} else if !autoUpdateCSISnapshotController(toUpdate) {
+		toUpdate.Status.DesiredImages.CSISnapshotController = ""
 	}
 
 	if toUpdate.Spec.Monitoring == nil ||
@@ -921,10 +928,19 @@ func hasAutopilotChanged(cluster *corev1.StorageCluster) bool {
 func hasLighthouseChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateLighthouse(cluster) && cluster.Status.DesiredImages.UserInterface == ""
 }
+func autoUpdateCSISnapshotController(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
+}
 
 func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsCSIEnabled(cluster) &&
-		cluster.Status.DesiredImages.CSIProvisioner == ""
+		(cluster.Status.DesiredImages.CSIProvisioner == "" || hasCSISnapshotControllerChanged(cluster))
+}
+
+func hasCSISnapshotControllerChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateCSISnapshotController(cluster) &&
+		cluster.Status.DesiredImages.CSISnapshotController == ""
+
 }
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
