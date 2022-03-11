@@ -14,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/mock"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -105,11 +107,15 @@ func testBackup(t *testing.T, backupExits bool) {
 		require.NoError(t, err)
 	}
 
-	driver := testutil.MockDriver(gomock.NewController(t))
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(true).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()

@@ -23,11 +23,25 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	prometheusConfigReloaderArg             = "--prometheus-config-reloader="
+	prometheusConfigMapReloaderArg          = "--config-reloader-image="
+	csiProvisionerContainerName             = "csi-external-provisioner"
+	csiAttacherContainerName                = "csi-attacher"
+	csiSnapshotterContainerName             = "csi-snapshotter"
+	csiResizerContainerName                 = "csi-resizer"
+	csiSnapshotControllerContainerName      = "csi-snapshot-controller"
+	csiHealthMonitorControllerContainerName = "csi-health-monitor-controller"
+)
+
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
 	stc := h.constructStorageCluster(ds)
 
+	if err := h.addCSISpec(stc, ds); err != nil {
+		return nil, err
+	}
 	if err := h.addStorkSpec(stc); err != nil {
 		return nil, err
 	}
@@ -403,24 +417,6 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 		cluster.Spec.UpdateStrategy.Type = corev1.OnDeleteStorageClusterStrategyType
 	}
 
-	// Enable CSI
-	csiEnabled := false
-	for _, c := range ds.Spec.Template.Spec.Containers {
-		switch c.Name {
-		case pxutil.CSIRegistrarContainerName:
-			csiEnabled = true
-			cluster.Status.DesiredImages.CSINodeDriverRegistrar = c.Image
-		}
-	}
-	// Install snapshot controller, as Daemonset spec generator
-	// always included snapshot controller.
-	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled: csiEnabled,
-	}
-	if csiEnabled {
-		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
-	}
-
 	_, hasSystemKey := envMap["PORTWORX_AUTH_SYSTEM_KEY"]
 	_, hasJWTIssuer := envMap["PORTWORX_AUTH_JWT_ISSUER"]
 	if hasSystemKey && hasJWTIssuer {
@@ -454,6 +450,52 @@ func (h *Handler) removeCustomImageRegistry(customImageRegistry, image string) s
 	}
 
 	return strings.TrimPrefix(image, customImageRegistry+"/")
+}
+
+func (h *Handler) addCSISpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
+	// Enable CSI
+	csiEnabled := false
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case pxutil.CSIRegistrarContainerName:
+			csiEnabled = true
+			cluster.Status.DesiredImages.CSINodeDriverRegistrar = c.Image
+		}
+	}
+	// Install snapshot controller, as Daemonset spec generator
+	// always included snapshot controller.
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled: csiEnabled,
+	}
+	if csiEnabled {
+		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+
+		dep, err := h.getDeployment(component.CSIApplicationName, cluster.Namespace)
+		if err != nil {
+			return err
+		} else if dep == nil {
+			return nil
+		}
+
+		for _, c := range dep.Spec.Template.Spec.Containers {
+			switch c.Image {
+			case csiProvisionerContainerName:
+				cluster.Status.DesiredImages.CSIProvisioner = c.Image
+			case csiAttacherContainerName:
+				cluster.Status.DesiredImages.CSIAttacher = c.Image
+			case csiSnapshotterContainerName:
+				cluster.Status.DesiredImages.CSISnapshotter = c.Image
+			case csiResizerContainerName:
+				cluster.Status.DesiredImages.CSIResizer = c.Image
+			case csiSnapshotControllerContainerName:
+				cluster.Status.DesiredImages.CSISnapshotController = c.Image
+			case csiHealthMonitorControllerContainerName:
+				cluster.Status.DesiredImages.CSIHealthMonitorController = c.Image
+			}
+		}
+	}
+
+	return nil
 }
 
 func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
@@ -595,6 +637,33 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
 		cluster.Status.DesiredImages.Prometheus = *prometheus.Spec.Image
+
+		dep := &appsv1.Deployment{}
+		err := h.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      prometheusOpDeploymentName,
+				Namespace: cluster.Namespace,
+			},
+			dep,
+		)
+		if errors.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		container := dep.Spec.Template.Spec.Containers[0]
+		cluster.Status.DesiredImages.PrometheusOperator = container.Image
+
+		for _, arg := range container.Args {
+			if strings.HasPrefix(arg, prometheusConfigReloaderArg) {
+				cluster.Status.DesiredImages.PrometheusConfigReloader = strings.TrimPrefix(arg, prometheusConfigReloaderArg)
+			}
+			if strings.HasPrefix(arg, prometheusConfigMapReloaderArg) {
+				cluster.Status.DesiredImages.PrometheusConfigMapReload = strings.TrimPrefix(arg, prometheusConfigMapReloaderArg)
+			}
+		}
 	}
 
 	return nil
@@ -724,8 +793,9 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 		versionCM,
 	)
 
-	// configmap exists, it could be created manually, let's do nothing.
+	// configmap exists, in this case let's clear DesiredImages and use images in the configmap.
 	if err == nil {
+		cluster.Status.DesiredImages = &corev1.ComponentImages{}
 		return nil
 	} else if !errors.IsNotFound(err) {
 		return err

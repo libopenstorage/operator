@@ -1191,7 +1191,8 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase:         constants.PhaseAwaitingApproval,
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -1210,7 +1211,6 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 }
 
 func TestSuccessfulMigration(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
 	migrationRetryIntervalFunc = func() time.Duration {
 		return 2 * time.Second
 	}
@@ -1408,6 +1408,7 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
 	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
