@@ -5018,6 +5018,7 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	// Enable snapshot controller
 	cluster.Spec.CSI.Enabled = true
 	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
