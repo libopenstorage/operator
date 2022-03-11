@@ -246,7 +246,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
 			}
-			if toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
+			if autoUpdateCSISnapshotController(toUpdate) ||
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate) {
 				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
@@ -942,7 +942,13 @@ func hasLighthouseChanged(cluster *corev1.StorageCluster) bool {
 
 func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsCSIEnabled(cluster) &&
-		(cluster.Status.DesiredImages.CSIProvisioner == "" || cluster.Status.DesiredImages.CSISnapshotController == "")
+		(cluster.Status.DesiredImages.CSIProvisioner == "" || autoUpdateCSISnapshotController(cluster))
+}
+
+func autoUpdateCSISnapshotController(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController == ""
 }
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
