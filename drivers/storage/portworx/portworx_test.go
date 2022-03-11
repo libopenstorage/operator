@@ -823,14 +823,24 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image: "px/image:2.1.5.1",
+			Image: "px/image:2.9.0.1",
 		},
 	}
 
-	// Enable CSI by default for a new install
+	// Simulate DesiredImages.CSISnapshotController being empty for old operator version w/o this image
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// SnapshotController image should be empty
+	require.Empty(t, cluster.Status.DesiredImages.CSISnapshotController)
+
+	// Enable CSI by default for a new install.
+	// Enable Snapshot controller, desired image should be set
+	trueBool := true
+	cluster.Spec.CSI.InstallSnapshotController = &trueBool
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
+	require.NotEmpty(t, cluster.Status.DesiredImages.CSISnapshotController)
 
 	// Feature gate should not be set when CSI is enabled
 	require.NotContains(t, cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
