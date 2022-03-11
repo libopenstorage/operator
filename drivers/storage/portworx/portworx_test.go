@@ -984,10 +984,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 			Image: "px/image:2.9.0.1",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Simulate DesiredImages.CSISnapshotController being empty for old operator version w/o this image
-	cluster.Status.DesiredImages.CSISnapshotController = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// SnapshotController image should be empty
