@@ -246,9 +246,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
 			}
-			if autoUpdateCSISnapshotController(toUpdate) ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate) {
+			if autoUpdateCSISnapshotController(toUpdate) &&
+				(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
+					pxVersionChanged ||
+					autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
 			}
 		}
@@ -311,7 +312,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.CSISnapshotter = ""
 		toUpdate.Status.DesiredImages.CSISnapshotController = ""
 		toUpdate.Status.DesiredImages.CSIHealthMonitorController = ""
-
+	} else if !autoUpdateCSISnapshotController(toUpdate) {
+		toUpdate.Status.DesiredImages.CSISnapshotController = ""
 	}
 
 	if toUpdate.Spec.Monitoring == nil ||
@@ -939,16 +941,19 @@ func hasAutopilotChanged(cluster *corev1.StorageCluster) bool {
 func hasLighthouseChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateLighthouse(cluster) && cluster.Status.DesiredImages.UserInterface == ""
 }
+func autoUpdateCSISnapshotController(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
+}
 
 func hasCSIChanged(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsCSIEnabled(cluster) &&
-		(cluster.Status.DesiredImages.CSIProvisioner == "" || autoUpdateCSISnapshotController(cluster))
+		(cluster.Status.DesiredImages.CSIProvisioner == "" || hasCSISnapshotControllerChanged(cluster))
 }
 
-func autoUpdateCSISnapshotController(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.CSI.InstallSnapshotController != nil &&
-		*cluster.Spec.CSI.InstallSnapshotController &&
+func hasCSISnapshotControllerChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateCSISnapshotController(cluster) &&
 		cluster.Status.DesiredImages.CSISnapshotController == ""
+
 }
 
 func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
