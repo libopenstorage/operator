@@ -89,11 +89,11 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 	body, _ := yaml.Marshal(expected)
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: string(body),
+			VersionConfigMapKey: string(body),
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
@@ -345,11 +345,11 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 	body, _ := yaml.Marshal(expected)
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: string(body),
+			VersionConfigMapKey: string(body),
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
@@ -375,11 +375,11 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	body, _ := yaml.Marshal(expected)
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: string(body),
+			VersionConfigMapKey: string(body),
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
@@ -392,7 +392,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 		CSIProvisioner: "image/csiprovisioner:3.0.0",
 	}
 	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	m := Instance()
@@ -416,7 +416,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, use all default components
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	m.Init(k8sClient, nil, k8sVersion)
@@ -428,7 +428,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	m.Init(k8sClient, nil, nil)
@@ -453,17 +453,17 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 	body, _ := yaml.Marshal(expected)
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: string(body),
+			VersionConfigMapKey: string(body),
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
 
 	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	m := Instance()
@@ -598,11 +598,11 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	body, _ := yaml.Marshal(expected)
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: string(body),
+			VersionConfigMapKey: string(body),
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
@@ -618,7 +618,7 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	// TestCase: Should return the updated version even if not forced
 	expected.Components.Stork = "image/stork:2.5.1"
 	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[versionConfigMapKey] = string(body)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
 	rel = m.GetVersions(cluster, true)

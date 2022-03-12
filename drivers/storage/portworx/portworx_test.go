@@ -7218,6 +7218,10 @@ func (m *fakeManifest) GetVersions(
 	return version
 }
 
+func (m *fakeManifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool {
+	return false
+}
+
 func compVersion() string {
 	return "2.3.4"
 }
