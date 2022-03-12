@@ -478,7 +478,7 @@ func (h *Handler) addCSISpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSe
 		}
 
 		for _, c := range dep.Spec.Template.Spec.Containers {
-			switch c.Image {
+			switch c.Name {
 			case csiProvisionerContainerName:
 				cluster.Status.DesiredImages.CSIProvisioner = c.Image
 			case csiAttacherContainerName:
@@ -663,6 +663,11 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 			if strings.HasPrefix(arg, prometheusConfigMapReloaderArg) {
 				cluster.Status.DesiredImages.PrometheusConfigMapReload = strings.TrimPrefix(arg, prometheusConfigMapReloaderArg)
 			}
+		}
+
+		if cluster.Status.DesiredImages.PrometheusConfigReloader == "" {
+			imgVersion := strings.Split(cluster.Status.DesiredImages.PrometheusOperator, ":")[1]
+			cluster.Status.DesiredImages.PrometheusConfigReloader = "quay.io/coreos/prometheus-config-reloader:" + imgVersion
 		}
 	}
 

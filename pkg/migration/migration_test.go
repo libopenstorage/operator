@@ -40,9 +40,21 @@ func TestImageMigration(t *testing.T) {
 	dsImages := ImageConfig{
 		PortworxImage: "portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
 		},
 	}
 
@@ -50,21 +62,45 @@ func TestImageMigration(t *testing.T) {
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages, false)
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
 
 	// Test with custom image registry. Component images should not have custom image registry prefix.
 	dsImages = ImageConfig{
 		PortworxImage: "test/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:     "test/a/stork:2.7.0",
-			Autopilot: "test/b/autopilot:1.3.1",
-			Telemetry: "test/c/ccm-service:3.0.9",
+			Stork:                      "test/a/stork:2.7.0",
+			Autopilot:                  "test/b/autopilot:1.3.1",
+			Telemetry:                  "test/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/prometheus/alertmanager:v1.2.3",
 		},
 	}
 
@@ -72,22 +108,46 @@ func TestImageMigration(t *testing.T) {
 		PortworxImage:       "oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages, false)
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
 
 	// Test with custom image registry, and oci-monitor image has "portworx/" prefix
 	// Component images should not have custom image registry prefix.
 	dsImages = ImageConfig{
 		PortworxImage: "test/portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:     "test/a/stork:2.7.0",
-			Autopilot: "test/b/autopilot:1.3.1",
-			Telemetry: "test/c/ccm-service:3.0.9",
+			Stork:                      "test/a/stork:2.7.0",
+			Autopilot:                  "test/b/autopilot:1.3.1",
+			Telemetry:                  "test/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/prometheus/alertmanager:v1.2.3",
 		},
 	}
 
@@ -95,22 +155,46 @@ func TestImageMigration(t *testing.T) {
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages, false)
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
 
 	// Test with custom image registry that has / in path, and oci-monitor image has "portworx/" prefix
 	// Component images should not have custom image registry prefix.
 	dsImages = ImageConfig{
 		PortworxImage: "test/customRegistry/portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:     "test/customRegistry/a/stork:2.7.0",
-			Autopilot: "test/customRegistry/b/autopilot:1.3.1",
-			Telemetry: "test/customRegistry/c/ccm-service:3.0.9",
+			Stork:                      "test/customRegistry/a/stork:2.7.0",
+			Autopilot:                  "test/customRegistry/b/autopilot:1.3.1",
+			Telemetry:                  "test/customRegistry/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/customRegistry/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/customRegistry/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/customRegistry/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/customRegistry/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/customRegistry/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/customRegistry/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/customRegistry/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/customRegistry/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/customRegistry/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/customRegistry/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/customRegistry/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/customRegistry/prometheus/alertmanager:v1.2.3",
 		},
 	}
 
@@ -118,21 +202,45 @@ func TestImageMigration(t *testing.T) {
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test/customRegistry",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages, true)
+	testImageMigration(t, dsImages, expectedStcImages, true, false)
 
 	// Test with custom image registry, but component images do not have custom registry prefix.
 	dsImages = ImageConfig{
 		PortworxImage: "test/portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
 		},
 	}
 
@@ -140,16 +248,28 @@ func TestImageMigration(t *testing.T) {
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
 		Components: manifest.Release{
-			Stork:     "a/stork:2.7.0",
-			Autopilot: "b/autopilot:1.3.1",
-			Telemetry: "c/ccm-service:3.0.9",
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
 		},
 	}
 
-	testImageMigration(t, dsImages, expectedStcImages, true)
+	testImageMigration(t, dsImages, expectedStcImages, true, true)
 }
 
-func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, airGapped bool) {
+func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, airGapped bool, manifestConfigMapExists bool) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -170,6 +290,10 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 						{
 							Name:  pxutil.TelemetryContainerName,
 							Image: dsImages.Components.Telemetry,
+						},
+						{
+							Name:  pxutil.CSIRegistrarContainerName,
+							Image: dsImages.Components.CSINodeDriverRegistrar,
 						},
 					},
 				},
@@ -210,10 +334,116 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 			},
 		},
 	}
+	csiDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      csiDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  csiProvisionerContainerName,
+							Image: dsImages.Components.CSIProvisioner,
+						},
+						{
+							Name:  csiAttacherContainerName,
+							Image: dsImages.Components.CSIAttacher,
+						},
+						{
+							Name:  csiSnapshotterContainerName,
+							Image: dsImages.Components.CSISnapshotter,
+						},
+						{
+							Name:  csiResizerContainerName,
+							Image: dsImages.Components.CSIResizer,
+						},
+						{
+							Name:  csiSnapshotControllerContainerName,
+							Image: dsImages.Components.CSISnapshotController,
+						},
+						{
+							Name:  csiHealthMonitorControllerContainerName,
+							Image: dsImages.Components.CSIHealthMonitorController,
+						},
+					},
+				},
+			},
+		},
+	}
+	promOpDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusOpDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: dsImages.Components.PrometheusOperator,
+							Args: []string{
+								prometheusConfigMapReloaderArg + dsImages.Components.PrometheusConfigMapReload,
+								prometheusConfigReloaderArg + dsImages.Components.PrometheusConfigReloader,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceMonitorName,
+			Namespace: ds.Namespace,
+		},
+	}
+	alertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      alertManagerName,
+			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &dsImages.Components.AlertManager,
+		},
+	}
+	prometheus := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusInstanceName,
+			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.PrometheusSpec{
+			RuleSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"prometheus": "portworx",
+				},
+			},
+			ServiceMonitorSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": serviceMonitorName,
+				},
+			},
+			Image: &dsImages.Components.Prometheus,
+		},
+	}
 
 	k8sClient := testutil.FakeK8sClient(
-		ds, storkDeployment, autopilotDeployment,
+		ds, storkDeployment, autopilotDeployment, csiDeployment,
+		promOpDeployment, serviceMonitor, alertManager, prometheus,
 	)
+
+	if manifestConfigMapExists {
+		k8sClient.Create(
+			context.TODO(),
+			&v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      manifest.DefaultConfigMapName,
+					Namespace: ds.Namespace,
+				},
+			},
+		)
+	}
 
 	mockController := gomock.NewController(t)
 	driver := testutil.MockDriver(mockController)
@@ -236,18 +466,37 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 	cluster := &corev1.StorageCluster{}
 	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
+
 	require.Equal(t, expectedStcImages.PortworxImage, cluster.Spec.Image)
 	require.Equal(t, expectedStcImages.CustomImageRegistry, cluster.Spec.CustomImageRegistry)
-	require.Equal(t, expectedStcImages.Components.Stork, cluster.Status.DesiredImages.Stork)
-	require.Equal(t, expectedStcImages.Components.Autopilot, cluster.Status.DesiredImages.Autopilot)
-	require.Equal(t, expectedStcImages.Components.Telemetry, cluster.Status.DesiredImages.Telemetry)
 
-	cm := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, cm, manifest.DefaultConfigMapName, ds.Namespace)
-	if airGapped {
-		require.NoError(t, err)
+	if manifestConfigMapExists {
+		require.Equal(t, cluster.Status.DesiredImages, &corev1.ComponentImages{})
 	} else {
-		require.True(t, errors.IsNotFound(err))
+		require.Equal(t, expectedStcImages.Components.Stork, cluster.Status.DesiredImages.Stork)
+		require.Equal(t, expectedStcImages.Components.Autopilot, cluster.Status.DesiredImages.Autopilot)
+
+		require.Equal(t, expectedStcImages.Components.CSINodeDriverRegistrar, cluster.Status.DesiredImages.CSINodeDriverRegistrar)
+		require.Equal(t, expectedStcImages.Components.CSIProvisioner, cluster.Status.DesiredImages.CSIProvisioner)
+		require.Equal(t, expectedStcImages.Components.CSIAttacher, cluster.Status.DesiredImages.CSIAttacher)
+		require.Equal(t, expectedStcImages.Components.CSIResizer, cluster.Status.DesiredImages.CSIResizer)
+		require.Equal(t, expectedStcImages.Components.CSISnapshotter, cluster.Status.DesiredImages.CSISnapshotter)
+		require.Equal(t, expectedStcImages.Components.CSISnapshotController, cluster.Status.DesiredImages.CSISnapshotController)
+		require.Equal(t, expectedStcImages.Components.CSIHealthMonitorController, cluster.Status.DesiredImages.CSIHealthMonitorController)
+		require.Equal(t, expectedStcImages.Components.Prometheus, cluster.Status.DesiredImages.Prometheus)
+		require.Equal(t, expectedStcImages.Components.AlertManager, cluster.Status.DesiredImages.AlertManager)
+		require.Equal(t, expectedStcImages.Components.PrometheusOperator, cluster.Status.DesiredImages.PrometheusOperator)
+		require.Equal(t, expectedStcImages.Components.PrometheusConfigMapReload, cluster.Status.DesiredImages.PrometheusConfigMapReload)
+		require.Equal(t, expectedStcImages.Components.PrometheusConfigReloader, cluster.Status.DesiredImages.PrometheusConfigReloader)
+		require.Equal(t, expectedStcImages.Components.Telemetry, cluster.Status.DesiredImages.Telemetry)
+
+		cm := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, cm, manifest.DefaultConfigMapName, ds.Namespace)
+		if airGapped {
+			require.NoError(t, err)
+		} else {
+			require.True(t, errors.IsNotFound(err))
+		}
 	}
 
 	// Stop the migration process by removing the daemonset
