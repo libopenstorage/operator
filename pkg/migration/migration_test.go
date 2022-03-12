@@ -7,12 +7,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/sched-ops/task"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/require"
@@ -23,7 +17,492 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/mock"
 )
+
+type ImageConfig struct {
+	CustomImageRegistry string
+	PortworxImage       string
+	Components          manifest.Release
+}
+
+func TestImageMigration(t *testing.T) {
+	// Test without custom image registry.
+	dsImages := ImageConfig{
+		PortworxImage: "portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	expectedStcImages := ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
+
+	// Test with custom image registry. Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:                      "test/a/stork:2.7.0",
+			Autopilot:                  "test/b/autopilot:1.3.1",
+			Telemetry:                  "test/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
+
+	// Test with custom image registry, and oci-monitor image has "portworx/" prefix
+	// Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:                      "test/a/stork:2.7.0",
+			Autopilot:                  "test/b/autopilot:1.3.1",
+			Telemetry:                  "test/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages, false, false)
+
+	// Test with custom image registry that has / in path, and oci-monitor image has "portworx/" prefix
+	// Component images should not have custom image registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/customRegistry/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:                      "test/customRegistry/a/stork:2.7.0",
+			Autopilot:                  "test/customRegistry/b/autopilot:1.3.1",
+			Telemetry:                  "test/customRegistry/c/ccm-service:3.0.9",
+			CSIProvisioner:             "test/customRegistry/k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "test/customRegistry/k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "test/customRegistry/k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "test/customRegistry/k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "test/customRegistry/k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "test/customRegistry/k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "test/customRegistry/k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "test/customRegistry/prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "test/customRegistry/coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "test/customRegistry/coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "test/customRegistry/coreos/configmap-reload:v1.2.3",
+			AlertManager:               "test/customRegistry/prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test/customRegistry",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages, true, false)
+
+	// Test with custom image registry, but component images do not have custom registry prefix.
+	dsImages = ImageConfig{
+		PortworxImage: "test/portworx/oci-monitor:2.9.1",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	expectedStcImages = ImageConfig{
+		PortworxImage:       "portworx/oci-monitor:2.9.1",
+		CustomImageRegistry: "test",
+		Components: manifest.Release{
+			Stork:                      "a/stork:2.7.0",
+			Autopilot:                  "b/autopilot:1.3.1",
+			Telemetry:                  "c/ccm-service:3.0.9",
+			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
+			CSIAttacher:                "k8scsi/csi-attacher:v1.2.3",
+			CSINodeDriverRegistrar:     "k8scsi/csi-node-driver-registrar:v1.2.3",
+			CSISnapshotter:             "k8scsi/csi-snapshotter:v1.2.3",
+			CSIResizer:                 "k8scsi/csi-resizer:v1.2.3",
+			CSISnapshotController:      "k8scsi/snapshot-controller:v1.2.3",
+			CSIHealthMonitorController: "k8scsi/csi-health-monitor-controller:v1.2.3",
+			Prometheus:                 "prometheus/prometheus:v1.2.3",
+			PrometheusOperator:         "coreos/prometheus-operator:v1.2.3",
+			PrometheusConfigReloader:   "coreos/prometheus-config-reloader:v1.2.3",
+			PrometheusConfigMapReload:  "coreos/configmap-reload:v1.2.3",
+			AlertManager:               "prometheus/alertmanager:v1.2.3",
+		},
+	}
+
+	testImageMigration(t, dsImages, expectedStcImages, true, true)
+}
+
+func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, airGapped bool, manifestConfigMapExists bool) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "portworx",
+							Image: dsImages.PortworxImage,
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+						{
+							Name:  pxutil.TelemetryContainerName,
+							Image: dsImages.Components.Telemetry,
+						},
+						{
+							Name:  pxutil.CSIRegistrarContainerName,
+							Image: dsImages.Components.CSINodeDriverRegistrar,
+						},
+					},
+				},
+			},
+		},
+	}
+	storkDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      storkDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: dsImages.Components.Stork,
+						},
+					},
+				},
+			},
+		},
+	}
+	autopilotDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.AutopilotDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: dsImages.Components.Autopilot,
+						},
+					},
+				},
+			},
+		},
+	}
+	csiDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      csiDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  csiProvisionerContainerName,
+							Image: dsImages.Components.CSIProvisioner,
+						},
+						{
+							Name:  csiAttacherContainerName,
+							Image: dsImages.Components.CSIAttacher,
+						},
+						{
+							Name:  csiSnapshotterContainerName,
+							Image: dsImages.Components.CSISnapshotter,
+						},
+						{
+							Name:  csiResizerContainerName,
+							Image: dsImages.Components.CSIResizer,
+						},
+						{
+							Name:  csiSnapshotControllerContainerName,
+							Image: dsImages.Components.CSISnapshotController,
+						},
+						{
+							Name:  csiHealthMonitorControllerContainerName,
+							Image: dsImages.Components.CSIHealthMonitorController,
+						},
+					},
+				},
+			},
+		},
+	}
+	promOpDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusOpDeploymentName,
+			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: dsImages.Components.PrometheusOperator,
+							Args: []string{
+								prometheusConfigMapReloaderArg + dsImages.Components.PrometheusConfigMapReload,
+								prometheusConfigReloaderArg + dsImages.Components.PrometheusConfigReloader,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceMonitorName,
+			Namespace: ds.Namespace,
+		},
+	}
+	alertManager := &monitoringv1.Alertmanager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      alertManagerName,
+			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &dsImages.Components.AlertManager,
+		},
+	}
+	prometheus := &monitoringv1.Prometheus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusInstanceName,
+			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.PrometheusSpec{
+			RuleSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"prometheus": "portworx",
+				},
+			},
+			ServiceMonitorSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": serviceMonitorName,
+				},
+			},
+			Image: &dsImages.Components.Prometheus,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(
+		ds, storkDeployment, autopilotDeployment, csiDeployment,
+		promOpDeployment, serviceMonitor, alertManager, prometheus,
+	)
+
+	if manifestConfigMapExists {
+		k8sClient.Create(
+			context.TODO(),
+			&v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      manifest.DefaultConfigMapName,
+					Namespace: ds.Namespace,
+				},
+			},
+		)
+	}
+
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(!airGapped).AnyTimes()
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedStcImages.PortworxImage, cluster.Spec.Image)
+	require.Equal(t, expectedStcImages.CustomImageRegistry, cluster.Spec.CustomImageRegistry)
+
+	if manifestConfigMapExists {
+		require.Equal(t, cluster.Status.DesiredImages, &corev1.ComponentImages{})
+	} else {
+		require.Equal(t, expectedStcImages.Components.Stork, cluster.Status.DesiredImages.Stork)
+		require.Equal(t, expectedStcImages.Components.Autopilot, cluster.Status.DesiredImages.Autopilot)
+
+		require.Equal(t, expectedStcImages.Components.CSINodeDriverRegistrar, cluster.Status.DesiredImages.CSINodeDriverRegistrar)
+		require.Equal(t, expectedStcImages.Components.CSIProvisioner, cluster.Status.DesiredImages.CSIProvisioner)
+		require.Equal(t, expectedStcImages.Components.CSIAttacher, cluster.Status.DesiredImages.CSIAttacher)
+		require.Equal(t, expectedStcImages.Components.CSIResizer, cluster.Status.DesiredImages.CSIResizer)
+		require.Equal(t, expectedStcImages.Components.CSISnapshotter, cluster.Status.DesiredImages.CSISnapshotter)
+		require.Equal(t, expectedStcImages.Components.CSISnapshotController, cluster.Status.DesiredImages.CSISnapshotController)
+		require.Equal(t, expectedStcImages.Components.CSIHealthMonitorController, cluster.Status.DesiredImages.CSIHealthMonitorController)
+		require.Equal(t, expectedStcImages.Components.Prometheus, cluster.Status.DesiredImages.Prometheus)
+		require.Equal(t, expectedStcImages.Components.AlertManager, cluster.Status.DesiredImages.AlertManager)
+		require.Equal(t, expectedStcImages.Components.PrometheusOperator, cluster.Status.DesiredImages.PrometheusOperator)
+		require.Equal(t, expectedStcImages.Components.PrometheusConfigMapReload, cluster.Status.DesiredImages.PrometheusConfigMapReload)
+		require.Equal(t, expectedStcImages.Components.PrometheusConfigReloader, cluster.Status.DesiredImages.PrometheusConfigReloader)
+		require.Equal(t, expectedStcImages.Components.Telemetry, cluster.Status.DesiredImages.Telemetry)
+
+		cm := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, cm, manifest.DefaultConfigMapName, ds.Namespace)
+		if airGapped {
+			require.NoError(t, err)
+		} else {
+			require.True(t, errors.IsNotFound(err))
+		}
+	}
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
 
 func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	clusterName := "px-cluster"
@@ -120,8 +599,16 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -264,7 +751,7 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -359,8 +846,16 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -475,7 +970,7 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -564,7 +1059,7 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -604,8 +1099,16 @@ func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds, existingCluster)
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -625,8 +1128,16 @@ func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 
 func TestWhenPortworxDaemonsetIsNotPresent(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -659,7 +1170,8 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 							Name: pxutil.CSIRegistrarContainerName,
 						},
 						{
-							Name: pxutil.TelemetryContainerName,
+							Name:  pxutil.TelemetryContainerName,
+							Image: "image/ccm-service:2.6.0",
 						},
 					},
 				},
@@ -671,11 +1183,33 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Name:      storkDeploymentName,
 			Namespace: ds.Namespace,
 		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "portworx/stork:2.7.0",
+						},
+					},
+				},
+			},
+		},
 	}
 	autopilotDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      component.AutopilotDeploymentName,
 			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "/autopilot:1.3.1",
+						},
+					},
+				},
+			},
 		},
 	}
 	pvcControllerDeployment := &appsv1.Deployment{
@@ -684,12 +1218,14 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	prometheusImage := "testPrometheusImage"
 	prometheus := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prometheusInstanceName,
 			Namespace: ds.Namespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			Image: &prometheusImage,
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": "portworx",
@@ -708,10 +1244,14 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	testAlertmanagerImage := "testAlertmanagerImage"
 	alertManager := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      component.AlertManagerInstanceName,
 			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &testAlertmanagerImage,
 		},
 	}
 
@@ -720,8 +1260,16 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 		pvcControllerDeployment, prometheus,
 		serviceMonitor, alertManager,
 	)
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -779,7 +1327,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
-	require.Equal(t, expectedCluster.Status, cluster.Status)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -834,8 +1382,16 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds, pvcControllerDeployment, prometheus)
-	ctrl := &storagecluster.Controller{}
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+
 	migrator := New(ctrl)
 
 	go migrator.Start()
@@ -884,7 +1440,8 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase:         constants.PhaseAwaitingApproval,
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -903,7 +1460,6 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 }
 
 func TestSuccessfulMigration(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
 	migrationRetryIntervalFunc = func() time.Duration {
 		return 2 * time.Second
 	}
@@ -943,11 +1499,15 @@ func TestSuccessfulMigration(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
 	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
@@ -1050,7 +1610,6 @@ func TestSuccessfulMigration(t *testing.T) {
 }
 
 func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
 	migrationRetryIntervalFunc = func() time.Duration {
 		return 2 * time.Second
 	}
@@ -1098,11 +1657,15 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
 	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
@@ -1241,7 +1804,6 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 }
 
 func TestOldComponentsAreDeleted(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
 	migrationRetryIntervalFunc = func() time.Duration {
 		return 2 * time.Second
 	}
@@ -1334,6 +1896,17 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 			Name:      storkDeploymentName,
 			Namespace: ds.Namespace,
 		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "portworx/stork:2.7.0",
+						},
+					},
+				},
+			},
+		},
 	}
 	storkSvc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1389,6 +1962,17 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autopilotDeploymentName,
 			Namespace: ds.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "/autopilot:1.3.1",
+						},
+					},
+				},
+			},
 		},
 	}
 	autopilotSvc := &v1.Service{
@@ -1531,10 +2115,14 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 	}
+	testAlertmanagerImage := "testAlertmanagerImage"
 	alertManager := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      alertManagerName,
 			Namespace: ds.Namespace,
+		},
+		Spec: monitoringv1.AlertmanagerSpec{
+			Image: &testAlertmanagerImage,
 		},
 	}
 	alertManagerSvc := &v1.Service{
@@ -1556,11 +2144,15 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 		prometheus, prometheusSvc, prometheusRole, prometheusRoleBinding, prometheusAccount,
 		promOpDeployment, promOpRole, promOpRoleBinding, promOpAccount,
 	)
+	mockCtrl := gomock.NewController(t)
 	driver := testutil.MockDriver(mockCtrl)
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
 	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 
 	// Start the migration handler
 	migrator := New(ctrl)

@@ -97,6 +97,8 @@ type Manifest interface {
 	Init(client.Client, record.EventRecorder, *version.Version)
 	// GetVersions return the correct release versions for given cluster
 	GetVersions(*corev1.StorageCluster, bool) *Version
+	// CanAccessRemoteManifest is used to test remote manifest to decide whether it's air-gapped env.
+	CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool
 }
 
 // Instance returns a single instance of Manifest if present, else
@@ -134,6 +136,23 @@ func (m *manifest) Init(
 	m.k8sVersion = k8sVersion
 }
 
+func (m *manifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool {
+	provider := newRemoteManifest(cluster, m.k8sVersion)
+
+	var err error
+	maxAttempts := 5
+	for i := 0; i < maxAttempts; i++ {
+		_, err = provider.Get()
+		if err == nil {
+			return true
+		}
+		time.Sleep(time.Second)
+	}
+
+	logrus.Infof("Could not access remote manifest after %d attempts: %v", maxAttempts, err)
+	return false
+}
+
 // GetVersions returns the version manifest for the given cluster version
 // The version manifest contains all the images of corresponding components
 // that are to be installed with given cluster version.
@@ -164,6 +183,7 @@ func (m *manifest) GetVersions(
 		return m.cachedVersions.DeepCopy()
 	}
 
+	// Bug: if it fails due to temporarily network issue, we should retry.
 	rel, err := provider.Get()
 	if err != nil {
 		msg := fmt.Sprintf("Using default version due to: %v", err)

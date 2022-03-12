@@ -2,15 +2,18 @@ package migration
 
 import (
 	"context"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -20,11 +23,25 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	prometheusConfigReloaderArg             = "--prometheus-config-reloader="
+	prometheusConfigMapReloaderArg          = "--config-reloader-image="
+	csiProvisionerContainerName             = "csi-external-provisioner"
+	csiAttacherContainerName                = "csi-attacher"
+	csiSnapshotterContainerName             = "csi-snapshotter"
+	csiResizerContainerName                 = "csi-resizer"
+	csiSnapshotControllerContainerName      = "csi-snapshot-controller"
+	csiHealthMonitorControllerContainerName = "csi-health-monitor-controller"
+)
+
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
 	stc := h.constructStorageCluster(ds)
 
+	if err := h.addCSISpec(stc, ds); err != nil {
+		return nil, err
+	}
 	if err := h.addStorkSpec(stc); err != nil {
 		return nil, err
 	}
@@ -34,7 +51,15 @@ func (h *Handler) createStorageCluster(
 	if err := h.addPVCControllerSpec(stc); err != nil {
 		return nil, err
 	}
-	if err := h.addMonitoringSpec(stc); err != nil {
+	if err := h.addMonitoringSpec(stc, ds); err != nil {
+		return nil, err
+	}
+
+	if err := h.handleCustomImageRegistry(stc); err != nil {
+		return nil, err
+	}
+
+	if err := h.createManifestConfigMap(stc); err != nil {
 		return nil, err
 	}
 
@@ -47,6 +72,35 @@ func (h *Handler) createStorageCluster(
 	return stc, err
 }
 
+func (h *Handler) parseCustomImageRegistry(pxImage, componentImage string) string {
+	imageParts := strings.Split(pxImage, "/")
+
+	// This should not happen.
+	if len(imageParts) <= 1 {
+		return ""
+	}
+
+	// default format, such as portworx/oci-monitor:2.9.0
+	if len(imageParts) == 2 && imageParts[0] == "portworx" {
+		return ""
+	}
+
+	paths := imageParts[:len(imageParts)-1]
+
+	// If the full image path is "registry.io/portworx/oci-monitor", then we look at other image
+	// - if component image has "registry.io/portworx" prefix then registry is registry.io/portworx
+	// - Otherwise registry is registry.io
+	if paths[len(paths)-1] == "portworx" {
+		registry := path.Join(paths...)
+
+		if !strings.HasPrefix(componentImage, registry) {
+			paths = paths[:len(paths)-1]
+		}
+	}
+
+	return path.Join(paths...)
+}
+
 func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageCluster {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -54,6 +108,9 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			Annotations: map[string]string{
 				constants.AnnotationMigrationApproved: "false",
 			},
+		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
 
@@ -360,31 +417,6 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 		cluster.Spec.UpdateStrategy.Type = corev1.OnDeleteStorageClusterStrategyType
 	}
 
-	// Enable CSI
-	csiEnabled := false
-	telemetryEnabled := false
-	for _, c := range ds.Spec.Template.Spec.Containers {
-		switch c.Name {
-		case pxutil.CSIRegistrarContainerName:
-			csiEnabled = true
-		case pxutil.TelemetryContainerName:
-			telemetryEnabled = true
-		}
-	}
-	// Install snapshot controller, as Daemonset spec generator
-	// always included snapshot controller.
-	cluster.Spec.CSI = &corev1.CSISpec{
-		Enabled: csiEnabled,
-	}
-	if csiEnabled {
-		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
-	}
-	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-		Telemetry: &corev1.TelemetrySpec{
-			Enabled: telemetryEnabled,
-		},
-	}
-
 	_, hasSystemKey := envMap["PORTWORX_AUTH_SYSTEM_KEY"]
 	_, hasJWTIssuer := envMap["PORTWORX_AUTH_JWT_ISSUER"]
 	if hasSystemKey && hasJWTIssuer {
@@ -407,6 +439,65 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	return cluster
 }
 
+func (h *Handler) removeCustomImageRegistry(customImageRegistry, image string) string {
+	if image == "" || customImageRegistry == "" {
+		return image
+	}
+
+	if !strings.HasPrefix(image, customImageRegistry) {
+		logrus.Warningf("image %s does not have custom image registry prefix %s", image, customImageRegistry)
+		return image
+	}
+
+	return strings.TrimPrefix(image, customImageRegistry+"/")
+}
+
+func (h *Handler) addCSISpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
+	// Enable CSI
+	csiEnabled := false
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case pxutil.CSIRegistrarContainerName:
+			csiEnabled = true
+			cluster.Status.DesiredImages.CSINodeDriverRegistrar = c.Image
+		}
+	}
+	// Install snapshot controller, as Daemonset spec generator
+	// always included snapshot controller.
+	cluster.Spec.CSI = &corev1.CSISpec{
+		Enabled: csiEnabled,
+	}
+	if csiEnabled {
+		cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
+
+		dep, err := h.getDeployment(component.CSIApplicationName, cluster.Namespace)
+		if err != nil {
+			return err
+		} else if dep == nil {
+			return nil
+		}
+
+		for _, c := range dep.Spec.Template.Spec.Containers {
+			switch c.Name {
+			case csiProvisionerContainerName:
+				cluster.Status.DesiredImages.CSIProvisioner = c.Image
+			case csiAttacherContainerName:
+				cluster.Status.DesiredImages.CSIAttacher = c.Image
+			case csiSnapshotterContainerName:
+				cluster.Status.DesiredImages.CSISnapshotter = c.Image
+			case csiResizerContainerName:
+				cluster.Status.DesiredImages.CSIResizer = c.Image
+			case csiSnapshotControllerContainerName:
+				cluster.Status.DesiredImages.CSISnapshotController = c.Image
+			case csiHealthMonitorControllerContainerName:
+				cluster.Status.DesiredImages.CSIHealthMonitorController = c.Image
+			}
+		}
+	}
+
+	return nil
+}
+
 func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 	dep, err := h.getDeployment(storkDeploymentName, cluster.Namespace)
 	if err != nil {
@@ -415,6 +506,11 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: dep != nil,
 	}
+
+	if dep != nil {
+		cluster.Status.DesiredImages.Stork = dep.Spec.Template.Spec.Containers[0].Image
+	}
+
 	return nil
 }
 
@@ -426,6 +522,11 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: dep != nil,
 	}
+
+	if dep != nil {
+		cluster.Status.DesiredImages.Autopilot = dep.Spec.Template.Spec.Containers[0].Image
+	}
+
 	return nil
 }
 
@@ -441,10 +542,28 @@ func (h *Handler) addPVCControllerSpec(cluster *corev1.StorageCluster) error {
 	if cluster.Namespace == "kube-system" {
 		cluster.Annotations[pxutil.AnnotationPVCController] = "true"
 	}
+
 	return nil
 }
 
-func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
+func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
+	if cluster.Spec.Monitoring == nil {
+		cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
+	}
+
+	// Check for telemetry
+	telemetryImage := ""
+	for _, container := range ds.Spec.Template.Spec.Containers {
+		if strings.Contains(container.Image, "ccm-service") {
+			telemetryImage = container.Image
+			break
+		}
+	}
+	cluster.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+		Enabled: telemetryImage != "",
+	}
+	cluster.Status.DesiredImages.Telemetry = telemetryImage
+
 	// Check if metrics need to be exported
 	svcMonitorFound := true
 	svcMonitor := &monitoringv1.ServiceMonitor{}
@@ -463,9 +582,7 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 	} else if err != nil {
 		return err
 	}
-	if cluster.Spec.Monitoring == nil {
-		cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
-	}
+
 	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{
 		ExportMetrics: svcMonitorFound,
 	}
@@ -488,6 +605,9 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 	}
 	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{
 		Enabled: alertManagerFound,
+	}
+	if alertManagerFound {
+		cluster.Status.DesiredImages.AlertManager = *alertManager.Spec.Image
 	}
 
 	if !cluster.Spec.Monitoring.Prometheus.ExportMetrics &&
@@ -516,6 +636,39 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster) error {
 		prometheus.Spec.ServiceMonitorSelector != nil &&
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
+		cluster.Status.DesiredImages.Prometheus = *prometheus.Spec.Image
+
+		dep := &appsv1.Deployment{}
+		err := h.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      prometheusOpDeploymentName,
+				Namespace: cluster.Namespace,
+			},
+			dep,
+		)
+		if errors.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		container := dep.Spec.Template.Spec.Containers[0]
+		cluster.Status.DesiredImages.PrometheusOperator = container.Image
+
+		for _, arg := range container.Args {
+			if strings.HasPrefix(arg, prometheusConfigReloaderArg) {
+				cluster.Status.DesiredImages.PrometheusConfigReloader = strings.TrimPrefix(arg, prometheusConfigReloaderArg)
+			}
+			if strings.HasPrefix(arg, prometheusConfigMapReloaderArg) {
+				cluster.Status.DesiredImages.PrometheusConfigMapReload = strings.TrimPrefix(arg, prometheusConfigMapReloaderArg)
+			}
+		}
+
+		if cluster.Status.DesiredImages.PrometheusConfigReloader == "" {
+			imgVersion := strings.Split(cluster.Status.DesiredImages.PrometheusOperator, ":")[1]
+			cluster.Status.DesiredImages.PrometheusConfigReloader = "quay.io/coreos/prometheus-config-reloader:" + imgVersion
+		}
 	}
 
 	return nil
@@ -589,4 +742,109 @@ func uint32Ptr(strValue string) *uint32 {
 
 func guestAccessTypePtr(value corev1.GuestAccessType) *corev1.GuestAccessType {
 	return &value
+}
+
+func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) error {
+	var componentImage string
+	if cluster.Status.DesiredImages.Stork != "" {
+		componentImage = cluster.Status.DesiredImages.Stork
+	} else if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
+		componentImage = cluster.Status.DesiredImages.CSINodeDriverRegistrar
+	} else if cluster.Status.DesiredImages.Telemetry != "" {
+		componentImage = cluster.Status.DesiredImages.Telemetry
+	}
+
+	cluster.Spec.CustomImageRegistry = h.parseCustomImageRegistry(cluster.Spec.Image, componentImage)
+
+	cluster.Spec.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Spec.Image)
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Stork:                      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Stork),
+		UserInterface:              h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.UserInterface),
+		Autopilot:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Autopilot),
+		CSINodeDriverRegistrar:     h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSINodeDriverRegistrar),
+		CSIDriverRegistrar:         h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIDriverRegistrar),
+		CSIProvisioner:             h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIProvisioner),
+		CSIAttacher:                h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIAttacher),
+		CSIResizer:                 h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIResizer),
+		CSISnapshotter:             h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSISnapshotter),
+		CSISnapshotController:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSISnapshotController),
+		CSIHealthMonitorController: h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CSIHealthMonitorController),
+		PrometheusOperator:         h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusOperator),
+		PrometheusConfigMapReload:  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusConfigMapReload),
+		PrometheusConfigReloader:   h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PrometheusConfigReloader),
+		Prometheus:                 h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Prometheus),
+		AlertManager:               h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.AlertManager),
+		Telemetry:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Telemetry),
+		MetricsCollector:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollector),
+		MetricsCollectorProxy:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollectorProxy),
+		PxRepo:                     h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PxRepo),
+	}
+	return nil
+}
+
+func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error {
+	// This is not air-gapped env, there is no need to create the configmap.
+	if manifest.Instance().CanAccessRemoteManifest(cluster) {
+		return nil
+	}
+
+	versionCM := &v1.ConfigMap{}
+	err := h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      manifest.DefaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		versionCM,
+	)
+
+	// configmap exists, in this case let's clear DesiredImages and use images in the configmap.
+	if err == nil {
+		cluster.Status.DesiredImages = &corev1.ComponentImages{}
+		return nil
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	splits := strings.Split(cluster.Spec.Image, ":")
+	ver := manifest.Version{
+		PortworxVersion: splits[len(splits)-1],
+		Components: manifest.Release{
+			Stork:                      cluster.Status.DesiredImages.Stork,
+			Lighthouse:                 "",
+			Autopilot:                  cluster.Status.DesiredImages.Autopilot,
+			NodeWiper:                  "",
+			CSIDriverRegistrar:         cluster.Status.DesiredImages.CSIDriverRegistrar,
+			CSINodeDriverRegistrar:     cluster.Status.DesiredImages.CSINodeDriverRegistrar,
+			CSIProvisioner:             cluster.Status.DesiredImages.CSIProvisioner,
+			CSIAttacher:                cluster.Status.DesiredImages.CSIAttacher,
+			CSIResizer:                 cluster.Status.DesiredImages.CSIResizer,
+			CSISnapshotter:             cluster.Status.DesiredImages.CSISnapshotter,
+			CSISnapshotController:      cluster.Status.DesiredImages.CSISnapshotController,
+			CSIHealthMonitorController: cluster.Status.DesiredImages.CSIHealthMonitorController,
+			Prometheus:                 cluster.Status.DesiredImages.Prometheus,
+			AlertManager:               cluster.Status.DesiredImages.AlertManager,
+			PrometheusOperator:         cluster.Status.DesiredImages.PrometheusOperator,
+			PrometheusConfigMapReload:  cluster.Status.DesiredImages.PrometheusConfigMapReload,
+			PrometheusConfigReloader:   cluster.Status.DesiredImages.PrometheusConfigReloader,
+			Telemetry:                  cluster.Status.DesiredImages.Telemetry,
+			MetricsCollector:           cluster.Status.DesiredImages.MetricsCollector,
+			MetricsCollectorProxy:      cluster.Status.DesiredImages.MetricsCollectorProxy,
+			PxRepo:                     "",
+		},
+	}
+
+	bytes, err := yaml.Marshal(ver)
+	if err != nil {
+		return err
+	}
+
+	versionCM.Name = manifest.DefaultConfigMapName
+	versionCM.Namespace = cluster.Namespace
+	versionCM.Data = make(map[string]string)
+	versionCM.Data[manifest.VersionConfigMapKey] = string(bytes)
+	return h.client.Create(
+		context.TODO(),
+		versionCM,
+	)
 }

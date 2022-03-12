@@ -19,11 +19,11 @@ func TestConfigMapManifestWithValidData(t *testing.T) {
 	}
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: `
+			VersionConfigMapKey: `
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -49,7 +49,7 @@ func TestConfigMapManifestWithValidDataButDifferentKey(t *testing.T) {
 	}
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
@@ -73,7 +73,7 @@ components:
 
 	// TestCase: Has both a valid and invalid key.
 	// We should use the valid one, if present
-	versionsConfigMap.Data[versionConfigMapKey] = `
+	versionsConfigMap.Data[VersionConfigMapKey] = `
 version: 4.2.1
 components:
   stork: stork/image:4.2.1
@@ -110,7 +110,7 @@ func TestConfigMapManifestWithEmptyData(t *testing.T) {
 	}
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -126,7 +126,7 @@ func TestConfigMapManifestWithEmptyData(t *testing.T) {
 
 	// TestCase: Empty versions data present
 	versionsConfigMap.Data = map[string]string{
-		versionConfigMapKey: "",
+		VersionConfigMapKey: "",
 	}
 	k8sClient.Update(context.TODO(), versionsConfigMap)
 
@@ -146,11 +146,11 @@ func TestConfigMapManifestWithInvalidData(t *testing.T) {
 	}
 	versionsConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string]string{
-			versionConfigMapKey: "invalid_yaml",
+			VersionConfigMapKey: "invalid_yaml",
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(versionsConfigMap)

@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	defaultConfigMapName = "px-versions"
-	versionConfigMapKey  = "versions"
+	// DefaultConfigMapName is name of the version manifest configMap.
+	DefaultConfigMapName = "px-versions"
+	// VersionConfigMapKey is key of version manifest content in configMap.
+	VersionConfigMapKey = "versions"
 )
 
 type configMap struct {
@@ -26,7 +28,7 @@ func newConfigMapManifest(
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      defaultConfigMapName,
+			Name:      DefaultConfigMapName,
 			Namespace: cluster.Namespace,
 		},
 		versionCM,
@@ -41,7 +43,7 @@ func newConfigMapManifest(
 }
 
 func (m *configMap) Get() (*Version, error) {
-	data, exists := m.cm.Data[versionConfigMapKey]
+	data, exists := m.cm.Data[VersionConfigMapKey]
 	if !exists {
 		// If the exact key does not exist, just take the first one
 		// as only one key is expected
