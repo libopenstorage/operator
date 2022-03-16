@@ -777,7 +777,6 @@ func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) erro
 		Telemetry:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Telemetry),
 		MetricsCollector:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollector),
 		MetricsCollectorProxy:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollectorProxy),
-		PxRepo:                     h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.PxRepo),
 	}
 	return nil
 }
@@ -830,7 +829,6 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 			Telemetry:                  cluster.Status.DesiredImages.Telemetry,
 			MetricsCollector:           cluster.Status.DesiredImages.MetricsCollector,
 			MetricsCollectorProxy:      cluster.Status.DesiredImages.MetricsCollectorProxy,
-			PxRepo:                     "",
 		},
 	}
 
