@@ -75,9 +75,9 @@ func main() {
 			Usage: "Port on which the operator metrics are to be exposed",
 			Value: defaultMetricsPort,
 		},
-		cli.BoolFlag{
+		cli.BoolTFlag{
 			Name:  flagMigration,
-			Usage: "Enable Portworx DaemonSet migration (default: false)",
+			Usage: "Enable Portworx DaemonSet migration (default: true)",
 		},
 	}
 
@@ -194,7 +194,8 @@ func run(c *cli.Context) {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
-	if c.Bool(flagMigration) {
+	if c.BoolT(flagMigration) {
+		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
 		go migrationHandler.Start()
 	}
