@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -546,6 +547,16 @@ func (h *Handler) addPVCControllerSpec(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
+func (h *Handler) getContainerImage(statefulSet *appsv1.StatefulSet, containerName string) string {
+	for _, c := range statefulSet.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+
+	return ""
+}
+
 func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
 	if cluster.Spec.Monitoring == nil {
 		cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
@@ -606,8 +617,29 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{
 		Enabled: alertManagerFound,
 	}
+	statefulSetList := &appsv1.StatefulSetList{}
+	err = h.client.List(
+		context.TODO(),
+		statefulSetList,
+		&client.ListOptions{
+			Namespace: ds.Namespace,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	if alertManagerFound {
-		cluster.Status.DesiredImages.AlertManager = *alertManager.Spec.Image
+		if alertManager.Spec.Image != nil {
+			cluster.Status.DesiredImages.AlertManager = *alertManager.Spec.Image
+		} else {
+			for _, ss := range statefulSetList.Items {
+				if metav1.IsControlledBy(&ss, alertManager) {
+					cluster.Status.DesiredImages.AlertManager = h.getContainerImage(&ss, "alertmanager")
+					break
+				}
+			}
+		}
 	}
 
 	if !cluster.Spec.Monitoring.Prometheus.ExportMetrics &&
@@ -636,7 +668,17 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 		prometheus.Spec.ServiceMonitorSelector != nil &&
 		prometheus.Spec.ServiceMonitorSelector.MatchLabels["name"] == serviceMonitorName {
 		cluster.Spec.Monitoring.Prometheus.Enabled = true
-		cluster.Status.DesiredImages.Prometheus = *prometheus.Spec.Image
+
+		if prometheus.Spec.Image != nil {
+			cluster.Status.DesiredImages.Prometheus = *prometheus.Spec.Image
+		} else {
+			for _, ss := range statefulSetList.Items {
+				if metav1.IsControlledBy(&ss, prometheus) {
+					cluster.Status.DesiredImages.Prometheus = h.getContainerImage(&ss, "prometheus")
+					break
+				}
+			}
+		}
 
 		dep := &appsv1.Deployment{}
 		err := h.client.Get(
