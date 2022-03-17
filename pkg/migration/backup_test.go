@@ -26,11 +26,11 @@ import (
 )
 
 func TestBackup(t *testing.T) {
-	testBackup(t, true)
-	testBackup(t, false)
+	testBackup(t, true, true)
+	testBackup(t, false, false)
 }
 
-func testBackup(t *testing.T, backupExits bool) {
+func testBackup(t *testing.T, backupExits, collectionExists bool) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -106,6 +106,16 @@ func testBackup(t *testing.T, backupExits bool) {
 			})
 		require.NoError(t, err)
 	}
+	if collectionExists {
+		err := k8sClient.Create(context.TODO(),
+			&v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      CollectionConfigMapName,
+					Namespace: ds.Namespace,
+				},
+			})
+		require.NoError(t, err)
+	}
 
 	mockController := gomock.NewController(t)
 	driver := testutil.MockDriver(mockController)
@@ -149,6 +159,17 @@ func testBackup(t *testing.T, backupExits bool) {
 			} else {
 				require.NotNil(t, cm.Data)
 			}
+		} else if errors.IsNotFound(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
+
+		cm = v1.ConfigMap{}
+		err = testutil.Get(k8sClient, &cm, CollectionConfigMapName, ds.Namespace)
+		if err == nil {
+			// The configmap should be overwritten to non-empty if it precreated.
+			require.NotNil(t, cm.Data)
 			return true, nil
 		} else if errors.IsNotFound(err) {
 			return false, nil

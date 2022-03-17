@@ -83,11 +83,17 @@ func (h *Handler) Start() {
 			return false, nil
 		}
 
+		err = h.backup(CollectionConfigMapName, cluster.Namespace, true)
+		if err != nil {
+			logrus.Errorf("Failed to collect daemonset components. %v", err)
+			return false, nil
+		}
+
 		if !h.isMigrationApproved(cluster) {
 			return false, nil
 		}
 
-		err = h.backup(cluster.Namespace)
+		err = h.backup(BackupConfigMapName, cluster.Namespace, false)
 		if err != nil {
 			logrus.Errorf("Failed to backup daemonset components. %v", err)
 			return false, nil
