@@ -150,7 +150,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			if arg == "-f" {
 				cluster.Spec.Storage.ForceUseDisks = boolPtr(true)
 			}
-		} else if arg == "-s" && strings.HasPrefix(c.Args[i+i], "/") {
+		} else if arg == "-s" && strings.HasPrefix(c.Args[i+1], "/") {
 			initStorageSpec(cluster)
 			devices := []string{}
 			if cluster.Spec.Storage.Devices != nil {
@@ -180,7 +180,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			devices = append(devices, c.Args[i+1])
 			cluster.Spec.Storage.CacheDevices = &devices
 			i++
-		} else if arg == "-s" && !strings.HasPrefix(c.Args[i+i], "/") {
+		} else if arg == "-s" && !strings.HasPrefix(c.Args[i+1], "/") {
 			initCloudStorageSpec(cluster)
 			devices := []string{}
 			if cluster.Spec.CloudStorage.DeviceSpecs != nil {
