@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -15,27 +14,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
+
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
 	// BackupConfigMapName is the name of configmap that contains Daemonset backup.
+	// The backup is generated before migration starts and will not be overwritten.
 	BackupConfigMapName = "px-daemonset-backup"
+
+	// CollectionConfigMapName is the name of configmap that collects customer daemonset setup.
+	// We can collect customer environment by asking customer to send the content of this configmap to us.
+	// The configmap will be overwritten as long as daemonset exists.
+	CollectionConfigMapName = "px-daemonset-collection"
 )
 
-func (h *Handler) backup(namespace string) error {
-	logrus.Info("Start backup")
-	existingConfigMap := &v1.ConfigMap{}
-	err := h.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      BackupConfigMapName,
-			Namespace: namespace,
-		},
-		existingConfigMap,
-	)
-	// Only proceed when the configmap does not exist.
-	if !errors.IsNotFound(err) {
-		return err
+func (h *Handler) backup(configMapName, namespace string, overwrite bool) error {
+	if !overwrite {
+		existingConfigMap := &v1.ConfigMap{}
+		err := h.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      configMapName,
+				Namespace: namespace,
+			},
+			existingConfigMap,
+		)
+		// Only proceed when the configmap does not exist.
+		if !errors.IsNotFound(err) {
+			return err
+		}
 	}
 
 	var objs []client.Object
@@ -82,14 +90,15 @@ func (h *Handler) backup(namespace string) error {
 		"backup": sb.String(),
 	}
 
-	return h.client.Create(context.TODO(),
+	return k8sutil.CreateOrUpdateConfigMap(h.client,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      BackupConfigMapName,
+				Name:      configMapName,
 				Namespace: namespace,
 			},
 			Data: data,
-		})
+		},
+		nil)
 }
 
 func (h *Handler) addObject(
