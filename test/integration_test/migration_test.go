@@ -373,11 +373,15 @@ func validateStorageClusterFromPortworxContainer(
 		envMap[env.Name] = env.DeepCopy()
 	}
 	for _, dsEnv := range container.Env {
-		if dsEnv.Name == "PX_TEMPLATE_VERSION" {
+		if dsEnv.Name == "PX_TEMPLATE_VERSION" ||
+			dsEnv.Name == "PORTWORX_CSIVERSION" ||
+			dsEnv.Name == "CSI_ENDPOINT" ||
+			dsEnv.Name == "NODE_NAME" ||
+			dsEnv.Name == "PX_NAMESPACE" {
 			continue
 		}
 		if env, present := envMap[dsEnv.Name]; !present {
-			return fmt.Errorf("expected env: %s to be present in StorageCluster", env.Name)
+			return fmt.Errorf("expected env: %s to be present in StorageCluster", dsEnv.Name)
 		} else if !reflect.DeepEqual(dsEnv, *env) {
 			return fmt.Errorf("environment variable do not match: expected: %+v, actual: %+v", dsEnv, env)
 		}
