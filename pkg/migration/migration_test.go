@@ -1066,6 +1066,218 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 	require.NoError(t, err)
 }
 
+func TestStorageClusterWithAutoJournalAndOnPremStorage(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "portworx",
+							Image: "portworx/test:version",
+							Args: []string{
+								"-c", clusterName,
+								"-s", "/dev/sda", "-s", "/dev/sdb",
+								"-j", "auto",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/test:version",
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
+					Devices:       stringSlicePtr([]string{"/dev/sda", "/dev/sdb"}),
+					JournalDevice: stringPtr("auto"),
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterWithAutoJournalAndCloudStorage(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "portworx",
+							Image: "portworx/test:version",
+							Args: []string{
+								"-c", clusterName,
+								"-s", "type=disk", "-s", "type=disk",
+								"-j", "auto",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/test:version",
+			CloudStorage: &corev1.CloudStorageSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs:       stringSlicePtr([]string{"type=disk", "type=disk"}),
+					JournalDeviceSpec: stringPtr("auto"),
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
 func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
