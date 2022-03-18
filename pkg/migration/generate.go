@@ -131,6 +131,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 		userpwd  string
 	}{}
 	miscArgs := ""
+	autoJournalEnabled := false
 
 	for i := 0; i < len(c.Args); i++ {
 		arg := c.Args[i]
@@ -190,8 +191,12 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			cluster.Spec.CloudStorage.DeviceSpecs = &devices
 			i++
 		} else if arg == "-j" && !strings.HasPrefix(c.Args[i+1], "/") {
-			initCloudStorageSpec(cluster)
-			cluster.Spec.CloudStorage.JournalDeviceSpec = stringPtr(c.Args[i+1])
+			if c.Args[i+1] == "auto" {
+				autoJournalEnabled = true
+			} else {
+				initCloudStorageSpec(cluster)
+				cluster.Spec.CloudStorage.JournalDeviceSpec = stringPtr(c.Args[i+1])
+			}
 			i++
 		} else if arg == "-metadata" && !strings.HasPrefix(c.Args[i+1], "/") {
 			initCloudStorageSpec(cluster)
@@ -342,6 +347,15 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 			i++
 		} else {
 			miscArgs += arg + " "
+		}
+	}
+
+	if autoJournalEnabled {
+		if cluster.Spec.Storage != nil || cluster.Spec.CloudStorage == nil {
+			initStorageSpec(cluster)
+			cluster.Spec.Storage.JournalDevice = stringPtr("auto")
+		} else if cluster.Spec.CloudStorage != nil {
+			cluster.Spec.CloudStorage.JournalDeviceSpec = stringPtr("auto")
 		}
 	}
 
