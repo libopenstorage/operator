@@ -184,6 +184,10 @@ func (h *Handler) getPortworxRbac(namespace string, objs *[]client.Object) error
 	if err := h.addObject(pxRoleName, namespace, &rbacv1.Role{}, objs); err != nil {
 		return err
 	}
+
+	if err := h.addObject(secretsNamespace, "", &v1.Namespace{}, objs); err != nil {
+		return err
+	}
 	if err := h.addObject(pxRoleBindingName, secretsNamespace, &rbacv1.RoleBinding{}, objs); err != nil {
 		return err
 	}
