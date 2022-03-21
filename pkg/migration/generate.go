@@ -834,6 +834,7 @@ func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) erro
 		MetricsCollector:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollector),
 		MetricsCollectorProxy:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollectorProxy),
 	}
+	cluster.Status.Version = pxutil.GetImageTag(cluster.Spec.Image)
 	return nil
 }
 
@@ -856,6 +857,7 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 	// configmap exists, in this case let's clear DesiredImages and use images in the configmap.
 	if err == nil {
 		cluster.Status.DesiredImages = &corev1.ComponentImages{}
+		cluster.Status.Version = ""
 		return nil
 	} else if !errors.IsNotFound(err) {
 		return err
