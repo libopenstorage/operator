@@ -28,7 +28,7 @@ const (
 	defaultStorkImage          = "openstorage/stork:2.7.0"
 	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
 	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage      = "portworx/px-node-wiper:2.5.0"
+	defaultNodeWiperImage      = "portworx/px-node-wiper:2.10.0"
 	defaultTelemetryImage      = "purestorage/ccm-service:3.0.9"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
