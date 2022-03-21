@@ -312,7 +312,7 @@ func validateStorageClusterFromDaemonSet(
 		case "portworx":
 			cerr = validateStorageClusterFromPortworxContainer(cluster, &c)
 		case "csi-node-driver-registrar":
-			if enabled, err := strconv.ParseBool(cluster.Spec.FeatureGates["CSI"]); err != nil || !enabled {
+			if !cluster.Spec.CSI.Enabled {
 				cerr = fmt.Errorf("csi should have been enabled")
 			}
 		case "telemetry":
