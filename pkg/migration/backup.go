@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
@@ -305,6 +306,9 @@ func (h *Handler) getMonitoringComponent(namespace string, objs *[]client.Object
 		return err
 	}
 	if err := h.addObject(prometheusOpAccountName, namespace, &v1.ServiceAccount{}, objs); err != nil {
+		return err
+	}
+	if err := h.addObject(component.TelemetryConfigMapName, namespace, &v1.ConfigMap{}, objs); err != nil {
 		return err
 	}
 	return nil
