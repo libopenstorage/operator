@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -587,7 +588,7 @@ func GetPortworxConn(sdkConn *grpc.ClientConn, k8sClient client.Client, namespac
 		}
 	}
 
-	endpoint = fmt.Sprintf("%s:%d", endpoint, sdkPort)
+	endpoint = net.JoinHostPort(endpoint, strconv.Itoa(sdkPort))
 	return GetGrpcConn(endpoint)
 }
 
