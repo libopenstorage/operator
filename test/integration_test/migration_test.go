@@ -147,7 +147,7 @@ func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet)
 	err := ci_utils.AddPortworxImageToDaemonSet(ds)
 	require.NoError(t, err)
 
-	err = updateImagesWithKubernetesVersion(objects)
+	err = updateComponentDeploymentImages(objects)
 	require.NoError(t, err)
 
 	logrus.Infof("Creating portworx objects")
@@ -173,13 +173,13 @@ func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet)
 	cluster, err = approveMigration(cluster)
 	require.NoError(t, err)
 
+	logrus.Infof("Validate original spec is deleted")
+	err = appops.Instance().ValidateDaemonSetIsTerminated(ds.Name, ds.Namespace, ci_utils.DefaultValidateUpgradeTimeout)
+	require.NoError(t, err)
+
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
 	err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster,
 		ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
-	require.NoError(t, err)
-
-	logrus.Infof("Validate original spec is deleted")
-	err = appops.Instance().ValidateDaemonSetIsTerminated(ds.Name, ds.Namespace, 5*time.Minute)
 	require.NoError(t, err)
 
 	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
@@ -268,16 +268,37 @@ func extractPortworxDaemonSetFromObjects(objects []runtime.Object) (*appsv1.Daem
 	return pxDaemonSet, remainingObjects
 }
 
-func updateImagesWithKubernetesVersion(objects []runtime.Object) error {
+func updateComponentDeploymentImages(objects []runtime.Object) error {
 	k8sVersion, err := k8sutil.GetVersion()
 	if err != nil {
 		return err
 	}
 	for _, obj := range objects {
-		if dep, ok := obj.(*appsv1.Deployment); ok &&
-			(dep.Name == "stork-scheduler" || dep.Name == "portworx-pvc-controller") {
-			image := strings.Split(dep.Spec.Template.Spec.Containers[0].Image, ":")[0]
-			dep.Spec.Template.Spec.Containers[0].Image = image + ":v" + k8sVersion.String()
+		if dep, ok := obj.(*appsv1.Deployment); ok {
+			if dep.Name == "stork-scheduler" || dep.Name == "portworx-pvc-controller" {
+				image := strings.Split(dep.Spec.Template.Spec.Containers[0].Image, ":")[0]
+				dep.Spec.Template.Spec.Containers[0].Image = image + ":v" + k8sVersion.String()
+			} else if dep.Name == "stork" || dep.Name == "autopilot" {
+				dep.Spec.Template.Spec.Containers[0].Image = ci_utils.PxSpecImages[dep.Name]
+			} else if dep.Name == "px-csi-ext" {
+				for _, c := range dep.Spec.Template.Spec.Containers {
+					if c.Name == "csi-external-provisioner" {
+						c.Image = ci_utils.PxSpecImages["csiProvisioner"]
+					} else if c.Name == "csi-snapshotter" {
+						c.Image = ci_utils.PxSpecImages["csiSnapshotter"]
+					} else if c.Name == "csi-resizer" {
+						c.Image = ci_utils.PxSpecImages["csiResizer"]
+					}
+				}
+			} else if dep.Name == "px-metrics-collector" {
+				for _, c := range dep.Spec.Template.Spec.Containers {
+					if c.Name == "collector" {
+						c.Image = ci_utils.PxSpecImages["metricsCollector"]
+					} else if c.Name == "envoy" {
+						c.Image = ci_utils.PxSpecImages["metricsCollectorProxy"]
+					}
+				}
+			}
 		}
 	}
 	return nil
