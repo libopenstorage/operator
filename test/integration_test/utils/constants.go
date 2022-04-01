@@ -52,6 +52,10 @@ const (
 	DefaultValidateComponentTimeout = 10 * time.Minute
 	// DefaultValidateComponentRetryInterval is a default retry interval for component validation
 	DefaultValidateComponentRetryInterval = 5 * time.Second
+	// DefaultValidateApplicationTimeout is a default timeout for component validation
+	DefaultValidateApplicationTimeout = 5 * time.Minute
+	// DefaultValidateApplicationRetryInterval is a default retry interval for component validation
+	DefaultValidateApplicationRetryInterval = 5 * time.Second
 
 	// LabelValueTrue value "true" for a label
 	LabelValueTrue = "true"
