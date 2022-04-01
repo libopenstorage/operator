@@ -65,6 +65,11 @@ var migrationTestCases = []types.TestCase{
 			return objects
 		},
 		TestFunc: MigrationWithAllComponents,
+		AppSpecs: func(t *testing.T) []runtime.Object {
+			appSpecs, err := ci_utils.ParseApplicationSpecs("nginx")
+			require.NoError(t, err)
+			return appSpecs
+		},
 	},
 }
 
@@ -86,7 +91,7 @@ func BasicMigration(tc *types.TestCase) func(*testing.T) {
 
 		nodeNameWithLabel := ci_utils.AddLabelToRandomNode(t, labelKeyPXEnabled, ci_utils.LabelValueFalse)
 
-		testMigration(t, objects, pxDaemonSet)
+		testMigration(t, pxDaemonSet, objects, tc.AppSpecs(t))
 
 		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeyPXEnabled)
 	}
@@ -104,7 +109,7 @@ func MigrationWithoutNodeAffinity(tc *types.TestCase) func(*testing.T) {
 		// Remove affinity from portworx daemonset
 		pxDaemonSet.Spec.Template.Spec.Affinity = nil
 
-		testMigration(t, objects, pxDaemonSet)
+		testMigration(t, pxDaemonSet, objects, tc.AppSpecs(t))
 	}
 }
 
@@ -143,7 +148,7 @@ func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet) {
+func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runtime.Object) {
 	err := ci_utils.AddPortworxImageToDaemonSet(ds)
 	require.NoError(t, err)
 
@@ -161,6 +166,17 @@ func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet)
 	logrus.Infof("Waiting for portworx daemonset to be ready")
 	err = appops.Instance().ValidateDaemonSet(ds.Name, ds.Namespace, ci_utils.DefaultValidateDeployTimeout)
 	require.NoError(t, err)
+
+	if len(appSpecs) != 0 {
+		logrus.Infof("Create application workloads")
+		err = ci_utils.CreateObjects(appSpecs)
+		require.NoError(t, err)
+
+		logrus.Infof("Validate application workloads")
+		err = ci_utils.ValidateApplicationWorkload(appSpecs,
+			ci_utils.DefaultValidateApplicationTimeout, ci_utils.DefaultValidateApplicationRetryInterval)
+		require.NoError(t, err)
+	}
 
 	logrus.Infof("Restarting portworx operator to trigger migration")
 	restartPortworxOperator(t)
@@ -181,6 +197,19 @@ func testMigration(t *testing.T, objects []runtime.Object, ds *appsv1.DaemonSet)
 	err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster,
 		ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true)
 	require.NoError(t, err)
+
+	if len(appSpecs) != 0 {
+		logrus.Infof("Validate application workloads after migration")
+		err = ci_utils.ValidateApplicationWorkload(appSpecs,
+			ci_utils.DefaultValidateApplicationTimeout, ci_utils.DefaultValidateApplicationRetryInterval)
+		require.NoError(t, err)
+		logrus.Infof("Delete application workloads")
+		err = ci_utils.DeleteObjects(appSpecs)
+		require.NoError(t, err)
+		logrus.Infof("Validate application workloads are deleted")
+		err = ci_utils.ValidateObjectsAreTerminated(appSpecs, false)
+		require.NoError(t, err)
+	}
 
 	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 

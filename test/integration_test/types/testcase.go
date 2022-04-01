@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var testReporter *TestReporter
@@ -25,7 +27,8 @@ type TestCase struct {
 	ShouldSkip func(tc *TestCase) bool
 	// PureBackendRequirements contains additional information to construct a px-pure-secret.
 	PureBackendRequirements *PureBackendRequirements
-
+	// AppSpecs is the specs for application workload
+	AppSpecs func(*testing.T) []runtime.Object
 	// TODO: Add TestSetup and TestTearDown phase func when we have more cases
 }
 
@@ -46,6 +49,9 @@ func (tc *TestCase) RunTest(t *testing.T) {
 		TestReporterInstance().AddSkipCase(*tc)
 		fmt.Printf("--- SKIP: %s %s\n", tc.TestName, tc.TestrailCaseIDs)
 		return
+	}
+	if tc.AppSpecs == nil {
+		tc.AppSpecs = func(t *testing.T) []runtime.Object { return []runtime.Object{} }
 	}
 
 	// NOTE: Tests filtered out by name regex will be marked as passed as well

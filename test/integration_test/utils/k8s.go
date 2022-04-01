@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -73,6 +74,24 @@ func ParseSpecs(filename string) ([]runtime.Object, error) {
 	return specs, nil
 }
 
+// ParseApplicationSpecs parses the files from a directory and returns k8s objects
+func ParseApplicationSpecs(app string) ([]runtime.Object, error) {
+	var specs []runtime.Object
+	appPath := filepath.Join("testspec/apps", app)
+	err := filepath.Walk(appPath, func(path string, info os.FileInfo, err error) error {
+		if filepath.Ext(path) == ".yaml" {
+			fileName := filepath.Join("apps", app, filepath.Base(path))
+			objects, err := ParseSpecs(fileName)
+			if err != nil {
+				return err
+			}
+			specs = append(specs, objects...)
+		}
+		return nil
+	})
+	return specs, err
+}
+
 // CreateObjects creates the given k8s objects
 func CreateObjects(objects []runtime.Object) error {
 	for _, obj := range objects {
@@ -114,8 +133,26 @@ func CreateObjects(objects []runtime.Object) error {
 			_, err = prometheusops.Instance().CreatePrometheus(prom)
 		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
 			_, err = prometheusops.Instance().CreateAlertManager(am)
+		} else if pvc, ok := obj.(*v1.PersistentVolumeClaim); ok {
+			_, err = coreops.Instance().CreatePersistentVolumeClaim(pvc)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateApplicationWorkload checks application deployments and PVCs are healthy
+func ValidateApplicationWorkload(objects []runtime.Object, timeout, interval time.Duration) error {
+	for _, obj := range objects {
+		var err error
+		if dp, ok := obj.(*appsv1.Deployment); ok {
+			err = appops.Instance().ValidateDeployment(dp, timeout, interval)
+		} else if pvc, ok := obj.(*v1.PersistentVolumeClaim); ok {
+			err = coreops.Instance().ValidatePersistentVolumeClaim(pvc, timeout, interval)
 		}
 		if err != nil {
 			return err
@@ -163,6 +200,8 @@ func DeleteObjects(objects []runtime.Object) error {
 			err = prometheusops.Instance().DeletePrometheus(prom.Name, prom.Namespace)
 		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
 			err = prometheusops.Instance().DeleteAlertManager(am.Name, am.Namespace)
+		} else if pvc, ok := obj.(*v1.PersistentVolumeClaim); ok {
+			err = coreops.Instance().DeletePersistentVolumeClaim(pvc.Name, pvc.Namespace)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
 		}
@@ -220,6 +259,8 @@ func ValidateObjectsAreTerminated(objects []runtime.Object, skip bool) error {
 			err = validateObjectIsTerminated(k8sClient, prom.Name, prom.Namespace, prom, false)
 		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
 			err = validateObjectIsTerminated(k8sClient, am.Name, am.Namespace, am, false)
+		} else if pvc, ok := obj.(*v1.PersistentVolumeClaim); ok {
+			err = validateObjectIsTerminated(k8sClient, pvc.Name, pvc.Namespace, pvc, false)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
 		}
@@ -310,6 +351,8 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 	} else if specObj, ok := in.(*monitoringv1.Prometheus); ok {
 		return specObj, nil
 	} else if specObj, ok := in.(*monitoringv1.Alertmanager); ok {
+		return specObj, nil
+	} else if specObj, ok := in.(*v1.PersistentVolumeClaim); ok {
 		return specObj, nil
 	}
 	return nil, fmt.Errorf("unsupported object: %v", reflect.TypeOf(in))
