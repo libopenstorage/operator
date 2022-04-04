@@ -25,6 +25,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/mock"
 )
@@ -450,6 +451,7 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -604,6 +606,7 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -851,6 +854,7 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1009,6 +1013,7 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 
 	k8sClient := testutil.FakeK8sClient(ds)
 	ctrl := &storagecluster.Controller{}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	migrator := New(ctrl)
 
@@ -1098,6 +1103,7 @@ func TestStorageClusterWithAutoJournalAndOnPremStorage(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1203,6 +1209,7 @@ func TestStorageClusterWithAutoJournalAndCloudStorage(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1316,6 +1323,7 @@ func TestWhenStorageClusterIsAlreadyPresent(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1345,6 +1353,7 @@ func TestWhenPortworxDaemonsetIsNotPresent(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1477,6 +1486,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1599,6 +1609,7 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
@@ -1716,6 +1727,8 @@ func TestSuccessfulMigration(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockCtrl)
 	manifest.SetInstance(mockManifest)
@@ -1814,6 +1827,8 @@ func TestSuccessfulMigration(t *testing.T) {
 	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
+	require.Contains(t, <-recorder.Events, "Migration completed successfully")
+
 	cluster = &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
@@ -1874,6 +1889,7 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockCtrl)
 	manifest.SetInstance(mockManifest)
@@ -2361,6 +2377,7 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockCtrl)
 	manifest.SetInstance(mockManifest)
