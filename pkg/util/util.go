@@ -38,6 +38,8 @@ const (
 	ClusterOnlineReason = "ClusterOnline"
 	// MigrationPendingReason is added to an event when the migration is in pending state.
 	MigrationPendingReason = "MigrationPending"
+	// MigrationCompletedReason is added to an event when the migration is completed.
+	MigrationCompletedReason = "MigrationCompleted"
 )
 
 var (
