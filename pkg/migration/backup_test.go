@@ -21,6 +21,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"k8s.io/client-go/tools/record"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -122,6 +123,7 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
 	ctrl.SetKubernetesClient(k8sClient)
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
