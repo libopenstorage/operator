@@ -121,6 +121,26 @@ func (h *Handler) addObject(
 		return err
 	}
 
+	obj.SetGenerateName("")
+	obj.SetUID("")
+	obj.SetResourceVersion("")
+	obj.SetGeneration(0)
+	obj.SetSelfLink("")
+	obj.SetCreationTimestamp(metav1.Time{})
+	obj.SetFinalizers(nil)
+	obj.SetOwnerReferences(nil)
+	obj.SetClusterName("")
+	obj.SetManagedFields(nil)
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Kind == "Service" && gvk.GroupVersion().String() == "v1" {
+		if svc, ok := obj.(*v1.Service); ok && svc.Spec.ClusterIP != v1.ClusterIPNone {
+			svc.Spec.ClusterIP = ""
+			svc.Spec.ClusterIPs = nil
+			obj = svc.DeepCopy()
+		}
+	}
+
 	*objs = append(*objs, obj)
 
 	return nil

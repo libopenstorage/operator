@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
@@ -22,8 +23,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"k8s.io/client-go/tools/record"
-
-	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 func TestBackup(t *testing.T) {
@@ -35,8 +34,15 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "portworx",
-			Namespace: "portworx",
+			Name:            "portworx",
+			Namespace:       "portworx",
+			UID:             types.UID("1001"),
+			ResourceVersion: "100",
+			SelfLink:        "portworx/portworx",
+			Finalizers:      []string{"finalizer"},
+			OwnerReferences: []metav1.OwnerReference{{Name: "owner"}},
+			ClusterName:     "cluster-name",
+			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "manager"}},
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: v1.PodTemplateSpec{
@@ -56,6 +62,16 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 					},
 				},
 			},
+		},
+	}
+	portworxService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxServiceName,
+			Namespace: ds.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP:  "1.2.3.4",
+			ClusterIPs: []string{"1.2.3.4"},
 		},
 	}
 	storkDeployment := &appsv1.Deployment{
@@ -85,16 +101,25 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Image: "autopilogImage",
+							Image: "autopilotImage",
 						},
 					},
 				},
 			},
 		},
 	}
+	csiService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      csiServiceName,
+			Namespace: ds.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: v1.ClusterIPNone,
+		},
+	}
 
 	k8sClient := testutil.FakeK8sClient(
-		ds, storkDeployment, autopilotDeployment,
+		ds, portworxService, storkDeployment, autopilotDeployment, csiService,
 	)
 
 	if backupExits {
@@ -160,6 +185,16 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 				require.Nil(t, cm.Data)
 			} else {
 				require.NotNil(t, cm.Data)
+				require.NotContains(t, cm.Data["backup"], "uid")
+				require.NotContains(t, cm.Data["backup"], "resourceVersion")
+				require.NotContains(t, cm.Data["backup"], "generat")
+				require.NotContains(t, cm.Data["backup"], "selfLink")
+				require.NotContains(t, cm.Data["backup"], "finalizers")
+				require.NotContains(t, cm.Data["backup"], "ownerReferences")
+				require.NotContains(t, cm.Data["backup"], "clusterName")
+				require.NotContains(t, cm.Data["backup"], "managedFields")
+				require.NotContains(t, cm.Data["backup"], "clusterIP: 1.2.3.4")
+				require.NotContains(t, cm.Data["backup"], "clusterIPs")
 			}
 		} else if errors.IsNotFound(err) {
 			return false, nil
@@ -172,6 +207,16 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 		if err == nil {
 			// The configmap should be overwritten to non-empty if it precreated.
 			require.NotNil(t, cm.Data)
+			require.NotContains(t, cm.Data["backup"], "uid")
+			require.NotContains(t, cm.Data["backup"], "resourceVersion")
+			require.NotContains(t, cm.Data["backup"], "generat")
+			require.NotContains(t, cm.Data["backup"], "selfLink")
+			require.NotContains(t, cm.Data["backup"], "finalizers")
+			require.NotContains(t, cm.Data["backup"], "ownerReferences")
+			require.NotContains(t, cm.Data["backup"], "clusterName")
+			require.NotContains(t, cm.Data["backup"], "managedFields")
+			require.NotContains(t, cm.Data["backup"], "clusterIP: 1.2.3.4")
+			require.NotContains(t, cm.Data["backup"], "clusterIPs")
 			return true, nil
 		} else if errors.IsNotFound(err) {
 			return false, nil
