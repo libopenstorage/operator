@@ -883,6 +883,8 @@ func getStorkSchedDeploymentSpec(
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
 	replicas := int32(3)
+	maxUnavailable := intstr.FromInt(1)
+	maxSurge := intstr.FromInt(1)
 
 	deployment := &apps.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -893,6 +895,13 @@ func getStorkSchedDeploymentSpec(
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,
+			Strategy: apps.DeploymentStrategy{
+				Type: apps.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &apps.RollingUpdateDeployment{
+					MaxSurge:       &maxSurge,
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: storkSchedulerDeploymentLabels,
 			},
