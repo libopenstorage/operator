@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8-minimal:8.5-230.1645809059
+FROM registry.access.redhat.com/ubi8-minimal:8.5-240.1648458092
 
 RUN microdnf --enablerepo=rhel-7-server-rpms \
 -y update-minimal --security --sec-severity=Important --sec-severity=Critical;\
