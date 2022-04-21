@@ -5,17 +5,16 @@
 package mock
 
 import (
-	"reflect"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-	"github.com/libopenstorage/openstorage/api"
-	v10 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/libopenstorage/operator/drivers/storage"
+	gomock "github.com/golang/mock/gomock"
+	api "github.com/libopenstorage/openstorage/api"
+	storage "github.com/libopenstorage/operator/drivers/storage"
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	v10 "k8s.io/api/core/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
+	record "k8s.io/client-go/tools/record"
+	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MockDriver is a mock of Driver interface.

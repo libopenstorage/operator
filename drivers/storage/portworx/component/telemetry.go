@@ -336,7 +336,7 @@ func (t *telemetry) createCollectorDeployment(
 	}
 
 	modified := false
-	if equal, _ := util.DeploymentDeepEqual(deployment, existingDeployment); !equal {
+	if equal, _ := util.DeepEqualDeployment(deployment, existingDeployment); !equal {
 		modified = true
 	}
 

@@ -232,10 +232,12 @@ func (p *portworx) GetStoragePodSpec(
 		t.cluster.Status.DesiredImages = &corev1.ComponentImages{}
 	}
 
-	if node, err := p.getNodeByName(nodeName); err != nil {
-		logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
-	} else {
-		t.setOSImage(node.Status.NodeInfo.OSImage)
+	if nodeName != "" {
+		if node, err := p.getNodeByName(nodeName); err != nil {
+			logrus.WithError(err).Warnf("Could not get OSImage for node %s", nodeName)
+		} else {
+			t.setOSImage(node.Status.NodeInfo.OSImage)
+		}
 	}
 
 	if cluster.Spec.CloudStorage != nil && len(cluster.Spec.CloudStorage.CapacitySpecs) > 0 {
@@ -249,7 +251,7 @@ func (p *portworx) GetStoragePodSpec(
 			return v1.PodSpec{}, err
 		}
 
-		if !storageNodeExists(nodeName, nodes) {
+		if nodeName != "" && !storageNodeExists(nodeName, nodes) {
 			err = p.createStorageNode(cluster, nodeName, cloudConfig)
 			if err != nil {
 				msg := fmt.Sprintf("Failed to create node for nodeID %v: %v", nodeName, err)

@@ -40,6 +40,11 @@ const (
 	MigrationPendingReason = "MigrationPending"
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
+
+	// DryRunCompletedReason is added to an event when dry run is completed
+	DryRunCompletedReason = "DryRunCompleted"
+	// DryRunFailedReason is aded to an event when dry run fails.
+	DryRunFailedReason = "DryRunFailed"
 )
 
 var (
@@ -169,8 +174,55 @@ func HaveTolerationsChanged(
 	return !reflect.DeepEqual(cluster.Spec.Placement.Tolerations, existingTolerations)
 }
 
-// DeploymentDeepEqual compares if two deployments are same.
-func DeploymentDeepEqual(d1 *appsv1.Deployment, d2 *appsv1.Deployment) (bool, error) {
+// DeepEqualObject compare two objects
+func DeepEqualObject(obj1, obj2 interface{}) error {
+	if !reflect.DeepEqual(obj1, obj2) {
+		return fmt.Errorf("two objects are different, first object %+v, second object %+v", obj1, obj2)
+	}
+	return nil
+}
+
+// DeepEqualObjects compares two arrays of objects
+func DeepEqualObjects(
+	objs1, objs2 []interface{},
+	funcGetKey func(obj interface{}) string,
+	funcDeepEqualObject func(obj1, obj2 interface{}) error) error {
+
+	map1 := make(map[string]interface{})
+	map2 := make(map[string]interface{})
+	for _, obj := range objs1 {
+		map1[funcGetKey(obj)] = obj
+	}
+	for _, obj := range objs2 {
+		map2[funcGetKey(obj)] = obj
+	}
+
+	var msg string
+	for k, v := range map1 {
+		v2, ok := map2[k]
+
+		if !ok {
+			msg += fmt.Sprintf("object \"%s\" exists in first array but does not exist in second array, %+v.\n", k, v)
+		} else if err := funcDeepEqualObject(v, v2); err != nil {
+			msg += err.Error()
+			msg += "\n"
+		}
+	}
+
+	for k, v := range map2 {
+		if _, ok := map1[k]; !ok {
+			msg += fmt.Sprintf("object \"%s\" exists in second array but does not exist in first array, %+v.\n", k, v)
+		}
+	}
+
+	if msg != "" {
+		return fmt.Errorf(msg)
+	}
+	return nil
+}
+
+// DeepEqualDeployment compares if two deployments are same.
+func DeepEqualDeployment(d1 *appsv1.Deployment, d2 *appsv1.Deployment) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
 	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
 	if !equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) {
