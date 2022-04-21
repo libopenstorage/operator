@@ -1,15 +1,15 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v2.0.0
+  name: portworx-operator.v1.9.0
   namespace: placeholder
   annotations:
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: portworx/px-operator:master
+    containerImage: portworx/px-operator:1.9.0-dev
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2022-01-01T08:00:00Z
+    createdAt: 2022-04-21T08:00:00Z
     support: Portworx, Inc
     certified: "true"
     operatorframework.io/initialization-resource: |-
@@ -49,7 +49,7 @@ metadata:
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 2.0.0
+  version: 1.9.0
   minKubeVersion: "1.12.0"
   maturity: stable
   replaces: portworx-operator.v1.8.0
@@ -214,7 +214,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: portworx/px-operator:master
+                image: portworx/px-operator:1.9.0-dev
                 imagePullPolicy: Always
                 command:
                 - /operator
@@ -403,6 +403,11 @@ spec:
       - description: KVDB configuration
         displayName: KVDB configuration
         path: kvdb
+        x-descriptors:
+        - 'urn:alm:descriptor:com.tectonic.ui:hidden'
+      - description: Resources configuration
+        displayName: Resources configuration
+        path: resources
         x-descriptors:
         - 'urn:alm:descriptor:com.tectonic.ui:hidden'
       - description: Autopilot configuration
