@@ -195,7 +195,7 @@ verify-bundle-dir:
 		-v $(BASE_DIR)/deploy:/deploy \
 		python:3 bash -c "pip3 install operator-courier==2.1.11 && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
 
-bundle: clean-bundle build-bundle deploy-bundle validate-bundle
+bundle: clean-bundle build-bundle deploy-bundle #validate-bundle
 
 build-bundle:
 	@rm -rf $(RELEASE_BUNDLE_DIR)/manifests $(RELEASE_BUNDLE_DIR)/metadata $(RELEASE_BUNDLE_DIR)/bundle.Dockerfile
