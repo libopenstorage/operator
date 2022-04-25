@@ -102,7 +102,7 @@ $(GOPATH)/bin/errcheck:
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
 
 $(GOPATH)/bin/staticcheck:
-	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
+	go get -u honnef.co/go/tools/cmd/staticcheck
 
 $(GOPATH)/bin/revive:
 	GO111MODULE=off go get -u github.com/mgechev/revive
