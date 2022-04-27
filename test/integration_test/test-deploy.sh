@@ -11,6 +11,11 @@ short_test=false
 portworx_docker_username=""
 portworx_docker_password=""
 portworx_image_override=""
+cloud_provider=""
+is_ocp=false
+portworx_volumes=""
+portworx_kvdb=""
+portworx_env_vars=""
 log_level="debug"
 for i in "$@"
 do
@@ -57,6 +62,36 @@ case $i in
         shift
         shift
         ;;
+    --cloud-provider)
+        echo "Flag for cloud provider type: $2"
+        cloud_provider=$2
+        shift
+        shift
+        ;;
+    --is-ocp)
+        echo "Flag for OCP: $2"
+        is_ocp=$2
+        shift
+        shift
+        ;;
+    --portworx-volumes)
+        echo "Flag for Portworx volumes: $2"
+        portworx_volumes=$2
+        shift
+        shift
+        ;;
+    --portworx-kvdb)
+        echo "Flag for Portworx KVDB device: $2"
+        portworx_kvdb=$2
+        shift
+        shift
+        ;;
+    --portworx-env-vars)
+        echo "Flag for Portworx ENV vars: $2"
+        portworx_env_vars=$2
+        shift
+        shift
+        ;;
     --short-test)
         echo "Skip tests that are long/not supported: $2"
         short_test=$2
@@ -90,6 +125,46 @@ else
 fi
 
 sed -i 's|'SHORT_FLAG'|'"$short_test"'|g' $test_pod_spec
+
+# Cloud provider
+if [ "$cloud_provider" != "" ]; then
+	echo "Cloud provider: $cloud_provider"
+	sed -i 's|'CLOUD_PROVIDER'|'"$cloud_provider"'|g' $test_pod_spec
+else
+	sed -i 's|'CLOUD_PROVIDER'|''|g' $test_pod_spec
+fi
+
+# Portworx Volumes
+if [ "$portworx_volumes" != "" ]; then
+    echo "Portworx volumes: $portworx_volumes"
+    sed -i 's|'PORTWORX_VOLUMES'|'"$portworx_volumes"'|g' $test_pod_spec
+else
+    sed -i 's|'PORTWORX_VOLUMES'|''|g' $test_pod_spec
+fi
+
+# Portworx KVDB
+if [ "$portworx_kvdb" != "" ]; then
+    echo "Portworx KVDB: $portworx_kvdb"
+    sed -i 's|'PORTWORX_KVDB'|'"$portworx_kvdb"'|g' $test_pod_spec
+else
+    sed -i 's|'PORTWORX_KVDB'|''|g' $test_pod_spec
+fi
+
+# Portworx ENV vars
+if [ "$portworx_env_vars" != "" ]; then
+    echo "Portworx ENV vars: $portworx_env_vars"
+    sed -i 's|'PORTWORX_ENV_VARS'|'"$portworx_env_vars"'|g' $test_pod_spec
+else
+    sed -i 's|'PORTWORX_ENV_VARS'|''|g' $test_pod_spec
+fi
+
+# Set OCP
+if [ "$is_ocp" != "" ]; then
+	echo "This is OCP cluster: $is_ocp"
+	sed -i 's|'IS_OCP'|'"$is_ocp"'|g' $test_pod_spec
+else
+	sed -i 's|'IS_OCP'|''|g' $test_pod_spec
+fi
 
 # Set Portworx Spec Generator URL
 if [ "$portworx_spec_gen_url" == "" ]; then

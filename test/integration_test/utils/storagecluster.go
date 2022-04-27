@@ -2,6 +2,7 @@ package utils
 
 import (
 	"path"
+	"strings"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -37,11 +38,52 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 	if cluster.Namespace == "" {
 		cluster.Namespace = PxNamespace
 	}
+
+	// Add OCP annotation
+	if IsOcp {
+		if cluster.Annotations == nil {
+			annotations := make(map[string]string)
+			annotations["portworx.io/is-openshift"] = "true"
+			cluster.Annotations = annotations
+		} else {
+			cluster.Annotations["portworx.io/is-openshift"] = "true"
+		}
+	}
+
+	// Populate cloud storage
+	if len(PxVolumes) != 0 {
+		pxVolumes := strings.Split(PxVolumes, ";")
+		cloudCommon := corev1.CloudStorageCommon{
+			DeviceSpecs:    &pxVolumes,
+			KvdbDeviceSpec: &PxKvdb,
+		}
+		cloudProvider := &CloudProvider
+		cloudStorage := &corev1.CloudStorageSpec{
+			Provider:           cloudProvider,
+			CloudStorageCommon: cloudCommon,
+		}
+
+		cluster.Spec.CloudStorage = cloudStorage
+	}
+
+	// Populate default ENV vars
+	var envVarList []v1.EnvVar
 	env, err := addDefaultEnvVars(cluster.Spec.Env, specGenURL)
 	if err != nil {
 		return err
 	}
-	cluster.Spec.Env = env
+	envVarList = append(envVarList, env...)
+
+	// Populate extra ENV vars, if any were passed
+	if len(PxEnvVars) != 0 {
+		vars := strings.Split(PxEnvVars, ",")
+		for _, v := range vars {
+			keyvalue := strings.Split(v, "=")
+			envVarList = append(envVarList, v1.EnvVar{Name: keyvalue[0], Value: keyvalue[1]})
+		}
+	}
+	cluster.Spec.Env = envVarList
+
 	return nil
 }
 

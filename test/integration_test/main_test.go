@@ -51,6 +51,26 @@ func setup() error {
 		"upgrade-hops-url-list",
 		"",
 		"List of Portworx Spec Generator URLs separated by commas used for upgrade hops")
+	flag.StringVar(&ci_utils.CloudProvider,
+		"cloud-provider",
+		"",
+		"Type of cloud provider")
+	flag.StringVar(&ci_utils.PxEnvVars,
+		"portworx-env-vars",
+		"",
+		"List of comma separated environment variables that will be added to StorageCluster spec")
+	flag.StringVar(&ci_utils.PxVolumes,
+		"portworx-volumes",
+		"",
+		"List of comma separated PX volumes")
+	flag.StringVar(&ci_utils.PxKvdb,
+		"portworx-kvdb",
+		"",
+		"PX KVDB device string")
+	flag.BoolVar(&ci_utils.IsOcp,
+		"is-ocp",
+		false,
+		"Is this OpenShift")
 	flag.StringVar(&logLevel,
 		"log-level",
 		"",
