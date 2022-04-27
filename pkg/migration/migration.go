@@ -93,7 +93,7 @@ func (h *Handler) Start() {
 
 		err = h.dryRun(cluster, pxDaemonSet)
 		if err != nil {
-			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.DryRunFailedReason,
+			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationDryRunFailedReason,
 				fmt.Sprintf("Dry-run failed: %v", err))
 			return false, nil
 		}

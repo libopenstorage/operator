@@ -41,10 +41,10 @@ const (
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
 
-	// DryRunCompletedReason is added to an event when dry run is completed
-	DryRunCompletedReason = "DryRunCompleted"
-	// DryRunFailedReason is aded to an event when dry run fails.
-	DryRunFailedReason = "DryRunFailed"
+	// MigrationDryRunCompletedReason is added to an event when dry run is completed
+	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
+	// MigrationDryRunFailedReason is aded to an event when dry run fails.
+	MigrationDryRunFailedReason = "MigrationDryRunFailed"
 )
 
 var (

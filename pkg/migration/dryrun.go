@@ -32,11 +32,11 @@ func (h *Handler) dryRun(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) e
 	// We don't block migration if difference is found in spec. Instead
 	// raise an event and let user review before approving migration.
 	if err := h.validateSpec(cluster, ds); err != nil {
-		k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.DryRunFailedReason,
+		k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationDryRunFailedReason,
 			fmt.Sprintf("Spec validation failed: %v", err))
 	} else {
-		k8sutil.InfoEvent(h.ctrl.GetEventRecorder(), cluster, util.DryRunCompletedReason,
-			"Spec validation completed successfully")
+		k8sutil.InfoEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationDryRunCompletedReason,
+			"Dry run completed successfully")
 	}
 
 	return nil
@@ -185,8 +185,79 @@ func (h *Handler) deepEqualContainer(obj1, obj2 interface{}) error {
 		msg += fmt.Sprintf("args is different: %s, %s\n", t1.Args, t2.Args)
 	}
 
+	err := h.deepEqualEnvVars(c1.Env, c2.Env)
+	if err != nil {
+		msg += fmt.Sprintf("env vars is different, %v\n", err)
+	}
+
+	err = h.deepEqualVolumeMounts(c1.VolumeMounts, c2.VolumeMounts)
+	if err != nil {
+		msg += fmt.Sprintf("VolumeMounts is different, %v\n", err)
+	}
+
 	if msg != "" {
 		return fmt.Errorf(msg)
 	}
 	return nil
+}
+
+func (h *Handler) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
+	getName := func(v interface{}) string {
+		return v.(v1.EnvVar).Name
+	}
+	getList := func(arr []v1.EnvVar) []interface{} {
+		var objs []interface{}
+		skippedEnvs := []string{
+			"PX_TEMPLATE_VERSION",
+			"PORTWORX_CSIVERSION",
+			"CSI_ENDPOINT",
+			"NODE_NAME",
+			"PX_NAMESPACE",
+			"PX_SECRETS_NAMESPACE",
+		}
+		for _, obj := range arr {
+			shouldSkip := false
+			for _, env := range skippedEnvs {
+				if obj.Name == env {
+					shouldSkip = true
+					break
+				}
+			}
+			if !shouldSkip {
+				objs = append(objs, obj)
+			}
+		}
+		return objs
+	}
+
+	return util.DeepEqualObjects(
+		getList(env1),
+		getList(env2),
+		getName,
+		util.DeepEqualObject)
+}
+
+func (h *Handler) deepEqualVolumeMounts(l1, l2 []v1.VolumeMount) error {
+	getName := func(v interface{}) string {
+		return v.(v1.VolumeMount).MountPath
+	}
+	getList := func(arr []v1.VolumeMount) []interface{} {
+		var objs []interface{}
+		for _, obj := range arr {
+			// "crioconf" only exists with operator install.
+			// "dev" only exists with daemonset install.
+			if obj.Name == "crioconf" || obj.Name == "dev" {
+				continue
+			}
+			obj.Name = ""
+			objs = append(objs, obj)
+		}
+		return objs
+	}
+
+	return util.DeepEqualObjects(
+		getList(l1),
+		getList(l2),
+		getName,
+		util.DeepEqualObject)
 }

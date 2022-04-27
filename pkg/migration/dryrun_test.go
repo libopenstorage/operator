@@ -12,7 +12,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -30,15 +29,9 @@ func TestDryRun(t *testing.T) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "portworx",
-			Namespace:       "portworx",
-			UID:             types.UID("1001"),
-			ResourceVersion: "100",
-			SelfLink:        "portworx/portworx",
-			Finalizers:      []string{"finalizer"},
-			OwnerReferences: []metav1.OwnerReference{{Name: "owner"}},
-			ClusterName:     "cluster-name",
-			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "manager"}},
+			Name:        "portworx",
+			Namespace:   "portworx",
+			ClusterName: "cluster-name",
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: v1.PodTemplateSpec{
