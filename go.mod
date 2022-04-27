@@ -19,7 +19,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
-	golang.org/x/exp/typeparams v0.0.0-20220414153411-bcd21879b8fd // indirect
+	golang.org/x/exp/typeparams v0.0.0-20220426173459-3bcf042a4bf5 // indirect
 	golang.org/x/sys v0.0.0-20220422013727-9388b58f7150 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/grpc v1.36.0
