@@ -207,25 +207,19 @@ func (h *Handler) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
 	}
 	getList := func(arr []v1.EnvVar) []interface{} {
 		var objs []interface{}
-		skippedEnvs := []string{
-			"PX_TEMPLATE_VERSION",
-			"PORTWORX_CSIVERSION",
-			"CSI_ENDPOINT",
-			"NODE_NAME",
-			"PX_NAMESPACE",
-			"PX_SECRETS_NAMESPACE",
+		skippedEnvs := map[string]bool{
+			"PX_TEMPLATE_VERSION":  true,
+			"PORTWORX_CSIVERSION":  true,
+			"CSI_ENDPOINT":         true,
+			"NODE_NAME":            true,
+			"PX_NAMESPACE":         true,
+			"PX_SECRETS_NAMESPACE": true,
 		}
 		for _, obj := range arr {
-			shouldSkip := false
-			for _, env := range skippedEnvs {
-				if obj.Name == env {
-					shouldSkip = true
-					break
-				}
+			if skippedEnvs[obj.Name] {
+				continue
 			}
-			if !shouldSkip {
-				objs = append(objs, obj)
-			}
+			objs = append(objs, obj)
 		}
 		return objs
 	}
