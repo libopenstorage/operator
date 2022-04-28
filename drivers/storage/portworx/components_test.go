@@ -22,6 +22,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	ocp_secv1 "github.com/openshift/api/security/v1"
+
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -11624,6 +11626,41 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestSecurityContextConstraints(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+}
+
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -12452,6 +12489,7 @@ func reregisterComponents() {
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
 	component.RegisterPxRepoComponent()
+	component.RegisterSCCComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}

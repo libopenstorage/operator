@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -461,7 +462,7 @@ func (u *uninstallPortworx) createClusterRole() error {
 				{
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{"privileged"},
+					ResourceNames: []string{component.PxSCCName},
 					Verbs:         []string{"use"},
 				},
 				{
