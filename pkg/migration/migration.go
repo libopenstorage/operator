@@ -8,12 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libopenstorage/operator/drivers/storage"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -27,6 +21,13 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/operator/drivers/storage"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -87,6 +88,13 @@ func (h *Handler) Start() {
 		err = h.backup(CollectionConfigMapName, cluster.Namespace, true)
 		if err != nil {
 			logrus.Errorf("Failed to collect daemonset components. %v", err)
+			return false, nil
+		}
+
+		err = h.dryRun(cluster, pxDaemonSet)
+		if err != nil {
+			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationDryRunFailedReason,
+				fmt.Sprintf("Dry-run failed: %v", err))
 			return false, nil
 		}
 

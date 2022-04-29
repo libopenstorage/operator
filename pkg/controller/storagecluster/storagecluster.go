@@ -950,7 +950,7 @@ func (c *Controller) createPodTemplateForNodeGroup(
 	hash string,
 ) error {
 	for _, node := range nodeGroup {
-		podTemplate, err := c.createPodTemplate(cluster, node, hash)
+		podTemplate, err := c.CreatePodTemplate(cluster, node, hash)
 		if err != nil {
 			return err
 		}
@@ -1053,7 +1053,8 @@ func (c *Controller) nodeShouldRunStoragePod(
 	return k8s.CheckPredicatesForStoragePod(node, cluster, c.StorageClusterSelectorLabels(cluster))
 }
 
-func (c *Controller) createPodTemplate(
+// CreatePodTemplate creates a Portworx pod template spec.
+func (c *Controller) CreatePodTemplate(
 	cluster *corev1.StorageCluster,
 	node *v1.Node,
 	hash string,
