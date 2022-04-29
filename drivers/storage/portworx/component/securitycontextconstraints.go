@@ -51,6 +51,10 @@ func (s *scc) IsPausedForMigration(cluster *opcorev1.StorageCluster) bool {
 }
 
 func (s *scc) IsEnabled(cluster *opcorev1.StorageCluster) bool {
+	return s.crdExists(cluster)
+}
+
+func (s *scc) crdExists(cluster *opcorev1.StorageCluster) bool {
 	crd := &apiextensionsv1.CustomResourceDefinition{}
 	err := s.k8sClient.Get(
 		context.TODO(),
@@ -92,6 +96,11 @@ func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 }
 
 func (s *scc) Delete(cluster *opcorev1.StorageCluster) error {
+	// Do not try to delete it if CRD does not exist, otherwise portworx would raise a cleanup failure warning.
+	if !s.crdExists(cluster) {
+		return nil
+	}
+
 	// Do not delete SCC during uninstallation, as it may be required by node wiper.
 	// It will be deleted when storage cluster is deleted as there is owner reference.
 	if cluster.DeletionTimestamp != nil &&
@@ -146,14 +155,8 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
 			},
 			Volumes: []ocp_secv1.FSType{"*"},
-			Groups: []string{
-				"system:cluster-admins",
-				"system:nodes",
-				"system:masters",
-			},
+			Groups:  nil,
 			Users: []string{
-				"system:admin",
-				"system:serviceaccount:openshift-infra:build-controller",
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
 			},
 		},
