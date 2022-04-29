@@ -18,6 +18,7 @@ import (
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	opcorev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -41,6 +42,8 @@ func (s *scc) Priority() int32 {
 
 func (s *scc) Initialize(k8sClient client.Client, k8sVersion version.Version, scheme *runtime.Scheme, recorder record.EventRecorder) {
 	s.k8sClient = k8sClient
+	ocp_secv1.Install(s.k8sClient.Scheme())
+	apiextensionsv1.AddToScheme(s.k8sClient.Scheme())
 }
 
 func (s *scc) IsPausedForMigration(cluster *opcorev1.StorageCluster) bool {
@@ -48,29 +51,40 @@ func (s *scc) IsPausedForMigration(cluster *opcorev1.StorageCluster) bool {
 }
 
 func (s *scc) IsEnabled(cluster *opcorev1.StorageCluster) bool {
-	ocp_secv1.Install(s.k8sClient.Scheme())
-	apiextensionsv1.AddToScheme(s.k8sClient.Scheme())
-	list := &ocp_secv1.SecurityContextConstraintsList{}
-	err := s.k8sClient.List(
+	crd := &apiextensionsv1.CustomResourceDefinition{}
+	err := s.k8sClient.Get(
 		context.TODO(),
-		list,
+		types.NamespacedName{
+			Name: "securitycontextconstraints.security.openshift.io",
+		},
+		crd,
 	)
-	if err == nil {
-		logrus.Debugf("security context constraints is enabled")
-	} else {
-		logrus.Debugf("security context constraints is disabled, %v", err)
-	}
 
-	return err == nil
+	if err == nil {
+		return true
+	} else if errors.IsNotFound(err) {
+		return false
+	} else {
+		logrus.WithError(err).Error("failed to get CRD SecurityContextConstraints")
+		return false
+	}
 }
 
 func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
-	for _, scc := range s.getSCCs(cluster.Namespace) {
-		ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-		scc.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
+	// Note SCC does not belong to namespace hence we don't set owner reference to StorageCluster.
+	// By design cross-namespace owner reference is invalid.
+	for _, scc := range s.getSCCs(cluster) {
+		err := s.k8sClient.Get(context.TODO(),
+			types.NamespacedName{
+				Name: scc.Name,
+			},
+			&ocp_secv1.SecurityContextConstraints{})
 
-		err := s.k8sClient.Create(context.TODO(), &scc)
-		if err != nil && !errors.IsAlreadyExists(err) {
+		if errors.IsNotFound(err) {
+			err = s.k8sClient.Create(context.TODO(), &scc)
+		}
+
+		if err != nil {
 			return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
 		}
 	}
@@ -78,10 +92,19 @@ func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 }
 
 func (s *scc) Delete(cluster *opcorev1.StorageCluster) error {
+	// Do not delete SCC during uninstallation, as it may be required by node wiper.
+	// It will be deleted when storage cluster is deleted as there is owner reference.
 	if cluster.DeletionTimestamp != nil &&
 		cluster.Spec.DeleteStrategy != nil &&
 		cluster.Spec.DeleteStrategy.Type != "" {
 		return nil
+	}
+
+	for _, scc := range s.getSCCs(cluster) {
+		err := s.k8sClient.Delete(context.TODO(), &scc)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
 	}
 
 	return nil
@@ -90,7 +113,7 @@ func (s *scc) Delete(cluster *opcorev1.StorageCluster) error {
 func (s *scc) MarkDeleted() {
 }
 
-func (s *scc) getSCCs(namespace string) []ocp_secv1.SecurityContextConstraints {
+func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityContextConstraints {
 	return []ocp_secv1.SecurityContextConstraints{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -131,7 +154,7 @@ func (s *scc) getSCCs(namespace string) []ocp_secv1.SecurityContextConstraints {
 			Users: []string{
 				"system:admin",
 				"system:serviceaccount:openshift-infra:build-controller",
-				fmt.Sprintf("system:serviceaccount:%s:%s", namespace, PxSCCName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
 			},
 		},
 	}

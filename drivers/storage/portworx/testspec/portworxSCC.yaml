@@ -21,12 +21,6 @@ kind: SecurityContextConstraints
 metadata:
   name: portworx
   resourceVersion: "1"
-  ownerReferences:
-    - apiVersion: core.libopenstorage.org/v1
-      blockOwnerDeletion: true
-      controller: true
-      kind: StorageCluster
-      name: px-cluster
 priority: 2
 readOnlyRootFilesystem: false
 requiredDropCapabilities: null

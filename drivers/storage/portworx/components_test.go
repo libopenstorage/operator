@@ -11626,7 +11626,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestSecurityContextConstraints(t *testing.T) {
+func TestSCC(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -11642,6 +11642,7 @@ func TestSecurityContextConstraints(t *testing.T) {
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	driver.SetDefaultsOnStorageCluster(cluster)
 
+	// Install with no SCC
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -11650,6 +11651,7 @@ func TestSecurityContextConstraints(t *testing.T) {
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
 	require.NotNil(t, err)
 
+	// Install with SCC enabled
 	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
 	err = k8sClient.Create(context.TODO(), crd)
 	require.NoError(t, err)
@@ -11659,6 +11661,16 @@ func TestSecurityContextConstraints(t *testing.T) {
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSCC, scc)
+
+	// Change SCC from enabled to disabled
+	err = k8sClient.Delete(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
