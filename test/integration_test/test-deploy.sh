@@ -13,8 +13,8 @@ portworx_docker_password=""
 portworx_image_override=""
 cloud_provider=""
 is_ocp=false
-portworx_volumes=""
-portworx_kvdb=""
+portworx_device_specs=""
+portworx_kvdb_spec=""
 portworx_env_vars=""
 log_level="debug"
 for i in "$@"
@@ -74,15 +74,15 @@ case $i in
         shift
         shift
         ;;
-    --portworx-volumes)
-        echo "Flag for Portworx volumes: $2"
-        portworx_volumes=$2
+    --portworx-device-specs)
+        echo "Flag for Portworx device specs: $2"
+        portworx_device_specs=$2
         shift
         shift
         ;;
-    --portworx-kvdb)
-        echo "Flag for Portworx KVDB device: $2"
-        portworx_kvdb=$2
+    --portworx-kvdb-spec)
+        echo "Flag for Portworx KVDB device spec: $2"
+        portworx_kvdb_spec=$2
         shift
         shift
         ;;
@@ -134,20 +134,20 @@ else
 	sed -i 's|'CLOUD_PROVIDER'|''|g' $test_pod_spec
 fi
 
-# Portworx Volumes
-if [ "$portworx_volumes" != "" ]; then
-    echo "Portworx volumes: $portworx_volumes"
-    sed -i 's|'PORTWORX_VOLUMES'|'"$portworx_volumes"'|g' $test_pod_spec
+# Portworx device specs
+if [ "$portworx_device_specs" != "" ]; then
+    echo "Portworx volumes: $portworx_device_specs"
+    sed -i 's|'PORTWORX_DEVICE_SPECS'|'"$portworx_device_specs"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_VOLUMES'|''|g' $test_pod_spec
+    sed -i 's|'PORTWORX_DEVICE_SPECS'|''|g' $test_pod_spec
 fi
 
-# Portworx KVDB
-if [ "$portworx_kvdb" != "" ]; then
-    echo "Portworx KVDB: $portworx_kvdb"
-    sed -i 's|'PORTWORX_KVDB'|'"$portworx_kvdb"'|g' $test_pod_spec
+# Portworx KVDB device spec
+if [ "$portworx_kvdb_spec" != "" ]; then
+    echo "Portworx KVDB: $portworx_kvdb_spec"
+    sed -i 's|'PORTWORX_KVDB_SPEC'|'"$portworx_kvdb_spec"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_KVDB'|''|g' $test_pod_spec
+    sed -i 's|'PORTWORX_KVDB_SPEC'|''|g' $test_pod_spec
 fi
 
 # Portworx ENV vars

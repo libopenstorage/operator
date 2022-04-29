@@ -29,11 +29,11 @@ var (
 	// PxOperatorVersion is the version of installed px operator found
 	PxOperatorVersion *version.Version
 
-	// PxVolume is a list of comma separated volumes
-	PxVolumes string
+	// PxDeviceSpecs is a list of `;` separated Portworx device specs
+	PxDeviceSpecs string
 
-	// PxKvdb is a KVDB device
-	PxKvdb string
+	// PxKvdbSpec is a Portworx KVDB device spec
+	PxKvdbSpec string
 
 	// PxEnvVars is a string of comma separated ENV vars
 	PxEnvVars string

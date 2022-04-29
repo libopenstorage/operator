@@ -59,14 +59,14 @@ func setup() error {
 		"portworx-env-vars",
 		"",
 		"List of comma separated environment variables that will be added to StorageCluster spec")
-	flag.StringVar(&ci_utils.PxVolumes,
-		"portworx-volumes",
+	flag.StringVar(&ci_utils.PxDeviceSpecs,
+		"portworx-device-specs",
 		"",
-		"List of comma separated PX volumes")
-	flag.StringVar(&ci_utils.PxKvdb,
-		"portworx-kvdb",
+		"List of `;` separated PX device specs")
+	flag.StringVar(&ci_utils.PxKvdbSpec,
+		"portworx-kvdb-spec",
 		"",
-		"PX KVDB device string")
+		"PX KVDB device spec")
 	flag.BoolVar(&ci_utils.IsOcp,
 		"is-ocp",
 		false,

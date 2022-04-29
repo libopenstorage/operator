@@ -42,20 +42,17 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 	// Add OCP annotation
 	if IsOcp {
 		if cluster.Annotations == nil {
-			annotations := make(map[string]string)
-			annotations["portworx.io/is-openshift"] = "true"
-			cluster.Annotations = annotations
-		} else {
-			cluster.Annotations["portworx.io/is-openshift"] = "true"
+			cluster.Annotations = make(map[string]string)
 		}
+		cluster.Annotations["portworx.io/is-openshift"] = "true"
 	}
 
 	// Populate cloud storage
-	if len(PxVolumes) != 0 {
-		pxVolumes := strings.Split(PxVolumes, ";")
+	if len(PxDeviceSpecs) != 0 {
+		pxDeviceSpecs := strings.Split(PxDeviceSpecs, ";")
 		cloudCommon := corev1.CloudStorageCommon{
-			DeviceSpecs:    &pxVolumes,
-			KvdbDeviceSpec: &PxKvdb,
+			DeviceSpecs:    &pxDeviceSpecs,
+			KvdbDeviceSpec: &PxKvdbSpec,
 		}
 		cloudProvider := &CloudProvider
 		cloudStorage := &corev1.CloudStorageSpec{
