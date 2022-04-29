@@ -3,6 +3,7 @@ module github.com/libopenstorage/operator
 go 1.15
 
 require (
+	github.com/BurntSushi/toml v1.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.6.0
@@ -18,10 +19,13 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
-	golang.org/x/tools v0.1.5 // indirect
+	golang.org/x/exp/typeparams v0.0.0-20220428152302-39d4317da171 // indirect
+	golang.org/x/sys v0.0.0-20220429121018-84afa8d3f7b3 // indirect
+	golang.org/x/tools v0.1.11-0.20220316014157-77aa08bb151a // indirect
+	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/grpc v1.36.0
 	gopkg.in/yaml.v2 v2.4.0
+	honnef.co/go/tools v0.2.1 // indirect
 	k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver v0.20.4
 	k8s.io/apimachinery v0.20.4
