@@ -11663,16 +11663,6 @@ func TestSCC(t *testing.T) {
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSCC, scc)
-
-	// Change SCC from enabled to disabled
-	err = k8sClient.Delete(context.TODO(), crd)
-	require.NoError(t, err)
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
-	require.True(t, errors.IsNotFound(err))
 }
 
 func TestPodSecurityPoliciesEnabled(t *testing.T) {

@@ -16,9 +16,10 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	opcorev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 	SCCComponentName = "scc"
 	// PxSCCName name of portworx securityContextConstraints
 	PxSCCName = "portworx"
+	// PxNodeWiperServiceAccountName name of portworx node wiper service account
+	PxNodeWiperServiceAccountName = "px-node-wiper"
 )
 
 type scc struct {
@@ -158,6 +161,11 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			Groups:  nil,
 			Users: []string{
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
 			},
 		},
 	}

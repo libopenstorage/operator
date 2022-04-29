@@ -5146,7 +5146,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, component.PxNodeWiperServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -5185,7 +5185,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 1)
-	require.Equal(t, pxNodeWiperServiceAccountName, serviceAccountList.Items[0].Name)
+	require.Equal(t, component.PxNodeWiperServiceAccountName, serviceAccountList.Items[0].Name)
 
 	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)
@@ -5568,7 +5568,7 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, component.PxNodeWiperServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -5762,7 +5762,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, pxNodeWiperServiceAccountName, cluster.Namespace)
+	err = testutil.Get(k8sClient, sa, component.PxNodeWiperServiceAccountName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, sa.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
@@ -5801,7 +5801,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	err = testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 1)
-	require.Equal(t, pxNodeWiperServiceAccountName, serviceAccountList.Items[0].Name)
+	require.Equal(t, component.PxNodeWiperServiceAccountName, serviceAccountList.Items[0].Name)
 
 	err = testutil.List(k8sClient, clusterRoleList)
 	require.NoError(t, err)

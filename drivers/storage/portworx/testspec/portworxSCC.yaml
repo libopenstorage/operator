@@ -13,10 +13,6 @@ apiVersion: security.openshift.io/v1
 defaultAddCapabilities: null
 fsGroup:
   type: RunAsAny
-groups:
-- system:cluster-admins
-- system:nodes
-- system:masters
 kind: SecurityContextConstraints
 metadata:
   name: portworx
@@ -33,8 +29,11 @@ seccompProfiles:
 supplementalGroups:
   type: RunAsAny
 users:
-- system:admin
-- system:serviceaccount:openshift-infra:build-controller
 - system:serviceaccount:kube-test:portworx
+- system:serviceaccount:kube-test:px-csi
+- system:serviceaccount:kube-test:px-lighthouse
+- system:serviceaccount:kube-test:portworx-pvc-controller
+- system:serviceaccount:kube-test:px-metrics-collector
+- system:serviceaccount:kube-test:px-node-wiper
 volumes:
 - '*'
