@@ -55,8 +55,8 @@ spec:
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
     - -portworx-image-override=PX_IMAGE_OVERRIDE
-    - -portworx-volumes=PORTWORX_VOLUMES
-    - -portworx-kvdb=PORTWORX_KVDB
+    - -portworx-device-specs=PORTWORX_DEVICE_SPECS
+    - -portworx-kvdb-spec=PORTWORX_KVDB_SPEC
     - -portworx-env-vars=PORTWORX_ENV_VARS
     - -is-ocp=IS_OCP
     - -cloud-provider=CLOUD_PROVIDER
