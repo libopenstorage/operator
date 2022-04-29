@@ -61,15 +61,16 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 18)
+	require.Len(t, components, 19)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
 			component.PSPComponentName,
 			component.AuthComponentName,
 			component.TLSComponentName,
+			component.SCCComponentName,
 		},
-		componentNames[:3],
+		componentNames[:4],
 	)
 	require.ElementsMatch(t,
 		[]string{
@@ -89,13 +90,14 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
 		},
-		componentNames[3:],
+		componentNames[4:],
 	)
 
 	require.Equal(t, int32(0), components[0].Priority())
 	require.Equal(t, int32(0), components[1].Priority())
 	require.Equal(t, int32(0), components[2].Priority())
-	for _, comp := range components[3:] {
+	require.Equal(t, int32(0), components[3].Priority())
+	for _, comp := range components[4:] {
 		require.Equal(t, component.DefaultComponentPriority, comp.Priority())
 	}
 }
