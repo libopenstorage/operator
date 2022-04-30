@@ -380,7 +380,7 @@ func (c *portworxBasic) createClusterRole() error {
 				{
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{"privileged"},
+					ResourceNames: []string{PxSCCName},
 					Verbs:         []string{"use"},
 				},
 				{

@@ -20,6 +20,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	ocp_secv1 "github.com/openshift/api/security/v1"
+
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -56,14 +58,15 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 16)
+	require.Len(t, components, 17)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
 			component.PSPComponentName,
 			component.SecurityComponentName,
+			component.SCCComponentName,
 		},
-		[]string{componentNames[0], componentNames[1]},
+		componentNames[:3],
 	)
 	require.ElementsMatch(t,
 		[]string{
@@ -82,12 +85,13 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
 		},
-		componentNames[2:],
+		componentNames[3:],
 	)
 
 	require.Equal(t, int32(0), components[0].Priority())
 	require.Equal(t, int32(0), components[1].Priority())
-	for _, comp := range components[2:] {
+	require.Equal(t, int32(0), components[2].Priority())
+	for _, comp := range components[3:] {
 		require.Equal(t, component.DefaultComponentPriority, comp.Priority())
 	}
 }
@@ -10943,6 +10947,43 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestSCC(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	// Install with no SCC
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+}
+
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -11769,6 +11810,7 @@ func reregisterComponents() {
 	component.RegisterAlertManagerComponent()
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
+	component.RegisterSCCComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
