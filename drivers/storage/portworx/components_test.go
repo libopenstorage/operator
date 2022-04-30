@@ -11880,6 +11880,7 @@ func reregisterComponents() {
 	component.RegisterAlertManagerComponent()
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
+	component.RegisterSCCComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
