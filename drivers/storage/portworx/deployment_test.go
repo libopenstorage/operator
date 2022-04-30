@@ -405,6 +405,47 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 
 }
 
+func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	volumeSpec := corev1.VolumeSpec{
+		Name: "volume1",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: "/path1",
+			},
+		},
+		MountPath: "/var/log",
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Volumes: []corev1.VolumeSpec{
+				volumeSpec,
+			},
+		},
+	}
+
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	volume := v1.Volume{
+		Name:         pxutil.UserVolumeName(volumeSpec.Name),
+		VolumeSource: volumeSpec.VolumeSource,
+	}
+	volumeMount := v1.VolumeMount{
+		Name:      volumeSpec.Name,
+		MountPath: volumeSpec.MountPath,
+	}
+
+	assert.Contains(t, actual.Volumes, volume)
+	assert.NotContains(t, actual.Containers[0].VolumeMounts, volumeMount)
+}
+
 func TestPodSpecWithTLS(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
 	k8sClient := coreops.New(fakek8sclient.NewSimpleClientset())
