@@ -56,6 +56,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
+	ocp_secv1 "github.com/openshift/api/security/v1"
 )
 
 const (
@@ -222,6 +223,14 @@ func GetExpectedCRD(t *testing.T, fileName string) *apiextensionsv1beta1.CustomR
 	return crd
 }
 
+// GetExpectedCRDV1 returns the CustomResourceDefinition object from given yaml spec file
+func GetExpectedCRDV1(t *testing.T, fileName string) *apiextensionsv1.CustomResourceDefinition {
+	obj := getKubernetesObject(t, fileName)
+	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
+	assert.True(t, ok, "Expected CustomResourceDefinition object")
+	return crd
+}
+
 // GetExpectedPrometheus returns the Prometheus object from given yaml spec file
 func GetExpectedPrometheus(t *testing.T, fileName string) *monitoringv1.Prometheus {
 	obj := getKubernetesObject(t, fileName)
@@ -263,13 +272,23 @@ func GetExpectedPSP(t *testing.T, fileName string) *policyv1beta1.PodSecurityPol
 	return psp
 }
 
+// GetExpectedSCC returns the SecurityContextConstraints object from given yaml spec file
+func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextConstraints {
+	obj := getKubernetesObject(t, fileName)
+	scc, ok := obj.(*ocp_secv1.SecurityContextConstraints)
+	assert.True(t, ok, "Expected SecurityContextConstraints object")
+	return scc
+}
+
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
 	apiextensionsv1beta1.AddToScheme(s)
+	apiextensionsv1.AddToScheme(s)
 	monitoringv1.AddToScheme(s)
+	ocp_secv1.Install(s)
 	codecs := serializer.NewCodecFactory(s)
 	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)

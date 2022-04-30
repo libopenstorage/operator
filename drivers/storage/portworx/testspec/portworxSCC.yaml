@@ -1,0 +1,39 @@
+allowHostDirVolumePlugin: true
+allowHostIPC: true
+allowHostNetwork: true
+allowHostPID: true
+allowHostPorts: true
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
+allowedCapabilities:
+- '*'
+allowedUnsafeSysctls:
+- '*'
+apiVersion: security.openshift.io/v1
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+kind: SecurityContextConstraints
+metadata:
+  name: portworx
+  resourceVersion: "1"
+priority: 2
+readOnlyRootFilesystem: false
+requiredDropCapabilities: null
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+seccompProfiles:
+- '*'
+supplementalGroups:
+  type: RunAsAny
+users:
+- system:serviceaccount:kube-test:portworx
+- system:serviceaccount:kube-test:px-csi
+- system:serviceaccount:kube-test:px-lighthouse
+- system:serviceaccount:kube-test:portworx-pvc-controller
+- system:serviceaccount:kube-test:px-metrics-collector
+- system:serviceaccount:kube-test:px-node-wiper
+volumes:
+- '*'

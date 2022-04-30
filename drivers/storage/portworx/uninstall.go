@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -58,7 +59,6 @@ const (
 	pxOptPwx                          = "/opt/pwx"
 	pxEtcPwx                          = "/etc/pwx"
 	pxSockPwx                         = "/var/lib/osd/driver"
-	pxNodeWiperServiceAccountName     = "px-node-wiper"
 	pxNodeWiperClusterRoleName        = "px-node-wiper"
 	pxNodeWiperClusterRoleBindingName = "px-node-wiper"
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
@@ -289,7 +289,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 						},
 					},
 					RestartPolicy:      "Always",
-					ServiceAccountName: pxNodeWiperServiceAccountName,
+					ServiceAccountName: component.PxNodeWiperServiceAccountName,
 					Volumes: []v1.Volume{
 						{
 							Name: dsEtcPwxVolumeName,
@@ -419,7 +419,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 func (u *uninstallPortworx) DeleteNodeWiper() error {
 	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteServiceAccount(u.k8sClient, pxNodeWiperServiceAccountName, u.cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteServiceAccount(u.k8sClient, component.PxNodeWiperServiceAccountName, u.cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteClusterRole(u.k8sClient, pxNodeWiperClusterRoleName); err != nil {
@@ -441,7 +441,7 @@ func (u *uninstallPortworx) createServiceAccount(
 		u.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            pxNodeWiperServiceAccountName,
+				Name:            component.PxNodeWiperServiceAccountName,
 				Namespace:       u.cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -461,7 +461,7 @@ func (u *uninstallPortworx) createClusterRole() error {
 				{
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{"privileged"},
+					ResourceNames: []string{component.PxSCCName},
 					Verbs:         []string{"use"},
 				},
 				{
@@ -485,7 +485,7 @@ func (u *uninstallPortworx) createClusterRoleBinding() error {
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      pxNodeWiperServiceAccountName,
+					Name:      component.PxNodeWiperServiceAccountName,
 					Namespace: u.cluster.Namespace,
 				},
 			},
