@@ -169,6 +169,7 @@ github.com/opencontainers/go-digest
 # github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 ## explicit
 github.com/openshift/api/config/v1
+github.com/openshift/api/security/v1
 # github.com/pborman/uuid v1.2.0
 github.com/pborman/uuid
 # github.com/pkg/errors v0.9.1

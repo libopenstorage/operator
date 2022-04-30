@@ -5,7 +5,7 @@ metadata:
 rules:
 - apiGroups: ["security.openshift.io"]
   resources: ["securitycontextconstraints"]
-  resourceNames: ["privileged"]
+  resourceNames: ["portworx"]
   verbs: ["use"]
 - apiGroups: ["policy"]
   resources: ["podsecuritypolicies"]
