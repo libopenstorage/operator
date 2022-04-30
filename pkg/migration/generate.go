@@ -35,6 +35,23 @@ const (
 	csiHealthMonitorControllerContainerName = "csi-health-monitor-controller"
 )
 
+var (
+	builtinPxVolumeNames = map[string]bool{
+		"containerddir": true,
+		"criosock":      true,
+		"dbusmount":     true,
+		"dev":           true,
+		"diagsdump":     true,
+		"dockersock":    true,
+		"etcpwx":        true,
+		"journalmount1": true,
+		"journalmount2": true,
+		"optpwx":        true,
+		"procmount":     true,
+		"sysdmount":     true,
+	}
+)
+
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
@@ -446,12 +463,38 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 		}
 	}
 
+	// Populate StorageCluster spec.volumes from extra volumes mounted to portworx container
+	cluster.Spec.Volumes = getVolumeSpecs(c.VolumeMounts, ds.Spec.Template.Spec.Volumes, builtinPxVolumeNames)
+
 	// TODO: Handle kvdb secret
-	// TODO: Handle volumes
 	// TODO: Handle custom annotations
-	// TODO: Handle custom image registry
 
 	return cluster
+}
+
+func getVolumeSpecs(mounts []v1.VolumeMount, volumes []v1.Volume, knownVolumeNames map[string]bool) []corev1.VolumeSpec {
+	volumeSpecMap := make(map[string]*corev1.VolumeSpec)
+	for _, m := range mounts {
+		if _, ok := knownVolumeNames[m.Name]; !ok {
+			volumeSpecMap[m.Name] = &corev1.VolumeSpec{
+				Name:             m.Name,
+				ReadOnly:         m.ReadOnly,
+				MountPath:        m.MountPath,
+				MountPropagation: m.MountPropagation,
+			}
+		}
+	}
+	for _, v := range volumes {
+		if spec, ok := volumeSpecMap[v.Name]; ok {
+			spec.VolumeSource = *(v.VolumeSource.DeepCopy())
+		}
+	}
+
+	var volumeSpecs []corev1.VolumeSpec
+	for _, spec := range volumeSpecMap {
+		volumeSpecs = append(volumeSpecs, *spec)
+	}
+	return volumeSpecs
 }
 
 func (h *Handler) removeCustomImageRegistry(customImageRegistry, image string) string {
