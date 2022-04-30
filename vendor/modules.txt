@@ -268,7 +268,7 @@ golang.org/x/net/trace
 # golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sys v0.0.0-20220429121018-84afa8d3f7b3
+# golang.org/x/sys v0.0.0-20220429233432-b5fbb4746d32
 ## explicit
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
