@@ -15,6 +15,17 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+var (
+	// "crioconf" only exists with operator install.
+	// "dev" only exists with daemonset install.
+	// varlibosd only exists with operator install
+	skipVolumes = map[string]bool {
+		"crioconf": true,
+		"dev": true,
+		"varlibosd": true,
+	}
+)
+
 func (h *Handler) dryRun(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
 	k8sVersion, err := k8sutil.GetVersion()
 	if err != nil {
@@ -104,9 +115,7 @@ func (h *Handler) deepEqualVolumes(vol1, vol2 []v1.Volume) error {
 	getVolumeList := func(arr []v1.Volume) []interface{} {
 		var objs []interface{}
 		for _, obj := range arr {
-			// "crioconf" only exists with operator install.
-			// "dev" only exists with daemonset install.
-			if obj.Name == "crioconf" || obj.Name == "dev" {
+			if skipVolumes[obj.Name] {
 				continue
 			}
 			objs = append(objs, obj)
@@ -219,6 +228,10 @@ func (h *Handler) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
 			if skippedEnvs[obj.Name] {
 				continue
 			}
+			// Ignore API version compare, found "v1" is same to "" during test.
+			if obj.ValueFrom != nil && obj.ValueFrom.FieldRef != nil {
+				obj.ValueFrom.FieldRef.APIVersion = ""
+			}
 			objs = append(objs, obj)
 		}
 		return objs
@@ -238,9 +251,7 @@ func (h *Handler) deepEqualVolumeMounts(l1, l2 []v1.VolumeMount) error {
 	getList := func(arr []v1.VolumeMount) []interface{} {
 		var objs []interface{}
 		for _, obj := range arr {
-			// "crioconf" only exists with operator install.
-			// "dev" only exists with daemonset install.
-			if obj.Name == "crioconf" || obj.Name == "dev" {
+			if skipVolumes[obj.Name] {
 				continue
 			}
 			obj.Name = ""
