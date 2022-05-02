@@ -28,6 +28,21 @@ var (
 
 	// PxOperatorVersion is the version of installed px operator found
 	PxOperatorVersion *version.Version
+
+	// PxDeviceSpecs is a list of `;` separated Portworx device specs
+	PxDeviceSpecs string
+
+	// PxKvdbSpec is a Portworx KVDB device spec
+	PxKvdbSpec string
+
+	// PxEnvVars is a string of comma separated ENV vars
+	PxEnvVars string
+
+	// CloudProvider is a cloud provider name
+	CloudProvider string
+
+	// IsOcp is an indication that this is OCP cluster or not
+	IsOcp bool
 )
 
 const (
