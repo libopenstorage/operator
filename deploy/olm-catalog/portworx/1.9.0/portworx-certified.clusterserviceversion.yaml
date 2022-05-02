@@ -183,6 +183,7 @@ spec:
           resourceNames:
           - anyuid
           - privileged
+          - portworx
           verbs:
           - use
       deployments:
