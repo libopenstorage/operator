@@ -1,8 +1,8 @@
-FROM golang:1.15.1
+FROM golang:1.16.10
 
 # Install dependancies
 RUN apt-get update && \ 
-    /usr/local/go/bin/go get -u gotest.tools/gotestsum
+    /usr/local/go/bin/go install gotest.tools/gotestsum@latest
 
 WORKDIR /
 
