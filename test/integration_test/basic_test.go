@@ -193,7 +193,15 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-regression-test"},
 		}),
-		TestFunc: AlertManagerRegression,
+		TestFunc: BasicAlertManagerRegression,
+	},
+	{
+		TestName:        "BasicSecurityRegression",
+		TestrailCaseIDs: []string{"C53416", "C53417", "C53423", "C60182", "C60183"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "security-regression-test"},
+		}),
+		TestFunc: BasicSecurityRegression,
 	},
 	{
 		TestName:        "InstallWithNodeTopologyLabels",
@@ -696,7 +704,7 @@ func InstallWithCustomLabels(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-// AlertManagerRegression test includes the following steps:
+// BasicAlertManagerRegression test includes the following steps:
 // 1. Deploy PX and validate AlertManager is not enabled by default
 // 2. Create AlertManager secret
 // 3. Enable AlertManager without Prometheus and validate it is not getting deployed
@@ -705,7 +713,7 @@ func InstallWithCustomLabels(tc *types.TestCase) func(*testing.T) {
 // 6. Disable AlertManager in StorageCluster and validate components
 // 7. Delete AlertManager secret
 // 8. Delete StorageCluster and validate it got successfully removed
-func AlertManagerRegression(tc *types.TestCase) func(*testing.T) {
+func BasicAlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		var err error
 		testSpec := tc.TestSpec(t)
@@ -782,6 +790,58 @@ func AlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Delete AlertManager secret
 		err = coreops.Instance().DeleteSecret("alertmanager-portworx", cluster.Namespace)
+		require.NoError(t, err)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// BasicSecurityRegression test includes the following steps:
+// 1. Deploy PX and validate Security is not enabled by default
+// 2. Enable Security and validate components got created
+// 3. Disable Security and validate components got removed
+// 4. Delete StorageCluster and validate it got successfully removed
+func BasicSecurityRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate Security is not enabled by default
+		logrus.Info("Validate Security is not enabled by default")
+		if cluster.Spec.Security != nil {
+			if cluster.Spec.Security.Enabled {
+				require.False(t, cluster.Spec.Security.Enabled, "failed to validate Security is enabled: expected: false, actual: %v", cluster.Spec.Security.Enabled)
+			}
+		}
+
+		// Enable Security and validate
+		logrus.Info("Enable Security and validate")
+		var security *corev1.SecuritySpec
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			if cluster.Spec.Security == nil {
+				security = &corev1.SecuritySpec{
+					Enabled: true,
+				}
+				cluster.Spec.Security = security
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateSecurity(cluster, false, updateParamFunc, t)
+		require.NoError(t, err)
+
+		// Disable Security and validate
+		logrus.Info("Disable Security and validate")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Security.Enabled = false
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateSecurity(cluster, true, updateParamFunc, t)
 		require.NoError(t, err)
 
 		// Delete and validate StorageCluster deletion

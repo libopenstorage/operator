@@ -72,6 +72,18 @@ const (
 	// StorkNamespaceEnvVarName is the namespace where stork is deployed
 	StorkNamespaceEnvVarName = "STORK-NAMESPACE"
 
+	// StorkPxJwtIssuerEnvVarName is a PX JWT issuer Env variable name for stork
+	StorkPxJwtIssuerEnvVarName = "PX_JWT_ISSUER"
+
+	// DefaultStorkPxJwtIssuerEnvVarValue is a defeault value for PX JWT issuer for stork
+	DefaultStorkPxJwtIssuerEnvVarValue = "apps.portworx.io"
+
+	// StorkPxSharedSecretEnvVarName is a PX shared secret Env variable name for stork
+	StorkPxSharedSecretEnvVarName = "PX_SHARED_SECRET"
+
+	// DefaultStorkPxSharedSecretEnvVarValue is a default value for PX shared secret for stork
+	DefaultStorkPxSharedSecretEnvVarValue = "px-system-secrets"
+
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
 )
@@ -965,6 +977,12 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
+	// Validate Security
+	previouslyEnabled := false
+	if err = ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -1723,6 +1741,212 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 			}
 		}
 	}
+	return nil
+}
+
+// ValidateSecurity validates all PX Security components
+func ValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, timeout, interval time.Duration) error {
+	if cluster.Spec.Security != nil &&
+		cluster.Spec.Security.Enabled {
+		logrus.Infof("PX Security is enabled")
+		return ValidateSecurityEnabled(cluster, timeout, interval)
+	}
+
+	logrus.Infof("PX Security is not enabled")
+	return ValidateSecurityDisabled(cluster, previouslyEnabled, timeout, interval)
+}
+
+// ValidateSecurityEnabled validates PX Security components are enabled`/running as expected
+func ValidateSecurityEnabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	storkDp := &appsv1.Deployment{}
+	storkDp.Name = "stork"
+	storkDp.Namespace = cluster.Namespace
+
+	t := func() (interface{}, bool, error) {
+		// Validate Stork ENV vars, if Stork is enabled
+		if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+			// Validate stork deployment and pods
+			if err := validateDeployment(storkDp, timeout, interval); err != nil {
+				return "", true, fmt.Errorf("failed to validate Stork deployment and pods, err %v", err)
+			}
+
+			// Validate Security ENv vars in Stork pods
+			if err := validateStorkSecurityEnvVar(cluster, storkDp, timeout, interval); err != nil {
+				return "", true, fmt.Errorf("failed to validate Stork Security ENV vars, err %v", err)
+			}
+		}
+
+		if _, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace); err != nil {
+			return "", true, fmt.Errorf("failed to find secret secret px-admin-token, err %v", err)
+		}
+
+		if _, err := coreops.Instance().GetSecret("px-user-token", cluster.Namespace); err != nil {
+			return "", true, fmt.Errorf("failed to find secret secret px-user-token, err %v", err)
+		}
+
+		if _, err := coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace); err != nil {
+			return "", true, fmt.Errorf("failed to find secret secret px-shared-secret, err %v", err)
+		}
+
+		if _, err := coreops.Instance().GetSecret("px-system-secrets", cluster.Namespace); err != nil {
+			return "", true, fmt.Errorf("failed to find secret secret px-system-secrets, err %v", err)
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateSecurityDisabled validates PX Security components are disabled/uninstalled as expected
+func ValidateSecurityDisabled(cluster *corev1.StorageCluster, previouslyEnabled bool, timeout, interval time.Duration) error {
+	storkDp := &appsv1.Deployment{}
+	storkDp.Name = "stork"
+	storkDp.Namespace = cluster.Namespace
+
+	t := func() (interface{}, bool, error) {
+		// Validate Stork ENV vars, if Stork is enabled
+		if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+			// Validate Stork deployment and pods
+			if err := validateDeployment(storkDp, timeout, interval); err != nil {
+				return "", true, fmt.Errorf("failed to validate Stork deployment and pods, err %v", err)
+			}
+
+			// Validate Security ENv vars in Stork pods
+			if err := validateStorkSecurityEnvVar(cluster, storkDp, timeout, interval); err != nil {
+				return "", true, fmt.Errorf("failed to validate Stork Security ENV vars, err %v", err)
+			}
+		}
+
+		if previouslyEnabled {
+			_, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-admin-token, when should't have, err %v", err)
+			}
+
+			_, err = coreops.Instance().GetSecret("px-user-token", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-user-token, when shouldn't have, err %v", err)
+			}
+
+			if _, err := coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace); err != nil {
+				return "", true, fmt.Errorf("failed to find secret secret px-shared-secret, err %v", err)
+			}
+
+			if _, err := coreops.Instance().GetSecret("px-system-secrets", cluster.Namespace); err != nil {
+				return "", true, fmt.Errorf("failed to find secret secret px-system-secrets, err %v", err)
+			}
+		} else {
+			_, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-admin-token, when should't have, err %v", err)
+			}
+
+			_, err = coreops.Instance().GetSecret("px-user-token", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-user-token, when shouldn't have, err %v", err)
+			}
+
+			_, err = coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-shared-secret, when shouldn't have, err %v", err)
+			}
+
+			_, err = coreops.Instance().GetSecret("px-system-secrets", cluster.Namespace)
+			if !errors.IsNotFound(err) {
+				return "", true, fmt.Errorf("found secret px-system-secrets, when shouldn't have, err %v", err)
+			}
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Debug("Validate Stork Security ENV vars")
+	var securityEnabled bool
+
+	if cluster.Spec.Security != nil && cluster.Spec.Security.Enabled {
+		securityEnabled = cluster.Spec.Security.Enabled
+	}
+
+	t := func() (interface{}, bool, error) {
+		pods, err := appops.Instance().GetDeploymentPods(storkDeployment)
+		if err != nil {
+			return nil, false, err
+		}
+
+		numberOfPods := 0
+		for _, pod := range pods {
+			pxJwtIssuerEnvVar := ""
+			pxSharedSecretEnvVar := ""
+			for _, env := range pod.Spec.Containers[0].Env {
+				if env.Name == StorkPxJwtIssuerEnvVarName && securityEnabled {
+					if env.Value != DefaultStorkPxJwtIssuerEnvVarValue {
+						return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s]: expected: %s, actual: %s", StorkPxJwtIssuerEnvVarName, pod.Name, DefaultStorkPxJwtIssuerEnvVarValue, env.Value)
+					}
+					pxJwtIssuerEnvVar = env.Value
+				} else if env.Name == StorkPxJwtIssuerEnvVarName && !securityEnabled {
+					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when stork is disabled", StorkPxJwtIssuerEnvVarName, pod.Name)
+				}
+
+				if env.Name == StorkPxSharedSecretEnvVarName && securityEnabled {
+					if env.ValueFrom != nil {
+						if env.ValueFrom.SecretKeyRef != nil {
+							if env.ValueFrom.SecretKeyRef.Key == "apps-secret" {
+								keyValue := env.ValueFrom.SecretKeyRef.LocalObjectReference
+								if keyValue.Name != DefaultStorkPxSharedSecretEnvVarValue {
+									return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s]: expected: %s, actual: %s", StorkPxSharedSecretEnvVarName, pod.Name, DefaultStorkPxSharedSecretEnvVarValue, keyValue.Name)
+								}
+								pxSharedSecretEnvVar = keyValue.Name
+							}
+						}
+					}
+				} else if env.Name == StorkPxSharedSecretEnvVarName && !securityEnabled {
+					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when stork is disabled", StorkPxSharedSecretEnvVarName, pod.Name)
+				}
+
+			}
+			if pxJwtIssuerEnvVar == "" && securityEnabled {
+				return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s], because it was not found", StorkPxJwtIssuerEnvVarName, pod.Name)
+			} else if pxJwtIssuerEnvVar != "" && !securityEnabled {
+				return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s], because it was was found, when shouldn't have, if security is disabled", StorkPxJwtIssuerEnvVarName, pod.Name)
+			}
+
+			if pxSharedSecretEnvVar == "" && securityEnabled {
+				return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s], because it was not found", StorkPxSharedSecretEnvVarName, pod.Name)
+			} else if pxSharedSecretEnvVar != "" && !securityEnabled {
+				return nil, true, fmt.Errorf("failed to validate Stork %s env var inside Stork pod [%s], because it was was found, when shouldn't have, if security is disabledd", StorkPxSharedSecretEnvVarName, pod.Name)
+			}
+
+			if securityEnabled {
+				logrus.Debugf("Value for %s env var in Stork pod [%s]: expected: %v, actual: %v", StorkPxJwtIssuerEnvVarName, pod.Name, DefaultStorkPxJwtIssuerEnvVarValue, pxJwtIssuerEnvVar)
+				logrus.Debugf("Value for %s env var in Stork pod [%s]: expected: %v, actual: %v", StorkPxSharedSecretEnvVarName, pod.Name, DefaultStorkPxSharedSecretEnvVarValue, pxSharedSecretEnvVar)
+			}
+			numberOfPods++
+		}
+
+		// TODO: Hardcoding this to 3 instead of len(pods), because the previous ValidateDeloyment() step might have not validated the updated deloyment
+		if numberOfPods != 3 {
+			return nil, true, fmt.Errorf("waiting for all Stork pods, expected: %d, got: %d", 3, numberOfPods)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
