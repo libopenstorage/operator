@@ -126,17 +126,12 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 // GetImageMajorVersion returns the major version for a given image.
 // This allows you to make decisions based on the major version.
 func GetImageMajorVersion(image string) int {
-	if image == "" {
+	if !strings.Contains(image, ":") {
 		return -1
 	}
 
-	var tag string
 	parts := strings.Split(image, ":")
-	if len(parts) < 2 {
-		return -1
-	}
-
-	tag = parts[1]
+	tag := parts[len(parts)-1]
 	if tag == "" {
 		return -1
 	}
