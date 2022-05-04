@@ -49,7 +49,7 @@ func (h *Handler) validateSpec(cluster *corev1.StorageCluster, ds *appsv1.Daemon
 		return err
 	}
 
-	err = h.deepEqualPod(&ds.Spec.Template, &pod)
+	err = h.DeepEqualPod(&ds.Spec.Template, &pod)
 	if err != nil {
 		msg += fmt.Sprintf("Validate portworx pod failed, %v\n", err)
 	}
@@ -61,7 +61,7 @@ func (h *Handler) validateSpec(cluster *corev1.StorageCluster, ds *appsv1.Daemon
 }
 
 // DeepEqualPod compares two pods.
-func (h *Handler) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
+func (h *Handler) DeepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
 	var msg string
 
 	err := h.deepEqualVolumes(p1.Spec.Volumes, p2.Spec.Volumes)

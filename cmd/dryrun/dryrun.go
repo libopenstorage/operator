@@ -38,6 +38,9 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/apis"
+	"github.com/libopenstorage/operator/pkg/migration"
+
+	//"github.com/libopenstorage/operator/pkg/migration"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	_ "github.com/libopenstorage/operator/pkg/log"
@@ -47,10 +50,11 @@ import (
 )
 
 const (
-	flagVerbose       = "verbose"
-	flagStorageCluser = "storagecluster,stc"
-	flagKubeConfig    = "kubeconfig"
-	flagOutputFile    = "output,o"
+	flagVerbose            = "verbose"
+	flagStorageCluser      = "storagecluster,stc"
+	flagKubeConfig         = "kubeconfig,kc"
+	flagOutputFile         = "output,o"
+	flagDaemonSetMigration = "migration,m"
 )
 
 var (
@@ -83,15 +87,19 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  flagStorageCluser,
-			Usage: "[Optional] File for storage cluster spec, retrieve from k8s if it's not configured",
+			Usage: "File for storage cluster spec, retrieve from k8s if it's not configured",
 		},
 		cli.StringFlag{
 			Name:  flagKubeConfig,
-			Usage: "[Optional] kubeconfig file",
+			Usage: "kubeconfig file",
 		},
 		cli.StringFlag{
 			Name:  flagOutputFile,
-			Usage: "[Optional] output file to save k8s object, default to " + defaultOutputFile,
+			Usage: "output file to save k8s object, default to " + defaultOutputFile,
+		},
+		cli.BoolFlag{
+			Name:  flagDaemonSetMigration,
+			Usage: "dry run daemonSet to operator migration",
 		},
 	}
 
@@ -108,15 +116,40 @@ func execute(c *cli.Context) {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if err := dryRun(c); err != nil {
+	d := DryRun{}
+	var err error
+	err = d.Init(c)
+	if err != nil {
+		log.WithError(err).Fatal("failed to initialize")
+	}
+
+	if err = d.Execute(); err != nil {
 		log.WithError(err).Errorf("dryrun failed")
 	}
 }
 
-func dryRun(c *cli.Context) error {
-	cluster, err := getStorageCluster(c)
+// DryRun is a struct for portworx installation dry run
+type DryRun struct {
+	mockController *storagecluster.Controller
+	// Point to real k8s client if kubeconfig is provided, or running inside of container.
+	realClient client.Client
+	mockClient client.Client
+	mockDriver storage.Driver
+	cluster    *corev1.StorageCluster
+	outputFile string
+}
+
+// Init performs required initialization
+func (d *DryRun) Init(c *cli.Context) error {
+	var err error
+	d.realClient, err = d.getK8sClient(c)
 	if err != nil {
-		return err
+		log.WithError(err).Warningf("Could not connect to k8s cluster, will run in standalone mode.")
+	}
+
+	d.cluster, err = d.getStorageCluster(c)
+	if err != nil {
+		log.WithError(err).Fatal("failed to get storage cluster.")
 	}
 
 	apiextensions.SetInstance(apiextensions.New(fakeextclient.NewSimpleClientset()))
@@ -125,16 +158,29 @@ func dryRun(c *cli.Context) error {
 	mockCtrl := gomock.NewController(nil)
 	defer mockCtrl.Finish()
 
-	dryRunDriver, err := storage.Get(pxutil.DriverName)
+	d.mockDriver, err = storage.Get(pxutil.DriverName)
 	if err != nil {
-		log.Fatalf("Error getting dry-run Storage driver %v", err)
+		log.WithError(err).Fatalf("failed to get mock driver")
 	}
 
-	dryRunClient := testutil.FakeK8sClient()
-	if err = dryRunDriver.Init(dryRunClient, runtime.NewScheme(), record.NewFakeRecorder(100)); err != nil {
-		log.Fatalf("Error initializing Storage driver for dry run %v", err)
+	d.mockClient = testutil.FakeK8sClient()
+	if err = d.mockDriver.Init(d.mockClient, runtime.NewScheme(), record.NewFakeRecorder(100)); err != nil {
+		log.WithError(err).Fatalf("failed to initialize mock driver")
 	}
 
+	d.mockController = &storagecluster.Controller{Driver: d.mockDriver}
+	d.mockController.SetKubernetesClient(d.mockClient)
+
+	d.outputFile = c.String(flagOutputFile)
+	if d.outputFile == "" {
+		d.outputFile = defaultOutputFile
+	}
+
+	return nil
+}
+
+// Execute dry run for portworx installation
+func (d *DryRun) Execute() error {
 	funcGetDir := func() string {
 		ex, err := os.Executable()
 		if err != nil {
@@ -147,7 +193,7 @@ func dryRun(c *cli.Context) error {
 	pxutil.SpecsBaseDir = funcGetDir
 
 	for _, comp := range component.GetAll() {
-		enabled := comp.IsEnabled(cluster)
+		enabled := comp.IsEnabled(d.cluster)
 		if skipComponents[comp.Name()] {
 			// Only log a warning if component is enabled but not supported.
 			if enabled {
@@ -158,7 +204,7 @@ func dryRun(c *cli.Context) error {
 
 		log.Infof("component \"%s\" enabled: %t", comp.Name(), enabled)
 		if enabled {
-			err := comp.Reconcile(cluster)
+			err := comp.Reconcile(d.cluster)
 			if ce, ok := err.(*component.Error); ok &&
 				ce.Code() == component.ErrCritical {
 				return err
@@ -167,23 +213,16 @@ func dryRun(c *cli.Context) error {
 				log.Warningf(msg)
 			}
 		} else {
-			if err := comp.Delete(cluster); err != nil {
+			if err := comp.Delete(d.cluster); err != nil {
 				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 				log.Warningf(msg)
 			}
 		}
 	}
 
-	controller := storagecluster.Controller{Driver: dryRunDriver}
-	controller.SetKubernetesClient(dryRunClient)
-	objs, err := getAllObjects(controller, cluster)
+	objs, err := d.getAllObjects()
 	if err != nil {
 		log.WithError(err).Error("failed to get all objects")
-	}
-
-	outputFile := c.String(flagOutputFile)
-	if outputFile == "" {
-		outputFile = defaultOutputFile
 	}
 
 	var sb strings.Builder
@@ -198,23 +237,67 @@ func dryRun(c *cli.Context) error {
 		sb.WriteString("---\n")
 	}
 
-	f, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	f, err := os.OpenFile(d.outputFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		log.WithError(err).Errorf("failed to open file %s", outputFile)
+		log.WithError(err).Errorf("failed to open file %s", d.outputFile)
 		return err
 	}
 	defer f.Close()
 	_, err = f.WriteString(sb.String())
 	if err != nil {
-		log.WithError(err).Errorf("failed to write file %s", outputFile)
+		log.WithError(err).Errorf("failed to write file %s", d.outputFile)
 		return err
 	}
 
-	log.Infof("wrote %d objects to file %s after dry run", len(objs), outputFile)
+	log.Infof("wrote %d objects to file %s after dry run", len(objs), d.outputFile)
+
+	log.Infof("start daemonSet to operator migration dry run")
+	h := migration.New(d.mockController)
+	dsObjs, err := h.GetAllDaemonSetObjects(d.cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	err = d.validateObjs(dsObjs, objs)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func getStorageCluster(c *cli.Context) (*corev1.StorageCluster, error) {
+func (d *DryRun) validateObjs(dsObjs, operatorObjs []client.Object) error {
+	// object kind, object name to object
+	operatorObjMap := make(map[string]map[string]client.Object)
+	for _, obj := range operatorObjs {
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		if _, ok := operatorObjMap[kind]; !ok {
+			operatorObjMap[kind] = make(map[string]client.Object)
+		}
+		operatorObjMap[kind][obj.GetName()] = obj
+	}
+
+	for _, obj := range dsObjs {
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		name := obj.GetName()
+
+		switch kind {
+		case "DaemonSet":
+			if name == "portworx" {
+				log.Info("Found portworx daemonset")
+				//opPod := operatorObjMap["Pod"][name].(*v1.Pod)
+				//t, err := d.mockController.CreatePodTemplate(d.cluster, &v1.Node{}, "")
+				//handler.DeepEqualPod(&obj.(*appsv1.DaemonSet).Spec.Template, opPod.Spec)
+			}
+		default:
+			log.Warningf("Object kind %s is not validated for migration", kind)
+		}
+	}
+
+	return nil
+}
+
+func (d *DryRun) getStorageCluster(c *cli.Context) (*corev1.StorageCluster, error) {
 	storageClusterFile := c.String(flagStorageCluser)
 	if storageClusterFile != "" {
 		objs, err := inttestutil.ParseSpecsWithFullPath(storageClusterFile)
@@ -231,20 +314,15 @@ func getStorageCluster(c *cli.Context) (*corev1.StorageCluster, error) {
 		return cluster, nil
 	}
 
-	k8sClient, err := getK8sClient(c)
-	if err != nil {
-		return nil, err
-	}
-
 	nsList := &v1.NamespaceList{}
-	err = k8sClient.List(context.TODO(), nsList)
+	err := d.realClient.List(context.TODO(), nsList)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, namespace := range nsList.Items {
 		clusterList := &corev1.StorageClusterList{}
-		err = k8sClient.List(context.TODO(), clusterList, &client.ListOptions{
+		err = d.realClient.List(context.TODO(), clusterList, &client.ListOptions{
 			Namespace: namespace.Name,
 		})
 		if err != nil {
@@ -258,7 +336,7 @@ func getStorageCluster(c *cli.Context) (*corev1.StorageCluster, error) {
 	return nil, fmt.Errorf("could not find storagecluster object from k8s")
 }
 
-func getK8sClient(c *cli.Context) (client.Client, error) {
+func (d *DryRun) getK8sClient(c *cli.Context) (client.Client, error) {
 	var err error
 	var config *rest.Config
 	kubeconfig := c.String(flagKubeConfig)
@@ -314,13 +392,13 @@ func getK8sClient(c *cli.Context) (client.Client, error) {
 	return mgr.GetClient(), nil
 }
 
-func getAllObjects(controller storagecluster.Controller, cluster *corev1.StorageCluster) ([]client.Object, error) {
+func (d *DryRun) getAllObjects() ([]client.Object, error) {
 	var objs []client.Object
 
-	k8sClient := controller.GetKubernetesClient()
-	namespace := cluster.Namespace
+	namespace := d.cluster.Namespace
+	k8sClient := d.mockClient
 	// TODO: populate storage cluster defaults.
-	t, err := controller.CreatePodTemplate(cluster, &v1.Node{}, "")
+	t, err := d.mockController.CreatePodTemplate(d.cluster, &v1.Node{}, "")
 	if err != nil {
 		log.WithError(err).Warningf("failed to get portworx pod template")
 	} else {
@@ -330,6 +408,9 @@ func getAllObjects(controller storagecluster.Controller, cluster *corev1.Storage
 			},
 			ObjectMeta: t.ObjectMeta,
 			Spec:       t.Spec,
+		}
+		if pod.Name == "" {
+			pod.Name = "portworx"
 		}
 		objs = append(objs, &pod)
 	}
