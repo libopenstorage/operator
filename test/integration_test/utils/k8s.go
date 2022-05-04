@@ -37,10 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ParseSpecs parses the file and returns all the valid k8s objects
+// ParseSpecs parses the file under testspec folder and returns all the valid k8s objects
 func ParseSpecs(filename string) ([]runtime.Object, error) {
+	return ParseSpecsWithFullPath(path.Join("testspec", filename))
+}
+
+// ParseSpecsWithFullPath parses the file and returns all the valid k8s objects
+func ParseSpecsWithFullPath(filename string) ([]runtime.Object, error) {
 	var specs []runtime.Object
-	file, err := os.Open(path.Join("testspec", filename))
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}

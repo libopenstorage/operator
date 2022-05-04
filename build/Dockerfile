@@ -21,3 +21,4 @@ COPY deploy/crds /crds
 COPY manifests /manifests
 COPY bin/configs /configs
 COPY bin/operator /
+COPY bin/dryrun /
