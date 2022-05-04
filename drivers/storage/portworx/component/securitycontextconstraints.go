@@ -105,7 +105,7 @@ func (s *scc) Delete(cluster *opcorev1.StorageCluster) error {
 	}
 
 	// Do not delete SCC during uninstallation, as it may be required by node wiper.
-	// It will be deleted when storage cluster is deleted as there is owner reference.
+	// TODO: need to handle deletion in this case
 	if cluster.DeletionTimestamp != nil &&
 		cluster.Spec.DeleteStrategy != nil &&
 		cluster.Spec.DeleteStrategy.Type != "" {
