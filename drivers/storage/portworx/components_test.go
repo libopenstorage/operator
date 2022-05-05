@@ -5001,6 +5001,78 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 }
 
+func TestCSIInstallWithTopology(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.20.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+				Topology: &corev1.CSITopologySpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_with_topology.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Disable CSI topology by setting the flag to false
+	cluster.Spec.CSI.Topology.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	container := k8sutil.GetContainerFromDeployment(deployment, "csi-external-provisioner")
+	require.NotContains(t, container.Args, "--feature-gates=Topology=true")
+
+	// Enable again
+	cluster.Spec.CSI.Topology.Enabled = true
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	container = k8sutil.GetContainerFromDeployment(deployment, "csi-external-provisioner")
+	require.Contains(t, container.Args, "--feature-gates=Topology=true")
+
+	// Disable CSI topology by removing the topology spec
+	cluster.Spec.CSI.Topology = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	container = k8sutil.GetContainerFromDeployment(deployment, "csi-external-provisioner")
+	require.NotContains(t, container.Args, "--feature-gates=Topology=true")
+}
+
 func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
