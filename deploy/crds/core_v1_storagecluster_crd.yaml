@@ -1030,6 +1030,13 @@ spec:
                   installSnapshotController:
                     type: boolean
                     description: Flag indicating whether CSI Snapshot Controller needs to be installed for the storage cluster.
+                  topology:
+                    type: object
+                    description: Contains CSI topology configurations.
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Flag indicating whether CSI topology feature gate is enabled.
               env:
                 type: array
                 description: List of environment variables used by the driver. This is an array of Kubernetes

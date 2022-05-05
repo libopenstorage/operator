@@ -136,7 +136,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "BasicCsiRegression",
-		TestrailCaseIDs: []string{"C55919", "C51020", "C51025", "C51026", "C54701", "C54706", "C58194", "C58195"},
+		TestrailCaseIDs: []string{"C55919", "C51020", "C51025", "C51026", "C54701", "C54706", "C58194", "C58195", "C60349", "C60350"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "csi-regression-test"},
 		}),
@@ -362,11 +362,11 @@ func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
 
 // BasicCsiRegression test includes the following steps:
 // 1. Deploy PX with CSI enabled by default and validate CSI components and images
-// 2. Validate CSI is enabled by default
+// 2. Validate CSI is enabled by default and topology spec is empty
 // 3. Delete "portworx" pods and validate they get re-deployed
 // 4. Delete "px-csi-ext" pods and validate they get re-deployed
 // 5. Disable CSI and validate CSI components got successfully removed
-// 6. Enabled CSI and validate CSI components and images
+// 6. Enabled CSI and topology and validate CSI components and images
 // 7. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
@@ -380,6 +380,7 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Validate CSI is enabled by default
 		require.Equal(t, cluster.Spec.CSI.Enabled, true)
+		require.Nil(t, cluster.Spec.CSI.Topology)
 
 		logrus.Info("Delete portworx pods and validate they get re-deployed")
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
@@ -401,13 +402,18 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Equal(t, cluster.Spec.CSI.Enabled, false)
 
-		logrus.Info("Enable CSI and validate StorageCluster")
+		logrus.Info("Enable CSI and topology and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			cluster.Spec.CSI.Enabled = true
+			cluster.Spec.CSI.Topology = &corev1.CSITopologySpec{
+				Enabled: true,
+			}
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
-		require.Equal(t, cluster.Spec.CSI.Enabled, true)
+		require.True(t, cluster.Spec.CSI.Enabled)
+		require.NotNil(t, cluster.Spec.CSI.Topology)
+		require.True(t, cluster.Spec.CSI.Topology.Enabled)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
