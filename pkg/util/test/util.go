@@ -1339,6 +1339,11 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		if err := validatePodTopologySpreadConstraints(pxCsiDp, timeout, interval); err != nil {
 			return err
 		}
+
+		// Validate CSI topology specs
+		if err := validateCSITopologySpecs(cluster.Namespace, cluster.Spec.CSI.Topology, timeout, interval); err != nil {
+			return err
+		}
 	} else {
 		logrus.Debug("CSI is disabled in StorageCluster")
 		if err := validateCsiContainerInPxPods(cluster.Namespace, csi, timeout, interval); err != nil {
@@ -1521,6 +1526,57 @@ func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]str
 		}
 	}
 
+	return nil
+}
+
+func validateCSITopologySpecs(namespace string, topologySpec *corev1.CSITopologySpec, timeout, interval time.Duration) error {
+	logrus.Debug("Validating CSI topology specs inside px-csi-ext pods")
+	topologyEnabled := false
+	if topologySpec != nil {
+		topologyEnabled = topologySpec.Enabled
+	}
+
+	t := func() (interface{}, bool, error) {
+		deployment, err := appops.Instance().GetDeployment("px-csi-ext", namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get deployment %s/px-csi-ext", namespace)
+		}
+		pods, err := appops.Instance().GetDeploymentPods(deployment)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get pods of deployment %s/px-csi-ext", namespace)
+		}
+		// Go through each pod and validate the csi specs
+		for _, pod := range pods {
+			if err := validateCSITopologyFeatureGate(pod, topologyEnabled); err != nil {
+				return nil, true, fmt.Errorf("failed to validate csi topology feature gate")
+			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCSITopologyFeatureGate(pod v1.Pod, topologyEnabled bool) error {
+	for _, container := range pod.Spec.Containers {
+		if container.Name == "csi-external-provisioner" {
+			featureGateEnabled := false
+			for _, arg := range container.Args {
+				if strings.Contains(arg, "Topology=true") {
+					featureGateEnabled = true
+					if !topologyEnabled {
+						return fmt.Errorf("csi topology is disabled but found the feature gate enabled in container args")
+					}
+				}
+			}
+			if topologyEnabled && !featureGateEnabled {
+				return fmt.Errorf("csi topology is enabled but cannot find the enabled feature gate in container args")
+			}
+		}
+	}
 	return nil
 }
 
