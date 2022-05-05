@@ -30,8 +30,13 @@ const (
 	CollectionConfigMapName = "px-daemonset-collection"
 )
 
+// SetKubernetesClient sets Kubernetes client, it's only used for dryrun.
+func (h *Handler) SetKubernetesClient(client client.Client) {
+	h.client = client
+}
+
 // GetAllDaemonSetObjects returns all objects deployed by daemonset method.
-func (h Handler) GetAllDaemonSetObjects(namespace string) ([]client.Object, error) {
+func (h *Handler) GetAllDaemonSetObjects(namespace string) ([]client.Object, error) {
 	var objs []client.Object
 	if err := h.getDaemonSetComponent(namespace, &objs); err != nil {
 		return nil, err
