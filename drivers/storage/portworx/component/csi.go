@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-version"
@@ -499,7 +500,8 @@ func (c *csi) createDeployment(
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
-			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
+		hasCSITopologyChanged(cluster, existingDeployment)
 
 	if !c.isCreated || modified {
 		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
@@ -510,6 +512,29 @@ func (c *csi) createDeployment(
 	}
 	c.isCreated = true
 	return nil
+}
+
+func hasCSITopologyChanged(
+	cluster *corev1.StorageCluster,
+	existingDeployment *appsv1.Deployment,
+) bool {
+	existingTopologyFeatureGate := false
+	csiProvisionerContainer := k8sutil.GetContainerFromDeployment(existingDeployment, csiProvisionerContainerName)
+	if csiProvisionerContainer != nil {
+		for _, arg := range csiProvisionerContainer.Args {
+			if strings.Contains(arg, "Topology=true") {
+				existingTopologyFeatureGate = true
+				break
+			}
+		}
+	}
+
+	updatedTopologyFeatureGate := false
+	if cluster.Spec.CSI.Topology != nil {
+		updatedTopologyFeatureGate = cluster.Spec.CSI.Topology.Enabled
+	}
+
+	return existingTopologyFeatureGate != updatedTopologyFeatureGate
 }
 
 func getCSIDeploymentSpec(
@@ -547,6 +572,10 @@ func getCSIDeploymentSpec(
 			"--enable-leader-election",
 			"--leader-election-type=" + provisionerLeaderElectionType,
 		}
+	}
+
+	if cluster.Spec.CSI.Topology != nil && cluster.Spec.CSI.Topology.Enabled {
+		args = append(args, "--feature-gates=Topology=true")
 	}
 
 	deployment := &appsv1.Deployment{
@@ -1165,6 +1194,12 @@ func (c *csi) getCSIConfiguration(
 		cluster.Spec.CSI = &corev1.CSISpec{
 			Enabled:                   false,
 			InstallSnapshotController: boolPtr(false),
+		}
+	}
+	if cluster.Spec.CSI.Enabled && cluster.Spec.CSI.Topology == nil {
+		// CSI topology feature gate is disabled by default
+		cluster.Spec.CSI.Topology = &corev1.CSITopologySpec{
+			Enabled: false,
 		}
 	}
 	csiGenerator := pxutil.NewCSIGenerator(c.k8sVersion, *pxVersion,
