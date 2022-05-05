@@ -186,8 +186,14 @@ type NodeSpec struct {
 
 // CSISpec is used to define the CSI configurations
 type CSISpec struct {
-	Enabled                   bool  `json:"enabled,omitempty"`
-	InstallSnapshotController *bool `json:"installSnapshotController,omitempty"`
+	Enabled                   bool             `json:"enabled,omitempty"`
+	InstallSnapshotController *bool            `json:"installSnapshotController,omitempty"`
+	Topology                  *CSITopologySpec `json:"topology,omitempty"`
+}
+
+// CSITopologySpec is used to define the CSI topology configurations
+type CSITopologySpec struct {
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // SecuritySpec is used to define the security configuration for a cluster.
