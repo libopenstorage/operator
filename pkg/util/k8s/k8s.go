@@ -1624,6 +1624,21 @@ func GetImageFromDeployment(deployment *appsv1.Deployment, containerName string)
 	return ""
 }
 
+// GetContainerFromDeployment returns the container given the name in the deployment
+func GetContainerFromDeployment(deployment *appsv1.Deployment, containerName string) *v1.Container {
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == containerName {
+			return &c
+		}
+	}
+	for _, c := range deployment.Spec.Template.Spec.InitContainers {
+		if c.Name == containerName {
+			return &c
+		}
+	}
+	return nil
+}
+
 // GetValueFromEnv returns a value for the given key name in list of env vars
 func GetValueFromEnv(imageKey string, envs []v1.EnvVar) string {
 	for _, env := range envs {
