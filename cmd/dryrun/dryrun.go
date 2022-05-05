@@ -47,14 +47,14 @@ import (
 )
 
 const (
-	flagVerbose       = "verbose"
-	flagStorageCluser = "storagecluster,stc"
-	flagKubeConfig    = "kubeconfig"
-	flagOutputFile    = "output,o"
+	flagVerbose        = "verbose"
+	flagStorageCluster = "storagecluster,stc"
+	flagKubeConfig     = "kubeconfig"
+	flagOutputFile     = "output,o"
 )
 
 var (
-	defaultOutputFile = "portworxCompnentSpecs.yaml"
+	defaultOutputFile = "portworxComponentSpecs.yaml"
 	skipComponents    = map[string]bool{
 		// CRD component registration is stuck at CRD validation as fake client does not set status of CRD.
 		// Potential fixes:
@@ -82,7 +82,7 @@ func main() {
 			Usage: "Enable verbose logging",
 		},
 		cli.StringFlag{
-			Name:  flagStorageCluser,
+			Name:  flagStorageCluster,
 			Usage: "[Optional] File for storage cluster spec, retrieve from k8s if it's not configured",
 		},
 		cli.StringFlag{
@@ -91,7 +91,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  flagOutputFile,
-			Usage: "[Optional] output file to save k8s object, default to " + defaultOutputFile,
+			Usage: "[Optional] output file to save k8s object, defaults to " + defaultOutputFile,
 		},
 	}
 
@@ -215,7 +215,7 @@ func dryRun(c *cli.Context) error {
 }
 
 func getStorageCluster(c *cli.Context) (*corev1.StorageCluster, error) {
-	storageClusterFile := c.String(flagStorageCluser)
+	storageClusterFile := c.String(flagStorageCluster)
 	if storageClusterFile != "" {
 		objs, err := inttestutil.ParseSpecsWithFullPath(storageClusterFile)
 		if err != nil {
@@ -269,6 +269,7 @@ func getK8sClient(c *cli.Context) (client.Client, error) {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 	} else {
 		config, err = rest.InClusterConfig()
+		// When running inside of container, writing to root will get "permission denied" error.
 		defaultOutputFile = "/tmp/" + defaultOutputFile
 	}
 	if err != nil {
