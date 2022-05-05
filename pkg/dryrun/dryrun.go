@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
-	"github.com/golang/mock/gomock"
+	//"time"
+
+	//"github.com/golang/mock/gomock"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	"github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
+	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+
+	//"github.com/portworx/sched-ops/k8s/apiextensions"
+	//coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -18,10 +25,10 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	//fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	//fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
@@ -29,17 +36,28 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/migration"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	inttestutil "github.com/libopenstorage/operator/test/integration_test/utils"
+	"k8s.io/apimachinery/pkg/version"
+
+	fakediscovery "k8s.io/client-go/discovery/fake"
+
+	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -62,11 +80,12 @@ var (
 type DryRun struct {
 	mockController *storagecluster.Controller
 	// Point to real k8s client if kubeconfig is provided, or running inside of container.
-	realClient client.Client
-	mockClient client.Client
-	mockDriver storage.Driver
-	cluster    *corev1.StorageCluster
-	outputFile string
+	realClient        client.Client
+	mockClient        client.Client
+	mockDriver        storage.Driver
+	cluster           *corev1.StorageCluster
+	outputFile        string
+	realControllerMgr manager.Manager
 }
 
 // Init performs required initialization
@@ -77,16 +96,18 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
 		log.WithError(err).Warningf("Could not connect to k8s cluster, will run in standalone mode.")
 	}
 
-	d.cluster, err = d.getStorageCluster(storageClusterFile)
-	if err != nil {
-		log.WithError(err).Fatal("failed to get storage cluster.")
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	// TODO: read k8s version with kubeconfig
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.22.0",
 	}
-
+	// TODO: check if more SetInstances are needed, review APIs called inside of components.
+	coreops.SetInstance(coreops.New(versionClient))
 	apiextensions.SetInstance(apiextensions.New(fakeextclient.NewSimpleClientset()))
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
-	mockCtrl := gomock.NewController(nil)
-	defer mockCtrl.Finish()
+	//mockCtrl := gomock.NewController(nil)
+	//defer mockCtrl.Finish()
 
 	d.mockDriver, err = storage.Get(pxutil.DriverName)
 	if err != nil {
@@ -99,6 +120,10 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
 	}
 
 	d.mockController = &storagecluster.Controller{Driver: d.mockDriver}
+	err = d.mockController.Init(d.realControllerMgr)
+	if err != nil {
+		log.WithError(err).Fatal("failed to initialize controller")
+	}
 	d.mockController.SetKubernetesClient(d.mockClient)
 
 	d.outputFile = outputFile
@@ -106,11 +131,51 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
 		d.outputFile = defaultOutputFile
 	}
 
+	start := func() {
+		if err := d.realControllerMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			log.Fatalf("Manager exited non-zero error: %v", err)
+		}
+	}
+	go start()
+	// Wait for the cache to be started.
+	time.Sleep(time.Second)
+
+	d.cluster, err = d.getStorageCluster(storageClusterFile)
+	if err != nil {
+		log.WithError(err).Fatal("failed to get storage cluster.")
+	}
+	// Mock migration approved.
+	d.cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	d.cluster.Status.Phase = constants.PhaseMigrationInProgress
+	d.cluster.Name = "mock-stc"
+
 	return nil
 }
 
 // Execute dry run for portworx installation
 func (d *DryRun) Execute() error {
+	err := d.mockClient.Create(context.TODO(), d.cluster)
+	if err != nil {
+		return err
+	}
+
+	if err = d.simulateK8sNode(); err != nil {
+		return err
+	}
+
+	// TODO: pre-install hook failed, probably due to the CRD issue.
+	_, err = d.mockController.Reconcile(
+		context.TODO(),
+		reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      d.cluster.Name,
+				Namespace: d.cluster.Namespace,
+			},
+		})
+	if err != nil {
+		return err
+	}
+
 	funcGetDir := func() string {
 		ex, err := os.Executable()
 		if err != nil {
@@ -139,13 +204,11 @@ func (d *DryRun) Execute() error {
 				ce.Code() == component.ErrCritical {
 				return err
 			} else if err != nil {
-				msg := fmt.Sprintf("Failed to setup %s. %v", comp.Name(), err)
-				log.Warningf(msg)
+				log.Errorf("Failed to setup %s. %v", comp.Name(), err)
 			}
 		} else {
 			if err := comp.Delete(d.cluster); err != nil {
-				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
-				log.Warningf(msg)
+				log.Errorf("Failed to cleanup %v. %v", comp.Name(), err)
 			}
 		}
 	}
@@ -189,6 +252,56 @@ func (d *DryRun) Execute() error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (d *DryRun) simulateK8sNode() error {
+	if d.realClient == nil {
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "mockNode",
+				Labels: make(map[string]string),
+			},
+			Status: v1.NodeStatus{
+				Allocatable: map[v1.ResourceName]resource.Quantity{
+					v1.ResourcePods: resource.MustParse(strconv.Itoa(1)),
+				},
+			},
+		}
+		if err := d.mockClient.Create(context.TODO(), node); err != nil {
+			return err
+		}
+	} else {
+		nodeList := &v1.NodeList{}
+		err := d.realClient.List(context.TODO(), nodeList)
+		if err != nil || nodeList == nil || len(nodeList.Items) == 0 {
+			return fmt.Errorf("failed to get real k8s node, err %v, nodeList %+v", err, nodeList)
+		}
+
+		for _, node := range nodeList.Items {
+			d.cleanupObject(&node)
+			err = d.mockClient.Create(context.TODO(), &node)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (d *DryRun) cleanupObject(obj client.Object) error {
+	obj.SetGenerateName("")
+	obj.SetUID("")
+	obj.SetResourceVersion("")
+	obj.SetGeneration(0)
+	obj.SetSelfLink("")
+	obj.SetCreationTimestamp(metav1.Time{})
+	obj.SetFinalizers(nil)
+	obj.SetOwnerReferences(nil)
+	obj.SetClusterName("")
+	obj.SetManagedFields(nil)
 
 	return nil
 }
@@ -255,7 +368,9 @@ func (d *DryRun) getStorageCluster(storageClusterFile string) (*corev1.StorageCl
 			log.WithError(err).Error("failed to list StorageCluster")
 		}
 		if len(clusterList.Items) > 0 {
-			return &clusterList.Items[0], nil
+			cluster := &clusterList.Items[0]
+			d.cleanupObject(cluster)
+			return cluster, nil
 		}
 	}
 
@@ -278,43 +393,35 @@ func (d *DryRun) getK8sClient(kubeconfig string) (client.Client, error) {
 		return nil, err
 	}
 
-	mgr, err := manager.New(config, manager.Options{})
+	d.realControllerMgr, err = manager.New(config, manager.Options{})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := apis.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
-	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := monitoringv1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
 	}
 
-	if err := cluster_v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := cluster_v1alpha1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
-	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := ocp_configv1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
-	if err := corev1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := corev1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add corev1 resources to the scheme: %v", err)
 	}
 
-	if err := v1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := v1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add v1 resources to the scheme: %v", err)
 	}
 
-	start := func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			log.Fatalf("Manager exited non-zero error: %v", err)
-		}
-	}
-	go start()
-	time.Sleep(time.Second)
-
-	return mgr.GetClient(), nil
+	return d.realControllerMgr.GetClient(), nil
 }
 
 func (d *DryRun) getAllObjects() ([]client.Object, error) {

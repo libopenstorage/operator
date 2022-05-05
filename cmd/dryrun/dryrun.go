@@ -12,10 +12,10 @@ import (
 
 const (
 	flagVerbose            = "verbose"
-	flagStorageCluser      = "storagecluster,stc"
-	flagKubeConfig         = "kubeconfig,kc"
-	flagOutputFile         = "output,o"
-	flagDaemonSetMigration = "migration,m"
+	flagStorageCluser      = "storagecluster"
+	flagKubeConfig         = "kubeconfig"
+	flagOutputFile         = "output"
+	flagDaemonSetMigration = "migration"
 )
 
 func main() {
