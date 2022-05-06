@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -52,7 +53,21 @@ import (
 )
 
 var (
-	defaultOutputFile = "portworxCompnentSpecs.yaml"
+	defaultOutputFile = "portworxComponentSpecs.yaml"
+	skipComponents    = map[string]bool{
+		// CRD component registration is stuck at CRD validation as fake client does not set status of CRD.
+		// Potential fixes:
+		//   1. remove the validation -- need more tests to see if it's safe to remove it.
+		//   2. create a thread to monitor the CRD and update status for dry run.
+		component.PortworxCRDComponentName: true,
+		// Disruption budget component needs to talk to portworx SDK,
+		// it also needs px to be deployed before it can get correct disruption budget, however
+		// dry run is before px being deployed.
+		component.DisruptionBudgetComponentName: true,
+		// Alert manager requires a secret to be deployed first.
+		// We may read the secret from real k8s cluster or generate a secret for dry run.
+		component.AlertManagerComponentName: true,
+	}
 )
 
 // DryRun is a struct for portworx installation dry run
@@ -66,11 +81,14 @@ type DryRun struct {
 	mockDriver storage.Driver
 	cluster    *corev1.StorageCluster
 	outputFile string
+	migration  bool
 }
 
 // Init performs required initialization
-func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
+func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string, migration bool) error {
 	var err error
+
+	d.migration = migration
 	d.realClient, err = d.getRealK8sClient(kubeconfig)
 	if err != nil {
 		logrus.WithError(err).Warningf("Could not connect to k8s cluster, will run in standalone mode.")
@@ -124,7 +142,6 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
 		logrus.WithError(err).Fatal("failed to initialize controller")
 	}
 	d.mockController.SetKubernetesClient(d.mockClient)
-	//	d.mockController.SetPodControl(&k8scontroller.FakePodControl{})
 
 	d.outputFile = outputFile
 	if d.outputFile == "" {
@@ -139,7 +156,6 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string) error {
 	d.cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
 	d.cluster.Annotations[constants.AnnotationPauseComponentMigration] = "false"
 	d.cluster.Status.Phase = constants.PhaseMigrationInProgress
-	d.cluster.Name = "mock-stc"
 	// Disable storage due to the driver will talk to portworx SDK to get storage node information.
 	// However dryrun is before installation so there won't be useful information.
 	// It will also disable PDB.
@@ -160,26 +176,7 @@ func (d *DryRun) Execute() error {
 		return err
 	}
 
-	funcGetDir := func() string {
-		ex, err := os.Executable()
-		if err != nil {
-			logrus.Warningf("failed to get executable path")
-			return ""
-		}
-
-		return filepath.Dir(ex) + "/configs"
-	}
-	pxutil.SpecsBaseDir = funcGetDir
-
-	_, err = d.mockController.Reconcile(
-		context.TODO(),
-		reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      d.cluster.Name,
-				Namespace: d.cluster.Namespace,
-			},
-		})
-	if err != nil {
+	if err = d.installAllComponents(); err != nil {
 		return err
 	}
 
@@ -211,18 +208,79 @@ func (d *DryRun) Execute() error {
 
 	logrus.Infof("Operator will deploy %d objects, saved to file %s", len(objs), d.outputFile)
 
-	logrus.Infof("Start daemonSet to operator migration dry run")
-	h := migration.New(&storagecluster.Controller{})
-	h.SetKubernetesClient(d.realClient)
-	dsObjs, err := h.GetAllDaemonSetObjects(d.cluster.Namespace)
+	if d.migration {
+		logrus.Infof("Start daemonSet to operator migration dry run")
+		controller := &storagecluster.Controller{}
+		controller.SetKubernetesClient(d.realClient)
+		h := migration.New(controller)
+		dsObjs, err := h.GetAllDaemonSetObjects(d.cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		logrus.Infof("Got %d objects from k8s cluster with daemonset install", len(dsObjs))
+		err = d.validateObjects(dsObjs, objs, h)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *DryRun) installAllComponents() error {
+	funcGetDir := func() string {
+		ex, err := os.Executable()
+		if err != nil {
+			logrus.Warningf("failed to get executable path")
+			return ""
+		}
+
+		return filepath.Dir(ex) + "/configs"
+	}
+	pxutil.SpecsBaseDir = funcGetDir
+
+	_, err := d.mockController.Reconcile(
+		context.TODO(),
+		reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      d.cluster.Name,
+				Namespace: d.cluster.Namespace,
+			},
+		})
 	if err != nil {
 		return err
 	}
 
-	logrus.Infof("Got %d objects from k8s cluster with daemonset install", len(dsObjs))
-	err = d.validateObjs(dsObjs, objs)
-	if err != nil {
-		return err
+	// We need to reconcile all components again with portworx enabled.
+	// Although it's done in controller reconcile, portworx was disabled to avoid calling to portworx SDKs,
+	//and many components are disabled when portworx is disabled.
+	cluster := d.cluster.DeepCopy()
+	cluster.Annotations[constants.AnnotationDisableStorage] = "false"
+	for _, comp := range component.GetAll() {
+		enabled := comp.IsEnabled(cluster)
+		if skipComponents[comp.Name()] {
+			// Only log a warning if component is enabled but not supported.
+			if enabled {
+				logrus.Warningf("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
+			}
+			continue
+		}
+
+		logrus.Infof("component \"%s\" enabled: %t", comp.Name(), enabled)
+		if enabled {
+			err := comp.Reconcile(d.cluster)
+			if ce, ok := err.(*component.Error); ok &&
+				ce.Code() == component.ErrCritical {
+				return err
+			} else if err != nil {
+				logrus.Errorf("Failed to setup %s. %v", comp.Name(), err)
+			}
+		} else {
+			if err := comp.Delete(d.cluster); err != nil {
+				logrus.Errorf("Failed to cleanup %v. %v", comp.Name(), err)
+			}
+		}
 	}
 
 	return nil
@@ -278,7 +336,7 @@ func (d *DryRun) cleanupObject(obj client.Object) error {
 	return nil
 }
 
-func (d *DryRun) validateObjs(dsObjs, operatorObjs []client.Object) error {
+func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migration.Handler) error {
 	// object kind, object name to object
 	operatorObjMap := make(map[string]map[string]client.Object)
 	for _, obj := range operatorObjs {
@@ -297,9 +355,11 @@ func (d *DryRun) validateObjs(dsObjs, operatorObjs []client.Object) error {
 		case "DaemonSet":
 			if name == "portworx" {
 				logrus.Info("Found portworx daemonset")
-				//opPod := operatorObjMap["Pod"][name].(*v1.Pod)
-				//t, err := d.mockController.CreatePodTemplate(d.cluster, &v1.Node{}, "")
-				//handler.DeepEqualPod(&obj.(*appsv1.DaemonSet).Spec.Template, opPod.Spec)
+				opPod := operatorObjMap["Pod"][name].(*v1.Pod)
+				err := d.deepEqualPod(&obj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opPod.Spec})
+				if err != nil {
+					logrus.WithError(err).Warningf("failed to validate portworx pod spec")
+				}
 			}
 		default:
 			logrus.Warningf("Object of kind %s is not validated for migration, object name: %s", kind, obj.GetName())
@@ -410,8 +470,10 @@ func (d *DryRun) getAllObjects() ([]client.Object, error) {
 
 	namespace := d.cluster.Namespace
 	k8sClient := d.mockClient
-	// TODO: populate storage cluster defaults.
-	t, err := d.mockController.CreatePodTemplate(d.cluster, &v1.Node{}, "")
+
+	cluster := d.cluster.DeepCopy()
+	cluster.Annotations[constants.AnnotationDisableStorage] = "false"
+	t, err := d.mockController.CreatePodTemplate(cluster, &v1.Node{}, "")
 	if err != nil {
 		logrus.WithError(err).Warningf("failed to get portworx pod template")
 	} else {

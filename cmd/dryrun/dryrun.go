@@ -12,7 +12,7 @@ import (
 
 const (
 	flagVerbose            = "verbose"
-	flagStorageCluser      = "storagecluster"
+	flagStorageCluster     = "storagecluster"
 	flagKubeConfig         = "kubeconfig"
 	flagOutputFile         = "output"
 	flagDaemonSetMigration = "migration"
@@ -31,7 +31,7 @@ func main() {
 			Usage: "Enable verbose logging",
 		},
 		cli.StringFlag{
-			Name:  flagStorageCluser,
+			Name:  flagStorageCluster,
 			Usage: "File for storage cluster spec, retrieve from k8s if it's not configured",
 		},
 		cli.StringFlag{
@@ -61,9 +61,14 @@ func execute(c *cli.Context) {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	d := dryrun.DryRun{}
+	d := &dryrun.DryRun{}
 	var err error
-	err = d.Init(c.String(flagKubeConfig), c.String(flagOutputFile), c.String(flagStorageCluser))
+	err = d.Init(
+		c.String(flagKubeConfig),
+		c.String(flagOutputFile),
+		c.String(flagStorageCluster),
+		c.Bool(flagDaemonSetMigration),
+	)
 	if err != nil {
 		log.WithError(err).Fatal("failed to initialize")
 	}
