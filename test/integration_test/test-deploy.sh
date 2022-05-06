@@ -13,6 +13,7 @@ portworx_docker_password=""
 portworx_image_override=""
 cloud_provider=""
 is_ocp=false
+is_eks=false
 portworx_device_specs=""
 portworx_kvdb_spec=""
 portworx_env_vars=""
@@ -71,6 +72,12 @@ case $i in
     --is-ocp)
         echo "Flag for OCP: $2"
         is_ocp=$2
+        shift
+        shift
+        ;;
+    --is-eks)
+        echo "Flag for EKS: $2"
+        is_eks=$2
         shift
         shift
         ;;
@@ -164,6 +171,14 @@ if [ "$is_ocp" != "" ]; then
 	sed -i 's|'IS_OCP'|'"$is_ocp"'|g' $test_pod_spec
 else
 	sed -i 's|'IS_OCP'|''|g' $test_pod_spec
+fi
+
+# Set EKS
+if [ "$is_eks" != "" ]; then
+    echo "This is EKS cluster: $is_eks"
+    sed -i 's|'IS_EKS'|'"$is_eks"'|g' $test_pod_spec
+else
+    sed -i 's|'IS_EKS'|''|g' $test_pod_spec
 fi
 
 # Set Portworx Spec Generator URL
