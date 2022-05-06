@@ -822,14 +822,11 @@ func BasicSecurityRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Enable Security and validate
 		logrus.Info("Enable Security and validate")
-		var security *corev1.SecuritySpec
 		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			if cluster.Spec.Security == nil {
-				security = &corev1.SecuritySpec{
-					Enabled: true,
-				}
-				cluster.Spec.Security = security
+				cluster.Spec.Security = &corev1.SecuritySpec{}
 			}
+			cluster.Spec.Security.Enabled = true
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateSecurity(cluster, false, updateParamFunc, t)

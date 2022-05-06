@@ -1756,7 +1756,7 @@ func ValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, ti
 	return ValidateSecurityDisabled(cluster, previouslyEnabled, timeout, interval)
 }
 
-// ValidateSecurityEnabled validates PX Security components are enabled`/running as expected
+// ValidateSecurityEnabled validates PX Security components are enabled/running as expected
 func ValidateSecurityEnabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	storkDp := &appsv1.Deployment{}
 	storkDp.Name = "stork"
@@ -1777,19 +1777,19 @@ func ValidateSecurityEnabled(cluster *corev1.StorageCluster, timeout, interval t
 		}
 
 		if _, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace); err != nil {
-			return "", true, fmt.Errorf("failed to find secret secret px-admin-token, err %v", err)
+			return "", true, fmt.Errorf("failed to find secret px-admin-token, err %v", err)
 		}
 
 		if _, err := coreops.Instance().GetSecret("px-user-token", cluster.Namespace); err != nil {
-			return "", true, fmt.Errorf("failed to find secret secret px-user-token, err %v", err)
+			return "", true, fmt.Errorf("failed to find secret px-user-token, err %v", err)
 		}
 
 		if _, err := coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace); err != nil {
-			return "", true, fmt.Errorf("failed to find secret secret px-shared-secret, err %v", err)
+			return "", true, fmt.Errorf("failed to find secret px-shared-secret, err %v", err)
 		}
 
 		if _, err := coreops.Instance().GetSecret("px-system-secrets", cluster.Namespace); err != nil {
-			return "", true, fmt.Errorf("failed to find secret secret px-system-secrets, err %v", err)
+			return "", true, fmt.Errorf("failed to find secret px-system-secrets, err %v", err)
 		}
 
 		return "", false, nil
@@ -1822,36 +1822,27 @@ func ValidateSecurityDisabled(cluster *corev1.StorageCluster, previouslyEnabled 
 			}
 		}
 
+		// *-token secrets are always deleted regardless if security was previously enabled or not
+		_, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found secret px-admin-token, when should't have, err %v", err)
+		}
+
+		_, err = coreops.Instance().GetSecret("px-user-token", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found secret px-user-token, when shouldn't have, err %v", err)
+		}
+
 		if previouslyEnabled {
-			_, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace)
-			if !errors.IsNotFound(err) {
-				return "", true, fmt.Errorf("found secret px-admin-token, when should't have, err %v", err)
-			}
-
-			_, err = coreops.Instance().GetSecret("px-user-token", cluster.Namespace)
-			if !errors.IsNotFound(err) {
-				return "", true, fmt.Errorf("found secret px-user-token, when shouldn't have, err %v", err)
-			}
-
 			if _, err := coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace); err != nil {
-				return "", true, fmt.Errorf("failed to find secret secret px-shared-secret, err %v", err)
+				return "", true, fmt.Errorf("failed to find secret px-shared-secret, err %v", err)
 			}
 
 			if _, err := coreops.Instance().GetSecret("px-system-secrets", cluster.Namespace); err != nil {
-				return "", true, fmt.Errorf("failed to find secret secret px-system-secrets, err %v", err)
+				return "", true, fmt.Errorf("failed to find secret px-system-secrets, err %v", err)
 			}
 		} else {
-			_, err := coreops.Instance().GetSecret("px-admin-token", cluster.Namespace)
-			if !errors.IsNotFound(err) {
-				return "", true, fmt.Errorf("found secret px-admin-token, when should't have, err %v", err)
-			}
-
-			_, err = coreops.Instance().GetSecret("px-user-token", cluster.Namespace)
-			if !errors.IsNotFound(err) {
-				return "", true, fmt.Errorf("found secret px-user-token, when shouldn't have, err %v", err)
-			}
-
-			_, err = coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace)
+			_, err := coreops.Instance().GetSecret("px-shared-secret", cluster.Namespace)
 			if !errors.IsNotFound(err) {
 				return "", true, fmt.Errorf("found secret px-shared-secret, when shouldn't have, err %v", err)
 			}
@@ -1897,7 +1888,7 @@ func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment
 					}
 					pxJwtIssuerEnvVar = env.Value
 				} else if env.Name == StorkPxJwtIssuerEnvVarName && !securityEnabled {
-					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when stork is disabled", StorkPxJwtIssuerEnvVarName, pod.Name)
+					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when Security is disabled", StorkPxJwtIssuerEnvVarName, pod.Name)
 				}
 
 				if env.Name == StorkPxSharedSecretEnvVarName && securityEnabled {
@@ -1913,7 +1904,7 @@ func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment
 						}
 					}
 				} else if env.Name == StorkPxSharedSecretEnvVarName && !securityEnabled {
-					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when stork is disabled", StorkPxSharedSecretEnvVarName, pod.Name)
+					return nil, true, fmt.Errorf("found env var %s inside Stork pod [%s] when Security is disabled", StorkPxSharedSecretEnvVarName, pod.Name)
 				}
 
 			}
@@ -1936,7 +1927,7 @@ func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment
 			numberOfPods++
 		}
 
-		// TODO: Hardcoding this to 3 instead of len(pods), because the previous ValidateDeloyment() step might have not validated the updated deloyment
+		// TODO: Hardcoding this to 3 instead of len(pods), because the previous ValidateDeloyment() step might have not validated the updated deployment
 		if numberOfPods != 3 {
 			return nil, true, fmt.Errorf("waiting for all Stork pods, expected: %d, got: %d", 3, numberOfPods)
 		}
