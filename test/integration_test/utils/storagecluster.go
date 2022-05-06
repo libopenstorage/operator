@@ -47,6 +47,14 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		cluster.Annotations["portworx.io/is-openshift"] = "true"
 	}
 
+	// Add EKS annotation
+	if IsEks {
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
+		cluster.Annotations["portworx.io/is-eks"] = "true"
+	}
+
 	// Populate cloud storage
 	if len(PxDeviceSpecs) != 0 {
 		pxDeviceSpecs := strings.Split(PxDeviceSpecs, ";")

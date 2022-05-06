@@ -43,6 +43,9 @@ var (
 
 	// IsOcp is an indication that this is OCP cluster or not
 	IsOcp bool
+
+	// IsEks is an indication that this is EKS cluster or not
+	IsEks bool
 )
 
 const (

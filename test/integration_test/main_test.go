@@ -71,6 +71,10 @@ func setup() error {
 		"is-ocp",
 		false,
 		"Is this OpenShift")
+	flag.BoolVar(&ci_utils.IsEks,
+		"is-eks",
+		false,
+		"Is this EKS")
 	flag.StringVar(&logLevel,
 		"log-level",
 		"",
