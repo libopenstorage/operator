@@ -75,27 +75,17 @@ func TestDryRun(t *testing.T) {
 	manifest.SetInstance(mockManifest)
 	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(true).AnyTimes()
 
-	// Change image pull secret in spec.
-	ds.Spec.Template.Spec.ImagePullSecrets = []v1.LocalObjectReference{
-		{
-			Name: "testSecret",
-		},
-	}
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	driver.EXPECT().String().Return("mock-driver").AnyTimes()
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
-		GitVersion: "v1.16.0",
+		GitVersion: "v1.15.0",
 	}
 
 	migrator := New(ctrl)
 	go migrator.Start()
 
 	err := wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
-		if strings.Contains(reflect.ValueOf(<-recorder.Events).String(), "Spec validation failed") {
+		if strings.Contains(reflect.ValueOf(<-recorder.Events).String(), "unsupported k8s version") {
 			return true, nil
 		}
 

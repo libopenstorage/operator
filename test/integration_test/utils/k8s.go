@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"time"
 
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	appops "github.com/portworx/sched-ops/k8s/apps"
@@ -358,6 +359,8 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 	} else if specObj, ok := in.(*monitoringv1.Alertmanager); ok {
 		return specObj, nil
 	} else if specObj, ok := in.(*v1.PersistentVolumeClaim); ok {
+		return specObj, nil
+	} else if specObj, ok := in.(*corev1.StorageCluster); ok {
 		return specObj, nil
 	}
 	return nil, fmt.Errorf("unsupported object: %v", reflect.TypeOf(in))

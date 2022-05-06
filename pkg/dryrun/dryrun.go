@@ -2,6 +2,7 @@ package dryrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,9 +53,13 @@ import (
 	inttestutil "github.com/libopenstorage/operator/test/integration_test/utils"
 )
 
+const (
+	defaultOutputFolder      = "./portworxSpecs"
+	defaultFileAllComponents = "allComponents.yaml"
+)
+
 var (
-	defaultOutputFile = "portworxComponentSpecs.yaml"
-	skipComponents    = map[string]bool{
+	skipComponents = map[string]bool{
 		// CRD component registration is stuck at CRD validation as fake client does not set status of CRD.
 		// Potential fixes:
 		//   1. remove the validation -- need more tests to see if it's safe to remove it.
@@ -76,16 +81,16 @@ type DryRun struct {
 	realControllerMgr manager.Manager
 	mockControllerMgr *mock.MockManager
 	// Point to real k8s cluster.
-	realClient client.Client
-	mockClient client.Client
-	mockDriver storage.Driver
-	cluster    *corev1.StorageCluster
-	outputFile string
-	migration  bool
+	realClient   client.Client
+	mockClient   client.Client
+	mockDriver   storage.Driver
+	cluster      *corev1.StorageCluster
+	outputFolder string
+	migration    bool
 }
 
 // Init performs required initialization
-func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string, migration bool) error {
+func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string, migration bool) error {
 	var err error
 
 	d.migration = migration
@@ -143,9 +148,9 @@ func (d *DryRun) Init(kubeconfig, outputFile, storageClusterFile string, migrati
 	}
 	d.mockController.SetKubernetesClient(d.mockClient)
 
-	d.outputFile = outputFile
-	if d.outputFile == "" {
-		d.outputFile = defaultOutputFile
+	d.outputFolder = outputFolder
+	if d.outputFolder == "" {
+		d.outputFolder = defaultOutputFolder
 	}
 
 	d.cluster, err = d.getStorageCluster(storageClusterFile)
@@ -185,28 +190,10 @@ func (d *DryRun) Execute() error {
 		logrus.WithError(err).Error("failed to get all objects")
 	}
 
-	f, err := os.OpenFile(d.outputFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-	if err != nil {
-		logrus.WithError(err).Errorf("failed to open file %s", d.outputFile)
+	if err = d.writeFiles(objs); err != nil {
 		return err
 	}
-	defer f.Close()
-
-	for _, obj := range objs {
-		logrus.Infof("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
-		bytes, err := yaml.Marshal(obj)
-		if err != nil {
-			return err
-		}
-
-		_, err = f.WriteString(string(bytes) + "---\n")
-		if err != nil {
-			logrus.WithError(err).Errorf("failed to write file %s", d.outputFile)
-			return err
-		}
-	}
-
-	logrus.Infof("Operator will deploy %d objects, saved to file %s", len(objs), d.outputFile)
+	logrus.Infof("Operator will deploy %d objects, saved to folder %s", len(objs), d.outputFolder)
 
 	if d.migration {
 		logrus.Infof("Start daemonSet to operator migration dry run")
@@ -221,6 +208,54 @@ func (d *DryRun) Execute() error {
 		logrus.Infof("Got %d objects from k8s cluster with daemonset install", len(dsObjs))
 		err = d.validateObjects(dsObjs, objs, h)
 		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *DryRun) writeFiles(objs []client.Object) error {
+
+	if _, err := os.Stat(d.outputFolder); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(d.outputFolder, os.ModePerm)
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to create folder %s", d.outputFolder)
+		}
+	}
+
+	fileAllComponents := fmt.Sprintf("%s/%s", d.outputFolder, defaultFileAllComponents)
+	f, err := os.OpenFile(fileAllComponents, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		logrus.WithError(err).Errorf("failed to open file %s", fileAllComponents)
+		return err
+	}
+	defer f.Close()
+
+	for _, obj := range objs {
+		logrus.Infof("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		bytes, err := yaml.Marshal(obj)
+		if err != nil {
+			return err
+		}
+
+		_, err = f.WriteString(string(bytes) + "---\n")
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to write file %s", fileAllComponents)
+			return err
+		}
+
+		objFileName := fmt.Sprintf("%s/%s.%s.yaml", d.outputFolder, obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		objFile, err := os.OpenFile(objFileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to open file %s", objFileName)
+			return err
+		}
+		defer objFile.Close()
+
+		_, err = objFile.WriteString(string(bytes))
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to write file %s", objFileName)
 			return err
 		}
 	}
@@ -248,6 +283,17 @@ func (d *DryRun) installAllComponents() error {
 				Namespace: d.cluster.Namespace,
 			},
 		})
+	if err != nil {
+		return err
+	}
+
+	// Update the storage cluster after reconcile, which is updated with default values.
+	err = d.mockClient.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      d.cluster.Name,
+			Namespace: d.cluster.Namespace,
+		},
+		d.cluster)
 	if err != nil {
 		return err
 	}
@@ -347,6 +393,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		operatorObjMap[kind][obj.GetName()] = obj
 	}
 
+	var lastErr error
 	for _, obj := range dsObjs {
 		kind := obj.GetObjectKind().GroupVersionKind().Kind
 		name := obj.GetName()
@@ -358,6 +405,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				opPod := operatorObjMap["Pod"][name].(*v1.Pod)
 				err := d.deepEqualPod(&obj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opPod.Spec})
 				if err != nil {
+					lastErr = err
 					logrus.WithError(err).Warningf("failed to validate portworx pod spec")
 				}
 			}
@@ -366,7 +414,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		}
 	}
 
-	return nil
+	return lastErr
 }
 
 func (d *DryRun) getStorageCluster(storageClusterFile string) (*corev1.StorageCluster, error) {
@@ -385,6 +433,9 @@ func (d *DryRun) getStorageCluster(storageClusterFile string) (*corev1.StorageCl
 		return cluster, nil
 	}
 
+	if d.realClient == nil {
+		return nil, fmt.Errorf("could not load storage cluster, either pass an input file or KUBECONFIG")
+	}
 	nsList := &v1.NamespaceList{}
 	err := d.realClient.List(context.TODO(), nsList)
 	if err != nil {
@@ -419,7 +470,8 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 	} else {
 		config, err = rest.InClusterConfig()
-		defaultOutputFile = "/tmp/" + defaultOutputFile
+		// When running inside of container, creating folder on root will get permission denied.
+		d.outputFolder = "/tmp/" + d.outputFolder
 	}
 	if err != nil {
 		return nil, err

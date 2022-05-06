@@ -14,7 +14,7 @@ const (
 	flagVerbose            = "verbose"
 	flagStorageCluster     = "storagecluster"
 	flagKubeConfig         = "kubeconfig"
-	flagOutputFile         = "output"
+	flagOutputFolder       = "output"
 	flagDaemonSetMigration = "migration"
 )
 
@@ -39,8 +39,8 @@ func main() {
 			Usage: "kubeconfig file",
 		},
 		cli.StringFlag{
-			Name:  flagOutputFile,
-			Usage: "output file to save k8s objects in yaml format",
+			Name:  flagOutputFolder,
+			Usage: "output folder to save k8s objects in yaml files",
 		},
 		cli.BoolFlag{
 			Name:  flagDaemonSetMigration,
@@ -65,7 +65,7 @@ func execute(c *cli.Context) {
 	var err error
 	err = d.Init(
 		c.String(flagKubeConfig),
-		c.String(flagOutputFile),
+		c.String(flagOutputFolder),
 		c.String(flagStorageCluster),
 		c.Bool(flagDaemonSetMigration),
 	)
