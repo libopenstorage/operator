@@ -59,6 +59,7 @@ spec:
     - -portworx-kvdb-spec=PORTWORX_KVDB_SPEC
     - -portworx-env-vars=PORTWORX_ENV_VARS
     - -is-ocp=IS_OCP
+    - -is-eks=IS_EKS
     - -cloud-provider=CLOUD_PROVIDER
     - -upgrade-hops-url-list=UPGRADE_HOPS_URL_LIST
     - -log-level=LOG_LEVEL
