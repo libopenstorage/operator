@@ -55,14 +55,6 @@ spec:
                       storage cluster components. The key specifies component in format of "kind/component",
                       e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
                       string that contains custom annotation key and value pairs.
-                  labels:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                    description: >-
-                      The labels section of spec is a map of map to pass custom labels to different storage cluster
-                      components. The key specifies component in format of "kind/component", e.g. "service/portworx-api"
-                      to pass custom labels to portworx-api service. The value is a map of string that contains custom
-                      label key and value pairs.
               resources:
                 type: object
                 description: Specifies the compute resource requirements for the storage pod.
@@ -96,14 +88,6 @@ spec:
                   Custom container image registry server that will be used instead of
                   index.docker.io to download Docker images. This may include the repository as well.
                   (Example: myregistry.net:5443 or myregistry.com/myrepository)
-              preserveFullCustomImageRegistry:
-                type: boolean
-                description: >-
-                  Setting this to true this stops part of the image tag being swallowed when setting a
-                  customImageRegistry with a / in it. When set to false using a customImageRegistry of
-                  `example.io/public` and an image of `portworx/oci-monitor` the full image path is is
-                  `example.io/public/oci-monitor`, setting to true gives you
-                  `example.io/public/portworx/oci-monitor`. Defaults to false
               secretsProvider:
                 type: string
                 description: Secrets provider is the name of secret provider that driver will connect to.
@@ -305,7 +289,7 @@ spec:
                             the taint. By default, it is not set, which means tolerate the taint forever
                             (do not evict). Zero and negative values will be treated as 0 (evict
                             immediately) by the system.
-              pxRepo:
+              pxrepo:
                 type: object
                 description: Details of PX repo service for installing dependency modules.
                 properties:
@@ -1467,9 +1451,6 @@ spec:
                   metricsCollectorProxy:
                     type: string
                     description: Desired image for metrics collector proxy.
-                  pxRepo:
-                    type: string
-                    description: Desired image for pxRepo.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.
@@ -1486,12 +1467,3 @@ spec:
                       type: string
                       description: Reason is human readable message indicating details about the current
                         state of the cluster.
-  - name: v1alpha1
-    served: false
-    storage: false
-    subresources:
-      status: {}
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
