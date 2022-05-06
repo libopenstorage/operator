@@ -231,6 +231,22 @@ func UpdateAndValidateMonitoring(cluster *corev1.StorageCluster, f func(*corev1.
 	return latestLiveCluster
 }
 
+// UpdateAndValidateSecurity update StorageCluster, validates Security components only and return latest version of live StorageCluster
+func UpdateAndValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, f func(*corev1.StorageCluster) *corev1.StorageCluster, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateSecurity(latestLiveCluster, previouslyEnabled, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	require.NoError(t, err)
+
+	return latestLiveCluster
+}
+
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion
 func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testing.T) {
 	// Delete cluster
