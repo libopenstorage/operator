@@ -2828,6 +2828,8 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 	require.ElementsMatch(t, expectedCluster.Spec.Volumes, cluster.Spec.Volumes)
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
+	expectedCluster.Spec.Volumes = nil
+	cluster.Spec.Volumes = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
