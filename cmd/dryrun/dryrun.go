@@ -11,11 +11,10 @@ import (
 )
 
 const (
-	flagVerbose            = "verbose"
-	flagStorageCluster     = "storagecluster"
-	flagKubeConfig         = "kubeconfig"
-	flagOutputFolder       = "output"
-	flagDaemonSetMigration = "migration"
+	flagVerbose        = "verbose"
+	flagStorageCluster = "storagecluster"
+	flagKubeConfig     = "kubeconfig"
+	flagOutputFolder   = "output"
 )
 
 func main() {
@@ -42,10 +41,6 @@ func main() {
 			Name:  flagOutputFolder,
 			Usage: "output folder to save k8s objects in yaml files",
 		},
-		cli.BoolFlag{
-			Name:  flagDaemonSetMigration,
-			Usage: "dry run daemonSet to operator migration",
-		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -67,7 +62,6 @@ func execute(c *cli.Context) {
 		c.String(flagKubeConfig),
 		c.String(flagOutputFolder),
 		c.String(flagStorageCluster),
-		c.Bool(flagDaemonSetMigration),
 	)
 	if err != nil {
 		log.WithError(err).Fatal("failed to initialize")

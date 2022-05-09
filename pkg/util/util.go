@@ -197,16 +197,16 @@ func DeepEqualObjects(
 		v2, ok := map2[k]
 
 		if !ok {
-			msg += fmt.Sprintf("object \"%s\" exists in first array but does not exist in second array, %+v.\n", k, v)
+			msg += fmt.Sprintf("object \"%s\" exists in first array but does not exist in second array.\n", k)
 		} else if err := funcDeepEqualObject(v, v2); err != nil {
 			msg += err.Error()
 			msg += "\n"
 		}
 	}
 
-	for k, v := range map2 {
+	for k := range map2 {
 		if _, ok := map1[k]; !ok {
-			msg += fmt.Sprintf("object \"%s\" exists in second array but does not exist in first array, %+v.\n", k, v)
+			msg += fmt.Sprintf("object \"%s\" exists in second array but does not exist in first array.\n", k)
 		}
 	}
 

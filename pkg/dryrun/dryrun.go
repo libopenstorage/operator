@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	goversion "github.com/hashicorp/go-version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	"github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -54,8 +55,8 @@ import (
 )
 
 const (
-	defaultOutputFolder      = "./portworxSpecs"
-	defaultFileAllComponents = "allComponents.yaml"
+	defaultOutputFolder      = "portworxSpecs"
+	defaultFileAllComponents = "AllSpecs.yaml"
 )
 
 var (
@@ -69,9 +70,15 @@ var (
 		// it also needs px to be deployed before it can get correct disruption budget, however
 		// dry run is before px being deployed.
 		component.DisruptionBudgetComponentName: true,
-		// Alert manager requires a secret to be deployed first.
-		// We may read the secret from real k8s cluster or generate a secret for dry run.
-		component.AlertManagerComponentName: true,
+	}
+
+	skipObjectKinds = map[string]bool{
+		"Namespace":          true,
+		"ClusterRole":        true,
+		"ClusterRoleBinding": true,
+		"Role":               true,
+		"RoleBinding":        true,
+		"ServiceAccount":     true,
 	}
 )
 
@@ -86,23 +93,43 @@ type DryRun struct {
 	mockDriver   storage.Driver
 	cluster      *corev1.StorageCluster
 	outputFolder string
-	migration    bool
 }
 
 // Init performs required initialization
-func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string, migration bool) error {
+func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error {
 	var err error
 
-	d.migration = migration
+	k8sVersion := "v1.22.0"
 	d.realClient, err = d.getRealK8sClient(kubeconfig)
 	if err != nil {
 		logrus.WithError(err).Warningf("Could not connect to k8s cluster, will run in standalone mode.")
+	} else {
+		ver, err := testutil.GetK8SVersion()
+		if err != nil {
+			logrus.WithError(err).Error("failed to get k8s version")
+		} else {
+			k8sVersion = ver
+			logrus.Infof("k8s version is %s", k8sVersion)
+			minVer, err := goversion.NewVersion("1.16")
+			if err != nil {
+				return fmt.Errorf("error parsing version '1.16': %v", err)
+			}
+
+			curVer, err := goversion.NewVersion(k8sVersion)
+			if err != nil {
+				return fmt.Errorf("error parsing version %s: %v", k8sVersion, err)
+			}
+
+			if !curVer.GreaterThanOrEqual(minVer) {
+				return fmt.Errorf("unsupported k8s version %v, please upgrade k8s to %s+ before migration", k8sVersion, minVer)
+			}
+		}
 	}
 
 	versionClient := fakek8sclient.NewSimpleClientset()
 	// TODO: read k8s version with kubeconfig
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.22.0",
+		GitVersion: k8sVersion,
 	}
 	// TODO: check if more SetInstances are needed, review APIs called inside of components.
 	coreops.SetInstance(coreops.New(versionClient))
@@ -148,9 +175,8 @@ func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string, migra
 	}
 	d.mockController.SetKubernetesClient(d.mockClient)
 
-	d.outputFolder = outputFolder
-	if d.outputFolder == "" {
-		d.outputFolder = defaultOutputFolder
+	if outputFolder != "" {
+		d.outputFolder = outputFolder
 	}
 
 	d.cluster, err = d.getStorageCluster(storageClusterFile)
@@ -195,8 +221,7 @@ func (d *DryRun) Execute() error {
 	}
 	logrus.Infof("Operator will deploy %d objects, saved to folder %s", len(objs), d.outputFolder)
 
-	if d.migration {
-		logrus.Infof("Start daemonSet to operator migration dry run")
+	if d.realClient != nil {
 		controller := &storagecluster.Controller{}
 		controller.SetKubernetesClient(d.realClient)
 		h := migration.New(controller)
@@ -205,10 +230,15 @@ func (d *DryRun) Execute() error {
 			return err
 		}
 
-		logrus.Infof("Got %d objects from k8s cluster with daemonset install", len(dsObjs))
-		err = d.validateObjects(dsObjs, objs, h)
-		if err != nil {
-			return err
+		if len(dsObjs) > 0 &&
+			dsObjs[0].GetObjectKind().GroupVersionKind().Kind == "DaemonSet" &&
+			dsObjs[0].GetName() == "portworx" {
+			logrus.Infof("Got %d objects from k8s cluster, will compare with objects installed by operator", len(dsObjs))
+			// Do not return error as it's quiet noisy, a lot of places are expected to be different between Daemonset
+			// and operator install. If there is difference, warning is already logged for user to review.
+			d.validateObjects(dsObjs, objs, h)
+		} else {
+			logrus.Infof("could not find DaemonSet portworx, will not dry run daemonset to operator migration")
 		}
 	}
 
@@ -216,7 +246,6 @@ func (d *DryRun) Execute() error {
 }
 
 func (d *DryRun) writeFiles(objs []client.Object) error {
-
 	if _, err := os.Stat(d.outputFolder); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(d.outputFolder, os.ModePerm)
 		if err != nil {
@@ -264,6 +293,19 @@ func (d *DryRun) writeFiles(objs []client.Object) error {
 }
 
 func (d *DryRun) installAllComponents() error {
+	// Create a secret for alert manager so installation can proceed
+	err := d.mockClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.AlertManagerConfigSecretName,
+				Namespace: d.cluster.Namespace,
+			},
+		})
+	if err != nil {
+		logrus.WithError(err).Error("failed to create mock secret for alertManager")
+	}
+
 	funcGetDir := func() string {
 		ex, err := os.Executable()
 		if err != nil {
@@ -275,7 +317,7 @@ func (d *DryRun) installAllComponents() error {
 	}
 	pxutil.SpecsBaseDir = funcGetDir
 
-	_, err := d.mockController.Reconcile(
+	_, err = d.mockController.Reconcile(
 		context.TODO(),
 		reconcile.Request{
 			NamespacedName: types.NamespacedName{
@@ -301,14 +343,14 @@ func (d *DryRun) installAllComponents() error {
 	// We need to reconcile all components again with portworx enabled.
 	// Although it's done in controller reconcile, portworx was disabled to avoid calling to portworx SDKs,
 	//and many components are disabled when portworx is disabled.
-	cluster := d.cluster.DeepCopy()
-	cluster.Annotations[constants.AnnotationDisableStorage] = "false"
+	d.cluster.Annotations[constants.AnnotationDisableStorage] = "false"
+
 	for _, comp := range component.GetAll() {
-		enabled := comp.IsEnabled(cluster)
+		enabled := comp.IsEnabled(d.cluster)
 		if skipComponents[comp.Name()] {
 			// Only log a warning if component is enabled but not supported.
 			if enabled {
-				logrus.Warningf("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
+				logrus.Infof("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
 			}
 			continue
 		}
@@ -394,23 +436,109 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 	}
 
 	var lastErr error
-	for _, obj := range dsObjs {
-		kind := obj.GetObjectKind().GroupVersionKind().Kind
-		name := obj.GetName()
+	for _, dsObj := range dsObjs {
+		kind := dsObj.GetObjectKind().GroupVersionKind().Kind
+		name := dsObj.GetName()
 
-		switch kind {
-		case "DaemonSet":
-			if name == "portworx" {
-				logrus.Info("Found portworx daemonset")
-				opPod := operatorObjMap["Pod"][name].(*v1.Pod)
-				err := d.deepEqualPod(&obj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opPod.Spec})
-				if err != nil {
-					lastErr = err
-					logrus.WithError(err).Warningf("failed to validate portworx pod spec")
+		if skipObjectKinds[kind] {
+			continue
+		}
+
+		// Map daemonset-installed object to operator-installed object
+		if kind == "DaemonSet" && name == "portworx" {
+			// Portworx DaemonSet is deployed as Pod by operator
+			kind = "Pod"
+		} else if kind == "Deployment" && name == "px-csi-ext" {
+			if m, ok := operatorObjMap["StatefulSet"]; ok {
+				if _, ok := m[name]; ok {
+					kind = "StatefulSet"
+					logrus.Info("px-csi-ext is deployed as StatefulSet instead of Deployment by operator")
 				}
 			}
+		} else if kind == "Prometheus" && name == "prometheus" {
+			name = "px-prometheus"
+		} else if kind == "Service" && name == "prometheus" {
+			name = "px-prometheus"
+		} else if kind == "Service" && name == "autopilot" {
+			// Operator does not create autopilot service
+			continue
+		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
+			name = "portworx"
+		}
+
+		foundOpObj := true
+		if _, ok := operatorObjMap[kind]; !ok {
+			foundOpObj = false
+		} else if _, ok := operatorObjMap[kind][name]; !ok {
+			foundOpObj = false
+		}
+		if !foundOpObj {
+			msg := fmt.Sprintf("object %s:%s is found in daemonset install but not operator install", kind, name)
+			logrus.Warning(msg)
+			lastErr = fmt.Errorf(msg)
+			continue
+		}
+
+		opObj := operatorObjMap[kind][name]
+
+		switch kind {
+		// This is only for portworx pod
+		case "Pod":
+			err := d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opObj.(*v1.Pod).Spec})
+			if err != nil {
+				lastErr = err
+				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			}
+		case "DaemonSet":
+			err := d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &opObj.(*appsv1.DaemonSet).Spec.Template)
+			if err != nil {
+				lastErr = err
+				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			}
+		case "Deployment":
+			if name == "stork" {
+				// To skip expected failure:
+				//  "Containers are different: command is different: [/stork --driver=pxd --verbose --leader-elect=true --health-monitor-interval=120 --webhook-controller=false], [/stork --driver=pxd --health-monitor-interval=120 --leader-elect=true --lock-object-namespace=kube-system --verbose=true]\nenv vars is different, object \"STORK-NAMESPACE\" exists in second array but does not exist in first array.\n\n\n\n"
+				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Env = nil
+				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Env = nil
+			}
+
+			if name == "autopilot" {
+				// To skip expected failure:
+				// "Containers are different: command is different: [/autopilot -f ./etc/config/config.yaml -log-level debug], [/autopilot --config=/etc/config/config.yaml --log-level=debug]\n\n\n"
+				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+			}
+
+			err := d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
+			if err != nil {
+				lastErr = err
+				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			}
+		case "StatefulSet":
+			var err error
+			if name == "px-csi-ext" {
+				err = d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
+			} else {
+				err = d.deepEqualPod(&dsObj.(*appsv1.StatefulSet).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
+			}
+			if err != nil {
+				lastErr = err
+				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			}
+		case "Service":
+			err := d.deepEqualService(dsObj.(*v1.Service), opObj.(*v1.Service))
+			if err != nil {
+				lastErr = err
+				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			}
+		case "ConfigMap":
+			// Do not compare configMap as there might be extra spaces and empty lines.
+			continue
 		default:
-			logrus.Warningf("Object of kind %s is not validated for migration, object name: %s", kind, obj.GetName())
+			logrus.Infof("Object %s/%s exists before and after migration, but was not compared", kind, name)
 		}
 	}
 
@@ -468,10 +596,13 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 	}
 	if kubeconfig != "" {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		d.outputFolder = defaultOutputFolder
 	} else {
 		config, err = rest.InClusterConfig()
 		// When running inside of container, creating folder on root will get permission denied.
-		d.outputFolder = "/tmp/" + d.outputFolder
+		d.outputFolder = "/tmp/" + defaultOutputFolder
+		logrus.Infof("output folder is %s", d.outputFolder)
+
 	}
 	if err != nil {
 		return nil, err

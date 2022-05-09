@@ -21,23 +21,61 @@ var (
 	}
 )
 
-// DeepEqualPod compares two pods.
-func (h *DryRun) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
+func (d *DryRun) deepEqualService(p1, p2 *v1.Service) error {
+	var msg string
+	if p1.Spec.Type != p2.Spec.Type {
+		msg += fmt.Sprintf("service type is different: %s and %s. ", p1.Spec.Type, p2.Spec.Type)
+	}
+
+	err := d.deepEqualServicePorts(p1.Spec.Ports, p2.Spec.Ports)
+	if err != nil {
+		msg += err.Error()
+	}
+
+	if msg != "" {
+		return fmt.Errorf(msg)
+	}
+	return nil
+}
+
+func (d *DryRun) deepEqualServicePorts(l1, l2 []v1.ServicePort) error {
+	getKey := func(v interface{}) string {
+		s := v.(v1.ServicePort)
+		return s.Name
+	}
+
+	getList := func(arr []v1.ServicePort) []interface{} {
+		var objs []interface{}
+		for _, obj := range arr {
+			objs = append(objs, obj)
+		}
+		return objs
+	}
+
+	return util.DeepEqualObjects(
+		getList(l1),
+		getList(l2),
+		getKey,
+		util.DeepEqualObject)
+}
+
+// deepEqualPod compares two pods.
+func (d *DryRun) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
 	var msg string
 
-	err := h.deepEqualVolumes(p1.Spec.Volumes, p2.Spec.Volumes)
+	err := d.deepEqualVolumes(p1.Spec.Volumes, p2.Spec.Volumes)
 	if err != nil {
-		msg += fmt.Sprintf("Validate volumes failed: %s\n", err.Error())
+		msg += fmt.Sprintf("Volumes are different: %s\n", err.Error())
 	}
 
-	err = h.deepEqualContainers(p1.Spec.Containers, p2.Spec.Containers)
+	err = d.deepEqualContainers(p1.Spec.Containers, p2.Spec.Containers)
 	if err != nil {
-		msg += fmt.Sprintf("Validate containers failed: %s\n", err.Error())
+		msg += fmt.Sprintf("Containers are different: %s\n", err.Error())
 	}
 
-	err = h.deepEqualContainers(p1.Spec.InitContainers, p2.Spec.InitContainers)
+	err = d.deepEqualContainers(p1.Spec.InitContainers, p2.Spec.InitContainers)
 	if err != nil {
-		msg += fmt.Sprintf("Validate init-containers failed: %s\n", err.Error())
+		msg += fmt.Sprintf("init-containers are different: %s\n", err.Error())
 	}
 
 	if !reflect.DeepEqual(p1.Spec.ImagePullSecrets, p2.Spec.ImagePullSecrets) {
@@ -50,7 +88,7 @@ func (h *DryRun) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
 	return nil
 }
 
-func (h *DryRun) deepEqualVolumes(vol1, vol2 []v1.Volume) error {
+func (d *DryRun) deepEqualVolumes(vol1, vol2 []v1.Volume) error {
 	// Use host path as key, as volume name may be different but path is the same.
 	getVolumeKey := func(v interface{}) string {
 		vol := v.(v1.Volume)
@@ -77,10 +115,10 @@ func (h *DryRun) deepEqualVolumes(vol1, vol2 []v1.Volume) error {
 		getVolumeList(vol1),
 		getVolumeList(vol2),
 		getVolumeKey,
-		h.deepEqualVolume)
+		d.deepEqualVolume)
 }
 
-func (h *DryRun) deepEqualVolume(obj1, obj2 interface{}) error {
+func (d *DryRun) deepEqualVolume(obj1, obj2 interface{}) error {
 	t1 := obj1.(v1.Volume)
 	t2 := obj2.(v1.Volume)
 
@@ -100,7 +138,7 @@ func (h *DryRun) deepEqualVolume(obj1, obj2 interface{}) error {
 	return util.DeepEqualObject(cleanupFields(*vol1), cleanupFields(*vol2))
 }
 
-func (h *DryRun) deepEqualContainers(c1, c2 []v1.Container) error {
+func (d *DryRun) deepEqualContainers(c1, c2 []v1.Container) error {
 	getContainerName := func(v interface{}) string {
 		return v.(v1.Container).Name
 	}
@@ -116,11 +154,11 @@ func (h *DryRun) deepEqualContainers(c1, c2 []v1.Container) error {
 		getContainerList(c1),
 		getContainerList(c2),
 		getContainerName,
-		h.deepEqualContainer)
+		d.deepEqualContainer)
 }
 
 // DeepEqualContainer compare two containers
-func (h *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
+func (d *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
 	t1 := obj1.(v1.Container)
 	t2 := obj2.(v1.Container)
 
@@ -144,23 +182,23 @@ func (h *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
 		msg += fmt.Sprintf("args is different: %s, %s\n", t1.Args, t2.Args)
 	}
 
-	err := h.deepEqualEnvVars(c1.Env, c2.Env)
+	err := d.deepEqualEnvVars(c1.Env, c2.Env)
 	if err != nil {
 		msg += fmt.Sprintf("env vars is different, %v\n", err)
 	}
 
-	err = h.deepEqualVolumeMounts(c1.VolumeMounts, c2.VolumeMounts)
+	err = d.deepEqualVolumeMounts(c1.VolumeMounts, c2.VolumeMounts)
 	if err != nil {
 		msg += fmt.Sprintf("VolumeMounts is different, %v\n", err)
 	}
 
 	if msg != "" {
-		return fmt.Errorf(msg)
+		return fmt.Errorf("container %s is different: %s", c1.Name, msg)
 	}
 	return nil
 }
 
-func (h *DryRun) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
+func (d *DryRun) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
 	getName := func(v interface{}) string {
 		return v.(v1.EnvVar).Name
 	}
@@ -194,7 +232,7 @@ func (h *DryRun) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
 		util.DeepEqualObject)
 }
 
-func (h *DryRun) deepEqualVolumeMounts(l1, l2 []v1.VolumeMount) error {
+func (d *DryRun) deepEqualVolumeMounts(l1, l2 []v1.VolumeMount) error {
 	getName := func(v interface{}) string {
 		return v.(v1.VolumeMount).MountPath
 	}
