@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	nextReleaseTag = "1.8.0-dev"
+	nextReleaseTag = "1.8.1-dev"
 )
 
 var (
