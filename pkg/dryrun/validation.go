@@ -59,6 +59,22 @@ func (d *DryRun) deepEqualServicePorts(l1, l2 []v1.ServicePort) error {
 		util.DeepEqualObject)
 }
 
+func (d *DryRun) deepEqualCSIPod(p1, p2 *v1.PodTemplateSpec) error {
+	filterFunc := func(p *v1.PodTemplateSpec) *v1.PodTemplateSpec {
+		for i, c := range p.Spec.Containers {
+			// To filter expected failure:
+			// Containers are different: container csi-snapshot-controller is different: env vars is different, object \"ADDRESS\" exists in first array but does not exist in second array.\n\nVolumeMounts is different, object \"/csi\" exists in first array but does not exist in second array.\n\n\n\n
+			if c.Name == "csi-snapshot-controller" {
+				p.Spec.Containers[i].Env = nil
+				p.Spec.Containers[i].VolumeMounts = nil
+			}
+		}
+		return p
+	}
+
+	return d.deepEqualPod(filterFunc(p1), filterFunc(p2))
+}
+
 // deepEqualPod compares two pods.
 func (d *DryRun) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
 	var msg string

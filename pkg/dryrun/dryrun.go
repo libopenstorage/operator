@@ -512,7 +512,12 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 			}
 
-			err := d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
+			var err error
+			if name == "px-csi-ext" {
+				err = d.deepEqualCSIPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
+			} else {
+				err = d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
+			}
 			if err != nil {
 				lastErr = err
 				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
@@ -520,7 +525,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		case "StatefulSet":
 			var err error
 			if name == "px-csi-ext" {
-				err = d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
+				err = d.deepEqualCSIPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
 			} else {
 				err = d.deepEqualPod(&dsObj.(*appsv1.StatefulSet).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
 			}
