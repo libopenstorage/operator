@@ -102,8 +102,8 @@ type Controller struct {
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
-	// Node to pod creation time map.
-	lastPodCreationTime map[string]time.Time
+	// Node to NodeInfo map
+	nodeInfoMap map[string]*k8s.NodeInfo
 }
 
 // Init initialize the storage cluster controller
@@ -112,7 +112,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
-	c.lastPodCreationTime = make(map[string]time.Time)
+	c.nodeInfoMap = make(map[string]*k8s.NodeInfo)
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -785,28 +785,38 @@ func (c *Controller) syncNodes(
 		for i := pos; i < pos+batchSize; i++ {
 			go func(idx int) {
 				defer createWait.Done()
+				nodeName := nodesNeedingStoragePods[idx]
 				err := c.podControl.CreatePodsOnNode(
-					nodesNeedingStoragePods[idx],
+					nodeName,
 					cluster.Namespace,
 					podTemplates[idx],
 					cluster,
 					metav1.NewControllerRef(cluster, controllerKind),
 				)
-				if err != nil && errors.IsTimeout(err) {
-					// TODO
-					// Pod is created but its initialization has timed out. If the initialization
-					// is successful eventually, the controller will observe the creation via the
-					// informer. If the initialization fails, or if the pod keeps uninitialized
-					// for a long time, the informer will not receive any update, and the controller
-					// will create a new pod.
-					c.lastPodCreationTime[nodesNeedingStoragePods[idx]] = time.Now()
-					return
-				}
-				if err != nil {
-					logrus.Warnf("Failed creation of storage pod on node %v: %v", nodesNeedingStoragePods[idx], err)
+				if err != nil && !errors.IsTimeout(err) {
+					logrus.Warnf("Failed creation of storage pod on node %s: %v", nodeName, err)
 					errCh <- err
 				} else {
-					c.lastPodCreationTime[nodesNeedingStoragePods[idx]] = time.Now()
+					// Pod created, store nodeInfo into the map, reset creation time if exists
+					nodeInfo, ok := c.nodeInfoMap[nodeName]
+					if ok {
+						nodeInfo.LastPodCreationTime = time.Now()
+					} else {
+						c.nodeInfoMap[nodeName] = &k8s.NodeInfo{
+							NodeName:             nodeName,
+							LastPodCreationTime:  time.Now(),
+							CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
+						}
+					}
+					if errors.IsTimeout(err) {
+						// TODO
+						// Pod is created but its initialization has timed out. If the initialization
+						// is successful eventually, the controller will observe the creation via the
+						// informer. If the initialization fails, or if the pod keeps uninitialized
+						// for a long time, the informer will not receive any update, and the controller
+						// will create a new pod.
+						return
+					}
 					c.createStorageNode(cluster, nodesNeedingStoragePods[idx])
 				}
 			}(i)
@@ -1046,7 +1056,8 @@ func (c *Controller) nodeShouldRunStoragePod(
 		return false, true, nil
 	}
 
-	if k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.lastPodCreationTime, cluster) {
+	if k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.nodeInfoMap, cluster) {
+		// Storage pod is created recently, should let the pod continue running without creating a new pod.
 		return false, true, nil
 	}
 
