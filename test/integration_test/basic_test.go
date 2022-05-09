@@ -402,18 +402,21 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Equal(t, cluster.Spec.CSI.Enabled, false)
 
-		logrus.Info("Enable CSI and topology and validate StorageCluster")
-		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Spec.CSI.Enabled = true
-			cluster.Spec.CSI.Topology = &corev1.CSITopologySpec{
-				Enabled: true,
+		// Test CSI topology feature on Operator 1.8.1+
+		if ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer1_8_1) {
+			logrus.Info("Enable CSI and topology and validate StorageCluster")
+			updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+				cluster.Spec.CSI.Enabled = true
+				cluster.Spec.CSI.Topology = &corev1.CSITopologySpec{
+					Enabled: true,
+				}
+				return cluster
 			}
-			return cluster
+			cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+			require.True(t, cluster.Spec.CSI.Enabled)
+			require.NotNil(t, cluster.Spec.CSI.Topology)
+			require.True(t, cluster.Spec.CSI.Topology.Enabled)
 		}
-		cluster = ci_utils.UpdateAndValidateStorageCluster(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
-		require.True(t, cluster.Spec.CSI.Enabled)
-		require.NotNil(t, cluster.Spec.CSI.Topology)
-		require.True(t, cluster.Spec.CSI.Topology.Enabled)
 
 		// Delete and validate StorageCluster deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
