@@ -35,7 +35,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  flagKubeConfig,
-			Usage: "kubeconfig file",
+			Usage: "kubeconfig file, identical to KUBECONFIG env variable",
 		},
 		cli.StringFlag{
 			Name:  flagOutputFolder,

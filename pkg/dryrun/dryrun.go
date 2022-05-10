@@ -484,20 +484,13 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 
 		opObj := operatorObjMap[kind][name]
 
+		var err error
 		switch kind {
 		// This is only for portworx pod
 		case "Pod":
-			err := d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opObj.(*v1.Pod).Spec})
-			if err != nil {
-				lastErr = err
-				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
-			}
+			err = d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &v1.PodTemplateSpec{Spec: opObj.(*v1.Pod).Spec})
 		case "DaemonSet":
-			err := d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &opObj.(*appsv1.DaemonSet).Spec.Template)
-			if err != nil {
-				lastErr = err
-				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
-			}
+			err = d.deepEqualPod(&dsObj.(*appsv1.DaemonSet).Spec.Template, &opObj.(*appsv1.DaemonSet).Spec.Template)
 		case "Deployment":
 			if name == "stork" {
 				// To skip expected failure:
@@ -515,38 +508,29 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 			}
 
-			var err error
 			if name == "px-csi-ext" {
 				err = d.deepEqualCSIPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
 			} else {
 				err = d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
 			}
-			if err != nil {
-				lastErr = err
-				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
-			}
 		case "StatefulSet":
-			var err error
 			if name == "px-csi-ext" {
 				err = d.deepEqualCSIPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
 			} else {
 				err = d.deepEqualPod(&dsObj.(*appsv1.StatefulSet).Spec.Template, &opObj.(*appsv1.StatefulSet).Spec.Template)
 			}
-			if err != nil {
-				lastErr = err
-				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
-			}
 		case "Service":
-			err := d.deepEqualService(dsObj.(*v1.Service), opObj.(*v1.Service))
-			if err != nil {
-				lastErr = err
-				logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
-			}
-		case "ConfigMap":
-			// Do not compare configMap as there might be extra spaces and empty lines.
-			continue
+			err = d.deepEqualService(dsObj.(*v1.Service), opObj.(*v1.Service))
 		default:
 			logrus.Infof("Object %s/%s exists before and after migration, but was not compared", kind, name)
+			continue
+		}
+
+		if err != nil {
+			lastErr = err
+			logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+		} else {
+			logrus.Infof("successfully compared %s %s", kind, name)
 		}
 	}
 
@@ -602,15 +586,16 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 	if kubeconfig == "" {
 		kubeconfig = os.Getenv("KUBECONFIG")
 	}
+	d.outputFolder = defaultOutputFolder
 	if kubeconfig != "" {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		d.outputFolder = defaultOutputFolder
 	} else {
 		config, err = rest.InClusterConfig()
-		// When running inside of container, creating folder on root will get permission denied.
-		d.outputFolder = "/tmp/" + defaultOutputFolder
-		logrus.Infof("output folder is %s", d.outputFolder)
-
+		if err == nil {
+			// When running inside of container, creating folder on root will get permission denied.
+			d.outputFolder = "/tmp/" + d.outputFolder
+			logrus.Infof("output folder is %s", d.outputFolder)
+		}
 	}
 	if err != nil {
 		return nil, err
