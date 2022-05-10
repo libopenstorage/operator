@@ -448,6 +448,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		if kind == "DaemonSet" && name == "portworx" {
 			// Portworx DaemonSet is deployed as Pod by operator
 			kind = "Pod"
+			logrus.Info("Portworx will be deployed via Pod scheduled by operator (instead of DaemonSet)")
 		} else if kind == "Deployment" && name == "px-csi-ext" {
 			if m, ok := operatorObjMap["StatefulSet"]; ok {
 				if _, ok := m[name]; ok {
@@ -456,6 +457,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				}
 			}
 		} else if kind == "Prometheus" && name == "prometheus" {
+			logrus.Warning("Prometheus service name will change from prometheus to px-prometheus after migration")
 			name = "px-prometheus"
 		} else if kind == "Service" && name == "prometheus" {
 			name = "px-prometheus"
@@ -463,6 +465,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			// Operator does not create autopilot service
 			continue
 		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
+			logrus.Warningf("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration")
 			name = "portworx"
 		}
 
