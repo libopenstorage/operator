@@ -5,7 +5,8 @@ test_pod_spec="/testspecs/operator-test-pod.yaml"
 
 test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
-upgrade_hops_url_list=""
+px_upgrade_hops_url_list=""
+operator_upgrade_hops_image_list=""
 focus_tests=""
 short_test=false
 portworx_docker_username=""
@@ -51,9 +52,15 @@ case $i in
         shift
         shift
         ;;
-    --upgrade-hops-url-list)
+    --px-upgrade-hops-url-list)
         echo "List of Portworx Spec Generator URLs to use as Upgrade hops for test: $2"
-        upgrade_hops_url_list=$2
+        px_upgrade_hops_url_list=$2
+        shift
+        shift
+        ;;
+    --operator-upgrade-hops-image-list)
+        echo "List of Portworx Operator images to use as Upgrade hops for test: $2"
+        operator_upgrade_hops_image_list=$2
         shift
         shift
         ;;
@@ -187,11 +194,18 @@ if [ "$portworx_spec_gen_url" == "" ]; then
 fi
 sed -i 's|'PORTWORX_SPEC_GEN_URL'|'"$portworx_spec_gen_url"'|g' $test_pod_spec
 
-# Upgrade hops URL list
-if [ "$upgrade_hops_url_list" != "" ]; then
-    sed -i 's|'UPGRADE_HOPS_URL_LIST'|'"$upgrade_hops_url_list"'|g' $test_pod_spec
+# PX upgrade hops URL list
+if [ "$px_upgrade_hops_url_list" != "" ]; then
+    sed -i 's|'PX_UPGRADE_HOPS_URL_LIST'|'"$px_upgrade_hops_url_list"'|g' $test_pod_spec
 else
-    sed -i 's|'UPGRADE_HOPS_URL_LIST'|''|g' $test_pod_spec
+    sed -i 's|'PX_UPGRADE_HOPS_URL_LIST'|''|g' $test_pod_spec
+fi
+
+# Operator upgrade hops image list
+if [ "$operator_upgrade_hops_image_list" != "" ]; then
+    sed -i 's|'OPERATOR_UPGRADE_HOPS_IMAGE_LIST'|'"$operator_upgrade_hops_image_list"'|g' $test_pod_spec
+else
+    sed -i 's|'OPERATOR_UPGRADE_HOPS_IMAGE_LIST'|''|g' $test_pod_spec
 fi
 
 # Portworx Docker credentials

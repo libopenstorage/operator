@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -83,22 +84,38 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicInstallWithNodeAffinity,
 	},
 	{
-		TestName:        "Upgrade",
+		TestName:        "BasicUpgradeStorageCluster",
 		TestrailCaseIDs: []string{"C50241"},
 		TestSpec: func(t *testing.T) interface{} {
 			return &corev1.StorageCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-test"},
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-storagecluster-test"},
 			}
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
 			if len(ci_utils.PxUpgradeHopsURLList[0]) == 0 {
+				logrus.Info("--upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
 				return true
 			}
 			k8sVersion, _ := k8sutil.GetVersion()
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
 			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
 		},
-		TestFunc: BasicUpgrade,
+		TestFunc: BasicUpgradeStorageCluster,
+	},
+	{
+		TestName:        "BasicUpgradeOperator",
+		TestrailCaseIDs: []string{""},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "operator-upgrade-test"},
+		}),
+		ShouldSkip: func(tc *types.TestCase) bool {
+			if len(ci_utils.OperatorUpgradeHopsImageList[0]) == 0 {
+				logrus.Info("--operator-upgrade-hops-image-list is empty, cannot run BasicUpgradeOperator test")
+				return true
+			}
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_7)
+		},
+		TestFunc: BasicUpgradeOperator,
 	},
 	{
 		TestName:        "InstallWithTelemetry",
@@ -252,7 +269,7 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
+func BasicUpgradeStorageCluster(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		// Get the storage cluster to start with
 		testSpec := tc.TestSpec(t)
@@ -290,6 +307,65 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 				require.NoError(t, err)
 			}
 			lastHopURL = hopURL
+		}
+
+		// Delete and validate the deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		// Get the storage cluster to start with
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		var lastHopImage string
+		for _, hopImage := range ci_utils.OperatorUpgradeHopsImageList {
+			pxOperatorDeployment, err := ci_utils.GetPxOperatorDeployment()
+			require.NoError(t, err)
+			pxOperatorImage, err := ci_utils.GetPxOperatorImage()
+			require.NoError(t, err)
+
+			if pxOperatorImage == hopImage {
+				logrus.Infof("Skipping upgrade of PX Operator from %s to %s", pxOperatorImage, hopImage)
+				lastHopImage = hopImage
+				continue
+			}
+
+			// Upgrade PX Operator image and validate deployment
+			logrus.Infof("Upgrading PX Operator from %s to %s", lastHopImage, hopImage)
+			updateParamFunc := func(pxOperator *appsv1.Deployment) *appsv1.Deployment {
+				for ind, container := range pxOperator.Spec.Template.Spec.Containers {
+					if container.Name == ci_utils.PortworxOperatorContainerName {
+						container.Image = hopImage
+						pxOperator.Spec.Template.Spec.Containers[ind] = container
+						break
+					}
+				}
+				return pxOperator
+			}
+
+			// Update and validate PX Operator deployment
+			ci_utils.UpdateAndValidatePxOperator(pxOperatorDeployment, updateParamFunc, t)
+
+			logrus.Infof("Upgraded PX Operator from %s to %s, letting it sleep for 15 secs to stabilize and let make changes to StorageCluster and/or existing objects", lastHopImage, hopImage)
+			time.Sleep(15 * time.Second)
+
+			// Validate PX Operator image
+			pxOperatorImage, err = ci_utils.GetPxOperatorImage()
+			require.NoError(t, err)
+			require.Equal(t, pxOperatorImage, hopImage)
+
+			// Validate StorageCluster
+			err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+			require.NoError(t, err)
+
+			lastHopImage = hopImage
 		}
 
 		// Delete and validate the deletion

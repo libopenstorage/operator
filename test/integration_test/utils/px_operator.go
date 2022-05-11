@@ -2,9 +2,12 @@ package utils
 
 import (
 	"strings"
+	"testing"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 
 	appops "github.com/portworx/sched-ops/k8s/apps"
 )
@@ -59,4 +62,49 @@ func getPXOperatorImageTag() (string, error) {
 	}
 
 	return strings.Split(image, ":")[1], nil
+}
+
+// GetPxOperatorImage return PX Operator image
+func GetPxOperatorImage() (string, error) {
+	deployment, err := GetPxOperatorDeployment()
+	if err != nil {
+		return "", err
+	}
+
+	var image string
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == PortworxOperatorContainerName {
+			image = container.Image
+			logrus.Infof("Get portworx-operator image installed: %s", image)
+			break
+		}
+	}
+
+	return image, nil
+}
+
+// GetPxOperatorDeployment return PX Operator deployment
+func GetPxOperatorDeployment() (*appsv1.Deployment, error) {
+	return appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
+}
+
+// UpdateAndValidatePxOperator update and validate PX Operator deployment
+func UpdateAndValidatePxOperator(pxOperator *appsv1.Deployment, f func(*appsv1.Deployment) *appsv1.Deployment, t *testing.T) *appsv1.Deployment {
+	livePxOperator, err := appops.Instance().GetDeployment(pxOperator.Name, pxOperator.Namespace)
+	require.NoError(t, err)
+
+	newPxOperator := f(livePxOperator)
+
+	latestLivePxOperator, err := UpdatePxOperator(newPxOperator)
+	require.NoError(t, err)
+
+	err = appops.Instance().ValidateDeployment(latestLivePxOperator, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval)
+	require.NoError(t, err)
+
+	return latestLivePxOperator
+}
+
+// UpdatePxOperator update PX Operator deploymnent
+func UpdatePxOperator(pxOperator *appsv1.Deployment) (*appsv1.Deployment, error) {
+	return appops.Instance().UpdateDeployment(pxOperator)
 }
