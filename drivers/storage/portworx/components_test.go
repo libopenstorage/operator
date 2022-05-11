@@ -892,7 +892,11 @@ func TestDisablePortworx(t *testing.T) {
 }
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.22.0",
+	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -907,6 +911,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 			Stork: &corev1.StorkSpec{
 				Enabled: true,
 			},
+			Image: "portworx/image:2.10.1",
 		},
 	}
 
@@ -916,7 +921,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	storageClassList := &storagev1.StorageClassList{}
 	err = testutil.List(k8sClient, storageClassList)
 	require.NoError(t, err)
-	require.Len(t, storageClassList.Items, 8)
+	require.Len(t, storageClassList.Items, 16)
 
 	expectedSC := testutil.GetExpectedStorageClass(t, "storageClassDb.yaml")
 	actualSC := &storagev1.StorageClass{}
@@ -993,6 +998,86 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	err = testutil.Get(k8sClient, actualSC, component.PxDbCloudSnapshotEncryptedStorageClass, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSC.Name, component.PxDbCloudSnapshotEncryptedStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDb.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDbEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbEncryptedCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbEncryptedCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIReplicated.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxReplicatedCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxReplicatedCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIReplicatedEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxReplicatedEncryptedCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxReplicatedEncryptedCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDbLocalSnapshot.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbLocalSnapshotCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbLocalSnapshotCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDbLocalSnapshotEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbLocalSnapshotEncryptedCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbLocalSnapshotEncryptedCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDbCloudSnapshot.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbCloudSnapshotCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbCloudSnapshotCSIStorageClass)
+	require.Empty(t, actualSC.OwnerReferences)
+	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
+	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
+	require.Equal(t, expectedSC.Parameters, actualSC.Parameters)
+
+	expectedSC = testutil.GetExpectedStorageClass(t, "storageClassCSIDbCloudSnapshotEncrypted.yaml")
+	actualSC = &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSC, component.PxDbCloudSnapshotEncryptedCSIStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, component.PxDbCloudSnapshotEncryptedCSIStorageClass)
 	require.Empty(t, actualSC.OwnerReferences)
 	require.Equal(t, expectedSC.Annotations, actualSC.Annotations)
 	require.Equal(t, expectedSC.Provisioner, actualSC.Provisioner)
