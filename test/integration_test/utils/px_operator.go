@@ -66,7 +66,7 @@ func getPXOperatorImageTag() (string, error) {
 
 // GetPxOperatorImage return PX Operator image
 func GetPxOperatorImage() (string, error) {
-	deployment, err := appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
+	deployment, err := GetPxOperatorDeployment()
 	if err != nil {
 		return "", err
 	}
@@ -85,12 +85,7 @@ func GetPxOperatorImage() (string, error) {
 
 // GetPxOperatorDeployment return PX Operator deployment
 func GetPxOperatorDeployment() (*appsv1.Deployment, error) {
-	pxOperator, err := appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
-	if err != nil {
-		return nil, err
-	}
-
-	return pxOperator, nil
+	return appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
 }
 
 // UpdateAndValidatePxOperator update and validate PX Operator deployment
@@ -111,12 +106,5 @@ func UpdateAndValidatePxOperator(pxOperator *appsv1.Deployment, f func(*appsv1.D
 
 // UpdatePxOperator update PX Operator deploymnent
 func UpdatePxOperator(pxOperator *appsv1.Deployment) (*appsv1.Deployment, error) {
-	logrus.Infof("Update PX Operator %s in %s", pxOperator.Name, pxOperator.Namespace)
-
-	pxOperator, err := appops.Instance().UpdateDeployment(pxOperator)
-	if err != nil {
-		return nil, err
-	}
-
-	return pxOperator, nil
+	return appops.Instance().UpdateDeployment(pxOperator)
 }
