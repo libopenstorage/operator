@@ -20,8 +20,11 @@ var (
 	// PxSpecImages contains images parsed from spec gen url
 	PxSpecImages map[string]string
 
-	// PxUpgradeHopsURLList urls for upgrade test
+	// PxUpgradeHopsURLList URL list for upgrade PX test
 	PxUpgradeHopsURLList []string
+
+	// OperatorUpgradeHopsImageList image list for upgrade PX Operator test
+	OperatorUpgradeHopsImageList []string
 
 	// K8sVersion is a K8s version from cluster server side
 	K8sVersion string

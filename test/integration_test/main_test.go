@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 func setup() error {
 	// Parse flags
 	var pxUpgradeHopsURLs string
+	var operatorUpgradeHopsImages string
 	var logLevel string
 	var err error
 	flag.StringVar(&ci_utils.PxDockerUsername,
@@ -48,9 +49,13 @@ func setup() error {
 		"",
 		"Portworx Image override, defines what Portworx version will be deployed")
 	flag.StringVar(&pxUpgradeHopsURLs,
-		"upgrade-hops-url-list",
+		"px-upgrade-hops-url-list",
 		"",
 		"List of Portworx Spec Generator URLs separated by commas used for upgrade hops")
+	flag.StringVar(&operatorUpgradeHopsImages,
+		"operator-upgrade-hops-image-list",
+		"",
+		"List of Portworx Operator images separated by commas used for operator upgrade hops")
 	flag.StringVar(&ci_utils.CloudProvider,
 		"cloud-provider",
 		"",
@@ -92,6 +97,8 @@ func setup() error {
 	}
 
 	ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+
+	ci_utils.OperatorUpgradeHopsImageList = strings.Split(operatorUpgradeHopsImages, ",")
 
 	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
 	if err != nil {
