@@ -563,6 +563,7 @@ func getCSIDeploymentSpec(
 			"--csi-address=$(ADDRESS)",
 			"--leader-election=true",
 			"--default-fstype=ext4",
+			"--extra-create-metadata=true",
 		}
 	} else {
 		args = []string{
