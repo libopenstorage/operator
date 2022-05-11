@@ -37,13 +37,39 @@ const (
 	// snapshots with encryption enabled
 	PxDbCloudSnapshotEncryptedStorageClass = "px-db-cloud-snapshot-encrypted"
 
-	portworxProvisioner = "kubernetes.io/portworx-volume"
+	// PxDbCSIStorageClass name of the CSI storage class for DB workloads
+	PxDbCSIStorageClass = "px-csi-db"
+	// PxReplicatedCSIStorageClass name of the replicated CSI storage class
+	PxReplicatedCSIStorageClass = "px-csi-replicated"
+	// PxDbLocalSnapshotCSIStorageClass name of the CSI storage class for local snapshots
+	PxDbLocalSnapshotCSIStorageClass = "px-csi-db-local-snapshot"
+	// PxDbCloudSnapshotCSIStorageClass name of the CSI storage class for cloud snapshots
+	PxDbCloudSnapshotCSIStorageClass = "px-csi-db-cloud-snapshot"
+	// PxDbEncryptedCSIStorageClass name of the CSI storage class for encrypted DB workloads
+	PxDbEncryptedCSIStorageClass = "px-csi-db-encrypted"
+	// PxReplicatedEncryptedCSIStorageClass name of the replicated CSI storage class with
+	// encryption enabled
+	PxReplicatedEncryptedCSIStorageClass = "px-csi-replicated-encrypted"
+	// PxDbLocalSnapshotEncryptedCSIStorageClass name of the CSI storage class for local
+	// snapshots with encryption enabled
+	PxDbLocalSnapshotEncryptedCSIStorageClass = "px-csi-db-local-snapshot-encrypted"
+	// PxDbCloudSnapshotEncryptedCSIStorageClass name of the CSI storage class for cloud
+	// snapshots with encryption enabled
+	PxDbCloudSnapshotEncryptedCSIStorageClass = "px-csi-db-cloud-snapshot-encrypted"
+
+	portworxInTreeProvisioner = "kubernetes.io/portworx-volume"
+	portworxCSIProvisioner    = "pxd.portworx.com"
 
 	portworxIoProfile = "db_remote"
 )
 
+var (
+	pxVer22, _ = version.NewVersion("2.2")
+)
+
 type portworxStorageClass struct {
-	k8sClient client.Client
+	k8sClient  client.Client
+	k8sVersion version.Version
 }
 
 func (c *portworxStorageClass) Name() string {
@@ -56,11 +82,12 @@ func (c *portworxStorageClass) Priority() int32 {
 
 func (c *portworxStorageClass) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	_ *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.k8sVersion = k8sVersion
 }
 
 func (c *portworxStorageClass) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -94,7 +121,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				Name:        PxDbStorageClass,
 				Annotations: docAnnotations,
 			},
-			Provisioner: portworxProvisioner,
+			Provisioner: portworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
 				api.SpecIoProfile: portworxIoProfile,
@@ -108,7 +135,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 					"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
 				},
 			},
-			Provisioner: portworxProvisioner,
+			Provisioner: portworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
 				api.SpecIoProfile: portworxIoProfile,
@@ -120,7 +147,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: PxReplicatedStorageClass,
 			},
-			Provisioner: portworxProvisioner,
+			Provisioner: portworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel: "2",
 			},
@@ -130,7 +157,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: PxReplicatedEncryptedStorageClass,
 			},
-			Provisioner: portworxProvisioner,
+			Provisioner: portworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel: "2",
 				api.SpecSecure:  "true",
@@ -145,7 +172,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbLocalSnapshotStorageClass,
 				},
-				Provisioner: portworxProvisioner,
+				Provisioner: portworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -160,7 +187,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbLocalSnapshotEncryptedStorageClass,
 				},
-				Provisioner: portworxProvisioner,
+				Provisioner: portworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecSecure:    "true",
@@ -176,7 +203,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbCloudSnapshotStorageClass,
 				},
-				Provisioner: portworxProvisioner,
+				Provisioner: portworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -191,7 +218,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbCloudSnapshotEncryptedStorageClass,
 				},
-				Provisioner: portworxProvisioner,
+				Provisioner: portworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecSecure:    "true",
@@ -204,6 +231,134 @@ annotations:
 				AllowVolumeExpansion: &allowVolumeExpansion,
 			},
 		)
+	}
+
+	// Duplicate all in-tree SCs for CSI SCs for K8s 1.13+ and PX 2.2+ (Supported CSI Versions)
+	var addCSIStorageClasses bool
+	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_13) && pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer22) {
+		addCSIStorageClasses = true
+	}
+
+	if addCSIStorageClasses {
+		csiStorageClasses := []*storagev1.StorageClass{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        PxDbCSIStorageClass,
+					Annotations: docAnnotations,
+				},
+				Provisioner: portworxCSIProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel:   "3",
+					api.SpecIoProfile: portworxIoProfile,
+				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: PxDbEncryptedCSIStorageClass,
+					Annotations: map[string]string{
+						"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
+					},
+				},
+				Provisioner: portworxCSIProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel:   "3",
+					api.SpecIoProfile: portworxIoProfile,
+					api.SpecSecure:    "true",
+				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: PxReplicatedCSIStorageClass,
+				},
+				Provisioner: portworxCSIProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "2",
+				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: PxReplicatedEncryptedCSIStorageClass,
+				},
+				Provisioner: portworxCSIProvisioner,
+				Parameters: map[string]string{
+					api.SpecHaLevel: "2",
+					api.SpecSecure:  "true",
+				},
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			},
+		}
+
+		if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+			csiStorageClasses = append(csiStorageClasses,
+				&storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: PxDbLocalSnapshotCSIStorageClass,
+					},
+					Provisioner: portworxCSIProvisioner,
+					Parameters: map[string]string{
+						api.SpecHaLevel:   "3",
+						api.SpecIoProfile: portworxIoProfile,
+						"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: local
+`,
+					},
+					AllowVolumeExpansion: &allowVolumeExpansion,
+				},
+				&storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: PxDbLocalSnapshotEncryptedCSIStorageClass,
+					},
+					Provisioner: portworxCSIProvisioner,
+					Parameters: map[string]string{
+						api.SpecHaLevel:   "3",
+						api.SpecSecure:    "true",
+						api.SpecIoProfile: portworxIoProfile,
+						"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: local
+`,
+					},
+					AllowVolumeExpansion: &allowVolumeExpansion,
+				},
+				&storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: PxDbCloudSnapshotCSIStorageClass,
+					},
+					Provisioner: portworxCSIProvisioner,
+					Parameters: map[string]string{
+						api.SpecHaLevel:   "3",
+						api.SpecIoProfile: portworxIoProfile,
+						"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: cloud
+`,
+					},
+					AllowVolumeExpansion: &allowVolumeExpansion,
+				},
+				&storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: PxDbCloudSnapshotEncryptedCSIStorageClass,
+					},
+					Provisioner: portworxCSIProvisioner,
+					Parameters: map[string]string{
+						api.SpecHaLevel:   "3",
+						api.SpecSecure:    "true",
+						api.SpecIoProfile: portworxIoProfile,
+						"snapshotschedule.stork.libopenstorage.org/daily-schedule": `schedulePolicyName: default-daily-policy
+annotations:
+  portworx/snapshot-type: cloud
+`,
+					},
+					AllowVolumeExpansion: &allowVolumeExpansion,
+				},
+			)
+		}
+
+		storageClasses = append(storageClasses, csiStorageClasses...)
 	}
 
 	for _, sc := range storageClasses {
@@ -222,30 +377,31 @@ func (c *portworxStorageClass) Delete(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbStorageClass); err != nil {
-		return err
+	storageClassesToDelete := []string{
+		PxDbStorageClass,
+		PxReplicatedStorageClass,
+		PxDbLocalSnapshotStorageClass,
+		PxDbCloudSnapshotStorageClass,
+		PxDbEncryptedStorageClass,
+		PxReplicatedEncryptedStorageClass,
+		PxDbLocalSnapshotEncryptedStorageClass,
+		PxDbCloudSnapshotEncryptedStorageClass,
+		PxDbCSIStorageClass,
+		PxReplicatedCSIStorageClass,
+		PxDbLocalSnapshotCSIStorageClass,
+		PxDbCloudSnapshotCSIStorageClass,
+		PxDbEncryptedCSIStorageClass,
+		PxReplicatedEncryptedCSIStorageClass,
+		PxDbLocalSnapshotEncryptedCSIStorageClass,
+		PxDbCloudSnapshotEncryptedCSIStorageClass,
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedStorageClass); err != nil {
-		return err
+
+	for _, scName := range storageClassesToDelete {
+		if err := k8sutil.DeleteStorageClass(c.k8sClient, scName); err != nil {
+			return err
+		}
 	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotStorageClass); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotStorageClass); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbEncryptedStorageClass); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxReplicatedEncryptedStorageClass); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbLocalSnapshotEncryptedStorageClass); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteStorageClass(c.k8sClient, PxDbCloudSnapshotEncryptedStorageClass); err != nil {
-		return err
-	}
+
 	return nil
 }
 
