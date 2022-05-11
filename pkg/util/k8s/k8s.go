@@ -43,6 +43,8 @@ const (
 
 var (
 	kbVerRegex = regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
+	// K8sVer1_13 k8s 1.13
+	K8sVer1_13, _ = version.NewVersion("1.13")
 	// K8sVer1_17 k8s 1.17
 	K8sVer1_17, _ = version.NewVersion("1.17")
 	// K8sVer1_18 k8s 1.18
