@@ -97,6 +97,7 @@ type DryRun struct {
 
 // Init performs required initialization
 func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error {
+	logrus.Infof("command line args, kubeconfig: %s, outputFolder: %s, storageClusterFile: %s", kubeconfig, outputFolder, storageClusterFile)
 	var err error
 
 	k8sVersion := "v1.22.0"

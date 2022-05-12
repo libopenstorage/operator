@@ -26,19 +26,21 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
-			Name:  flagVerbose,
+			// vb is alias for the arg.
+			// v is already used by default arg --version.
+			Name:  flagVerbose + ",vb",
 			Usage: "Enable verbose logging",
 		},
 		cli.StringFlag{
-			Name:  flagStorageCluster,
+			Name:  flagStorageCluster + ",stc",
 			Usage: "File for storage cluster spec, retrieve from k8s if it's not configured",
 		},
 		cli.StringFlag{
-			Name:  flagKubeConfig,
+			Name:  flagKubeConfig + ",kc",
 			Usage: "kubeconfig file, identical to KUBECONFIG env variable",
 		},
 		cli.StringFlag{
-			Name:  flagOutputFolder,
+			Name:  flagOutputFolder + ",o",
 			Usage: "output folder to save k8s objects in yaml files",
 		},
 	}
@@ -51,6 +53,7 @@ func main() {
 func execute(c *cli.Context) {
 	verbose := c.Bool(flagVerbose)
 	if verbose {
+		log.Info("verbose log enabled")
 		log.SetLevel(log.DebugLevel)
 	} else {
 		log.SetLevel(log.InfoLevel)

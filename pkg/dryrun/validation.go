@@ -24,7 +24,7 @@ var (
 func (d *DryRun) deepEqualService(p1, p2 *v1.Service) error {
 	var msg string
 	if p1.Spec.Type != p2.Spec.Type {
-		msg += fmt.Sprintf("service type is different: %s and %s. ", p1.Spec.Type, p2.Spec.Type)
+		msg += fmt.Sprintf("service type is different, before-migration %s, after-migration %s. ", p1.Spec.Type, p2.Spec.Type)
 	}
 
 	err := d.deepEqualServicePorts(p1.Spec.Ports, p2.Spec.Ports)
@@ -183,19 +183,19 @@ func (d *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
 
 	msg := ""
 	if c1.Image != c2.Image {
-		msg += fmt.Sprintf("image is different: %s, %s\n", c1.Image, c2.Image)
+		msg += fmt.Sprintf("image is different: before-migration %s, after-migration %s\n", c1.Image, c2.Image)
 	}
 
 	sort.Strings(c1.Command)
 	sort.Strings(c2.Command)
 	if !reflect.DeepEqual(c1.Command, c2.Command) {
-		msg += fmt.Sprintf("command is different: %s, %s\n", t1.Command, t2.Command)
+		msg += fmt.Sprintf("command is different: before-migration %s, after-migration %s\n", t1.Command, t2.Command)
 	}
 
 	sort.Strings(c1.Args)
 	sort.Strings(c2.Args)
 	if !reflect.DeepEqual(c1.Args, c2.Args) {
-		msg += fmt.Sprintf("args is different: %s, %s\n", t1.Args, t2.Args)
+		msg += fmt.Sprintf("args is different: before-migration %s, after-migration %s\n", t1.Args, t2.Args)
 	}
 
 	err := d.deepEqualEnvVars(c1.Env, c2.Env)
