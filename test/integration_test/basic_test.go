@@ -92,8 +92,8 @@ var testStorageClusterBasicCases = []types.TestCase{
 			}
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
-			if len(ci_utils.PxUpgradeHopsURLList[0]) == 0 {
-				logrus.Info("--upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
+			if len(ci_utils.PxUpgradeHopsURLList) == 0 {
+				logrus.Info("--px-upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
 				return true
 			}
 			k8sVersion, _ := k8sutil.GetVersion()
@@ -109,7 +109,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{Name: "operator-upgrade-test"},
 		}),
 		ShouldSkip: func(tc *types.TestCase) bool {
-			if len(ci_utils.OperatorUpgradeHopsImageList[0]) == 0 {
+			if len(ci_utils.OperatorUpgradeHopsImageList) == 0 {
 				logrus.Info("--operator-upgrade-hops-image-list is empty, cannot run BasicUpgradeOperator test")
 				return true
 			}

@@ -96,9 +96,13 @@ func setup() error {
 		return err
 	}
 
-	ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+	if len(pxUpgradeHopsURLs) != 0 {
+		ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
+	}
 
-	ci_utils.OperatorUpgradeHopsImageList = strings.Split(operatorUpgradeHopsImages, ",")
+	if len(operatorUpgradeHopsImages) != 0 {
+		ci_utils.OperatorUpgradeHopsImageList = strings.Split(operatorUpgradeHopsImages, ",")
+	}
 
 	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
 	if err != nil {
