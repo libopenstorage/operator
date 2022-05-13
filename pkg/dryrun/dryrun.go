@@ -234,10 +234,15 @@ func (d *DryRun) Execute() error {
 		if len(dsObjs) > 0 &&
 			dsObjs[0].GetObjectKind().GroupVersionKind().Kind == "DaemonSet" &&
 			dsObjs[0].GetName() == "portworx" {
-			logrus.Infof("Got %d objects from k8s cluster, will compare with objects installed by operator", len(dsObjs))
+			logrus.Infof("Got %d objects from k8s cluster (daemonSet install), will compare with objects installed by operator (after migration)", len(dsObjs))
 			// Do not return error as it's quiet noisy, a lot of places are expected to be different between Daemonset
 			// and operator install. If there is difference, warning is already logged for user to review.
-			d.validateObjects(dsObjs, objs, h)
+			err = d.validateObjects(dsObjs, objs, h)
+			if err == nil {
+				logrus.Info("Operator migration dry-run finished successfully")
+			} else {
+				logrus.Warning("Please review the warning/error messages and/or refer to the troubleshooting guide")
+			}
 		} else {
 			logrus.Infof("could not find DaemonSet portworx, will not dry run daemonset to operator migration")
 		}
@@ -458,7 +463,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				}
 			}
 		} else if kind == "Prometheus" && name == "prometheus" {
-			logrus.Warning("Prometheus service name will change from prometheus to px-prometheus after migration, ok to proceed with migration")
+			logrus.Info("Prometheus service name will change from prometheus to px-prometheus after migration, ok to proceed with migration")
 			name = "px-prometheus"
 		} else if kind == "Service" && name == "prometheus" {
 			name = "px-prometheus"
@@ -466,7 +471,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			// Operator does not create autopilot service
 			continue
 		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
-			logrus.Warningf("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration, ok to proceed with migration")
+			logrus.Info("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration, ok to proceed with migration")
 			name = "portworx"
 		}
 
