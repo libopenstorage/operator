@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"time"
 
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	appops "github.com/portworx/sched-ops/k8s/apps"
@@ -37,10 +38,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ParseSpecs parses the file and returns all the valid k8s objects
+// ParseSpecs parses the file under testspec folder and returns all the valid k8s objects
 func ParseSpecs(filename string) ([]runtime.Object, error) {
+	return ParseSpecsWithFullPath(path.Join("testspec", filename))
+}
+
+// ParseSpecsWithFullPath parses the file and returns all the valid k8s objects
+func ParseSpecsWithFullPath(filename string) ([]runtime.Object, error) {
 	var specs []runtime.Object
-	file, err := os.Open(path.Join("testspec", filename))
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -353,6 +359,8 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 	} else if specObj, ok := in.(*monitoringv1.Alertmanager); ok {
 		return specObj, nil
 	} else if specObj, ok := in.(*v1.PersistentVolumeClaim); ok {
+		return specObj, nil
+	} else if specObj, ok := in.(*corev1.StorageCluster); ok {
 		return specObj, nil
 	}
 	return nil, fmt.Errorf("unsupported object: %v", reflect.TypeOf(in))
