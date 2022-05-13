@@ -458,7 +458,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				}
 			}
 		} else if kind == "Prometheus" && name == "prometheus" {
-			logrus.Warning("Prometheus service name will change from prometheus to px-prometheus after migration")
+			logrus.Warning("Prometheus service name will change from prometheus to px-prometheus after migration, ok to proceed with migration")
 			name = "px-prometheus"
 		} else if kind == "Service" && name == "prometheus" {
 			name = "px-prometheus"
@@ -466,7 +466,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			// Operator does not create autopilot service
 			continue
 		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
-			logrus.Warningf("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration")
+			logrus.Warningf("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration, ok to proceed with migration")
 			name = "portworx"
 		}
 
