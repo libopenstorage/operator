@@ -97,7 +97,7 @@ type DryRun struct {
 
 // Init performs required initialization
 func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error {
-	logrus.Infof("command line args, kubeconfig: %s, outputFolder: %s, storageClusterFile: %s", kubeconfig, outputFolder, storageClusterFile)
+	logrus.Debugf("command line args, kubeconfig: %s, outputFolder: %s, storageClusterFile: %s", kubeconfig, outputFolder, storageClusterFile)
 	var err error
 
 	k8sVersion := "v1.22.0"
@@ -263,7 +263,7 @@ func (d *DryRun) writeFiles(objs []client.Object) error {
 	defer f.Close()
 
 	for _, obj := range objs {
-		logrus.Infof("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		logrus.Debugf("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 		bytes, err := yaml.Marshal(obj)
 		if err != nil {
 			return err
@@ -351,12 +351,12 @@ func (d *DryRun) installAllComponents() error {
 		if skipComponents[comp.Name()] {
 			// Only log a warning if component is enabled but not supported.
 			if enabled {
-				logrus.Infof("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
+				logrus.Debugf("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
 			}
 			continue
 		}
 
-		logrus.Infof("component \"%s\" enabled: %t", comp.Name(), enabled)
+		logrus.Debugf("component \"%s\" enabled: %t", comp.Name(), enabled)
 		if enabled {
 			err := comp.Reconcile(d.cluster)
 			if ce, ok := err.(*component.Error); ok &&
@@ -523,15 +523,15 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		case "Service":
 			err = d.deepEqualService(dsObj.(*v1.Service), opObj.(*v1.Service))
 		default:
-			logrus.Infof("Object %s/%s exists before and after migration, but was not compared", kind, name)
+			logrus.Debugf("Object %s/%s exists before and after migration, but was not compared", kind, name)
 			continue
 		}
 
 		if err != nil {
 			lastErr = err
-			logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			logrus.Warningf("failed to compare %s %s, %s", kind, name, err.Error())
 		} else {
-			logrus.Infof("successfully compared %s %s", kind, name)
+			logrus.Debugf("successfully compared %s %s", kind, name)
 		}
 	}
 
@@ -595,7 +595,7 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 		if err == nil {
 			// When running inside of container, creating folder on root will get permission denied.
 			d.outputFolder = "/tmp/" + d.outputFolder
-			logrus.Infof("output folder is %s", d.outputFolder)
+			logrus.Debugf("output folder is %s", d.outputFolder)
 		}
 	}
 	if err != nil {
