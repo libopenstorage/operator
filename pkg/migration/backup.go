@@ -30,6 +30,40 @@ const (
 	CollectionConfigMapName = "px-daemonset-collection"
 )
 
+// GetAllDaemonSetObjects returns all objects deployed by daemonset method.
+func (h *Handler) GetAllDaemonSetObjects(namespace string) ([]client.Object, error) {
+	var objs []client.Object
+	if err := h.getDaemonSetComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+
+	if err := h.getPortworxAPI(namespace, &objs); err != nil {
+		return nil, err
+	}
+	if err := h.getPortworxRbac(namespace, &objs); err != nil {
+		return nil, err
+	}
+
+	if err := h.getStorkComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+
+	if err := h.getAutopilotComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+	if err := h.getCSIComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+	if err := h.getPVCControllerComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+	if err := h.getMonitoringComponent(namespace, &objs); err != nil {
+		return nil, err
+	}
+
+	return objs, nil
+}
+
 func (h *Handler) backup(configMapName, namespace string, overwrite bool) error {
 	if !overwrite {
 		existingConfigMap := &v1.ConfigMap{}
@@ -47,32 +81,8 @@ func (h *Handler) backup(configMapName, namespace string, overwrite bool) error 
 		}
 	}
 
-	var objs []client.Object
-	if err := h.getDaemonSetComponent(namespace, &objs); err != nil {
-		return err
-	}
-
-	if err := h.getPortworxAPI(namespace, &objs); err != nil {
-		return err
-	}
-	if err := h.getPortworxRbac(namespace, &objs); err != nil {
-		return err
-	}
-
-	if err := h.getStorkComponent(namespace, &objs); err != nil {
-		return err
-	}
-
-	if err := h.getAutopilotComponent(namespace, &objs); err != nil {
-		return err
-	}
-	if err := h.getCSIComponent(namespace, &objs); err != nil {
-		return err
-	}
-	if err := h.getPVCControllerComponent(namespace, &objs); err != nil {
-		return err
-	}
-	if err := h.getMonitoringComponent(namespace, &objs); err != nil {
+	objs, err := h.GetAllDaemonSetObjects(namespace)
+	if err != nil {
 		return err
 	}
 

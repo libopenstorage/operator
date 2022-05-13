@@ -180,7 +180,8 @@ codegen:
 
 operator:
 	@echo "Building the cluster operator binary"
-	@cd cmd && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
+	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
+	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
