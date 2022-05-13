@@ -409,7 +409,7 @@ func (c *Controller) createStorkSchedClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
-					Verbs:     []string{"get", "list", "watch"},
+					Verbs:     []string{"get", "list", "watch", "update"},
 				},
 				{
 					APIGroups: []string{"storage.k8s.io"},
