@@ -183,7 +183,7 @@ func (d *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
 
 	msg := ""
 	if c1.Image != c2.Image {
-		msg += fmt.Sprintf("image is different: before-migration %s, after-migration %s\n", c1.Image, c2.Image)
+		msg += fmt.Sprintf("image is different: before-migration %s, after-migration %s, please make sure the image exists if running on air-gapped env.\n", c1.Image, c2.Image)
 	}
 
 	sort.Strings(c1.Command)
