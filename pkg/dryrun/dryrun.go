@@ -97,7 +97,7 @@ type DryRun struct {
 
 // Init performs required initialization
 func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error {
-	logrus.Infof("command line args, kubeconfig: %s, outputFolder: %s, storageClusterFile: %s", kubeconfig, outputFolder, storageClusterFile)
+	logrus.Debugf("command line args, kubeconfig: %s, outputFolder: %s, storageClusterFile: %s", kubeconfig, outputFolder, storageClusterFile)
 	var err error
 
 	k8sVersion := "v1.22.0"
@@ -234,10 +234,15 @@ func (d *DryRun) Execute() error {
 		if len(dsObjs) > 0 &&
 			dsObjs[0].GetObjectKind().GroupVersionKind().Kind == "DaemonSet" &&
 			dsObjs[0].GetName() == "portworx" {
-			logrus.Infof("Got %d objects from k8s cluster, will compare with objects installed by operator", len(dsObjs))
+			logrus.Infof("Got %d objects from k8s cluster (daemonSet install), will compare with objects installed by operator (after migration)", len(dsObjs))
 			// Do not return error as it's quiet noisy, a lot of places are expected to be different between Daemonset
 			// and operator install. If there is difference, warning is already logged for user to review.
-			d.validateObjects(dsObjs, objs, h)
+			err = d.validateObjects(dsObjs, objs, h)
+			if err == nil {
+				logrus.Info("Operator migration dry-run finished successfully")
+			} else {
+				logrus.Warning("Please review the warning/error messages and/or refer to the troubleshooting guide")
+			}
 		} else {
 			logrus.Infof("could not find DaemonSet portworx, will not dry run daemonset to operator migration")
 		}
@@ -263,7 +268,7 @@ func (d *DryRun) writeFiles(objs []client.Object) error {
 	defer f.Close()
 
 	for _, obj := range objs {
-		logrus.Infof("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		logrus.Debugf("Operator will deploy %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 		bytes, err := yaml.Marshal(obj)
 		if err != nil {
 			return err
@@ -351,12 +356,12 @@ func (d *DryRun) installAllComponents() error {
 		if skipComponents[comp.Name()] {
 			// Only log a warning if component is enabled but not supported.
 			if enabled {
-				logrus.Infof("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
+				logrus.Debugf("component \"%s\": dry run is not supported yet, component enabled: %t.", comp.Name(), enabled)
 			}
 			continue
 		}
 
-		logrus.Infof("component \"%s\" enabled: %t", comp.Name(), enabled)
+		logrus.Debugf("component \"%s\" enabled: %t", comp.Name(), enabled)
 		if enabled {
 			err := comp.Reconcile(d.cluster)
 			if ce, ok := err.(*component.Error); ok &&
@@ -458,7 +463,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				}
 			}
 		} else if kind == "Prometheus" && name == "prometheus" {
-			logrus.Warning("Prometheus service name will change from prometheus to px-prometheus after migration")
+			logrus.Info("Prometheus service name will change from prometheus to px-prometheus after migration, ok to proceed with migration")
 			name = "px-prometheus"
 		} else if kind == "Service" && name == "prometheus" {
 			name = "px-prometheus"
@@ -466,7 +471,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			// Operator does not create autopilot service
 			continue
 		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
-			logrus.Warningf("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration")
+			logrus.Info("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration, ok to proceed with migration")
 			name = "portworx"
 		}
 
@@ -523,15 +528,15 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 		case "Service":
 			err = d.deepEqualService(dsObj.(*v1.Service), opObj.(*v1.Service))
 		default:
-			logrus.Infof("Object %s/%s exists before and after migration, but was not compared", kind, name)
+			logrus.Debugf("Object %s/%s exists before and after migration, but was not compared", kind, name)
 			continue
 		}
 
 		if err != nil {
 			lastErr = err
-			logrus.WithError(err).Warningf("failed to compare %s %s", kind, name)
+			logrus.Warningf("failed to compare %s %s, %s", kind, name, err.Error())
 		} else {
-			logrus.Infof("successfully compared %s %s", kind, name)
+			logrus.Debugf("successfully compared %s %s", kind, name)
 		}
 	}
 
@@ -595,7 +600,7 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 		if err == nil {
 			// When running inside of container, creating folder on root will get permission denied.
 			d.outputFolder = "/tmp/" + d.outputFolder
-			logrus.Infof("output folder is %s", d.outputFolder)
+			logrus.Debugf("output folder is %s", d.outputFolder)
 		}
 	}
 	if err != nil {
