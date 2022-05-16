@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -34,9 +33,21 @@ func CreateStorageClusterTestSpecFunc(cluster *corev1.StorageCluster) func(t *te
 
 // ConstructStorageCluster makes StorageCluster object and add all the common basic parameters that all StorageCluster should have
 func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, specImages map[string]string) error {
+	var envVarList []v1.EnvVar
+
 	cluster.Spec.Image = specImages["version"]
 	if cluster.Namespace == "" {
 		cluster.Namespace = PxNamespace
+	}
+
+	if cluster.Namespace != PxNamespace {
+		// If this is OCP on vSphere, attempt to find and copy PX vSphere secret to custom namespace
+		if IsOcp && CloudProvider == "vsphere" {
+			logrus.Debugf("This is OpenShift cluster and PX will be deployed in custom namespace %s, attempting to find and copy PX vSphere secret to custom namespace %s", cluster.Namespace, cluster.Namespace)
+			if err := testutil.FindAndCopyVsphereSecretToCustomNamespace(cluster.Namespace); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Add OCP annotation
@@ -45,6 +56,18 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 			cluster.Annotations = make(map[string]string)
 		}
 		cluster.Annotations["portworx.io/is-openshift"] = "true"
+
+		// Create PX vSphere Env var credentials, if PX vSphere secret exists
+		if CloudProvider == "vsphere" {
+			ocpEnvVarCreds, err := testutil.CreateVsphereCredentialEnvVarsFromSecret(cluster.Namespace)
+			if err != nil {
+				return err
+			}
+
+			if ocpEnvVarCreds != nil {
+				envVarList = append(envVarList, ocpEnvVarCreds...)
+			}
+		}
 	}
 
 	// Add EKS annotation
@@ -72,7 +95,6 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 	}
 
 	// Populate default ENV vars
-	var envVarList []v1.EnvVar
 	env, err := addDefaultEnvVars(cluster.Spec.Env, specGenURL)
 	if err != nil {
 		return err
@@ -106,16 +128,6 @@ func CreateStorageClusterFromSpec(filename string) (*corev1.StorageCluster, erro
 // CreateStorageCluster creates the given storage cluster on k8s
 func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Create StorageCluster %s in %s", cluster.Name, cluster.Namespace)
-	if cluster.Namespace != PxNamespace {
-		ns := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cluster.Namespace,
-			},
-		}
-		if err := CreateObjects([]runtime.Object{ns}); err != nil {
-			return nil, err
-		}
-	}
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
@@ -258,19 +270,6 @@ func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testi
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
-
-	// Delete namespace if not kube-system
-	if cluster.Namespace != PxNamespace {
-		ns := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cluster.Namespace,
-			},
-		}
-		err = DeleteObjects([]runtime.Object{ns})
-		require.NoError(t, err)
-		err = ValidateObjectsAreTerminated([]runtime.Object{ns}, false)
-		require.NoError(t, err)
-	}
 }
 
 // ValidateStorageClusterComponents validates storage cluster components

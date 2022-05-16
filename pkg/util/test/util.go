@@ -84,6 +84,9 @@ const (
 	// DefaultStorkPxSharedSecretEnvVarValue is a default value for PX shared secret for stork
 	DefaultStorkPxSharedSecretEnvVarValue = "px-system-secrets"
 
+	// DefaultPxVsphereSecretName is a default name for PX vSphere credentials secret
+	DefaultPxVsphereSecretName = "px-vsphere-secret"
+
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
 )
@@ -389,6 +392,95 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 	}
 
 	return operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+}
+
+// FindAndCopyVsphereSecretToCustomNamespace attempt to find and copy PX vSphere secret to a given namespace
+func FindAndCopyVsphereSecretToCustomNamespace(customNamespace string) error {
+	var pxVsphereSecret *v1.Secret
+
+	// Get all secrets
+	secrets, err := coreops.Instance().ListSecret("", metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list secrets, err %v", err)
+	}
+
+	// Find PX vSphere secret
+	for _, secret := range secrets.Items {
+		if secret.Name == DefaultPxVsphereSecretName {
+			logrus.Debugf("Found %s in the %s namespace", secret.Name, secret.Namespace)
+			pxVsphereSecret = &secret
+			break
+		}
+	}
+
+	if pxVsphereSecret == nil {
+		logrus.Warnf("Failed to find secret %s", DefaultPxVsphereSecretName)
+		return nil
+	}
+
+	// Construct new PX vSpheresecret in the new namespace
+	newPxVsphereSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxVsphereSecret.Name,
+			Namespace: customNamespace,
+		},
+		Data: pxVsphereSecret.Data,
+		Type: pxVsphereSecret.Type,
+	}
+
+	logrus.Debugf("Attempting to copy %s from %s to %s", DefaultPxVsphereSecretName, pxVsphereSecret.Namespace, customNamespace)
+	_, err = coreops.Instance().CreateSecret(newPxVsphereSecret)
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logrus.Warnf("Secret %s already exists in %s namespace", DefaultPxVsphereSecretName, customNamespace)
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+// CreateVsphereCredentialEnvVarsFromSecret check if px-vsphere-secret exists and returns vSphere crendentials Env vars
+func CreateVsphereCredentialEnvVarsFromSecret(namespace string) ([]v1.EnvVar, error) {
+	var envVars []v1.EnvVar
+
+	// Get PX vSphere secret
+	_, err := coreops.Instance().GetSecret(DefaultPxVsphereSecretName, namespace)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logrus.Warnf("PX vSphere secret %s in not found in %s namespace, unable to get credentials from secret, please make sure you have specified them in the Env vars", DefaultPxVsphereSecretName, namespace)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get secret %s in %s namespace, err %v", DefaultPxVsphereSecretName, namespace, err)
+	}
+
+	envVars = []v1.EnvVar{
+		{
+			Name: "VSPHERE_USER",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: DefaultPxVsphereSecretName,
+					},
+					Key: "VSPHERE_USER",
+				},
+			},
+		},
+		{
+			Name: "VSPHERE_PASSWORD",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: DefaultPxVsphereSecretName,
+					},
+					Key: "VSPHERE_PASSWORD",
+				},
+			},
+		},
+	}
+
+	return envVars, nil
 }
 
 // ValidateStorageCluster validates a StorageCluster spec
@@ -1549,7 +1641,7 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 	t := func() (interface{}, bool, error) {
 		pods, err := appops.Instance().GetDeploymentPods(pvcControllerDeployment)
 		if err != nil {
-			return nil, false, err
+			return nil, true, fmt.Errorf("failed to get %s deployment pods, Err: %v", pvcControllerDeployment.Name, err)
 		}
 
 		numberOfPods := 0

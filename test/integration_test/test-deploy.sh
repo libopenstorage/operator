@@ -145,7 +145,7 @@ if [ "$cloud_provider" != "" ]; then
 	echo "Cloud provider: $cloud_provider"
 	sed -i 's|'CLOUD_PROVIDER'|'"$cloud_provider"'|g' $test_pod_spec
 else
-	sed -i 's|'CLOUD_PROVIDER'|''|g' $test_pod_spec
+	sed -i '/CLOUD_PROVIDER/d' $test_pod_spec
 fi
 
 # Portworx device specs
@@ -153,7 +153,7 @@ if [ "$portworx_device_specs" != "" ]; then
     echo "Portworx volumes: $portworx_device_specs"
     sed -i 's|'PORTWORX_DEVICE_SPECS'|'"$portworx_device_specs"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_DEVICE_SPECS'|''|g' $test_pod_spec
+    sed -i '/PORTWORX_DEVICE_SPECS/d' $test_pod_spec
 fi
 
 # Portworx KVDB device spec
@@ -161,7 +161,7 @@ if [ "$portworx_kvdb_spec" != "" ]; then
     echo "Portworx KVDB: $portworx_kvdb_spec"
     sed -i 's|'PORTWORX_KVDB_SPEC'|'"$portworx_kvdb_spec"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_KVDB_SPEC'|''|g' $test_pod_spec
+    sed -i '/PORTWORX_KVDB_SPEC/d' $test_pod_spec
 fi
 
 # Portworx ENV vars
@@ -169,7 +169,7 @@ if [ "$portworx_env_vars" != "" ]; then
     echo "Portworx ENV vars: $portworx_env_vars"
     sed -i 's|'PORTWORX_ENV_VARS'|'"$portworx_env_vars"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_ENV_VARS'|''|g' $test_pod_spec
+    sed -i '/PORTWORX_ENV_VARS/d' $test_pod_spec
 fi
 
 # Set OCP
@@ -198,14 +198,14 @@ sed -i 's|'PORTWORX_SPEC_GEN_URL'|'"$portworx_spec_gen_url"'|g' $test_pod_spec
 if [ "$px_upgrade_hops_url_list" != "" ]; then
     sed -i 's|'PX_UPGRADE_HOPS_URL_LIST'|'"$px_upgrade_hops_url_list"'|g' $test_pod_spec
 else
-    sed -i 's|'PX_UPGRADE_HOPS_URL_LIST'|''|g' $test_pod_spec
+    sed -i '/PX_UPGRADE_HOPS_URL_LIST/d' $test_pod_spec
 fi
 
 # Operator upgrade hops image list
 if [ "$operator_upgrade_hops_image_list" != "" ]; then
     sed -i 's|'OPERATOR_UPGRADE_HOPS_IMAGE_LIST'|'"$operator_upgrade_hops_image_list"'|g' $test_pod_spec
 else
-    sed -i 's|'OPERATOR_UPGRADE_HOPS_IMAGE_LIST'|''|g' $test_pod_spec
+    sed -i '/OPERATOR_UPGRADE_HOPS_IMAGE_LIST/d' $test_pod_spec
 fi
 
 # Portworx Docker credentials
@@ -213,8 +213,8 @@ if [ "$portworx_docker_username" != "" ] && [ "$portworx_docker_password" != "" 
     sed -i 's|'PORTWORX_DOCKER_USERNAME'|'"$portworx_docker_username"'|g' $test_pod_spec
     sed -i 's|'PORTWORX_DOCKER_PASSWORD'|'"$portworx_docker_password"'|g' $test_pod_spec
 else
-    sed -i 's|'PORTWORX_DOCKER_USERNAME'|''|g' $test_pod_spec
-    sed -i 's|'PORTWORX_DOCKER_PASSWORD'|''|g' $test_pod_spec
+    sed -i '/PORTWORX_DOCKER_USERNAME/d' $test_pod_spec
+    sed -i '/PORTWORX_DOCKER_PASSWORD/d' $test_pod_spec
 fi
 
 # Set test image

@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -45,16 +47,19 @@ var testStorageClusterBasicCases = []types.TestCase{
 	{
 		TestName:        "InstallInCustomNamespaceWithShiftedPort",
 		TestrailCaseIDs: []string{"C52411", "C52430", "C53572"},
-		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "custom-ns-shifted-port",
-				Namespace: "custom-namespace",
-			},
-			Spec: corev1.StorageClusterSpec{
-				StartPort: func(val uint32) *uint32 { return &val }(17001),
-			},
-		}),
-		TestFunc: BasicInstall,
+		TestSpec: func(t *testing.T) interface{} {
+			cluster := &corev1.StorageCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-ns-shifted-port",
+					Namespace: "custom-namespace",
+				},
+				Spec: corev1.StorageClusterSpec{
+					StartPort: func(val uint32) *uint32 { return &val }(17001),
+				},
+			}
+			return cluster
+		},
+		TestFunc: BasicInstallInCustomNamespace,
 	},
 	{
 		TestName:        "NodeAffinityLabels",
@@ -92,8 +97,8 @@ var testStorageClusterBasicCases = []types.TestCase{
 			}
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
-			if len(ci_utils.PxUpgradeHopsURLList[0]) == 0 {
-				logrus.Info("--upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
+			if len(ci_utils.PxUpgradeHopsURLList) == 0 {
+				logrus.Info("--px-upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
 				return true
 			}
 			k8sVersion, _ := k8sutil.GetVersion()
@@ -109,7 +114,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{Name: "operator-upgrade-test"},
 		}),
 		ShouldSkip: func(tc *types.TestCase) bool {
-			if len(ci_utils.OperatorUpgradeHopsImageList[0]) == 0 {
+			if len(ci_utils.OperatorUpgradeHopsImageList) == 0 {
 				logrus.Info("--operator-upgrade-hops-image-list is empty, cannot run BasicUpgradeOperator test")
 				return true
 			}
@@ -250,9 +255,61 @@ func BasicInstall(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
+		// Deploy PX and validate
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
+		// Wipe PX and validate
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Check if we need to create custom namespace
+		if cluster.Namespace != ci_utils.PxNamespace {
+			logrus.Debugf("Attempting to create custom namespace %s", cluster.Namespace)
+			ns := &v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: cluster.Namespace,
+				},
+			}
+
+			err := ci_utils.CreateObjects([]runtime.Object{ns})
+			if err != nil {
+				if errors.IsAlreadyExists(err) {
+					logrus.Warnf("Namespace %s already exists", cluster.Namespace)
+				} else {
+					require.NoError(t, err)
+				}
+			}
+		}
+
+		// Construct StorageCluster
+		err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+		require.NoError(t, err)
+
+		// Deploy PX and validate
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Wipe PX and validate
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+
+		// Delete namespace if custom
+		if cluster.Namespace != ci_utils.PxNamespace {
+			ns := &v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: cluster.Namespace,
+				},
+			}
+			err := ci_utils.DeleteObjects([]runtime.Object{ns})
+			require.NoError(t, err)
+			err = ci_utils.ValidateObjectsAreTerminated([]runtime.Object{ns}, false)
+			require.NoError(t, err)
+		}
 	}
 }
 
