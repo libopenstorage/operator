@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
+	"github.com/google/uuid"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -128,11 +129,9 @@ func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error
 	}
 
 	versionClient := fakek8sclient.NewSimpleClientset()
-	// TODO: read k8s version with kubeconfig
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: k8sVersion,
 	}
-	// TODO: check if more SetInstances are needed, review APIs called inside of components.
 	coreops.SetInstance(coreops.New(versionClient))
 
 	mockClientSet := fakeextclient.NewSimpleClientset()
@@ -193,6 +192,8 @@ func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error
 	// It will also disable PDB.
 	// We will generate portworx pod spec by calling the API directly.
 	d.cluster.Annotations[constants.AnnotationDisableStorage] = "true"
+	// Make a fake cluster ID as metrics collector waits for the UID before deploying.
+	d.cluster.Status.ClusterUID = uuid.New().String()
 
 	return nil
 }
