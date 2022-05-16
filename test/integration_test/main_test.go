@@ -96,11 +96,11 @@ func setup() error {
 		return err
 	}
 
-	if len(pxUpgradeHopsURLs) != 0 {
+	if pxUpgradeHopsURLs != "" {
 		ci_utils.PxUpgradeHopsURLList = strings.Split(pxUpgradeHopsURLs, ",")
 	}
 
-	if len(operatorUpgradeHopsImages) != 0 {
+	if operatorUpgradeHopsImages != "" {
 		ci_utils.OperatorUpgradeHopsImageList = strings.Split(operatorUpgradeHopsImages, ",")
 	}
 

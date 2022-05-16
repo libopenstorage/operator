@@ -449,7 +449,7 @@ func CreateVsphereCredentialEnvVarsFromSecret(namespace string) ([]v1.EnvVar, er
 	_, err := coreops.Instance().GetSecret(DefaultPxVsphereSecretName, namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logrus.Infof("PX vSphere secret %s in not found in %s namespace, unable to get credentials from secret, please make sure you have specified them in the Env vars", DefaultPxVsphereSecretName, namespace)
+			logrus.Warnf("PX vSphere secret %s in not found in %s namespace, unable to get credentials from secret, please make sure you have specified them in the Env vars", DefaultPxVsphereSecretName, namespace)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get secret %s in %s namespace, err %v", DefaultPxVsphereSecretName, namespace, err)
@@ -1641,7 +1641,7 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 	t := func() (interface{}, bool, error) {
 		pods, err := appops.Instance().GetDeploymentPods(pvcControllerDeployment)
 		if err != nil {
-			return nil, false, err
+			return nil, true, fmt.Errorf("failed to get %s deployment pods, Err: %v", pvcControllerDeployment.Name, err)
 		}
 
 		numberOfPods := 0

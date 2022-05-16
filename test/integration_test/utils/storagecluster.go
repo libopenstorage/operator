@@ -8,8 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -43,23 +41,6 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 	}
 
 	if cluster.Namespace != PxNamespace {
-		// Create custom namespace
-		ns := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cluster.Namespace,
-			},
-		}
-
-		logrus.Debugf("Attempting to create custom namespace %s", cluster.Namespace)
-		err := CreateObjects([]runtime.Object{ns})
-		if err != nil {
-			if errors.IsAlreadyExists(err) {
-				logrus.Warnf("Namespace %s already exists", cluster.Namespace)
-			} else {
-				return err
-			}
-		}
-
 		// If this is OCP on vSphere, attempt to find and copy PX vSphere secret to custom namespace
 		if IsOcp && CloudProvider == "vsphere" {
 			logrus.Debugf("This is OpenShift cluster and PX will be deployed in custom namespace %s, attempting to find and copy PX vSphere secret to custom namespace %s", cluster.Namespace, cluster.Namespace)
@@ -289,19 +270,6 @@ func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testi
 	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
-
-	// Delete namespace if not kube-system
-	if cluster.Namespace != PxNamespace {
-		ns := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cluster.Namespace,
-			},
-		}
-		err = DeleteObjects([]runtime.Object{ns})
-		require.NoError(t, err)
-		err = ValidateObjectsAreTerminated([]runtime.Object{ns}, false)
-		require.NoError(t, err)
-	}
 }
 
 // ValidateStorageClusterComponents validates storage cluster components
