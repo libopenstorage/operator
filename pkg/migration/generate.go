@@ -37,18 +37,19 @@ const (
 
 var (
 	builtinPxVolumeNames = map[string]bool{
-		"containerddir": true,
-		"criosock":      true,
-		"dbusmount":     true,
-		"dev":           true,
-		"diagsdump":     true,
-		"dockersock":    true,
-		"etcpwx":        true,
-		"journalmount1": true,
-		"journalmount2": true,
-		"optpwx":        true,
-		"procmount":     true,
-		"sysdmount":     true,
+		"containerdsock": true,
+		"containerddir":  true,
+		"criosock":       true,
+		"dbusmount":      true,
+		"dev":            true,
+		"diagsdump":      true,
+		"dockersock":     true,
+		"etcpwx":         true,
+		"journalmount1":  true,
+		"journalmount2":  true,
+		"optpwx":         true,
+		"procmount":      true,
+		"sysdmount":      true,
 	}
 )
 
