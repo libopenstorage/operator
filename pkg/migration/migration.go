@@ -109,7 +109,8 @@ func (h *Handler) Start() {
 		}
 
 		if err := h.processMigration(cluster, pxDaemonSet); err != nil {
-			logrus.Errorf("Migration failed, will retry in %v. %v", migrationRetryIntervalFunc(), err)
+			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationFailedReason,
+				fmt.Sprintf("Migration failed, will retry in %v, %v", migrationRetryIntervalFunc(), err))
 			return false, nil
 		}
 

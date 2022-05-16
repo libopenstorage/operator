@@ -40,6 +40,8 @@ const (
 	MigrationPendingReason = "MigrationPending"
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
+	// MigrationFailed is added to an event when the migration fails.
+	MigrationFailedReason = "MigrationFailed"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
