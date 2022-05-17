@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	goversion "github.com/hashicorp/go-version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	"github.com/portworx/sched-ops/k8s/apiextensions"
@@ -41,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
-	"github.com/google/uuid"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"

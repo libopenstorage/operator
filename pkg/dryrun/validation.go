@@ -36,27 +36,6 @@ func (d *DryRun) deepEqualService(p1, p2 *v1.Service) error {
 	return nil
 }
 
-func (d *DryRun) deepEqualServicePorts(l1, l2 []v1.ServicePort) error {
-	getKey := func(v interface{}) string {
-		s := v.(v1.ServicePort)
-		return s.Name
-	}
-
-	getList := func(arr []v1.ServicePort) []interface{} {
-		var objs []interface{}
-		for _, obj := range arr {
-			objs = append(objs, obj)
-		}
-		return objs
-	}
-
-	return util.DeepEqualObjects(
-		getList(l1),
-		getList(l2),
-		getKey,
-		util.DeepEqualObject)
-}
-
 func (d *DryRun) deepEqualCSIPod(p1, p2 *v1.PodTemplateSpec) error {
 	filterFunc := func(p *v1.PodTemplateSpec) *v1.PodTemplateSpec {
 		for i, c := range p.Spec.Containers {
