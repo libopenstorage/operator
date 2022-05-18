@@ -5,8 +5,10 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	"github.com/libopenstorage/operator/pkg/util"
 )
 
@@ -21,42 +23,17 @@ var (
 	}
 )
 
+// Don't compare service ports, as px-kvdb port is managed by a separate service after operator migration.
 func (d *DryRun) deepEqualService(p1, p2 *v1.Service) error {
 	var msg string
 	if p1.Spec.Type != p2.Spec.Type {
 		msg += fmt.Sprintf("service type is different, before-migration %s, after-migration %s. ", p1.Spec.Type, p2.Spec.Type)
 	}
 
-	err := d.deepEqualServicePorts(p1.Spec.Ports, p2.Spec.Ports)
-	if err != nil {
-		msg += err.Error()
-	}
-
 	if msg != "" {
 		return fmt.Errorf(msg)
 	}
 	return nil
-}
-
-func (d *DryRun) deepEqualServicePorts(l1, l2 []v1.ServicePort) error {
-	getKey := func(v interface{}) string {
-		s := v.(v1.ServicePort)
-		return s.Name
-	}
-
-	getList := func(arr []v1.ServicePort) []interface{} {
-		var objs []interface{}
-		for _, obj := range arr {
-			objs = append(objs, obj)
-		}
-		return objs
-	}
-
-	return util.DeepEqualObjects(
-		getList(l1),
-		getList(l2),
-		getKey,
-		util.DeepEqualObject)
 }
 
 func (d *DryRun) deepEqualCSIPod(p1, p2 *v1.PodTemplateSpec) error {
@@ -77,29 +54,32 @@ func (d *DryRun) deepEqualCSIPod(p1, p2 *v1.PodTemplateSpec) error {
 
 // deepEqualPod compares two pods.
 func (d *DryRun) deepEqualPod(p1, p2 *v1.PodTemplateSpec) error {
-	var msg string
-
+	failed := false
 	err := d.deepEqualVolumes(p1.Spec.Volumes, p2.Spec.Volumes)
 	if err != nil {
-		msg += fmt.Sprintf("Volumes are different: %s\n", err.Error())
+		logrus.Warningf("Volumes are different: %s", err.Error())
+		failed = true
 	}
 
 	err = d.deepEqualContainers(p1.Spec.Containers, p2.Spec.Containers)
 	if err != nil {
-		msg += fmt.Sprintf("Containers are different: %s\n", err.Error())
+		logrus.Warningf("Containers are different: %s", err.Error())
+		failed = true
 	}
 
 	err = d.deepEqualContainers(p1.Spec.InitContainers, p2.Spec.InitContainers)
 	if err != nil {
-		msg += fmt.Sprintf("init-containers are different: %s\n", err.Error())
+		logrus.Warningf("init-containers are different: %s", err.Error())
+		failed = true
 	}
 
 	if !reflect.DeepEqual(p1.Spec.ImagePullSecrets, p2.Spec.ImagePullSecrets) {
-		msg += fmt.Sprintf("ImagePullSecrets are different: first %+v, second: %+v\n", p1.Spec.ImagePullSecrets, p2.Spec.ImagePullSecrets)
+		logrus.Warningf("ImagePullSecrets are different: first %+v, second: %+v\n", p1.Spec.ImagePullSecrets, p2.Spec.ImagePullSecrets)
+		failed = true
 	}
 
-	if msg != "" {
-		return fmt.Errorf(msg)
+	if failed {
+		return fmt.Errorf("failed to compare pod %s", p1.Name)
 	}
 	return nil
 }
@@ -148,6 +128,10 @@ func (d *DryRun) deepEqualVolume(obj1, obj2 interface{}) error {
 		if vol.HostPath != nil {
 			vol.HostPath.Type = nil
 		}
+		// Observed telemetry config map is set to DefaultMode:*420 by kubernetes, although it's not set.
+		if vol.ConfigMap != nil {
+			vol.ConfigMap.DefaultMode = nil
+		}
 		return vol
 	}
 
@@ -181,35 +165,46 @@ func (d *DryRun) deepEqualContainer(obj1, obj2 interface{}) error {
 	c1 := t1.DeepCopy()
 	c2 := t2.DeepCopy()
 
-	msg := ""
+	failed := false
 	if c1.Image != c2.Image {
-		msg += fmt.Sprintf("image is different: before-migration %s, after-migration %s, please make sure the image exists if running on air-gapped env.\n", c1.Image, c2.Image)
+		msg := fmt.Sprintf("image is different: before-migration %s, after-migration %s", c1.Image, c2.Image)
+		if manifest.Instance().CanAccessRemoteManifest(d.cluster) {
+			logrus.Info(msg)
+		} else {
+			logrus.Warning(msg + ", please make sure the image exists on air-gapped env.")
+			failed = true
+		}
 	}
 
 	sort.Strings(c1.Command)
 	sort.Strings(c2.Command)
 	if !reflect.DeepEqual(c1.Command, c2.Command) {
-		msg += fmt.Sprintf("command is different: before-migration %s, after-migration %s\n", t1.Command, t2.Command)
+		logrus.Warningf("command is different: before-migration %s, after-migration %s", t1.Command, t2.Command)
+		failed = true
 	}
 
 	sort.Strings(c1.Args)
 	sort.Strings(c2.Args)
 	if !reflect.DeepEqual(c1.Args, c2.Args) {
-		msg += fmt.Sprintf("args is different: before-migration %s, after-migration %s\n", t1.Args, t2.Args)
+		logrus.Warningf("args is different: before-migration %s, after-migration %s", t1.Args, t2.Args)
+		failed = true
 	}
 
 	err := d.deepEqualEnvVars(c1.Env, c2.Env)
 	if err != nil {
-		msg += fmt.Sprintf("env vars is different, %v\n", err)
+		logrus.Warningf("env vars is different, %v", err)
+		failed = true
 	}
 
 	err = d.deepEqualVolumeMounts(c1.VolumeMounts, c2.VolumeMounts)
 	if err != nil {
-		msg += fmt.Sprintf("VolumeMounts is different, %v\n", err)
+		logrus.Warningf("VolumeMounts is different, %v", err)
+		failed = true
 	}
 
-	if msg != "" {
-		return fmt.Errorf("container %s is different: %s", c1.Name, msg)
+	if failed {
+		msg := fmt.Sprintf("container %s is different", c1.Name)
+		return fmt.Errorf(msg)
 	}
 	return nil
 }
@@ -227,6 +222,7 @@ func (d *DryRun) deepEqualEnvVars(env1, env2 []v1.EnvVar) error {
 			"NODE_NAME":            true,
 			"PX_NAMESPACE":         true,
 			"PX_SECRETS_NAMESPACE": true,
+			"controller_sn":        true,
 		}
 		for _, obj := range arr {
 			if skippedEnvs[obj.Name] {
