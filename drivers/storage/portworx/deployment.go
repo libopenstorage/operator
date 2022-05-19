@@ -263,14 +263,15 @@ func (p *portworx) GetStoragePodSpec(
 
 	containers := t.portworxContainer(cluster)
 	podSpec := v1.PodSpec{
-		// For Pods running with hostNetwork, you should explicitly set its DNS policy to DNSClusterFirstWithHostNet
-		DNSPolicy:          v1.DNSClusterFirstWithHostNet,
 		HostPID:            pxutil.IsHostPidEnabled(cluster),
 		HostNetwork:        true,
 		RestartPolicy:      v1.RestartPolicyAlways,
 		ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),
 		Containers:         []v1.Container{containers},
 		Volumes:            t.getVolumes(),
+	}
+	if cluster.Annotations[pxutil.AnnotationDNSPolicy] != "" {
+		podSpec.DNSPolicy = v1.DNSPolicy(cluster.Annotations[pxutil.AnnotationDNSPolicy])
 	}
 
 	if pxutil.IsCSIEnabled(t.cluster) {
