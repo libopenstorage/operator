@@ -121,6 +121,8 @@ const (
 	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
 	// AnnotationHostPid configures hostPid flag for portworx pod.
 	AnnotationHostPid = pxAnnotationPrefix + "/host-pid"
+	// AnnotationDNSPolicy configures dns policy for portworx pod.
+	AnnotationDNSPolicy = pxAnnotationPrefix + "/dns-policy"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
