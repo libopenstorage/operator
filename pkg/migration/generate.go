@@ -514,6 +514,16 @@ func getVolumeSpecs(mounts []v1.VolumeMount, volumes []v1.Volume, knownVolumeNam
 	return volumeSpecs
 }
 
+func getEnvs(envs []v1.EnvVar, knownEnvNames map[string]bool) []v1.EnvVar {
+	var filteredEnvs []v1.EnvVar
+	for _, e := range envs {
+		if _, ok := knownEnvNames[e.Name]; !ok {
+			filteredEnvs = append(filteredEnvs, e)
+		}
+	}
+	return filteredEnvs
+}
+
 func (h *Handler) removeCustomImageRegistry(customImageRegistry, image string) string {
 	if image == "" || customImageRegistry == "" {
 		return image
@@ -584,6 +594,11 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 
 	if dep != nil {
 		cluster.Status.DesiredImages.Stork = dep.Spec.Template.Spec.Containers[0].Image
+		container := dep.Spec.Template.Spec.Containers[0]
+		// Migrate extra env vars
+		cluster.Spec.Stork.Env = getEnvs(container.Env, map[string]bool{"PX_SERVICE_NAME": true})
+		// Migrate extra volumes
+		cluster.Spec.Stork.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, make(map[string]bool))
 	}
 
 	return nil
@@ -600,6 +615,11 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 
 	if dep != nil {
 		cluster.Status.DesiredImages.Autopilot = dep.Spec.Template.Spec.Containers[0].Image
+		container := dep.Spec.Template.Spec.Containers[0]
+		// Migrate extra env vars
+		cluster.Spec.Autopilot.Env = getEnvs(container.Env, make(map[string]bool))
+		// Migrate extra volumes
+		cluster.Spec.Autopilot.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, map[string]bool{"config-volume": true})
 	}
 
 	return nil
