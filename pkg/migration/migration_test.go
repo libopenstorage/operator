@@ -1478,7 +1478,31 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Image: "portworx/stork:2.7.0",
+							Env: []v1.EnvVar{
+								{Name: "PX_SERVICE_NAME", Value: "portworx-api"},
+								{Name: "PX_SHARED_SECRET", ValueFrom: &v1.EnvVarSource{
+									SecretKeyRef: &v1.SecretKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{Name: "pxkeys"},
+										Key:                  "stork-secret",
+									},
+								}},
+								{Name: "EXTRA_ENV_STORK", Value: "value-stork"},
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{Name: "stork-secret", MountPath: "/secret"},
+								{Name: "extra-volume-stork", MountPath: "/mountpath-stork"},
+							},
 						},
+					},
+					Volumes: []v1.Volume{
+						{Name: "stork-secret", VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{
+								SecretName: "stork-secret",
+							},
+						}},
+						{Name: "extra-volume-stork", VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{Path: "/path-stork"},
+						}},
 					},
 				},
 			},
@@ -1495,7 +1519,27 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Image: "/autopilot:1.3.1",
+							Env: []v1.EnvVar{
+								{Name: "EXTRA_ENV_AUTOPILOT", Value: "value-autopilot"},
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{Name: "config-volume", MountPath: "/etc/config"},
+								{Name: "extra-volume-autopilot", MountPath: "/mountpath-autopilot"},
+							},
 						},
+					},
+					Volumes: []v1.Volume{
+						{Name: "config-volume", VolumeSource: v1.VolumeSource{
+							ConfigMap: &v1.ConfigMapVolumeSource{
+								LocalObjectReference: v1.LocalObjectReference{Name: "autopilot-config"},
+								Items: []v1.KeyToPath{
+									{Key: "config.yaml", Path: "config.yaml"},
+								},
+							},
+						}},
+						{Name: "extra-volume-autopilot", VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{Path: "/path-autopilot"},
+						}},
 					},
 				},
 			},
@@ -1571,7 +1615,16 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 	migrator := New(ctrl)
 
 	go migrator.Start()
-	time.Sleep(2 * time.Second)
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+
+		return true, nil
+	})
+	require.NoError(t, err)
 
 	expectedCluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1588,9 +1641,36 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			},
 			Stork: &corev1.StorkSpec{
 				Enabled: true,
+				Env: []v1.EnvVar{
+					{Name: "PX_SHARED_SECRET", ValueFrom: &v1.EnvVarSource{
+						SecretKeyRef: &v1.SecretKeySelector{
+							LocalObjectReference: v1.LocalObjectReference{Name: "pxkeys"},
+							Key:                  "stork-secret",
+						},
+					}},
+					{Name: "EXTRA_ENV_STORK", Value: "value-stork"},
+				},
+				Volumes: []corev1.VolumeSpec{
+					{Name: "stork-secret", VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: "stork-secret",
+						},
+					}, MountPath: "/secret"},
+					{Name: "extra-volume-stork", VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/path-stork"},
+					}, MountPath: "/mountpath-stork"},
+				},
 			},
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
+				Env: []v1.EnvVar{
+					{Name: "EXTRA_ENV_AUTOPILOT", Value: "value-autopilot"},
+				},
+				Volumes: []corev1.VolumeSpec{
+					{Name: "extra-volume-autopilot", VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/path-autopilot"},
+					}, MountPath: "/mountpath-autopilot"},
+				},
 			},
 			Monitoring: &corev1.MonitoringSpec{
 				Prometheus: &corev1.PrometheusSpec{
@@ -1617,13 +1697,22 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Phase: constants.PhaseAwaitingApproval,
 		},
 	}
-	cluster := &corev1.StorageCluster{}
-	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
-	require.NoError(t, err)
 	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
 	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	require.ElementsMatch(t, expectedCluster.Spec.Autopilot.Env, cluster.Spec.Autopilot.Env)
+	require.ElementsMatch(t, expectedCluster.Spec.Autopilot.Volumes, cluster.Spec.Autopilot.Volumes)
+	require.ElementsMatch(t, expectedCluster.Spec.Stork.Env, cluster.Spec.Stork.Env)
+	require.ElementsMatch(t, expectedCluster.Spec.Stork.Volumes, cluster.Spec.Stork.Volumes)
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
+	expectedCluster.Spec.Autopilot.Env = nil
+	cluster.Spec.Autopilot.Env = nil
+	expectedCluster.Spec.Autopilot.Volumes = nil
+	cluster.Spec.Autopilot.Volumes = nil
+	expectedCluster.Spec.Stork.Env = nil
+	cluster.Spec.Stork.Env = nil
+	expectedCluster.Spec.Stork.Volumes = nil
+	cluster.Spec.Stork.Volumes = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
