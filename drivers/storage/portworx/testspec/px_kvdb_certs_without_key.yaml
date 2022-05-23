@@ -15,7 +15,6 @@ spec:
         name: portworx
     spec:
       hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       hostPID: false
       containers:
         - name: portworx
