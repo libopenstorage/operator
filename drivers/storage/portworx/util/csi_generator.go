@@ -259,7 +259,7 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.1.0-2"
+	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.1.0-3"
 	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v5.0.1"
 	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v5.0.1"
 
