@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -483,8 +484,12 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 		return nil, err
 	}
 
+	// Add StorageCluster custom annotations for storage pods if exist
+	if err := h.addCustomAnnotations(cluster, ds); err != nil {
+		return nil, err
+	}
+
 	// TODO: Handle kvdb secret
-	// TODO: Handle custom annotations
 
 	return cluster, nil
 }
@@ -825,6 +830,45 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 			imgVersion := strings.Split(cluster.Status.DesiredImages.PrometheusOperator, ":")[1]
 			cluster.Status.DesiredImages.PrometheusConfigReloader = "quay.io/coreos/prometheus-config-reloader:" + imgVersion
 		}
+	}
+
+	return nil
+}
+
+func (h *Handler) addCustomAnnotations(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
+	podList := &v1.PodList{}
+	err := h.client.List(
+		context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     ds.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx"}),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	customAnnotations := make(map[string]string)
+	for _, pod := range podList.Items {
+		owner := metav1.GetControllerOf(&pod)
+		if owner != nil && owner.UID == ds.UID && pod.Annotations != nil {
+			for k, v := range pod.Annotations {
+				if k != constants.AnnotationPodSafeToEvict {
+					customAnnotations[k] = v
+				}
+			}
+		}
+	}
+
+	if len(customAnnotations) != 0 {
+		if cluster.Spec.Metadata == nil {
+			cluster.Spec.Metadata = &corev1.Metadata{}
+		}
+		if cluster.Spec.Metadata.Annotations == nil {
+			cluster.Spec.Metadata.Annotations = make(map[string]map[string]string)
+		}
+		cluster.Spec.Metadata.Annotations["pod/storage"] = customAnnotations
 	}
 
 	return nil
