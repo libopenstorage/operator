@@ -3131,6 +3131,144 @@ func TestStorageClusterWithServiceTypeAnnotation(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestStorageClusterWithCustomAnnotations(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+			UID:       "100",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	numNodes := 3
+	nodes := []*v1.Node{}
+	dsPods := []*v1.Pod{}
+	for i := 1; i <= numNodes; i++ {
+		nodes = append(nodes, constructNode(i))
+		dsPod := constructDaemonSetPod(ds, i)
+		dsPod.Annotations = map[string]string{
+			constants.AnnotationPodSafeToEvict: "false",
+			"custom-annotation-key":            "custom-annotation-val",
+		}
+		dsPods = append(dsPods, dsPod)
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+
+	for i := 0; i < numNodes; i++ {
+		err := k8sClient.Create(context.TODO(), nodes[i])
+		require.NoError(t, err)
+		err = k8sClient.Create(context.TODO(), dsPods[i])
+		require.NoError(t, err)
+	}
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+			Metadata: &corev1.Metadata{
+				Annotations: map[string]map[string]string{
+					"pod/storage": {
+						"custom-annotation-key": "custom-annotation-val",
+					},
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+
+	migrator := New(ctrl)
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
 func validateMigrationIsInProgress(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
