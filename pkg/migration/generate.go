@@ -56,7 +56,10 @@ var (
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
-	stc := h.constructStorageCluster(ds)
+	stc, err := h.constructStorageCluster(ds)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := h.addCSISpec(stc, ds); err != nil {
 		return nil, err
@@ -83,7 +86,7 @@ func (h *Handler) createStorageCluster(
 	}
 
 	logrus.Infof("Creating StorageCluster %v/%v for migration", stc.Namespace, stc.Name)
-	err := h.client.Create(context.TODO(), stc)
+	err = h.client.Create(context.TODO(), stc)
 	if err == nil {
 		stc.Status.Phase = constants.PhaseAwaitingApproval
 		err = h.client.Status().Update(context.TODO(), stc)
@@ -120,7 +123,7 @@ func (h *Handler) parseCustomImageRegistry(pxImage, componentImage string) strin
 	return path.Join(paths...)
 }
 
-func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageCluster {
+func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ds.Namespace,
@@ -467,10 +470,15 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) *corev1.StorageC
 	// Populate StorageCluster spec.volumes from extra volumes mounted to portworx container
 	cluster.Spec.Volumes = getVolumeSpecs(c.VolumeMounts, ds.Spec.Template.Spec.Volumes, builtinPxVolumeNames)
 
+	// Add service type annotation based on portworx and portworx-api service if it's not ClusterIP by default
+	if err := h.addServiceTypeAnnotation(cluster); err != nil {
+		return nil, err
+	}
+
 	// TODO: Handle kvdb secret
 	// TODO: Handle custom annotations
 
-	return cluster
+	return cluster, nil
 }
 
 func getVolumeSpecs(mounts []v1.VolumeMount, volumes []v1.Volume, knownVolumeNames map[string]bool) []corev1.VolumeSpec {
@@ -613,6 +621,26 @@ func (h *Handler) getContainerImage(statefulSet *appsv1.StatefulSet, containerNa
 	}
 
 	return ""
+}
+
+func (h *Handler) addServiceTypeAnnotation(cluster *corev1.StorageCluster) error {
+	portworxService, err := h.getService(pxutil.PortworxServiceName, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	if portworxService != nil && portworxService.Spec.Type != v1.ServiceTypeClusterIP {
+		cluster.Annotations[pxutil.AnnotationServiceType] = string(portworxService.Spec.Type)
+		return nil
+	}
+	portworxAPIService, err := h.getService(component.PxAPIServiceName, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	if portworxAPIService != nil && portworxAPIService.Spec.Type != v1.ServiceTypeClusterIP {
+		cluster.Annotations[pxutil.AnnotationServiceType] = string(portworxAPIService.Spec.Type)
+		return nil
+	}
+	return nil
 }
 
 func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
@@ -790,6 +818,25 @@ func (h *Handler) getDeployment(name, namespace string) (*appsv1.Deployment, err
 		return nil, err
 	}
 	return dep, nil
+}
+
+func (h *Handler) getService(name, namespace string) (*v1.Service, error) {
+	svc := &v1.Service{}
+	err := h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		svc,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Warningf("service %s/%s not found", namespace, name)
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return svc, nil
 }
 
 func initStorageSpec(cluster *corev1.StorageCluster) {
