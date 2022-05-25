@@ -2608,12 +2608,12 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
-				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
-				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
-				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
+				SecretKeyKvdbCA:       []byte("kvdb-ca-file"),
+				SecretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				SecretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				SecretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				SecretKeyKvdbUsername: []byte("kvdb-username"),
+				SecretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
@@ -2689,11 +2689,11 @@ func TestPodSpecForKvdbAuthCertsWithoutCert(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
-				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
-				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
+				SecretKeyKvdbCA:       []byte("kvdb-ca-file"),
+				SecretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				SecretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				SecretKeyKvdbUsername: []byte("kvdb-username"),
+				SecretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
@@ -2732,11 +2732,11 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
-				secretKeyKvdbCertKey:  []byte("kvdb-key-file"),
-				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
+				SecretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				SecretKeyKvdbCertKey:  []byte("kvdb-key-file"),
+				SecretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				SecretKeyKvdbUsername: []byte("kvdb-username"),
+				SecretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
@@ -2775,11 +2775,11 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbCA:       []byte("kvdb-ca-file"),
-				secretKeyKvdbCert:     []byte("kvdb-cert-file"),
-				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
+				SecretKeyKvdbCA:       []byte("kvdb-ca-file"),
+				SecretKeyKvdbCert:     []byte("kvdb-cert-file"),
+				SecretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				SecretKeyKvdbUsername: []byte("kvdb-username"),
+				SecretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
@@ -2818,7 +2818,7 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbACLToken: []byte("kvdb-acl-token"),
+				SecretKeyKvdbACLToken: []byte("kvdb-acl-token"),
 			},
 		},
 	)
@@ -2863,8 +2863,8 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 				Namespace: "kube-test",
 			},
 			Data: map[string][]byte{
-				secretKeyKvdbUsername: []byte("kvdb-username"),
-				secretKeyKvdbPassword: []byte("kvdb-password"),
+				SecretKeyKvdbUsername: []byte("kvdb-username"),
+				SecretKeyKvdbPassword: []byte("kvdb-password"),
 			},
 		},
 	)
