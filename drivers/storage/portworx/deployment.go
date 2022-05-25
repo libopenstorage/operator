@@ -28,15 +28,21 @@ import (
 )
 
 const (
-	pxContainerName       = "portworx"
-	pxKVDBContainerName   = "portworx-kvdb"
-	templateVersion       = "v4"
-	secretKeyKvdbCA       = "kvdb-ca.crt"
-	secretKeyKvdbCert     = "kvdb.crt"
-	secretKeyKvdbCertKey  = "kvdb.key"
-	secretKeyKvdbUsername = "username"
-	secretKeyKvdbPassword = "password"
-	secretKeyKvdbACLToken = "acl-token"
+	pxContainerName     = "portworx"
+	pxKVDBContainerName = "portworx-kvdb"
+	templateVersion     = "v4"
+	// SecretKeyKvdbCA secret key for external kvdb ca
+	SecretKeyKvdbCA = "kvdb-ca.crt"
+	// SecretKeyKvdbCert secret key for external kvdb cert
+	SecretKeyKvdbCert = "kvdb.crt"
+	// SecretKeyKvdbCertKey secret key for external kvdb cert key
+	SecretKeyKvdbCertKey = "kvdb.key"
+	// SecretKeyKvdbUsername secret key for external kvdb username
+	SecretKeyKvdbUsername = "username"
+	// SecretKeyKvdbPassword secret key for external kvdb password
+	SecretKeyKvdbPassword = "password"
+	// SecretKeyKvdbACLToken secret key for external kvdb acl token
+	SecretKeyKvdbACLToken = "acl-token"
 )
 
 type volumeInfo struct {
@@ -776,21 +782,21 @@ func (t *template) getArguments() []string {
 		}
 
 		auth := t.loadKvdbAuth()
-		if auth[secretKeyKvdbCert] != "" {
-			args = append(args, "-cert", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCert))
+		if auth[SecretKeyKvdbCert] != "" {
+			args = append(args, "-cert", path.Join(kvdbVolumeInfo.mountPath, SecretKeyKvdbCert))
 		}
-		if auth[secretKeyKvdbCA] != "" {
-			args = append(args, "-ca", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCA))
+		if auth[SecretKeyKvdbCA] != "" {
+			args = append(args, "-ca", path.Join(kvdbVolumeInfo.mountPath, SecretKeyKvdbCA))
 		}
-		if auth[secretKeyKvdbCertKey] != "" {
-			args = append(args, "-key", path.Join(kvdbVolumeInfo.mountPath, secretKeyKvdbCertKey))
+		if auth[SecretKeyKvdbCertKey] != "" {
+			args = append(args, "-key", path.Join(kvdbVolumeInfo.mountPath, SecretKeyKvdbCertKey))
 		}
-		if auth[secretKeyKvdbACLToken] != "" {
-			args = append(args, "-acltoken", auth[secretKeyKvdbACLToken])
+		if auth[SecretKeyKvdbACLToken] != "" {
+			args = append(args, "-acltoken", auth[SecretKeyKvdbACLToken])
 		}
-		if auth[secretKeyKvdbUsername] != "" && auth[secretKeyKvdbPassword] != "" {
+		if auth[SecretKeyKvdbUsername] != "" && auth[SecretKeyKvdbPassword] != "" {
 			args = append(args, "-userpwd",
-				fmt.Sprintf("%s:%s", auth[secretKeyKvdbUsername], auth[secretKeyKvdbPassword]))
+				fmt.Sprintf("%s:%s", auth[SecretKeyKvdbUsername], auth[SecretKeyKvdbPassword]))
 		}
 	}
 
@@ -1181,7 +1187,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	}
 
 	kvdbAuth := t.loadKvdbAuth()
-	if kvdbAuth[secretKeyKvdbCert] != "" {
+	if kvdbAuth[SecretKeyKvdbCert] != "" {
 		volumeMounts = append(volumeMounts, v1.VolumeMount{
 			Name:      kvdbVolumeInfo.name,
 			MountPath: kvdbVolumeInfo.mountPath,
@@ -1253,7 +1259,7 @@ func (t *template) getVolumes() []v1.Volume {
 	}
 
 	kvdbAuth := t.loadKvdbAuth()
-	if kvdbAuth[secretKeyKvdbCert] != "" || kvdbAuth[secretKeyKvdbCA] != "" || kvdbAuth[secretKeyKvdbCertKey] != "" {
+	if kvdbAuth[SecretKeyKvdbCert] != "" || kvdbAuth[SecretKeyKvdbCA] != "" || kvdbAuth[SecretKeyKvdbCertKey] != "" {
 		kvdbVolume := v1.Volume{
 			Name: kvdbVolumeInfo.name,
 			VolumeSource: v1.VolumeSource{
@@ -1263,30 +1269,30 @@ func (t *template) getVolumes() []v1.Volume {
 				},
 			},
 		}
-		if kvdbAuth[secretKeyKvdbCert] != "" {
+		if kvdbAuth[SecretKeyKvdbCert] != "" {
 			kvdbVolume.VolumeSource.Secret.Items = append(
 				kvdbVolume.VolumeSource.Secret.Items,
 				v1.KeyToPath{
-					Key:  secretKeyKvdbCert,
-					Path: secretKeyKvdbCert,
+					Key:  SecretKeyKvdbCert,
+					Path: SecretKeyKvdbCert,
 				},
 			)
 		}
-		if kvdbAuth[secretKeyKvdbCA] != "" {
+		if kvdbAuth[SecretKeyKvdbCA] != "" {
 			kvdbVolume.VolumeSource.Secret.Items = append(
 				kvdbVolume.VolumeSource.Secret.Items,
 				v1.KeyToPath{
-					Key:  secretKeyKvdbCA,
-					Path: secretKeyKvdbCA,
+					Key:  SecretKeyKvdbCA,
+					Path: SecretKeyKvdbCA,
 				},
 			)
 		}
-		if kvdbAuth[secretKeyKvdbCertKey] != "" {
+		if kvdbAuth[SecretKeyKvdbCertKey] != "" {
 			kvdbVolume.VolumeSource.Secret.Items = append(
 				kvdbVolume.VolumeSource.Secret.Items,
 				v1.KeyToPath{
-					Key:  secretKeyKvdbCertKey,
-					Path: secretKeyKvdbCertKey,
+					Key:  SecretKeyKvdbCertKey,
+					Path: SecretKeyKvdbCertKey,
 				},
 			)
 		}
