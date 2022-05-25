@@ -2,10 +2,12 @@ package migration
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
 
+	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -58,6 +60,15 @@ var (
 		"pxlogs":         true,
 		"src":            true,
 		"sysdmount":      true,
+	}
+	skipPxEnvVarNames = map[string]bool{
+		"PX_TEMPLATE_VERSION":          true,
+		"PORTWORX_CSIVERSION":          true,
+		"CSI_ENDPOINT":                 true,
+		"NODE_NAME":                    true,
+		"PX_KVDB_USERNAME":             true,
+		"PX_KVDB_PASSWORD":             true,
+		pxutil.EnvKeyPortworxNamespace: true,
 	}
 )
 
@@ -397,11 +408,7 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 	secretsNamespaceProvided := false
 	// Populate env variables from args and env vars of portworx container
 	for _, env := range c.Env {
-		if env.Name == "PX_TEMPLATE_VERSION" ||
-			env.Name == "PORTWORX_CSIVERSION" ||
-			env.Name == "CSI_ENDPOINT" ||
-			env.Name == "NODE_NAME" ||
-			env.Name == pxutil.EnvKeyPortworxNamespace {
+		if ok := skipPxEnvVarNames[env.Name]; ok {
 			continue
 		}
 		if env.Name == pxutil.EnvKeyPortworxSecretsNamespace {
@@ -494,9 +501,154 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 		return nil, err
 	}
 
-	// TODO: Handle kvdb secret
+	// Handle external kvdb secret migration if configured
+	if err := h.configureExternalKvdbAuth(cluster, ds, kvdbSecret.ca, kvdbSecret.cert, kvdbSecret.key, kvdbSecret.aclToken, kvdbSecret.userpwd); err != nil {
+		return nil, err
+	}
 
 	return cluster, nil
+}
+
+// configureExternalKvdbAuth migrate external kvdb auth configurations
+// Find secret name from cert volume mounts or password env vars
+// Certification auth:
+// 1. Reuse the secret if cert file names are operator default ones
+// 2. Create a new secret if cert file names are customized
+// ACL token:
+// 1. Reuse the secret if it has key acl-token
+// 2. Create a new secret and store the arg value to it
+// Password auth:
+// 1. Reuse the secret if it has both key username and password
+// 2. Create a new secret and store the arg values to it
+func (h *Handler) configureExternalKvdbAuth(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet, caPath, certPath, keyPath, aclToken, userpwd string) error {
+	useCertificate := caPath != "" || certPath != "" || keyPath != ""
+	useACLToken := aclToken != ""
+	usePassword := userpwd != ""
+	if !useCertificate && !useACLToken && !usePassword {
+		return nil
+	}
+
+	// Need to create a new secret for cert auth if the keys don't match
+	createNewSecret := false
+	if (caPath != "" && path.Base(caPath) != portworx.SecretKeyKvdbCA) ||
+		(certPath != "" && path.Base(certPath) != portworx.SecretKeyKvdbCert) ||
+		(keyPath != "" && path.Base(keyPath) != portworx.SecretKeyKvdbCertKey) {
+		createNewSecret = true
+	}
+
+	// Need to create a new secret for acl-token and password auth if secret or key not found
+	secret := &v1.Secret{}
+	secretName := getExternalKvdbSecretName(ds)
+	err := h.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      secretName,
+			Namespace: ds.Namespace,
+		},
+		secret,
+	)
+	if errors.IsNotFound(err) {
+		if useCertificate {
+			return fmt.Errorf("kvdb certificate auth enabled but secret %s/%s not found", ds.Namespace, secretName)
+		}
+		if useACLToken {
+			createNewSecret = true
+		}
+		if usePassword {
+			createNewSecret = true
+		}
+	} else if err != nil {
+		return err
+	}
+
+	// Try to get all values from the secret
+	caVal, caExist := secret.Data[path.Base(caPath)]
+	certVal, certExist := secret.Data[path.Base(certPath)]
+	keyVal, keyExist := secret.Data[path.Base(keyPath)]
+	aclTokenVal, aclTokenExist := secret.Data[portworx.SecretKeyKvdbACLToken]
+	usernameVal, usernameExist := secret.Data[portworx.SecretKeyKvdbUsername]
+	passwordVal, passwordExist := secret.Data[portworx.SecretKeyKvdbPassword]
+	if (caPath != "" && !caExist) ||
+		(certPath != "" && !certExist) ||
+		(keyPath != "" && !keyExist) {
+		return fmt.Errorf("kvdb certificate auth enabled but key(s) not found in secret %s/%s", ds.Namespace, secretName)
+	}
+	if useACLToken && !aclTokenExist ||
+		usePassword && (!usernameExist || !passwordExist) {
+		createNewSecret = true
+	}
+
+	// Case the existing secret will be reused
+	if !createNewSecret {
+		cluster.Spec.Kvdb.AuthSecret = secret.Name
+		return nil
+	}
+
+	// Case new secret will be created
+	newSecretData := make(map[string][]byte)
+	if caPath != "" {
+		newSecretData[portworx.SecretKeyKvdbCA] = caVal
+	}
+	if certPath != "" {
+		newSecretData[portworx.SecretKeyKvdbCert] = certVal
+	}
+	if keyPath != "" {
+		newSecretData[portworx.SecretKeyKvdbCertKey] = keyVal
+	}
+	if useACLToken {
+		if aclTokenExist {
+			newSecretData[portworx.SecretKeyKvdbACLToken] = aclTokenVal
+		} else {
+			newSecretData[portworx.SecretKeyKvdbACLToken] = []byte(aclToken)
+		}
+	}
+	if usePassword {
+		if usernameExist && passwordExist {
+			newSecretData[portworx.SecretKeyKvdbUsername] = usernameVal
+			newSecretData[portworx.SecretKeyKvdbPassword] = passwordVal
+		} else {
+			split := strings.Split(userpwd, ":")
+			newSecretData[portworx.SecretKeyKvdbUsername] = []byte(split[0])
+			newSecretData[portworx.SecretKeyKvdbPassword] = []byte(split[1])
+		}
+	}
+
+	newSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-kvdb-auth-operator",
+			Namespace: cluster.Namespace,
+		},
+		Data: newSecretData,
+	}
+	if err := h.client.Delete(context.TODO(), newSecret); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if err := h.client.Create(context.TODO(), newSecret); err != nil {
+		return err
+	}
+	cluster.Spec.Kvdb.AuthSecret = newSecret.Name
+	return nil
+}
+
+func getExternalKvdbSecretName(ds *appsv1.DaemonSet) string {
+	// Assume certificate, acl token and password share the same secret
+	// Look for etcdcerts volume for cert auth first
+	for _, volume := range ds.Spec.Template.Spec.Volumes {
+		if volume.Name == "etcdcerts" && volume.Secret != nil {
+			return volume.Secret.SecretName
+		}
+	}
+	// Look for username and password env vars if not passed using plain text
+	container := getPortworxContainer(ds)
+	for _, env := range container.Env {
+		if env.Name == "PX_KVDB_USERNAME" || env.Name == "PX_KVDB_PASSWORD" {
+			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+				return env.ValueFrom.SecretKeyRef.Name
+			}
+		}
+	}
+	// For acl-token as it's not configured in spec generator, assuming it's passed by plain text
+	return "px-kvdb-auth"
 }
 
 func getVolumeSpecs(mounts []v1.VolumeMount, volumes []v1.Volume, knownVolumeNames map[string]bool) []corev1.VolumeSpec {

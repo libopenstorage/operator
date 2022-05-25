@@ -880,11 +880,6 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 								"-node_pool_label", "px/storage",
 								"-cloud_provider", "aws",
 								"-k", "etcd:http://etcd-1.com:1111,etcd:http://etcd-2.com:1111",
-								"-ca", "/etc/pwx/ca",
-								"-cert", "/etc/pwx/cert",
-								"-key", "/etc/pwx/key",
-								"-acltoken", "acltoken",
-								"-userpwd", "userpwd",
 								"-jwt_issuer", "jwt_issuer",
 								"-jwt_shared_secret", "shared_secret",
 								"-jwt_rsa_pubkey_file", "rsa_file",
@@ -3255,6 +3250,605 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 	err = testutil.Delete(k8sClient, ds)
 	require.NoError(t, err)
 }
+
+func TestStorageClusterExternalKvdbAuthReuseOldSecretWithCert(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+								"-k", "etcd:http://etcd-1.com:1111,etcd:http://etcd-2.com:1111",
+								"-ca", "/etc/pwx/etcdcerts/kvdb-ca.crt",
+								"-cert", "/etc/pwx/etcdcerts/kvdb.crt",
+								"-key", "/etc/pwx/etcdcerts/kvdb.key",
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "etcdcerts",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "px-kvdb-auth",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-kvdb-auth",
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{
+			"kvdb-ca.crt": []byte("ca file content"),
+			"kvdb.crt":    []byte("cert file content"),
+			"kvdb.key":    []byte("key file content"),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds, secret)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints: []string{
+					"etcd:http://etcd-1.com:1111",
+					"etcd:http://etcd-2.com:1111",
+				},
+				AuthSecret: secret.Name,
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+
+	migrator := New(ctrl)
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterExternalKvdbAuthReuseOldSecretWithPassword(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+								"-k", "etcd:http://etcd-1.com:1111,etcd:http://etcd-2.com:1111",
+								"-userpwd", "$PX_KVDB_USERNAME:$PX_KVDB_PASSWORD",
+							},
+							Env: []v1.EnvVar{
+								{
+									Name: "PX_KVDB_USERNAME",
+									ValueFrom: &v1.EnvVarSource{
+										SecretKeyRef: &v1.SecretKeySelector{
+											LocalObjectReference: v1.LocalObjectReference{
+												Name: "px-etcd-auth",
+											},
+										},
+									},
+								},
+								{
+									Name: "PX_KVDB_PASSWORD",
+									ValueFrom: &v1.EnvVarSource{
+										SecretKeyRef: &v1.SecretKeySelector{
+											LocalObjectReference: v1.LocalObjectReference{
+												Name: "px-etcd-auth",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-etcd-auth",
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{
+			"username": []byte("username"),
+			"password": []byte("password"),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds, secret)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints: []string{
+					"etcd:http://etcd-1.com:1111",
+					"etcd:http://etcd-2.com:1111",
+				},
+				AuthSecret: secret.Name,
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+
+	migrator := New(ctrl)
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterExternalKvdbAuthCreateNewSecretForDifferentCertNames(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "custom-ns",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+								"-k", "etcd:http://etcd-1.com:1111,etcd:http://etcd-2.com:1111",
+								"-ca", "/etc/pwx/etcdcerts/ca",
+								"-cert", "/etc/pwx/etcdcerts/cert",
+								"-key", "/etc/pwx/etcdcerts/key",
+								"-acltoken", "acltoken",
+								"-userpwd", "user:password",
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "etcdcerts",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "px-etcd-auth",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-etcd-auth",
+			Namespace: "custom-ns",
+		},
+		Data: map[string][]byte{
+			"ca":        []byte("ca file content"),
+			"cert":      []byte("cert file content"),
+			"key":       []byte("key file content"),
+			"acl-token": []byte("acltoken"),
+			"username":  []byte("user"),
+			"password":  []byte("password"),
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds, secret)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints: []string{
+					"etcd:http://etcd-1.com:1111",
+					"etcd:http://etcd-2.com:1111",
+				},
+				AuthSecret: "px-kvdb-auth-operator",
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	expectedSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-kvdb-auth-operator",
+			Namespace: expectedCluster.Namespace,
+		},
+		Data: map[string][]byte{
+			"kvdb-ca.crt": []byte("ca file content"),
+			"kvdb.crt":    []byte("cert file content"),
+			"kvdb.key":    []byte("key file content"),
+			"acl-token":   []byte("acltoken"),
+			"username":    []byte("user"),
+			"password":    []byte("password"),
+		},
+	}
+
+	migrator := New(ctrl)
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	newSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, newSecret, expectedSecret.Name, expectedSecret.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Data, newSecret.Data)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
+func TestStorageClusterExternalKvdbAuthCreateNewSecretForPlainTextACLTokenAndPassword(t *testing.T) {
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+								"-k", "etcd:http://etcd-1.com:1111,etcd:http://etcd-2.com:1111",
+								"-acltoken", "acltoken",
+								"-userpwd", "username:password",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	secretToDelete := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-kvdb-auth-operator",
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds, secretToDelete)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints: []string{
+					"etcd:http://etcd-1.com:1111",
+					"etcd:http://etcd-2.com:1111",
+				},
+				AuthSecret: "px-kvdb-auth-operator",
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					Enabled:       false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	expectedSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-kvdb-auth-operator",
+			Namespace: expectedCluster.Namespace,
+		},
+		Data: map[string][]byte{
+			"acl-token": []byte("acltoken"),
+			"username":  []byte("username"),
+			"password":  []byte("password"),
+		},
+	}
+
+	migrator := New(ctrl)
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	newSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, newSecret, expectedSecret.Name, expectedSecret.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Data, newSecret.Data)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
 func validateMigrationIsInProgress(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
