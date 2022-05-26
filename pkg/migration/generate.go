@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -842,28 +841,10 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 }
 
 func (h *Handler) addCustomAnnotations(cluster *corev1.StorageCluster, ds *appsv1.DaemonSet) error {
-	podList := &v1.PodList{}
-	err := h.client.List(
-		context.TODO(),
-		podList,
-		&client.ListOptions{
-			Namespace:     ds.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx"}),
-		},
-	)
-	if err != nil {
-		return err
-	}
-
 	customAnnotations := make(map[string]string)
-	for _, pod := range podList.Items {
-		owner := metav1.GetControllerOf(&pod)
-		if owner != nil && owner.UID == ds.UID && pod.Annotations != nil {
-			for k, v := range pod.Annotations {
-				if k != constants.AnnotationPodSafeToEvict {
-					customAnnotations[k] = v
-				}
-			}
+	for k, v := range ds.Spec.Template.Annotations {
+		if k != constants.AnnotationPodSafeToEvict {
+			customAnnotations[k] = v
 		}
 	}
 
