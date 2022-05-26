@@ -3141,6 +3141,12 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						constants.AnnotationPodSafeToEvict: "false",
+						"custom-annotation-key":            "custom-annotation-val",
+					},
+				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
@@ -3153,19 +3159,6 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	numNodes := 3
-	nodes := []*v1.Node{}
-	dsPods := []*v1.Pod{}
-	for i := 1; i <= numNodes; i++ {
-		nodes = append(nodes, constructNode(i))
-		dsPod := constructDaemonSetPod(ds, i)
-		dsPod.Annotations = map[string]string{
-			constants.AnnotationPodSafeToEvict: "false",
-			"custom-annotation-key":            "custom-annotation-val",
-		}
-		dsPods = append(dsPods, dsPod)
 	}
 
 	k8sClient := testutil.FakeK8sClient(ds)
@@ -3187,13 +3180,6 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.16.0",
-	}
-
-	for i := 0; i < numNodes; i++ {
-		err := k8sClient.Create(context.TODO(), nodes[i])
-		require.NoError(t, err)
-		err = k8sClient.Create(context.TODO(), dsPods[i])
-		require.NoError(t, err)
 	}
 
 	expectedCluster := &corev1.StorageCluster{
