@@ -103,33 +103,39 @@ func (h *Handler) createStorageCluster(
 	return stc, err
 }
 
-func (h *Handler) parseCustomImageRegistry(pxImage, componentImage string) string {
+func parseCustomImageRegistry(pxImage string, componentImages []string) (string, bool) {
+	// PX image could be
+	// 1. portworx/oci-monitor:image
+	// 2. custom-registry/oci-monitor:tag
+	// 3. custom-registry/custom-repo/oci-monitor:tag
 	imageParts := strings.Split(pxImage, "/")
 
 	// This should not happen.
 	if len(imageParts) <= 1 {
-		return ""
+		return "", false
 	}
 
-	// default format, such as portworx/oci-monitor:2.9.0
+	// Case 1: default format, such as portworx/oci-monitor:2.9.0
 	if len(imageParts) == 2 && imageParts[0] == "portworx" {
-		return ""
+		return "", false
 	}
 
+	// Case 2 & 3: remove image name and tag
 	paths := imageParts[:len(imageParts)-1]
-
-	// If the full image path is "registry.io/portworx/oci-monitor", then we look at other image
-	// - if component image has "registry.io/portworx" prefix then registry is registry.io/portworx
-	// - Otherwise registry is registry.io
-	if paths[len(paths)-1] == "portworx" {
+	for _, componentImage := range componentImages {
+		if componentImage == "" {
+			continue
+		}
 		registry := path.Join(paths...)
-
-		if !strings.HasPrefix(componentImage, registry) {
+		// In case of some component images don't have custom registry,
+		// we have to rely on "portworx" repo name of px image to determine whether it's case 3
+		if !strings.HasPrefix(componentImage, registry) && (paths[len(paths)-1] == "portworx") {
 			paths = paths[:len(paths)-1]
+			return path.Join(paths...), true
 		}
 	}
 
-	return path.Join(paths...)
+	return path.Join(paths...), false
 }
 
 func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
@@ -964,16 +970,30 @@ func guestAccessTypePtr(value corev1.GuestAccessType) *corev1.GuestAccessType {
 }
 
 func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) error {
-	var componentImage string
-	if cluster.Status.DesiredImages.Stork != "" {
-		componentImage = cluster.Status.DesiredImages.Stork
-	} else if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
-		componentImage = cluster.Status.DesiredImages.CSINodeDriverRegistrar
-	} else if cluster.Status.DesiredImages.Telemetry != "" {
-		componentImage = cluster.Status.DesiredImages.Telemetry
-	}
+	var componentImages []string
+	desiredImages := cluster.Status.DesiredImages
+	componentImages = append(componentImages, desiredImages.Stork)
+	componentImages = append(componentImages, desiredImages.UserInterface)
+	componentImages = append(componentImages, desiredImages.Autopilot)
+	componentImages = append(componentImages, desiredImages.CSINodeDriverRegistrar)
+	componentImages = append(componentImages, desiredImages.CSIDriverRegistrar)
+	componentImages = append(componentImages, desiredImages.CSIProvisioner)
+	componentImages = append(componentImages, desiredImages.CSIAttacher)
+	componentImages = append(componentImages, desiredImages.CSIResizer)
+	componentImages = append(componentImages, desiredImages.CSISnapshotter)
+	componentImages = append(componentImages, desiredImages.CSISnapshotController)
+	componentImages = append(componentImages, desiredImages.CSIHealthMonitorController)
+	componentImages = append(componentImages, desiredImages.PrometheusOperator)
+	componentImages = append(componentImages, desiredImages.PrometheusConfigMapReload)
+	componentImages = append(componentImages, desiredImages.PrometheusConfigReloader)
+	componentImages = append(componentImages, desiredImages.Prometheus)
+	componentImages = append(componentImages, desiredImages.AlertManager)
+	componentImages = append(componentImages, desiredImages.Telemetry)
+	componentImages = append(componentImages, desiredImages.MetricsCollector)
+	componentImages = append(componentImages, desiredImages.MetricsCollectorProxy)
+	componentImages = append(componentImages, desiredImages.PxRepo)
 
-	cluster.Spec.CustomImageRegistry = h.parseCustomImageRegistry(cluster.Spec.Image, componentImage)
+	cluster.Spec.CustomImageRegistry, cluster.Spec.PreserveFullCustomImageRegistry = parseCustomImageRegistry(cluster.Spec.Image, componentImages)
 
 	cluster.Spec.Image = h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Spec.Image)
 	cluster.Status.DesiredImages = &corev1.ComponentImages{

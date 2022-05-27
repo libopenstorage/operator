@@ -38,6 +38,74 @@ type ImageConfig struct {
 	CustomImageRegistry string
 	PortworxImage       string
 	Components          manifest.Release
+	PreserveFullPath    bool
+}
+
+func TestParseCustomImageRegistry(t *testing.T) {
+	// Case: no custom registry
+	pxImage := "portworx/oci-monitor:tag"
+	desiredImages := []string{
+		"portworx/stork:tag",
+		"a/autopilot:tag",
+		"docker.io/b/csi-provisioner:tag",
+		"k8s.gcr.io/c/snapshot-controller:tag",
+		"",
+	}
+	customRegistry, preserved := parseCustomImageRegistry(pxImage, desiredImages)
+	require.Equal(t, "", customRegistry)
+	require.False(t, preserved)
+
+	// Case: custom registry with image names only
+	pxImage = "registry.io/public:123/oci-monitor:tag"
+	desiredImages = []string{
+		"registry.io/public:123/stork:tag",
+		"registry.io/public:123/autopilot:tag",
+		"registry.io/public:123/csi-provisioner:tag",
+		"registry.io/public:123/snapshot-controller:tag",
+		"docker.io/openstorage/csi-attacher:tag",
+		"",
+	}
+	customRegistry, preserved = parseCustomImageRegistry(pxImage, desiredImages)
+	require.Equal(t, "registry.io/public:123", customRegistry)
+	require.False(t, preserved)
+
+	// Case: custom registry with full path
+	pxImage = "registry.io/public:123/portworx/oci-monitor:tag"
+	desiredImages = []string{
+		"registry.io/public:123/a/stork:tag",
+		"registry.io/public:123/portworx/autopilot:tag",
+		"registry.io/public:123/k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"registry.io/public:123/sig-storage/snapshot-controller:tag",
+		"",
+	}
+	customRegistry, preserved = parseCustomImageRegistry(pxImage, desiredImages)
+	require.Equal(t, "registry.io/public:123", customRegistry)
+	require.True(t, preserved)
+
+	// Case: some component images don't have custom registry
+	pxImage = "registry.io/oci-monitor:tag"
+	desiredImages = []string{
+		"registry.io/stork:tag",
+		"registry.io/autopilot:tag",
+		"k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"sig-storage/snapshot-controller:tag",
+		"",
+	}
+	customRegistry, preserved = parseCustomImageRegistry(pxImage, desiredImages)
+	require.Equal(t, "registry.io", customRegistry)
+	require.False(t, preserved)
+
+	pxImage = "registry.io/public:123/portworx/oci-monitor:tag"
+	desiredImages = []string{
+		"registry.io/public:123/a/stork:tag",
+		"registry.io/public:123/portworx/autopilot:tag",
+		"k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"sig-storage/snapshot-controller:tag",
+		"",
+	}
+	customRegistry, preserved = parseCustomImageRegistry(pxImage, desiredImages)
+	require.Equal(t, "registry.io/public:123", customRegistry)
+	require.True(t, preserved)
 }
 
 func TestImageMigration(t *testing.T) {
@@ -66,6 +134,7 @@ func TestImageMigration(t *testing.T) {
 	expectedStcImages := ImageConfig{
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "",
+		PreserveFullPath:    false,
 		Components: manifest.Release{
 			Stork:                      "a/stork:2.7.0",
 			Autopilot:                  "b/autopilot:1.3.1",
@@ -112,6 +181,7 @@ func TestImageMigration(t *testing.T) {
 	expectedStcImages = ImageConfig{
 		PortworxImage:       "oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
+		PreserveFullPath:    false,
 		Components: manifest.Release{
 			Stork:                      "a/stork:2.7.0",
 			Autopilot:                  "b/autopilot:1.3.1",
@@ -138,7 +208,7 @@ func TestImageMigration(t *testing.T) {
 	dsImages = ImageConfig{
 		PortworxImage: "test/portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:                      "test/a/stork:2.7.0",
+			Stork:                      "test/portworx/stork:2.7.0",
 			Autopilot:                  "test/b/autopilot:1.3.1",
 			Telemetry:                  "test/c/ccm-service:3.0.9",
 			CSIProvisioner:             "test/k8scsi/csi-provisioner:v1.2.3",
@@ -159,8 +229,9 @@ func TestImageMigration(t *testing.T) {
 	expectedStcImages = ImageConfig{
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
+		PreserveFullPath:    true,
 		Components: manifest.Release{
-			Stork:                      "a/stork:2.7.0",
+			Stork:                      "portworx/stork:2.7.0",
 			Autopilot:                  "b/autopilot:1.3.1",
 			Telemetry:                  "c/ccm-service:3.0.9",
 			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
@@ -185,7 +256,7 @@ func TestImageMigration(t *testing.T) {
 	dsImages = ImageConfig{
 		PortworxImage: "test/customRegistry/portworx/oci-monitor:2.9.1",
 		Components: manifest.Release{
-			Stork:                      "test/customRegistry/a/stork:2.7.0",
+			Stork:                      "test/customRegistry/portworx/stork:2.7.0",
 			Autopilot:                  "test/customRegistry/b/autopilot:1.3.1",
 			Telemetry:                  "test/customRegistry/c/ccm-service:3.0.9",
 			CSIProvisioner:             "test/customRegistry/k8scsi/csi-provisioner:v1.2.3",
@@ -206,8 +277,9 @@ func TestImageMigration(t *testing.T) {
 	expectedStcImages = ImageConfig{
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test/customRegistry",
+		PreserveFullPath:    true,
 		Components: manifest.Release{
-			Stork:                      "a/stork:2.7.0",
+			Stork:                      "portworx/stork:2.7.0",
 			Autopilot:                  "b/autopilot:1.3.1",
 			Telemetry:                  "c/ccm-service:3.0.9",
 			CSIProvisioner:             "k8scsi/csi-provisioner:v1.2.3",
@@ -252,6 +324,7 @@ func TestImageMigration(t *testing.T) {
 	expectedStcImages = ImageConfig{
 		PortworxImage:       "portworx/oci-monitor:2.9.1",
 		CustomImageRegistry: "test",
+		PreserveFullPath:    true,
 		Components: manifest.Release{
 			Stork:                      "a/stork:2.7.0",
 			Autopilot:                  "b/autopilot:1.3.1",
@@ -481,6 +554,7 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 
 	require.Equal(t, expectedStcImages.PortworxImage, cluster.Spec.Image)
 	require.Equal(t, expectedStcImages.CustomImageRegistry, cluster.Spec.CustomImageRegistry)
+	require.Equal(t, expectedStcImages.PreserveFullPath, cluster.Spec.PreserveFullCustomImageRegistry)
 
 	if manifestConfigMapExists {
 		require.Equal(t, cluster.Status.DesiredImages, &corev1.ComponentImages{})
