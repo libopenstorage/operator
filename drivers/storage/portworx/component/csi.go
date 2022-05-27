@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -769,18 +768,6 @@ func getCSIDeploymentSpec(
 						ContainerPort: 8080,
 						Protocol:      v1.ProtocolTCP,
 					},
-				},
-				LivenessProbe: &v1.Probe{
-					FailureThreshold: 1,
-					Handler: v1.Handler{
-						HTTPGet: &v1.HTTPGetAction{
-							Path: "/healthz/leader-election",
-							Port: intstr.FromString("http-endpoint"),
-						},
-					},
-					InitialDelaySeconds: 10,
-					TimeoutSeconds:      10,
-					PeriodSeconds:       20,
 				},
 			},
 		)

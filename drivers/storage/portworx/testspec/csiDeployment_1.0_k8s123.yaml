@@ -94,14 +94,6 @@ spec:
             - name: http-endpoint
               containerPort: 8080
               protocol: TCP
-          livenessProbe:
-            failureThreshold: 1
-            httpGet:
-              path: /healthz/leader-election
-              port: http-endpoint
-            initialDelaySeconds: 10
-            timeoutSeconds: 10
-            periodSeconds: 20
       volumes:
         - name: socket-dir
           hostPath:
