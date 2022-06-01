@@ -806,7 +806,8 @@ func CreateOrUpdateService(
 
 	modified := existingService.Spec.Type != service.Spec.Type ||
 		!reflect.DeepEqual(existingService.Labels, service.Labels) ||
-		!reflect.DeepEqual(existingService.Spec.Selector, service.Spec.Selector)
+		!reflect.DeepEqual(existingService.Spec.Selector, service.Spec.Selector) ||
+		!reflect.DeepEqual(existingService.Annotations, service.Annotations)
 
 	portMapping := make(map[string]v1.ServicePort)
 	for _, port := range service.Spec.Ports {
@@ -857,6 +858,7 @@ func CreateOrUpdateService(
 		existingService.Spec.Selector = service.Spec.Selector
 		existingService.Spec.Type = service.Spec.Type
 		existingService.Spec.Ports = servicePorts
+		existingService.Annotations = service.Annotations
 		logrus.Debugf("Updating %s/%s Service", service.Namespace, service.Name)
 		return k8sClient.Update(context.TODO(), existingService)
 	}
