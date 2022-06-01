@@ -4,10 +4,6 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-version"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -18,6 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -471,6 +473,8 @@ func getPortworxServiceSpec(
 		newService.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	}
 
+	newService.Annotations = util.GetCustomAnnotations(cluster, k8sutil.Service, pxutil.PortworxServiceName)
+
 	serviceType := pxutil.ServiceType(cluster)
 	if serviceType != "" {
 		newService.Spec.Type = serviceType
@@ -520,6 +524,8 @@ func getPortworxKVDBServiceSpec(
 	if ownerRef != nil {
 		newService.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	}
+
+	newService.Annotations = util.GetCustomAnnotations(cluster, k8sutil.Service, pxutil.PortworxKVDBServiceName)
 
 	serviceType := pxutil.ServiceType(cluster)
 	if serviceType != "" {
