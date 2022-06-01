@@ -140,6 +140,8 @@ func (c *portworxAPI) createService(
 		},
 	}
 
+	newService.Annotations = util.GetCustomAnnotations(cluster, k8sutil.Service, PxAPIServiceName)
+
 	serviceType := pxutil.ServiceType(cluster)
 	if serviceType != "" {
 		newService.Spec.Type = serviceType
