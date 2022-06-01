@@ -12579,6 +12579,180 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
 }
 
+func TestServiceCustomAnnotations(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx Service
+	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
+	pxService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXService.Name, pxService.Name)
+	require.Equal(t, expectedPXService.Namespace, pxService.Namespace)
+	require.Len(t, pxService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPXService.Labels, pxService.Labels)
+	require.Equal(t, expectedPXService.Spec, pxService.Spec)
+	require.Nil(t, pxService.Annotations)
+
+	// Portworx KVDB Service
+	expectedPXKVDBService := testutil.GetExpectedService(t, "portworxKVDBService.yaml")
+	pxKVDBService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXKVDBService.Name, pxKVDBService.Name)
+	require.Equal(t, expectedPXKVDBService.Namespace, pxKVDBService.Namespace)
+	require.Len(t, pxKVDBService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxKVDBService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPXKVDBService.Labels, pxKVDBService.Labels)
+	require.Equal(t, expectedPXKVDBService.Spec, pxKVDBService.Spec)
+	require.Nil(t, pxKVDBService.Annotations)
+
+	// Portworx API Service
+	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService.yaml")
+	pxAPIService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Name, pxAPIService.Name)
+	require.Equal(t, expectedPxAPIService.Namespace, pxAPIService.Namespace)
+	require.Len(t, pxAPIService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxAPIService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+	require.Nil(t, pxAPIService.Annotations)
+
+	// Portworx Proxy Service
+	expectedPxProxyService := testutil.GetExpectedService(t, "pxProxyService.yaml")
+	pxProxyService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxProxyService.Name, pxProxyService.Name)
+	require.Equal(t, expectedPxProxyService.Namespace, pxProxyService.Namespace)
+	require.Empty(t, pxProxyService.OwnerReferences)
+	require.Equal(t, expectedPxProxyService.Labels, pxProxyService.Labels)
+	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
+	require.Nil(t, pxProxyService.Annotations)
+
+	// Add custom annotation to services
+	pxServiceAnnotations := map[string]string{"px-service-annotation-key": "px-service-annotation-val"}
+	pxKVDBServiceAnnotations := map[string]string{"px-kvdb-service-annotation-key": "px-kvdb-service-annotation-val"}
+	pxAPIServiceAnnotations := map[string]string{"px-api-service-annotation-key": "px-api-service-annotation-val"}
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			fmt.Sprintf("%s/%s", k8sutil.Service, pxutil.PortworxServiceName):     pxServiceAnnotations,
+			fmt.Sprintf("%s/%s", k8sutil.Service, pxutil.PortworxKVDBServiceName): pxKVDBServiceAnnotations,
+			fmt.Sprintf("%s/%s", k8sutil.Service, component.PxAPIServiceName):     pxAPIServiceAnnotations,
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxServiceAnnotations, pxService.Annotations)
+
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxKVDBServiceAnnotations, pxKVDBService.Annotations)
+
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxAPIServiceAnnotations, pxAPIService.Annotations)
+
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, pxServiceAnnotations, pxService.Annotations)
+
+	// Update and remove custom annotations
+	pxServiceAnnotations["px-service-annotation-another-key"] = "px-service-annotation-another-val"
+	pxKVDBServiceAnnotations["px-kvdb-service-annotation-key"] = "px-kvdb-service-annotation-new-val"
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			fmt.Sprintf("%s/%s", k8sutil.Service, pxutil.PortworxServiceName):     pxServiceAnnotations,
+			fmt.Sprintf("%s/%s", k8sutil.Service, pxutil.PortworxKVDBServiceName): pxKVDBServiceAnnotations,
+		},
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxServiceAnnotations, pxService.Annotations)
+
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, pxKVDBServiceAnnotations, pxKVDBService.Annotations)
+
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, pxAPIService.Annotations)
+
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, pxServiceAnnotations, pxService.Annotations)
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {
