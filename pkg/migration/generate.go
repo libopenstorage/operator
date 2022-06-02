@@ -1124,7 +1124,6 @@ func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) erro
 	componentImages = append(componentImages, desiredImages.Telemetry)
 	componentImages = append(componentImages, desiredImages.MetricsCollector)
 	componentImages = append(componentImages, desiredImages.MetricsCollectorProxy)
-	componentImages = append(componentImages, desiredImages.PxRepo)
 
 	cluster.Spec.CustomImageRegistry, cluster.Spec.PreserveFullCustomImageRegistry = parseCustomImageRegistry(cluster.Spec.Image, componentImages)
 
