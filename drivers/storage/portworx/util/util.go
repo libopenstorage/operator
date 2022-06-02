@@ -309,17 +309,36 @@ func PodSecurityPolicyEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present
-func ServiceType(cluster *corev1.StorageCluster) v1.ServiceType {
+// 1. backward compatible format: "LoadBalancer", "ClusterIP" or "NodePort"
+// 2. control different services: "portworx-service:LoadBalancer;portworx-api:ClusterIP;portworx-kvdb-service:NodePort"
+func ServiceType(cluster *corev1.StorageCluster, serviceName string) v1.ServiceType {
 	var serviceType v1.ServiceType
-	if val, exists := cluster.Annotations[AnnotationServiceType]; exists {
-		st := v1.ServiceType(val)
-		if st == v1.ServiceTypeClusterIP ||
-			st == v1.ServiceTypeNodePort ||
-			st == v1.ServiceTypeLoadBalancer {
-			serviceType = st
+	val, exist := cluster.Annotations[AnnotationServiceType]
+	if !exist || val == "" {
+		return serviceType
+	}
+
+	valParts := strings.Split(val, ";")
+	for _, p := range valParts {
+		annotationParts := strings.Split(p, ":")
+		if len(annotationParts) == 1 {
+			// No ":" found, so we expect this to be the backward compatible case
+			serviceType = v1.ServiceType(annotationParts[0])
+			break
+		} else if (len(annotationParts) == 2) && (annotationParts[0] == serviceName) {
+			serviceType = v1.ServiceType(annotationParts[1])
+			break
 		}
 	}
-	return serviceType
+
+	if serviceType == v1.ServiceTypeClusterIP ||
+		serviceType == v1.ServiceTypeNodePort ||
+		serviceType == v1.ServiceTypeLoadBalancer ||
+		serviceType == v1.ServiceTypeExternalName {
+		return serviceType
+	}
+
+	return ""
 }
 
 // MiscArgs returns the miscellaneous arguments from the cluster's annotations
