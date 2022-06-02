@@ -119,7 +119,7 @@ func newTemplate(
 	t.isPKS = pxutil.IsPKS(cluster)
 	t.isIKS = pxutil.IsIKS(cluster)
 	t.isOpenshift = pxutil.IsOpenshift(cluster)
-	t.serviceType = pxutil.ServiceType(cluster)
+	t.serviceType = pxutil.ServiceType(cluster, "")
 	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
 	t.startPort = pxutil.StartPort(cluster)
 
