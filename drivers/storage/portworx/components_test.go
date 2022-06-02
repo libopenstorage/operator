@@ -11987,6 +11987,223 @@ func TestServiceCustomAnnotations(t *testing.T) {
 	require.Equal(t, pxServiceAnnotations, pxService.Annotations)
 }
 
+func TestServiceTypeAnnotation(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+			UserInterface: &corev1.UserInterfaceSpec{
+				Enabled: true,
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Test default service types
+	// Portworx Service
+	pxService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService := &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
+
+	// Test add service type annotation in backward compatible format
+	expectedServiceType := v1.ServiceTypeLoadBalancer
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationServiceType: string(expectedServiceType),
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService = &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, lhService.Spec.Type)
+
+	// Test update service type annotation to new format, services not specified should use their default values
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationServiceType: "portworx-service:LoadBalancer;portworx-api:NodePort;",
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeLoadBalancer, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeLoadBalancer, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService = &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
+
+	// Test update service type annotation values, services not specified should use their default values
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationServiceType: "portworx-service:NodePort;portworx-kvdb-service:LoadBalancer",
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeLoadBalancer, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService = &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
+
+	// Test update service type annotation back to backward compatible format
+	expectedServiceType = v1.ServiceTypeExternalName
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationServiceType: string(expectedServiceType),
+	}
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService = &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedServiceType, lhService.Spec.Type)
+
+	// Test remove service type annotation
+	cluster.Annotations = nil
+	k8sClient.Update(context.TODO(), cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	// Portworx Service
+	pxService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxService.Spec.Type)
+	// Portworx KVDB Service
+	pxKVDBService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxKVDBService, pxutil.PortworxKVDBServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxKVDBService.Spec.Type)
+	// Portworx API Service
+	pxAPIService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxAPIService.Spec.Type)
+	// Portworx Proxy Service
+	pxProxyService = &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeClusterIP, pxProxyService.Spec.Type)
+	// Lighthouse Service
+	lhService = &v1.Service{}
+	err = testutil.Get(k8sClient, lhService, component.LhServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, v1.ServiceTypeNodePort, lhService.Spec.Type)
+}
+
 func contains(slice []string, val string) bool {
 	for _, v := range slice {
 		if v == val {

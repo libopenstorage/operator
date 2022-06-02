@@ -475,7 +475,7 @@ func getPortworxServiceSpec(
 
 	newService.Annotations = util.GetCustomAnnotations(cluster, k8sutil.Service, pxutil.PortworxServiceName)
 
-	serviceType := pxutil.ServiceType(cluster)
+	serviceType := pxutil.ServiceType(cluster, pxutil.PortworxServiceName)
 	if serviceType != "" {
 		newService.Spec.Type = serviceType
 	}
@@ -527,7 +527,7 @@ func getPortworxKVDBServiceSpec(
 
 	newService.Annotations = util.GetCustomAnnotations(cluster, k8sutil.Service, pxutil.PortworxKVDBServiceName)
 
-	serviceType := pxutil.ServiceType(cluster)
+	serviceType := pxutil.ServiceType(cluster, pxutil.PortworxKVDBServiceName)
 	if serviceType != "" {
 		newService.Spec.Type = serviceType
 	}

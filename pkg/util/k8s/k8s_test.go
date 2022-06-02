@@ -2598,6 +2598,100 @@ func TestServiceChangeSelector(t *testing.T) {
 	require.Empty(t, actualService.Spec.Selector)
 }
 
+func TestServiceChangeAnnotations(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	expectedService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+	}
+
+	err := CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService := &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Empty(t, actualService.Annotations)
+
+	// Add new annotations
+	expectedService.Annotations = map[string]string{"key": "value"}
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Annotations, actualService.Annotations)
+
+	// Change annotations
+	expectedService.Annotations = map[string]string{"key": "newvalue"}
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Annotations, actualService.Annotations)
+
+	// Remove annotations
+	expectedService.Annotations = nil
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Empty(t, actualService.Annotations)
+}
+
+func TestServiceChangeType(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+
+	serviceType := v1.ServiceTypeClusterIP
+	expectedService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+		},
+		Spec: v1.ServiceSpec{
+			Type: serviceType,
+		},
+	}
+
+	err := CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService := &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, serviceType, actualService.Spec.Type)
+
+	// Change service type
+	serviceType = v1.ServiceTypeLoadBalancer
+	expectedService.Spec.Type = serviceType
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, serviceType, actualService.Spec.Type)
+
+	// Remove service type
+	serviceType = v1.ServiceTypeClusterIP
+	expectedService.Spec.Type = ""
+	err = CreateOrUpdateService(k8sClient, expectedService, nil)
+	require.NoError(t, err)
+
+	actualService = &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, serviceType, actualService.Spec.Type)
+}
+
 func TestGetCRDFromFile(t *testing.T) {
 	tests := []struct {
 		dir         string
