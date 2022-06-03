@@ -813,23 +813,39 @@ func (h *Handler) getContainerImage(statefulSet *appsv1.StatefulSet, containerNa
 	return ""
 }
 
+// addServiceTypeAnnotation scans services and set the storage cluster annotation
+// if the service type is not the default one
+// e.g. portworx.io/service-type: "portworx-service:LoadBalancer;portworx-kvdb-service:LoadBalancer"
 func (h *Handler) addServiceTypeAnnotation(cluster *corev1.StorageCluster) error {
+	annotation := ""
+
+	// Service portworx-service has ClusterIP by default
 	portworxService, err := h.getService(pxutil.PortworxServiceName, cluster.Namespace)
 	if err != nil {
 		return err
 	}
 	if portworxService != nil && portworxService.Spec.Type != v1.ServiceTypeClusterIP {
-		cluster.Annotations[pxutil.AnnotationServiceType] = string(portworxService.Spec.Type)
-		return nil
+		annotation = fmt.Sprintf("%s:%s", portworxService.Name, portworxService.Spec.Type)
 	}
+
+	// Service portworx-api has ClusterIP by default
 	portworxAPIService, err := h.getService(component.PxAPIServiceName, cluster.Namespace)
 	if err != nil {
 		return err
 	}
 	if portworxAPIService != nil && portworxAPIService.Spec.Type != v1.ServiceTypeClusterIP {
-		cluster.Annotations[pxutil.AnnotationServiceType] = string(portworxAPIService.Spec.Type)
-		return nil
+		part := fmt.Sprintf("%s:%s", portworxAPIService.Name, portworxAPIService.Spec.Type)
+		if annotation == "" {
+			annotation = part
+		} else {
+			annotation = fmt.Sprintf("%s;%s", annotation, part)
+		}
 	}
+
+	if annotation != "" {
+		cluster.Annotations[pxutil.AnnotationServiceType] = annotation
+	}
+
 	return nil
 }
 
