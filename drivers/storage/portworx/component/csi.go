@@ -65,12 +65,13 @@ var (
 )
 
 type csi struct {
-	isCreated              bool
-	csiNodeInfoCRDCreated  bool
-	csiSnapshotCRDsCreated bool
-	k8sClient              client.Client
-	k8sVersion             version.Version
-	scheme                 *runtime.Scheme
+	isCreated                         bool
+	csiNodeInfoCRDCreated             bool
+	csiSnapshotCRDsCreated            bool
+	csiSnapshotControllerPreInstalled *bool
+	k8sClient                         client.Client
+	k8sVersion                        version.Version
+	scheme                            *runtime.Scheme
 }
 
 func (c *csi) Name() string {
@@ -471,10 +472,19 @@ func (c *csi) createDeployment(
 	if cluster.Spec.CSI.InstallSnapshotController != nil &&
 		*cluster.Spec.CSI.InstallSnapshotController &&
 		cluster.Status.DesiredImages.CSISnapshotController != "" {
-		snapshotControllerImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSISnapshotController,
-		)
+		// Check if a snapshot controller was installed already using image "snapshot-controller",
+		// Only do this once to avoid scanning all pods frequently.
+		if c.csiSnapshotControllerPreInstalled == nil {
+			if err := c.findPreinstalledCSISnapshotController(); err != nil {
+				return err
+			}
+		}
+		if !*c.csiSnapshotControllerPreInstalled {
+			snapshotControllerImage = util.GetImageURN(
+				cluster,
+				cluster.Status.DesiredImages.CSISnapshotController,
+			)
+		}
 	}
 
 	if csiConfig.IncludeHealthMonitorController && cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
@@ -510,6 +520,24 @@ func (c *csi) createDeployment(
 		}
 	}
 	c.isCreated = true
+	return nil
+}
+
+func (c *csi) findPreinstalledCSISnapshotController() error {
+	podList := &v1.PodList{}
+	err := c.k8sClient.List(context.TODO(), podList)
+	if err != nil {
+		return err
+	}
+	for _, pod := range podList.Items {
+		for _, container := range pod.Spec.Containers {
+			if strings.Contains(container.Image, "/snapshot-controller:") {
+				c.csiSnapshotControllerPreInstalled = boolPtr(true)
+				return nil
+			}
+		}
+	}
+	c.csiSnapshotControllerPreInstalled = boolPtr(false)
 	return nil
 }
 
