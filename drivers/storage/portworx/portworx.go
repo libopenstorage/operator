@@ -164,7 +164,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
-		SetPortworxDefaults(toUpdate)
+		SetPortworxDefaults(toUpdate, p.k8sVersion)
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -588,7 +588,7 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cl
 }
 
 // SetPortworxDefaults populates default storage cluster spec values
-func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
+func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) {
 	t, err := newTemplate(toUpdate, "")
 	if err != nil {
 		return
@@ -699,6 +699,13 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.CSI = &corev1.CSISpec{
 				Enabled: true,
 			}
+		}
+	}
+
+	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
+	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
+		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
+			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
 		}
 	}
 
