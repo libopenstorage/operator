@@ -76,14 +76,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
-        - name: csi-snapshot-controller
-          image: quay.io/k8scsi/snapshot-controller:v1.2.3
-          imagePullPolicy: Always
-          args:
-          - --v=3
-          - --leader-election=true
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/pxd.portworx.com
+            path: /var/lib/kubelet/csi-plugins/pxd.portworx.com
             type: DirectoryOrCreate

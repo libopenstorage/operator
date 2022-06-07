@@ -76,6 +76,12 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+        - name: csi-snapshot-controller
+          image: quay.io/k8scsi/snapshot-controller:v1.2.3
+          imagePullPolicy: Always
+          args:
+            - --v=3
+            - --leader-election=true
         - name: csi-health-monitor-controller
           image: quay.io/k8scsi/csi-health-monitor-controller:v1.2.3
           imagePullPolicy: Always
