@@ -463,8 +463,15 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 					logrus.Info("px-csi-ext is deployed as StatefulSet instead of Deployment by operator")
 				}
 			}
+		} else if kind == "Deployment" && name == "prometheus-operator" {
+			logrus.Info("Prometheus deployment will change from prometheus-operator to px-prometheus-operator after migration")
+			name = "px-prometheus-operator"
+			// Not compare deployment as it's expected to be different with helm install.
+			// 1. Container name will change from prometheus-operator to px-prometheus-operator
+			// 2. args is different: before-migration [--kubelet-service=kube-system/kubelet --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1], after-migration [-namespaces=kube-system --kubelet-service=kube-system/kubelet --prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v0.36.0 --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1]
+			continue
 		} else if kind == "Prometheus" && name == "prometheus" {
-			logrus.Info("Prometheus service name will change from prometheus to px-prometheus after migration, ok to proceed with migration")
+			logrus.Info("Prometheus service name will change from prometheus to px-prometheus after migration")
 			name = "px-prometheus"
 		} else if kind == "Service" && name == "prometheus" {
 			name = "px-prometheus"
@@ -472,7 +479,7 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			// Operator does not create autopilot service
 			continue
 		} else if kind == "ServiceMonitor" && name == "portworx-prometheus-sm" {
-			logrus.Info("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration, ok to proceed with migration")
+			logrus.Info("ServiceMonitor name will change from portworx-prometheus-sm to portworx after migration")
 			name = "portworx"
 		}
 
