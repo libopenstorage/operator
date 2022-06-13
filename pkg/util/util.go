@@ -40,7 +40,7 @@ const (
 	MigrationPendingReason = "MigrationPending"
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
-	// MigrationFailed is added to an event when the migration fails.
+	// MigrationFailedReason is added to an event when the migration fails.
 	MigrationFailedReason = "MigrationFailed"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
@@ -63,26 +63,40 @@ var (
 		"topology.kubernetes.io/region",
 		"topology.kubernetes.io/zone",
 	}
+	// pxVer211 corresponds to version "2.11.0"
+	pxVer211 = version.Must(version.NewVersion("2.10.0"))
 )
 
 func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
-	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
-
-	if !ok {
-		return commonDockerRegistries
+	ret := make(map[string]bool)
+	for k, v := range commonDockerRegistries {
+		ret[k] = v
 	}
 
-	mergedCommonRegistries := make(map[string]bool)
+	// customize common registries based on the PX version
+	// - px-2.11 (or missing/broken version) adds k8s.gcr.io as common repository
+	addGcrReg := cluster.Spec.Version == ""
+	if cluster.Spec.Version != "" {
+		v, err := version.NewVersion(cluster.Spec.Version)
+		if err == nil && v.GreaterThanOrEqual(pxVer211) {
+			addGcrReg = true
+		}
+	}
+	if addGcrReg {
+		ret["k8s.gcr.io"] = true
+	}
+
+	// append annotated registries (if available)
+	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
+	if !ok {
+		return ret
+	}
 
 	for _, v := range strings.Split(strings.TrimSpace(val), ",") {
-		mergedCommonRegistries[v] = true
+		ret[v] = true
 	}
 
-	for k, v := range commonDockerRegistries {
-		mergedCommonRegistries[k] = v
-	}
-
-	return mergedCommonRegistries
+	return ret
 }
 
 // GetImageURN returns the complete image name based on the registry and repo

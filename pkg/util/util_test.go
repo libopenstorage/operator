@@ -108,6 +108,25 @@ func TestImageURN(t *testing.T) {
 
 	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
+
+	// check px-2.11 image expansions
+	out = getImageURNPx211("gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURNPx211("", "registry.io//", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURNPx211("", "registry.io//", "gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURNPx211("gcr.io,k8s.gcr.io", "registry.io", "gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURNPx211("gcr.io,k8s.gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
+
+	out = getImageURNPx211("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
+	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
 }
 
 func TestImageURNPreserved(t *testing.T) {
@@ -146,6 +165,13 @@ func setUpCluster(commonRegistries string, customImageRegistry string, image str
 
 func getImageURN(commonRegistries string, customImageRegistry string, image string) string {
 	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	cluster.Spec.Version = "2.9.1.4"
+	return GetImageURN(&cluster, image)
+}
+
+func getImageURNPx211(commonRegistries string, customImageRegistry string, image string) string {
+	cluster := setUpCluster(commonRegistries, customImageRegistry, image)
+	cluster.Spec.Version = "2.11.0"
 	return GetImageURN(&cluster, image)
 }
 
