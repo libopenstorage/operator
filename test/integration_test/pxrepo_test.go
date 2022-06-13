@@ -57,7 +57,8 @@ var pxrepoTestCases = []types.TestCase{
 				require.True(t, ok)
 
 				// Populate default values to empty fields first
-				portworx.SetPortworxDefaults(cluster)
+				k8sVersion, _ := version.NewVersion(ci_utils.K8sVersion)
+				portworx.SetPortworxDefaults(cluster, k8sVersion)
 				// Record pre-deploy timestamp
 				installTime := time.Now()
 				// Deploy cluster
