@@ -64,7 +64,7 @@ var (
 		"topology.kubernetes.io/zone",
 	}
 	// pxVer211 corresponds to version "2.11.0"
-	pxVer211 = version.Must(version.NewVersion("2.10.0"))
+	pxVer211 = version.Must(version.NewVersion("2.11.0"))
 )
 
 func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
