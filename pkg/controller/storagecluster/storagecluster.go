@@ -632,6 +632,15 @@ func (c *Controller) deleteStorageCluster(
 			if err := c.removeMigrationLabels(); err != nil {
 				return fmt.Errorf("failed to remove migration labels from nodes: %v", err)
 			}
+
+			if err := c.removeResources(toDelete.Namespace); err != nil {
+				return fmt.Errorf("failed to remove resources: %v", err)
+			}
+
+			if err := c.removeResources("kube-system"); err != nil {
+				return fmt.Errorf("failed to remove resources: %v", err)
+			}
+
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
 			if err := c.client.Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
@@ -645,6 +654,45 @@ func (c *Controller) deleteStorageCluster(
 		k8s.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
 	}
 	return nil
+}
+
+func (c *Controller) removeResources(namespace string) error {
+	objs, err := k8s.GetAllObjects(c.client, namespace)
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range objs {
+		gcAnnotated := false
+		if obj.GetAnnotations() != nil {
+			gcAnnotated, _ = strconv.ParseBool(obj.GetAnnotations()[constants.AnnotationGarbageCollection])
+		}
+
+		if gcAnnotated || c.gcNeeded(obj) {
+			logrus.Infof("Garbage collect object %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+			if err := c.client.Delete(context.TODO(), obj); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// All external object should use the GC annotation for operator to delete them.
+// For backward compatibility, we still delete some objects without the annotation.
+func (c *Controller) gcNeeded(obj client.Object) bool {
+	if obj == nil {
+		return false
+	}
+
+	if obj.GetObjectKind().GroupVersionKind().Kind == "ConfigMap" {
+		if obj.GetName() == "px-attach-driveset-lock" ||
+			strings.HasPrefix(obj.GetName(), "px-bringup-queue-lock") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *Controller) removeMigrationLabels() error {
