@@ -629,6 +629,18 @@ func (c *Controller) deleteStorageCluster(
 		}
 
 		if toDelete.Status.Conditions[foundIndex].Status == corev1.ClusterOperationCompleted {
+			if err := c.removeMigrationLabels(); err != nil {
+				return fmt.Errorf("failed to remove migration labels from nodes: %v", err)
+			}
+
+			if err := c.removeResources(toDelete.Namespace); err != nil {
+				return fmt.Errorf("failed to remove resources: %v", err)
+			}
+
+			if err := c.removeResources("kube-system"); err != nil {
+				return fmt.Errorf("failed to remove resources: %v", err)
+			}
+
 			newFinalizers := removeDeleteFinalizer(toDelete.Finalizers)
 			toDelete.Finalizers = newFinalizers
 			if err := c.client.Update(context.TODO(), toDelete); err != nil && !errors.IsNotFound(err) {
@@ -640,6 +652,61 @@ func (c *Controller) deleteStorageCluster(
 	if err := c.removeStork(cluster); err != nil {
 		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
 		k8s.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
+	}
+	return nil
+}
+
+func (c *Controller) removeResources(namespace string) error {
+	objs, err := k8s.GetAllObjects(c.client, namespace)
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range objs {
+		gcAnnotated := false
+		if obj.GetAnnotations() != nil {
+			gcAnnotated, _ = strconv.ParseBool(obj.GetAnnotations()[constants.AnnotationGarbageCollection])
+		}
+
+		if gcAnnotated || c.gcNeeded(obj) {
+			logrus.Infof("Garbage collect object %s %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+			if err := c.client.Delete(context.TODO(), obj); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// All external object should use the GC annotation for operator to delete them.
+// For backward compatibility, we still delete some objects without the annotation.
+func (c *Controller) gcNeeded(obj client.Object) bool {
+	if obj == nil {
+		return false
+	}
+
+	if obj.GetObjectKind().GroupVersionKind().Kind == "ConfigMap" {
+		if obj.GetName() == "px-attach-driveset-lock" ||
+			strings.HasPrefix(obj.GetName(), "px-bringup-queue-lock") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *Controller) removeMigrationLabels() error {
+	nodeList := &v1.NodeList{}
+	if err := c.client.List(context.TODO(), nodeList, &client.ListOptions{}); err != nil {
+		return err
+	}
+	for _, node := range nodeList.Items {
+		if _, ok := node.Labels[constants.LabelPortworxDaemonsetMigration]; ok {
+			delete(node.Labels, constants.LabelPortworxDaemonsetMigration)
+			if err := c.client.Update(context.TODO(), &node, &client.UpdateOptions{}); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
