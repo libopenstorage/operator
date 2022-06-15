@@ -24,7 +24,6 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-
 	DefaultPortworxVersion     = "2.8.1.2"
 	defaultStorkImage          = "openstorage/stork:2.7.0"
 	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
