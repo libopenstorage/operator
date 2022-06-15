@@ -38,7 +38,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -76,7 +76,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -165,7 +165,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -253,7 +253,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -333,7 +333,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
