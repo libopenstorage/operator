@@ -3259,12 +3259,12 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 	podControl := &k8scontroller.FakePodControl{}
 	recorder := record.NewFakeRecorder(10)
 	controller := Controller{
-		client:              k8sClient,
-		Driver:              driver,
-		podControl:          podControl,
-		recorder:            recorder,
-		kubernetesVersion:   k8sVersion,
-		lastPodCreationTime: make(map[string]time.Time),
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
