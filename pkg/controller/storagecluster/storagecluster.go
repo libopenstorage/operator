@@ -192,6 +192,16 @@ func (c *Controller) SetKubernetesClient(client client.Client) {
 	c.client = client
 }
 
+// GetEventRecorder returns the event recorder.
+func (c *Controller) GetEventRecorder() record.EventRecorder {
+	return c.recorder
+}
+
+// SetEventRecorder sets event recorder for test.
+func (c *Controller) SetEventRecorder(r record.EventRecorder) {
+	c.recorder = r
+}
+
 // Reconcile reads that state of the cluster for a StorageCluster object and makes changes based on
 // the state read and what is in the StorageCluster.Spec
 // Note:

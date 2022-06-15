@@ -9,6 +9,11 @@ metadata:
   namespace: kube-test
 spec:
   replicas: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
   selector:
     matchLabels:
       component: scheduler

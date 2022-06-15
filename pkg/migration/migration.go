@@ -12,6 +12,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -104,7 +105,9 @@ func (h *Handler) Start() {
 			return false, nil
 		}
 
-		logrus.Infof("Migration completed successfully")
+		k8sutil.InfoEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationCompletedReason,
+			"Migration completed successfully",
+		)
 		return true, nil
 	})
 }

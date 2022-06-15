@@ -55,6 +55,14 @@ spec:
                       storage cluster components. The key specifies component in format of "kind/component",
                       e.g. "deployment/stork" to pass custom annotations to stork deployment. The value is a map of
                       string that contains custom annotation key and value pairs.
+                  labels:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    description: >-
+                      The labels section of spec is a map of map to pass custom labels to different storage cluster
+                      components. The key specifies component in format of "kind/component", e.g. "service/portworx-api"
+                      to pass custom labels to portworx-api service. The value is a map of string that contains custom
+                      label key and value pairs.
               resources:
                 type: object
                 description: Specifies the compute resource requirements for the storage pod.
@@ -88,6 +96,14 @@ spec:
                   Custom container image registry server that will be used instead of
                   index.docker.io to download Docker images. This may include the repository as well.
                   (Example: myregistry.net:5443 or myregistry.com/myrepository)
+              preserveFullCustomImageRegistry:
+                type: boolean
+                description: >-
+                  Setting this to true this stops part of the image tag being swallowed when setting a
+                  customImageRegistry with a / in it. When set to false using a customImageRegistry of
+                  `example.io/public` and an image of `portworx/oci-monitor` the full image path is is
+                  `example.io/public/oci-monitor`, setting to true gives you
+                  `example.io/public/portworx/oci-monitor`. Defaults to false
               secretsProvider:
                 type: string
                 description: Secrets provider is the name of secret provider that driver will connect to.
@@ -928,6 +944,16 @@ spec:
                             type: string
                             description: Shared secret is the name of the Kubernetes secret containing the shared key
                               used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
+              csi:
+                type: object
+                description: Contains CSI configuration for the storage cluster.
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Flag indicating whether CSI needs to be installed for the storage cluster.
+                  installSnapshotController:
+                    type: boolean
+                    description: Flag indicating whether CSI Snapshot Controller needs to be installed for the storage cluster.
               env:
                 type: array
                 description: List of environment variables used by the driver. This is an array of Kubernetes
@@ -1328,6 +1354,12 @@ spec:
                   csiSnapshotter:
                     type: string
                     description: Desired image for CSI snapshotter.
+                  csiSnapshotController:
+                    type: string
+                    description: Desired image for CSI snapshot controller.
+                  csiHealthMonitorController:
+                    type: string
+                    description: Desired image for CSI health monitor controller.
                   prometheusOperator:
                     type: string
                     description: Desired image for Prometheus operator.
@@ -1368,3 +1400,12 @@ spec:
                       type: string
                       description: Reason is human readable message indicating details about the current
                         state of the cluster.
+  - name: v1alpha1
+    served: false
+    storage: false
+    subresources:
+      status: {}
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
