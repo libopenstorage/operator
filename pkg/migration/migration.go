@@ -175,43 +175,12 @@ func (h *Handler) processMigration(
 	}
 
 	portworxNodes := sortedPortworxNodes(cluster, nodes)
-	for _, node := range portworxNodes {
-		nodeLog := logrus.WithField("node", node.Name)
-		nodeLog.Infof("Starting migration of portworx pod")
-
-		value := node.Labels[constants.LabelPortworxDaemonsetMigration]
-		if value == constants.LabelValueMigrationDone {
-			nodeLog.Infof("Portworx pod already migrated")
-			continue
-		} else if value == constants.LabelValueMigrationSkip {
-			nodeLog.Infof("Portworx pod migration skipped")
-			continue
-		}
-
-		if err := h.markMigrationAsStarting(node); err != nil {
+	if cluster.Spec.UpdateStrategy.Type == corev1.OnDeleteStorageClusterStrategyType {
+		if err := h.portworxNodesOnDeleteUpdate(cluster, ds, portworxNodes); err != nil {
 			return err
 		}
-
-		// Wait for daemonset pod to terminate, else it causes conflicts with
-		// the operator managed portworx pod
-		if err := h.waitForDaemonSetPodTermination(ds, node.Name, nodeLog); err != nil {
-			return err
-		}
-
-		if err := h.markMigrationAsInProgress(node); err != nil {
-			return err
-		}
-
-		// Wait until operator managed portworx pod is ready
-		if err := h.waitForPortworxPod(cluster, node.Name, nodeLog); err != nil {
-			return err
-		}
-
-		if err := h.markMigrationAsDone(node); err != nil {
-			return err
-		}
-
-		nodeLog.Infof("Portworx pod migration status: %s", node.Labels[constants.LabelPortworxDaemonsetMigration])
+	} else if err := h.portworxNodesRollingUpdate(cluster, ds, portworxNodes); err != nil {
+		return err
 	}
 
 	logrus.Infof("Starting migration of components")
@@ -253,6 +222,148 @@ func (h *Handler) processMigration(
 	return nil
 }
 
+func (h *Handler) portworxNodesRollingUpdate(
+	cluster *corev1.StorageCluster,
+	ds *appsv1.DaemonSet,
+	portworxNodes []*v1.Node,
+) error {
+	for _, node := range portworxNodes {
+		stc := &corev1.StorageCluster{}
+		err := h.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+			stc,
+		)
+		if err != nil {
+			return err
+		} else if stc.Spec.UpdateStrategy.Type != corev1.RollingUpdateStorageClusterStrategyType {
+			return fmt.Errorf("StorageCluster update strategy changed during migration, expect %s, actual %s",
+				corev1.RollingUpdateStorageClusterStrategyType, stc.Spec.UpdateStrategy.Type)
+		}
+
+		nodeLog := logrus.WithField("node", node.Name)
+		nodeLog.Infof("Starting migration of portworx pod")
+
+		value := node.Labels[constants.LabelPortworxDaemonsetMigration]
+		if value == constants.LabelValueMigrationDone {
+			nodeLog.Infof("Portworx pod already migrated")
+			continue
+		} else if value == constants.LabelValueMigrationSkip {
+			nodeLog.Infof("Portworx pod migration skipped")
+			continue
+		}
+
+		if err := h.markMigrationAsStarting(node); err != nil {
+			return err
+		}
+
+		// Wait for daemonset pod to terminate, else it causes conflicts with
+		// the operator managed portworx pod
+		if err := h.waitForDaemonSetPodTermination(ds, node.Name, nodeLog); err != nil {
+			return err
+		}
+
+		if err := h.markMigrationAsInProgress(node); err != nil {
+			return err
+		}
+
+		// Wait until operator managed portworx pod is ready
+		if err := h.waitForPortworxPod(stc, node.Name, nodeLog); err != nil {
+			return err
+		}
+
+		if err := h.markMigrationAsDone(node); err != nil {
+			return err
+		}
+
+		nodeLog.Infof("Portworx pod migration status: %s", node.Labels[constants.LabelPortworxDaemonsetMigration])
+	}
+	return nil
+}
+
+// portworxNodesOnDeleteUpdate expects user to mark the nodes as Starting manually, will exit until:
+// 1. All portworx nodes are marked as migrated
+// 2. StorageCluster not found
+// 3. StorageCluster update strategy changed by the user, retry migration from the beginning
+func (h *Handler) portworxNodesOnDeleteUpdate(
+	cluster *corev1.StorageCluster,
+	ds *appsv1.DaemonSet,
+	portworxNodes []*v1.Node,
+) error {
+	return wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
+		stc := &corev1.StorageCluster{}
+		err := h.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+			stc,
+		)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return false, err
+			}
+			return false, nil
+		} else if stc.Spec.UpdateStrategy.Type != corev1.OnDeleteStorageClusterStrategyType {
+			return false, fmt.Errorf("StorageCluster update strategy changed during migration, expect %s, actual %s",
+				corev1.OnDeleteStorageClusterStrategyType, stc.Spec.UpdateStrategy.Type)
+		}
+
+		allNodesMigrated := true
+		for _, n := range portworxNodes {
+			nodeLog := logrus.WithField("node", n.Name)
+			node := &v1.Node{}
+			if err := h.client.Get(context.TODO(), types.NamespacedName{Name: n.Name}, node); err != nil {
+				nodeLog.Errorf("Failed to get node. %v", err)
+				return false, nil
+			}
+			value := node.Labels[constants.LabelPortworxDaemonsetMigration]
+			if value == constants.LabelValueMigrationDone || value == constants.LabelValueMigrationSkip {
+				continue
+			} else if value == constants.LabelValueMigrationPending {
+				allNodesMigrated = false
+			} else if value == constants.LabelValueMigrationStarting {
+				allNodesMigrated = false
+				// mark the node as InProgress if DaemonSet pod not found
+				portworxPod, err := h.getDaemonSetPortworxPod(ds, node.Name)
+				if err != nil {
+					nodeLog.Errorf("Failed to list daemonset portworx pods. %v", err)
+					return false, nil
+				}
+				if portworxPod == nil {
+					nodeLog.Infof("DaemonSet portworx pod is no longer present")
+					if err := h.markMigrationAsInProgress(node); err != nil {
+						return false, nil
+					}
+				}
+			} else if value == constants.LabelValueMigrationInProgress {
+				// mark the node as Done if operator portworx pod found
+				portworxPod, err := h.getOperatorPortworxPod(cluster, node.Name)
+				if err != nil {
+					nodeLog.Errorf("Failed to list operator managed portworx pods. %v", err)
+					return false, nil
+				}
+				if portworxPod != nil && portworxPod.DeletionTimestamp == nil && podutil.IsPodReady(portworxPod) {
+					nodeLog.Infof("Operator managed portworx pod is ready")
+					if err := h.markMigrationAsDone(node); err != nil {
+						return false, nil
+					}
+					continue
+				}
+				allNodesMigrated = false
+			} else {
+				allNodesMigrated = false
+				nodeLog.Errorf("Unexpected daemonset migration label value: %s", value)
+			}
+		}
+		return allNodesMigrated, nil
+	})
+}
+
 func (h *Handler) waitForDaemonSetPodTermination(
 	ds *appsv1.DaemonSet,
 	nodeName string,
@@ -269,38 +380,46 @@ func (h *Handler) waitForDaemonSetPodTermination(
 			return true, nil
 		}
 
-		podList := &v1.PodList{}
-		fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": nodeName})
-		err := h.client.List(
-			context.TODO(),
-			podList,
-			&client.ListOptions{
-				Namespace:     ds.Namespace,
-				FieldSelector: fieldSelector,
-				LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx"}),
-			},
-		)
+		portworxPod, err := h.getDaemonSetPortworxPod(ds, nodeName)
 		if err != nil {
 			nodeLog.Errorf("Failed to list daemonset portworx pods. %v", err)
 			return false, nil
 		}
-
-		podPresent := false
-		for _, pod := range podList.Items {
-			owner := metav1.GetControllerOf(&pod)
-			if owner != nil && owner.UID == ds.UID && pod.Spec.NodeName == nodeName {
-				podPresent = true
-				break
-			}
-		}
-		if podPresent {
+		if portworxPod != nil {
 			nodeLog.Debugf("DaemonSet portworx pod is still present")
 			return false, nil
 		}
 
-		nodeLog.Debugf("DaemonSet portworx pod is no longer present")
+		nodeLog.Infof("DaemonSet portworx pod is no longer present")
 		return true, nil
 	})
+}
+
+func (h *Handler) getDaemonSetPortworxPod(
+	ds *appsv1.DaemonSet,
+	nodeName string,
+) (*v1.Pod, error) {
+	podList := &v1.PodList{}
+	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": nodeName})
+	err := h.client.List(
+		context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     ds.Namespace,
+			FieldSelector: fieldSelector,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx"}),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, pod := range podList.Items {
+		owner := metav1.GetControllerOf(&pod)
+		if owner != nil && owner.UID == ds.UID && pod.Spec.NodeName == nodeName {
+			return pod.DeepCopy(), nil
+		}
+	}
+	return nil, nil
 }
 
 func (h *Handler) waitForPortworxPod(
@@ -319,29 +438,10 @@ func (h *Handler) waitForPortworxPod(
 			return true, nil
 		}
 
-		podList := &v1.PodList{}
-		fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": nodeName})
-		err := h.client.List(
-			context.TODO(),
-			podList,
-			&client.ListOptions{
-				Namespace:     cluster.Namespace,
-				FieldSelector: fieldSelector,
-				LabelSelector: labels.SelectorFromSet(h.ctrl.StorageClusterSelectorLabels(cluster)),
-			},
-		)
+		portworxPod, err := h.getOperatorPortworxPod(cluster, nodeName)
 		if err != nil {
 			nodeLog.Errorf("Failed to list operator managed portworx pods. %v", err)
 			return false, nil
-		}
-
-		var portworxPod *v1.Pod
-		for _, pod := range podList.Items {
-			owner := metav1.GetControllerOf(&pod)
-			if owner != nil && owner.UID == cluster.UID && pod.Spec.NodeName == nodeName {
-				portworxPod = pod.DeepCopy()
-				break
-			}
 		}
 		if portworxPod == nil {
 			nodeLog.Debugf("Operator managed portworx pod not found")
@@ -352,9 +452,36 @@ func (h *Handler) waitForPortworxPod(
 			return false, nil
 		}
 
-		nodeLog.Debugf("Operator managed portworx pod is ready")
+		nodeLog.Infof("Operator managed portworx pod is ready")
 		return true, nil
 	})
+}
+
+func (h *Handler) getOperatorPortworxPod(
+	cluster *corev1.StorageCluster,
+	nodeName string,
+) (*v1.Pod, error) {
+	podList := &v1.PodList{}
+	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": nodeName})
+	err := h.client.List(
+		context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     cluster.Namespace,
+			FieldSelector: fieldSelector,
+			LabelSelector: labels.SelectorFromSet(h.ctrl.StorageClusterSelectorLabels(cluster)),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, pod := range podList.Items {
+		owner := metav1.GetControllerOf(&pod)
+		if owner != nil && owner.UID == cluster.UID && pod.Spec.NodeName == nodeName {
+			return pod.DeepCopy(), nil
+		}
+	}
+	return nil, nil
 }
 
 func (h *Handler) isMigrationApproved(cluster *corev1.StorageCluster) bool {
@@ -539,7 +666,21 @@ func sortedPortworxNodes(cluster *corev1.StorageCluster, nodes []*v1.Node) []*v1
 	}
 
 	sort.Slice(selectedNodes, func(i, j int) bool {
-		return selectedNodes[i].Name < selectedNodes[j].Name
+		// Sort based on label first: Skip, Done, InProgress, Starting, Pending
+		// then based on name
+		labelMap := map[string]int{
+			constants.LabelValueMigrationSkip:       0,
+			constants.LabelValueMigrationDone:       1,
+			constants.LabelValueMigrationInProgress: 2,
+			constants.LabelValueMigrationStarting:   3,
+			constants.LabelValueMigrationPending:    4,
+		}
+		iLabel := selectedNodes[i].Labels[constants.LabelPortworxDaemonsetMigration]
+		jLabel := selectedNodes[j].Labels[constants.LabelPortworxDaemonsetMigration]
+		if iLabel == jLabel {
+			return selectedNodes[i].Name < selectedNodes[j].Name
+		}
+		return labelMap[iLabel] < labelMap[jLabel]
 	})
 
 	return selectedNodes
