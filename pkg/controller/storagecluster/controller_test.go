@@ -2736,6 +2736,154 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	require.Empty(t, recorder.Events)
 }
 
+func TestGarbageCollection(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+
+	// Configmaps created by px are expected to be deleted https://portworx.atlassian.net/browse/OPERATOR-752
+	configMaps := []v1.ConfigMap{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-attach-driveset-lock",
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-attach-driveset-lock",
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-bringup-queue-lockb",
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-bringup-queue-locka",
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cm1",
+				Namespace: cluster.Namespace,
+				Annotations: map[string]string{
+					"operator.libopenstorage.org/garbage-collection": "true",
+				},
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cm2",
+				Namespace: "kube-system",
+				Annotations: map[string]string{
+					"operator.libopenstorage.org/garbage-collection": "true",
+				},
+			},
+			Data: map[string]string{},
+		},
+	}
+	nonGCConfigMaps := []v1.ConfigMap{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "a",
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string]string{},
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	for _, cm := range configMaps {
+		err := k8sClient.Create(context.TODO(), &cm)
+		require.NoError(t, err)
+	}
+	for _, cm := range nonGCConfigMaps {
+		err := k8sClient.Create(context.TODO(), &cm)
+		require.NoError(t, err)
+	}
+
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("pxd").AnyTimes()
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	err := testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	deletionTimeStamp := metav1.Now()
+	cluster.DeletionTimestamp = &deletionTimeStamp
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	condition := &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationCompleted,
+	}
+	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
+
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	for _, cm := range configMaps {
+		obj := &v1.ConfigMap{}
+		err = k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      cm.Name,
+				Namespace: cm.Namespace,
+			},
+			obj,
+		)
+		require.True(t, errors.IsNotFound(err))
+	}
+	for _, cm := range nonGCConfigMaps {
+		obj := &v1.ConfigMap{}
+		err = k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      cm.Name,
+				Namespace: cm.Namespace,
+			},
+			obj,
+		)
+		require.NoError(t, err)
+	}
+}
+
 func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -3089,6 +3237,88 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
 	require.Empty(t, deploymentList.Items)
+}
+
+func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+	deletionTimeStamp := metav1.Now()
+	cluster.DeletionTimestamp = &deletionTimeStamp
+
+	driverName := "mock-driver"
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	condition := &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationCompleted,
+	}
+	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	// Migration done on node1
+	k8sNode1 := createK8sNode("k8s-node-1", 10)
+	k8sNode1.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationDone
+	k8sClient.Create(context.TODO(), k8sNode1)
+	storagePod1 := createStoragePod(cluster, "pod-1", k8sNode1.Name, storageLabels)
+	k8sClient.Create(context.TODO(), storagePod1)
+
+	// Migration skipped/pending on node2/node3
+	k8sNode2 := createK8sNode("k8s-node-2", 10)
+	k8sNode2.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationSkip
+	k8sClient.Create(context.TODO(), k8sNode2)
+	k8sNode3 := createK8sNode("k8s-node-3", 10)
+	k8sNode3.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationPending
+	k8sClient.Create(context.TODO(), k8sNode3)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	updatedCluster := &corev1.StorageCluster{}
+	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, *condition, updatedCluster.Status.Conditions[0])
+	require.Empty(t, updatedCluster.Finalizers)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	nodeList := &v1.NodeList{}
+	err = k8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, nodeList.Items, 3)
+	for _, node := range nodeList.Items {
+		_, ok := node.Labels[constants.LabelPortworxDaemonsetMigration]
+		require.False(t, ok)
+	}
 }
 
 func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
