@@ -213,6 +213,15 @@ func TestGetCustomAnnotations(t *testing.T) {
 	require.Nil(t, GetCustomAnnotations(cluster, k8s.Pod, "invalid-component"))
 	require.Nil(t, GetCustomAnnotations(cluster, "invalid-kind", componentName))
 	require.Equal(t, podPortworxAnnotations, GetCustomAnnotations(cluster, k8s.Pod, componentName))
+
+	componentName = "portworx-service"
+	serviceAnnotations := map[string]string{
+		"annotation-key": "annotation-val",
+	}
+	cluster.Spec.Metadata.Annotations = map[string]map[string]string{
+		"service/portworx-service": serviceAnnotations,
+	}
+	require.Equal(t, serviceAnnotations, GetCustomAnnotations(cluster, k8s.Service, componentName))
 }
 
 func TestGetCustomLabels(t *testing.T) {
