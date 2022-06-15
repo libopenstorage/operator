@@ -42,10 +42,10 @@ const (
 	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
 
 	// Default new Prometheus images for k8s 1.22+
-	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.50.0"
-	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.29.1"
-	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
-	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.22.2"
+	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
+	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.36.0"
+	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
+	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
