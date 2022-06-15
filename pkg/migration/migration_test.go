@@ -1940,6 +1940,9 @@ func TestSuccessfulMigration(t *testing.T) {
 			UID:       "100",
 		},
 		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			},
 			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -2112,6 +2115,9 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 			UID:       "100",
 		},
 		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			},
 			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -4106,6 +4112,718 @@ func TestStorageClusterExternalKvdbAuthCreateNewSecretForPlainTextACLTokenAndPas
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
 	require.NoError(t, err)
+}
+
+func TestSuccessfulMigrationOnDelete(t *testing.T) {
+	migrationRetryIntervalFunc = func() time.Duration {
+		return 2 * time.Second
+	}
+	defer func() {
+		migrationRetryIntervalFunc = getMigrationRetryInterval
+	}()
+
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+			UID:       "100",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			},
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	numNodes := 3
+	var nodes []*v1.Node
+	var dsPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		nodes = append(nodes, constructNode(i))
+		dsPods = append(dsPods, constructDaemonSetPod(ds, i))
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+
+	for i := 0; i < numNodes; i++ {
+		err := k8sClient.Create(context.TODO(), nodes[i])
+		require.NoError(t, err)
+		err = k8sClient.Create(context.TODO(), dsPods[i])
+		require.NoError(t, err)
+	}
+
+	// Start the migration handler
+	migrator := New(ctrl)
+	go migrator.Start()
+
+	// Check cluster's initial status before user approval
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Update the storage cluster update strategy to OnDelete
+	cluster.Spec.UpdateStrategy.Type = corev1.OnDeleteStorageClusterStrategyType
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Approve migration
+	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate the migration has started
+	err = validateMigrationIsInProgress(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate daemonset has been updated
+	currDaemonSet := &appsv1.DaemonSet{}
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, appsv1.OnDeleteDaemonSetStrategyType, currDaemonSet.Spec.UpdateStrategy.Type)
+	require.Equal(t, expectedDaemonSetAffinity(), currDaemonSet.Spec.Template.Spec.Affinity)
+
+	// Validate components have been paused
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "true", cluster.Annotations[constants.AnnotationPauseComponentMigration])
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Mark the first node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[0], nodes[0].Name, nodes[0].Namespace)
+	require.NoError(t, err)
+	nodes[0].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[0])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on first node
+	err = testutil.Delete(k8sClient, dsPods[0])
+	require.NoError(t, err)
+
+	// Mark the second node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[1], nodes[1].Name, nodes[1].Namespace)
+	require.NoError(t, err)
+	nodes[1].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[1])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	var operatorPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		operatorPods = append(operatorPods, constructOperatorPod(cluster, i))
+	}
+
+	// Create an operator pod so migration can proceed on first node
+	err = k8sClient.Create(context.TODO(), operatorPods[0])
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on second node
+	err = testutil.Delete(k8sClient, dsPods[1])
+	require.NoError(t, err)
+
+	// Mark the third node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[2], nodes[2].Name, nodes[2].Namespace)
+	require.NoError(t, err)
+	nodes[2].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[2])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+
+	// Create an operator pod on second node for migration to proceed
+	err = k8sClient.Create(context.TODO(), operatorPods[1])
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on third node
+	err = testutil.Delete(k8sClient, dsPods[2])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+
+	// Create an operator pod on second node for migration to proceed
+	err = k8sClient.Create(context.TODO(), operatorPods[2])
+	require.NoError(t, err)
+
+	// Validate the migration has completed
+	err = validateNodeStatus(k8sClient, nodes[0].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, "")
+	require.NoError(t, err)
+
+	currDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	close(recorder.Events)
+	var msg string
+	for e := range recorder.Events {
+		msg += e
+	}
+	require.Contains(t, msg, "Migration completed successfully")
+
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+	require.False(t, annotationExists)
+}
+
+func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
+	migrationRetryIntervalFunc = func() time.Duration {
+		return 2 * time.Second
+	}
+	defer func() {
+		migrationRetryIntervalFunc = getMigrationRetryInterval
+	}()
+
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+			UID:       "100",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			},
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	numNodes := 3
+	var nodes []*v1.Node
+	var dsPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		nodes = append(nodes, constructNode(i))
+		dsPods = append(dsPods, constructDaemonSetPod(ds, i))
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+
+	for i := 0; i < numNodes; i++ {
+		err := k8sClient.Create(context.TODO(), nodes[i])
+		require.NoError(t, err)
+		err = k8sClient.Create(context.TODO(), dsPods[i])
+		require.NoError(t, err)
+	}
+
+	// Start the migration handler
+	migrator := New(ctrl)
+	go migrator.Start()
+
+	// Check cluster's initial status before user approval
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Approve migration
+	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate the migration has started
+	err = validateMigrationIsInProgress(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate daemonset has been updated
+	currDaemonSet := &appsv1.DaemonSet{}
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, appsv1.OnDeleteDaemonSetStrategyType, currDaemonSet.Spec.UpdateStrategy.Type)
+	require.Equal(t, expectedDaemonSetAffinity(), currDaemonSet.Spec.Template.Spec.Affinity)
+
+	// Validate components have been paused
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "true", cluster.Annotations[constants.AnnotationPauseComponentMigration])
+
+	// Validate status of the nodes, first node starts migration first
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on first node
+	err = testutil.Delete(k8sClient, dsPods[0])
+	require.NoError(t, err)
+
+	// Update the storage cluster update strategy to OnDelete
+	cluster.Spec.UpdateStrategy.Type = corev1.OnDeleteStorageClusterStrategyType
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	var operatorPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		operatorPods = append(operatorPods, constructOperatorPod(cluster, i))
+	}
+
+	// Create an operator pod so migration can proceed on first node
+	err = k8sClient.Create(context.TODO(), operatorPods[0])
+	require.NoError(t, err)
+
+	// Mark the third node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[2], nodes[2].Name, nodes[2].Namespace)
+	require.NoError(t, err)
+	nodes[2].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[2])
+	require.NoError(t, err)
+
+	// Validate status of the nodes, first node need to finish first
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on third node
+	err = testutil.Delete(k8sClient, dsPods[2])
+	require.NoError(t, err)
+
+	// Mark the second node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[1], nodes[1].Name, nodes[1].Namespace)
+	require.NoError(t, err)
+	nodes[1].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[1])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+
+	// Create an operator pod so migration can proceed on third node
+	err = k8sClient.Create(context.TODO(), operatorPods[2])
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on second node
+	err = testutil.Delete(k8sClient, dsPods[1])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+
+	// Create an operator pod so migration can proceed on second node
+	err = k8sClient.Create(context.TODO(), operatorPods[1])
+	require.NoError(t, err)
+
+	// Validate the migration has completed
+	err = validateNodeStatus(k8sClient, nodes[0].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, "")
+	require.NoError(t, err)
+
+	currDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	close(recorder.Events)
+	var msg string
+	for e := range recorder.Events {
+		msg += e
+	}
+	require.Contains(t, msg, "Migration completed successfully")
+
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+	require.False(t, annotationExists)
+}
+
+func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
+	migrationRetryIntervalFunc = func() time.Duration {
+		return 2 * time.Second
+	}
+	defer func() {
+		migrationRetryIntervalFunc = getMigrationRetryInterval
+	}()
+
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+			UID:       "100",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.OnDeleteDaemonSetStrategyType,
+			},
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	numNodes := 3
+	var nodes []*v1.Node
+	var dsPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		nodes = append(nodes, constructNode(i))
+		dsPods = append(dsPods, constructDaemonSetPod(ds, i))
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockCtrl := gomock.NewController(t)
+	driver := testutil.MockDriver(mockCtrl)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockCtrl)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+
+	for i := 0; i < numNodes; i++ {
+		err := k8sClient.Create(context.TODO(), nodes[i])
+		require.NoError(t, err)
+		err = k8sClient.Create(context.TODO(), dsPods[i])
+		require.NoError(t, err)
+	}
+
+	// Start the migration handler
+	migrator := New(ctrl)
+	go migrator.Start()
+
+	// Check cluster's initial status before user approval
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Approve migration
+	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate the migration has started
+	err = validateMigrationIsInProgress(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate daemonset has been updated
+	currDaemonSet := &appsv1.DaemonSet{}
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, appsv1.OnDeleteDaemonSetStrategyType, currDaemonSet.Spec.UpdateStrategy.Type)
+	require.Equal(t, expectedDaemonSetAffinity(), currDaemonSet.Spec.Template.Spec.Affinity)
+
+	// Validate components have been paused
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "true", cluster.Annotations[constants.AnnotationPauseComponentMigration])
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Mark the third node as Starting to trigger the migration
+	err = testutil.Get(k8sClient, nodes[2], nodes[2].Name, nodes[2].Namespace)
+	require.NoError(t, err)
+	nodes[2].Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, nodes[2])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on third node
+	err = testutil.Delete(k8sClient, dsPods[2])
+	require.NoError(t, err)
+
+	// Update the storage cluster update strategy to RollingUpdate
+	cluster.Spec.UpdateStrategy.Type = corev1.RollingUpdateStorageClusterStrategyType
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+
+	// Validate status of the nodes, the third node should be picked up first
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	var operatorPods []*v1.Pod
+	for i := 1; i <= numNodes; i++ {
+		operatorPods = append(operatorPods, constructOperatorPod(cluster, i))
+	}
+
+	// Create an operator pod so migration can proceed on third node
+	err = k8sClient.Create(context.TODO(), operatorPods[2])
+	require.NoError(t, err)
+
+	// Validate status of the nodes, third node should finish first then pick up first node
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on first node
+	err = testutil.Delete(k8sClient, dsPods[0])
+	require.NoError(t, err)
+
+	// Validate status of the nodes, third node should finish first then pick up first node
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+
+	// Create an operator pod so migration can proceed on first node
+	err = k8sClient.Create(context.TODO(), operatorPods[0])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+
+	// Delete the daemonset pod so migration can proceed on second node
+	err = testutil.Delete(k8sClient, dsPods[1])
+	require.NoError(t, err)
+
+	// Validate status of the nodes
+	err = validateNodeStatus(k8sClient, nodes[2].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[0].Name, constants.LabelValueMigrationDone)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+
+	// Create an operator pod on second node for migration to proceed
+	err = k8sClient.Create(context.TODO(), operatorPods[1])
+	require.NoError(t, err)
+
+	// Validate the migration has completed
+	err = validateNodeStatus(k8sClient, nodes[0].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[1].Name, "")
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, nodes[2].Name, "")
+	require.NoError(t, err)
+
+	currDaemonSet = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	close(recorder.Events)
+	var msg string
+	for e := range recorder.Events {
+		msg += e
+	}
+	require.Contains(t, msg, "Migration completed successfully")
+
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+	require.False(t, annotationExists)
 }
 
 func validateMigrationIsInProgress(
