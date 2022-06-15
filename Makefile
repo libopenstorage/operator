@@ -185,7 +185,7 @@ operator:
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
-	docker build --tag $(OPERATOR_IMG) -f build/Dockerfile .
+	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"
