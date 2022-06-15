@@ -1841,50 +1841,27 @@ func GetV1beta1CRDFromFile(
 func GetAllObjects(k8sClient client.Client, namespace string) ([]client.Object, error) {
 	var objs []client.Object
 
-	if err := AppendObjectList(k8sClient, namespace, &v1.ServiceList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &v1.ServiceAccountList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &v1.SecretList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &v1.ConfigMapList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &v1.PodList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &v1.PersistentVolumeClaimList{}, &objs); err != nil {
-		return objs, err
+	objectLists := []client.ObjectList{
+		&v1.ServiceList{},
+		&v1.ServiceAccountList{},
+		&v1.SecretList{},
+		&v1.ConfigMapList{},
+		&v1.PodList{},
+		&v1.PersistentVolumeClaimList{},
+		&appsv1.DaemonSetList{},
+		&appsv1.DeploymentList{},
+		&appsv1.StatefulSetList{},
+		&rbacv1.ClusterRoleList{},
+		&rbacv1.ClusterRoleBindingList{},
+		&rbacv1.RoleList{},
+		&rbacv1.RoleBindingList{},
+		&storagev1.StorageClassList{},
 	}
 
-	if err := AppendObjectList(k8sClient, namespace, &appsv1.DaemonSetList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &appsv1.DeploymentList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &appsv1.StatefulSetList{}, &objs); err != nil {
-		return objs, err
-	}
-
-	if err := AppendObjectList(k8sClient, "", &rbacv1.ClusterRoleList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, "", &rbacv1.ClusterRoleBindingList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &rbacv1.RoleList{}, &objs); err != nil {
-		return objs, err
-	}
-	if err := AppendObjectList(k8sClient, namespace, &rbacv1.RoleBindingList{}, &objs); err != nil {
-		return objs, err
-	}
-
-	if err := AppendObjectList(k8sClient, "", &storagev1.StorageClassList{}, &objs); err != nil {
-		return objs, err
+	for _, objectList := range objectLists {
+		if err := AppendObjectList(k8sClient, namespace, objectList, &objs); err != nil {
+			return objs, err
+		}
 	}
 
 	return objs, nil
