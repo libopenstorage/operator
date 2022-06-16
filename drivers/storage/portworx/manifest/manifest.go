@@ -24,15 +24,14 @@ const (
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion = "2.8.1.2"
-	defaultStorkImage      = "openstorage/stork:2.7.0"
-	defaultAutopilotImage  = "portworx/autopilot:1.3.1"
-	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage  = "portworx/px-node-wiper:2.5.0"
-	defaultTelemetryImage  = "purestorage/ccm-service:3.0.9"
-
+	DefaultPortworxVersion     = "2.8.1.2"
+	defaultStorkImage          = "openstorage/stork:2.7.0"
+	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
+	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
+	defaultNodeWiperImage      = "portworx/px-node-wiper:2.5.0"
+	defaultTelemetryImage      = "purestorage/ccm-service:3.2.10"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
-	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
+	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
@@ -42,10 +41,10 @@ const (
 	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
 
 	// Default new Prometheus images for k8s 1.22+
-	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.50.0"
-	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.29.1"
-	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
-	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.22.2"
+	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
+	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.36.0"
+	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
+	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
