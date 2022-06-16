@@ -36,8 +36,8 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:3.0.9",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
+			Telemetry:                 "image/ccm-service:3.2.10",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -161,8 +161,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.5.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
+			Telemetry:                 "image/ccm-service:3.2.10",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -248,8 +248,8 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
+			Telemetry:                 "image/ccm-service:3.2.10",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -327,8 +327,8 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:2.6.0",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
+			Telemetry:                 "image/ccm-service:3.2.10",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.19.1",
 		},
 	}
@@ -476,11 +476,11 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 	k8sVersion, _ = version.NewSemver("1.22.0")
 	m.Init(k8sClient, nil, k8sVersion)
 	rel = m.GetVersions(cluster, true)
-	require.Equal(t, "quay.io/prometheus/prometheus:v2.29.1", rel.Components.Prometheus)
-	require.Equal(t, "quay.io/prometheus-operator/prometheus-operator:v0.50.0", rel.Components.PrometheusOperator)
+	require.Equal(t, "quay.io/prometheus/prometheus:v2.36.0", rel.Components.Prometheus)
+	require.Equal(t, "quay.io/prometheus-operator/prometheus-operator:v0.56.3", rel.Components.PrometheusOperator)
 	require.Equal(t, "", rel.Components.PrometheusConfigMapReload)
-	require.Equal(t, "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0", rel.Components.PrometheusConfigReloader)
-	require.Equal(t, "quay.io/prometheus/alertmanager:v0.22.2", rel.Components.AlertManager)
+	require.Equal(t, "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3", rel.Components.PrometheusConfigReloader)
+	require.Equal(t, "quay.io/prometheus/alertmanager:v0.24.0", rel.Components.AlertManager)
 }
 
 func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
