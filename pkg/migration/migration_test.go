@@ -2895,6 +2895,7 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 							},
 							VolumeMounts: []v1.VolumeMount{
 								{Name: "diagsdump", MountPath: "/var/cores"},
+								{Name: "pathconflict", MountPath: "/etc/crictl.yaml"},
 								{Name: "volume1", MountPath: "/mountpath1"},
 								{Name: "volume2", MountPath: "/mountpath2", ReadOnly: true},
 							},
@@ -2902,6 +2903,7 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 					},
 					Volumes: []v1.Volume{
 						{Name: "diagsdump", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/cores"}}},
+						{Name: "pathconflict", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/vcap/store/crictl.yaml"}}},
 						{Name: "csi-driver-path", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/kubelet/plugins/pxd.portworx.com"}}},
 						{Name: "volume1", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/path1"}}},
 						{Name: "volume2", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/path2"}}},
@@ -2909,6 +2911,26 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 					},
 				},
 			},
+		},
+	}
+	pxPodTemplate := v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "portworx",
+				Args: []string{
+					"-c", clusterName,
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{Name: "diagsdump", MountPath: "/var/cores"},
+					{Name: "criosock", MountPath: "/var/run/crio"},
+					{Name: "crioconf", MountPath: "/etc/crictl.yaml"},
+				},
+			},
+		},
+		Volumes: []v1.Volume{
+			{Name: "diagsdump", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/cores"}}},
+			{Name: "criosock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/vcap/sys/run/crio"}}},
+			{Name: "crioconf", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/vcap/store/crictl.yaml"}}},
 		},
 	}
 
@@ -2923,7 +2945,7 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 	mockManifest := mock.NewMockManifest(mockController)
 	manifest.SetInstance(mockManifest)
 	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).Return(false).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(pxPodTemplate, nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().AnyTimes()
 	driver.EXPECT().String().AnyTimes()
 	versionClient := fakek8sclient.NewSimpleClientset()
