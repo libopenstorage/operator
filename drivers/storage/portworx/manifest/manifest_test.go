@@ -38,7 +38,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -75,7 +75,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 		},
 	}
 
@@ -163,7 +163,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -250,7 +250,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -329,7 +329,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-service:3.2.10",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.22.2",
+			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 		},
 	}
 	cluster := &corev1.StorageCluster{
