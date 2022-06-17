@@ -41,6 +41,8 @@ var (
 	builtinPxVolumeNames = map[string]bool{
 		"containerdsock": true,
 		"containerddir":  true,
+		"cores":          true,
+		"crioconf":       true,
 		"criosock":       true,
 		"dbusmount":      true,
 		"dev":            true,
@@ -489,7 +491,9 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 	}
 
 	// Populate StorageCluster spec.volumes from extra volumes mounted to portworx container
-	cluster.Spec.Volumes = getVolumeSpecs(c.VolumeMounts, ds.Spec.Template.Spec.Volumes, builtinPxVolumeNames)
+	if err := h.addExtraPortworxVolumes(cluster, c.VolumeMounts, ds.Spec.Template.Spec.Volumes); err != nil {
+		return nil, err
+	}
 
 	// Add service type annotation based on portworx and portworx-api service if it's not ClusterIP by default
 	if err := h.addServiceTypeAnnotation(cluster); err != nil {
@@ -507,6 +511,38 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 	}
 
 	return cluster, nil
+}
+
+func (h *Handler) addExtraPortworxVolumes(
+	cluster *corev1.StorageCluster,
+	mounts []v1.VolumeMount,
+	volumes []v1.Volume,
+) error {
+	podTemplate, err := h.driver.GetStoragePodSpec(cluster, "")
+	if err != nil {
+		return err
+	}
+
+	var pxContainer *v1.Container
+	for _, c := range podTemplate.Containers {
+		if c.Name == portworxContainerName {
+			pxContainer = c.DeepCopy()
+			break
+		}
+	}
+	if pxContainer == nil {
+		return fmt.Errorf("failed to get portworx container template to migrate extra volumes")
+	}
+
+	mountPathMap := make(map[string]bool)
+	for _, m := range pxContainer.VolumeMounts {
+		if m.MountPath != "" {
+			mountPathMap[m.MountPath] = true
+		}
+	}
+
+	cluster.Spec.Volumes = getVolumeSpecs(mounts, volumes, builtinPxVolumeNames, mountPathMap)
+	return nil
 }
 
 // configureExternalKvdbAuth migrate external kvdb auth configurations
@@ -651,16 +687,36 @@ func getExternalKvdbSecretName(ds *appsv1.DaemonSet) string {
 	return "px-kvdb-auth"
 }
 
-func getVolumeSpecs(mounts []v1.VolumeMount, volumes []v1.Volume, knownVolumeNames map[string]bool) []corev1.VolumeSpec {
+func getVolumeSpecs(
+	mounts []v1.VolumeMount,
+	volumes []v1.Volume,
+	knownVolumeNames map[string]bool,
+	existingVolumeMounts map[string]bool,
+) []corev1.VolumeSpec {
+	if knownVolumeNames == nil {
+		knownVolumeNames = make(map[string]bool)
+	}
+	if existingVolumeMounts == nil {
+		existingVolumeMounts = make(map[string]bool)
+	}
 	volumeSpecMap := make(map[string]*corev1.VolumeSpec)
 	for _, m := range mounts {
-		if _, ok := knownVolumeNames[m.Name]; !ok {
-			volumeSpecMap[m.Name] = &corev1.VolumeSpec{
-				Name:             m.Name,
-				ReadOnly:         m.ReadOnly,
-				MountPath:        m.MountPath,
-				MountPropagation: m.MountPropagation,
-			}
+		// Filter out builtin PX DaemonSet and Operator managed volumes by name
+		// also ignore volumes with mount path conflicts
+		if _, ok := knownVolumeNames[m.Name]; ok {
+			continue
+		} else if _, ok := existingVolumeMounts[m.MountPath]; ok {
+			logrus.WithFields(logrus.Fields{
+				"name":      m.Name,
+				"mountPath": m.MountPath,
+			}).Warningf("found mountPath conflict when constructing StorageCluster from DaemonSet, volume will be ignored")
+			continue
+		}
+		volumeSpecMap[m.Name] = &corev1.VolumeSpec{
+			Name:             m.Name,
+			ReadOnly:         m.ReadOnly,
+			MountPath:        m.MountPath,
+			MountPropagation: m.MountPropagation,
 		}
 	}
 	for _, v := range volumes {
@@ -760,7 +816,7 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 		// Migrate extra env vars
 		cluster.Spec.Stork.Env = getEnvs(container.Env, map[string]bool{"PX_SERVICE_NAME": true})
 		// Migrate extra volumes
-		cluster.Spec.Stork.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, make(map[string]bool))
+		cluster.Spec.Stork.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, nil, nil)
 	}
 
 	return nil
@@ -781,7 +837,7 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 		// Migrate extra env vars
 		cluster.Spec.Autopilot.Env = getEnvs(container.Env, make(map[string]bool))
 		// Migrate extra volumes
-		cluster.Spec.Autopilot.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, map[string]bool{"config-volume": true})
+		cluster.Spec.Autopilot.Volumes = getVolumeSpecs(container.VolumeMounts, dep.Spec.Template.Spec.Volumes, map[string]bool{"config-volume": true}, nil)
 	}
 
 	return nil

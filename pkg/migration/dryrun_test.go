@@ -65,6 +65,7 @@ func TestDryRun(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(ds)
 	mockController := gomock.NewController(t)
 	driver := testutil.MockDriver(mockController)
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
 	ctrl := &storagecluster.Controller{
 		Driver: driver,
 	}
