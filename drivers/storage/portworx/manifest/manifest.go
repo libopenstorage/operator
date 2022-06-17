@@ -30,7 +30,7 @@ const (
 	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage      = "portworx/px-node-wiper:2.5.0"
 	defaultTelemetryImage      = "purestorage/ccm-service:3.2.10"
-	defaultCollectorProxyImage = "envoyproxy/envoy:v1.22.2"
+	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
