@@ -3,8 +3,24 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
+
+	ocp_configv1 "github.com/openshift/api/config/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/util/flowcontrol"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/libopenstorage/operator/drivers/storage"
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -15,18 +31,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
 	"github.com/libopenstorage/operator/pkg/version"
-	ocp_configv1 "github.com/openshift/api/config/v1"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	log "github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 const (
@@ -35,9 +39,13 @@ const (
 	flagLeaderElectLockName      = "leader-elect-lock-name"
 	flagLeaderElectLockNamespace = "leader-elect-lock-namespace"
 	flagMetricsPort              = "metrics-port"
+	flagRateLimiterQPS           = "rate-limiter-qps"
+	flagRateLimiterBurst         = "rate-limiter-burst"
+	flagEnableProfiling          = "pprof"
 	defaultLockObjectName        = "openstorage-operator"
 	defaultResyncPeriod          = 30 * time.Second
 	defaultMetricsPort           = 8999
+	defaultPprofPort             = 6060
 	metricsPortName              = "metrics"
 )
 
@@ -79,6 +87,20 @@ func main() {
 			Name:  flagMigration,
 			Usage: "Enable Portworx DaemonSet migration (default: true)",
 		},
+		cli.Float64Flag{
+			Name:  flagRateLimiterQPS,
+			Usage: "Set the rate limiter maximum QPS to the master from operator clients",
+			Value: 0,
+		},
+		cli.IntFlag{
+			Name:  flagRateLimiterBurst,
+			Usage: "Set the rate limiter maximum burst for throttle",
+			Value: 0,
+		},
+		cli.BoolFlag{
+			Name:  flagEnableProfiling,
+			Usage: "Enable Portworx Operator profiling using pprof (default: false)",
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -100,9 +122,29 @@ func run(c *cli.Context) {
 		log.SetLevel(log.InfoLevel)
 	}
 
+	pprofEnabled := c.Bool(flagEnableProfiling)
+	if pprofEnabled {
+		go func() {
+			log.Infof("pprof profiling is enabled, creating profiling server at port %v", defaultPprofPort)
+			http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", defaultPprofPort), nil)
+		}()
+	}
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("Error getting cluster config: %v", err)
+	}
+
+	// Set controller client rate limiter
+	qps := c.Float64(flagRateLimiterQPS)
+	burst := c.Int(flagRateLimiterBurst)
+	if qps != 0 || burst != 0 {
+		if qps == 0 || burst == 0 {
+			log.Errorf("Rate limiter is not configured, both flags %s and %s need to be set", flagRateLimiterQPS, flagRateLimiterBurst)
+		} else {
+			log.Infof("Rate limiter is configured. QPS: %v, burst: %v", qps, burst)
+			config.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(qps), burst)
+		}
 	}
 
 	// Register CRDs
