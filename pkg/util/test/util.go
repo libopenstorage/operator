@@ -779,6 +779,41 @@ func ValidateUninstallStorageCluster(
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
+	// Validate deletion of Portworx ConfigMaps
+	if err := validatePortworxConfigMapsDeleted(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validatePortworxConfigMapsDeleted(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	configMapList := []string{"px-attach-driveset-lock", fmt.Sprintf("px-bootstrap-%s", cluster.Name), "px-bringup-queue-lockdefault", fmt.Sprintf("px-cloud-drive-%s", cluster.Name)}
+
+	t := func() (interface{}, bool, error) {
+		var presentConfigMaps []string
+		for _, configMapName := range configMapList {
+			_, err := coreops.Instance().GetConfigMap(configMapName, "kube-system")
+			if err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return "", true, err
+			}
+			presentConfigMaps = append(presentConfigMaps, configMapName)
+		}
+		if len(presentConfigMaps) > 0 {
+			return "", true, fmt.Errorf("not all expected configMaps have been deleted, waiting for %s to be deleted", presentConfigMaps)
+		}
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Debug("Portworx ConfigMaps have been deleted successfully")
 	return nil
 }
 
