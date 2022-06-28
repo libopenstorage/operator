@@ -2,17 +2,11 @@ package storagenode
 
 import (
 	"context"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/mock"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
@@ -23,8 +17,6 @@ import (
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kversion "k8s.io/apimachinery/pkg/version"
@@ -33,9 +25,15 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
 func TestInit(t *testing.T) {
@@ -625,11 +623,14 @@ func TestReconcileKVDB(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(kvdbNode1, kvdbNode2, k8sNode1, k8sNode2, cluster)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("ut-driver").AnyTimes()
-	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	podNode1 := v1.PodSpec{}
+	podNode1.NodeName = "node1"
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), "node1").Return(podNode1, nil).AnyTimes()
 
 	controller := Controller{
 		client:      k8sClient,
@@ -646,17 +647,16 @@ func TestReconcileKVDB(t *testing.T) {
 	}
 	_, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
-
-	// check if reconcile created kvdb pods
-	podList := &v1.PodList{}
-	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": kvdbNode1.Name})
-	err = controller.client.List(context.TODO(), podList, &client.ListOptions{
-		Namespace:     kvdbNode1.Namespace,
-		LabelSelector: labels.SelectorFromSet(controller.kvdbPodLabels(cluster)),
-		FieldSelector: fieldSelector,
-	})
+	podList, err := coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
 	require.NoError(t, err)
-	require.Len(t, podList.Items, 1)
+	var kvdbPods []v1.Pod
+	for _, p := range podList.Items {
+		if p.Spec.NodeName == kvdbNode1.Name {
+			kvdbPods = append(kvdbPods, p)
+		}
+	}
+	require.NoError(t, err)
+	require.Len(t, kvdbPods, 1)
 
 	// test reconcile when k8s node has been deleted
 	err = controller.client.Delete(context.TODO(), k8sNode1)
@@ -665,7 +665,8 @@ func TestReconcileKVDB(t *testing.T) {
 	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "kvdb-pod-node2", testKVDBNode2, controller.kvdbPodLabels(cluster), clusterRef)
-	k8sClient.Create(context.TODO(), podNode2)
+	_, err = coreops.Instance().CreatePod(podNode2)
+	require.NoError(t, err)
 	request = reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      testKVDBNode2,
@@ -675,13 +676,8 @@ func TestReconcileKVDB(t *testing.T) {
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
-	checkPod := &v1.Pod{}
-	err = k8sClient.Get(context.TODO(), client.ObjectKey{
-		Name:      podNode2.Name,
-		Namespace: podNode2.Namespace,
-	}, checkPod)
+	_, err = coreops.Instance().GetPodByName(podNode2.Name, podNode2.Namespace)
 	require.Error(t, err)
-	require.Empty(t, checkPod.Name)
 }
 
 func TestReconcileKVDBWithNodeChanges(t *testing.T) {
@@ -739,6 +735,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 		},
 	}
 
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(cluster, kvdbNode, k8sNode, machine)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
@@ -749,7 +746,9 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("ut-driver").AnyTimes()
-	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	podNode1 := v1.PodSpec{}
+	podNode1.NodeName = "kvdb-node"
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), podNode1.NodeName).Return(podNode1, nil).AnyTimes()
 
 	// TestCase: Do not create kvdb pod if associated machine is being deleted
 	now := metav1.Now()
@@ -777,8 +776,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
-	podList = &v1.PodList{}
-	err = testutil.List(k8sClient, podList)
+	podList, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
 	require.NoError(t, err)
 	require.Len(t, podList.Items, 1)
 	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
@@ -786,13 +785,13 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	// TestCase: Create kvdb pod if associated machine is not found
 	k8sNode.Annotations[constants.AnnotationClusterAPIMachine] = "not-present"
 	k8sClient.Update(context.TODO(), k8sNode)
-	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
+	err = coreops.Instance().DeletePod(podList.Items[0].Name, podList.Items[0].Namespace, false)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
-	podList = &v1.PodList{}
-	err = testutil.List(k8sClient, podList)
+	podList, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
 	require.NoError(t, err)
 	require.Len(t, podList.Items, 1)
 	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
@@ -808,13 +807,13 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 		},
 	}
 	k8sClient.Update(context.TODO(), k8sNode)
-	k8sClient.Delete(context.TODO(), &(podList.Items[0]))
+	err = coreops.Instance().DeletePod(podList.Items[0].Name, podList.Items[0].Namespace, false)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
-	podList = &v1.PodList{}
-	err = testutil.List(k8sClient, podList)
+	podList, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
 	require.NoError(t, err)
 	require.Empty(t, podList.Items)
 
@@ -832,8 +831,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
-	podList = &v1.PodList{}
-	err = testutil.List(k8sClient, podList)
+	podList, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
 	require.NoError(t, err)
 	require.Len(t, podList.Items, 1)
 	require.Equal(t, controller.kvdbPodLabels(cluster), podList.Items[0].Labels)
