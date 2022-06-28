@@ -1110,6 +1110,51 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
+	// Validate KVDB
+	if err = ValidateKvdb(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateKvdb validates Portworx KVDB components
+func ValidateKvdb(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	if cluster.Spec.Kvdb.Internal {
+		logrus.Debug("Internal KVDB is Enabled")
+
+		t := func() (interface{}, bool, error) {
+			// Validate KVDB pods
+			listOptions := map[string]string{"kvdb": "true"}
+			podList, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get KVDB pods, Err: %v", err)
+			}
+
+			desiredKvdbPodCount := 3
+			if len(podList.Items) != 3 {
+				return nil, true, fmt.Errorf("failed to validate KVDB pod count, expected: %d, actual: %d", desiredKvdbPodCount, len(podList.Items))
+			}
+			logrus.Debugf("Found all %d/%d Internal KVDB pods", len(podList.Items), desiredKvdbPodCount)
+
+			// Validate Portworx KVDB service
+			portworxKvdbServiceName := "portworx-kvdb-service"
+			_, err = coreops.Instance().GetService(portworxKvdbServiceName, cluster.Namespace)
+			if errors.IsNotFound(err) {
+				return nil, true, fmt.Errorf("failed to validate Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
+			}
+			return nil, false, nil
+		}
+
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
+		}
+
+		logrus.Debug("Successfully validated Internal KVDB and its components")
+	} else {
+		logrus.Debug("Internal KVDB is Disabled")
+	}
+
 	return nil
 }
 
