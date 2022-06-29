@@ -8,6 +8,7 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
+	github.com/google/uuid v1.1.2
 	github.com/hashicorp/go-version v1.2.1
 	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
 	github.com/libopenstorage/openstorage v8.0.1-0.20211025171211-43eadb190637+incompatible
@@ -19,8 +20,9 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
+	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/sys v0.0.0-20220429233432-b5fbb4746d32 // indirect
-	golang.org/x/tools v0.1.11-0.20220316014157-77aa08bb151a // indirect
+	golang.org/x/tools v0.1.11 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/grpc v1.36.0
 	gopkg.in/yaml.v2 v2.4.0
