@@ -96,7 +96,7 @@ vendor:
 # - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
 
 $(GOPATH)/bin/golint:
-	GO111MODULE=off go get -u golang.org/x/lint/golint
+	go get -u golang.org/x/lint/golint
 
 $(GOPATH)/bin/errcheck:
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
