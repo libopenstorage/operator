@@ -1132,7 +1132,7 @@ func ValidateKvdb(cluster *corev1.StorageCluster, timeout, interval time.Duratio
 			}
 
 			desiredKvdbPodCount := 3
-			if len(podList.Items) != 3 {
+			if len(podList.Items) != desiredKvdbPodCount {
 				return nil, true, fmt.Errorf("failed to validate KVDB pod count, expected: %d, actual: %d", desiredKvdbPodCount, len(podList.Items))
 			}
 			logrus.Debugf("Found all %d/%d Internal KVDB pods", len(podList.Items), desiredKvdbPodCount)
@@ -1140,8 +1140,11 @@ func ValidateKvdb(cluster *corev1.StorageCluster, timeout, interval time.Duratio
 			// Validate Portworx KVDB service
 			portworxKvdbServiceName := "portworx-kvdb-service"
 			_, err = coreops.Instance().GetService(portworxKvdbServiceName, cluster.Namespace)
-			if errors.IsNotFound(err) {
-				return nil, true, fmt.Errorf("failed to validate Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					return nil, true, fmt.Errorf("failed to validate Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
+				}
+				return nil, true, fmt.Errorf("failed to get Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
 			}
 			return nil, false, nil
 		}
