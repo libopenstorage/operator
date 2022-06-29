@@ -3,6 +3,7 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-version"
@@ -12,6 +13,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -234,17 +236,26 @@ func (c *Controller) syncKVDB(
 		return nil
 	}
 
-	// ensure kvdb pods are present on nodes running kvdb
-	// list kvdb nodes on the node for this cluster
-	kvdbPodList := &v1.PodList{}
-	fieldSelector := fields.SelectorFromSet(map[string]string{"nodeName": storageNode.Name})
-	err := c.client.List(context.TODO(), kvdbPodList, &client.ListOptions{
-		Namespace:     storageNode.Namespace,
-		LabelSelector: labels.SelectorFromSet(c.kvdbPodLabels(cluster)),
-		FieldSelector: fieldSelector,
-	})
+	// Do not use c.client.List API, as it would hit controller runtime cache, which does not count pod in outOfPods status,
+	// operator would keep creating kvdb pods in this case. https://portworx.atlassian.net/browse/CEE-400
+	podList, err := coreops.Instance().GetPods(cluster.Namespace, c.kvdbPodLabels(cluster))
 	if err != nil {
 		return err
+	}
+	var kvdbPods []v1.Pod
+	for _, p := range podList.Items {
+		if p.Spec.NodeName == storageNode.Name {
+			// Let's delete the pod if it's in outOfPods status, so that a new one will be created.
+			if strings.ToLower(p.Status.Reason) == "outofpods" {
+				logrus.Warningf("Found pod with outOfPods status, will delete it: %+v", p)
+				err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
+				if err != nil {
+					return err
+				}
+			} else {
+				kvdbPods = append(kvdbPods, p)
+			}
+		}
 	}
 
 	if isNodeRunningKVDB(storageNode) { // create kvdb pod if not present
@@ -267,14 +278,14 @@ func (c *Controller) syncKVDB(
 			isRecentlyCreatedAfterNodeCordoned = k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.nodeInfoMap, cluster)
 		}
 
-		if !isBeingDeleted && !isRecentlyCreatedAfterNodeCordoned && len(kvdbPodList.Items) == 0 {
+		if !isBeingDeleted && !isRecentlyCreatedAfterNodeCordoned && len(kvdbPods) == 0 {
 			pod, err := c.createKVDBPod(cluster, storageNode)
 			if err != nil {
 				return err
 			}
 
 			c.log(storageNode).Infof("creating kvdb pod: %s/%s", pod.Namespace, pod.Name)
-			err = c.client.Create(context.TODO(), pod)
+			_, err = coreops.Instance().CreatePod(pod)
 			if err != nil {
 				return err
 			}
@@ -291,9 +302,9 @@ func (c *Controller) syncKVDB(
 			}
 		}
 	} else { // delete pods if present
-		for _, p := range kvdbPodList.Items {
+		for _, p := range kvdbPods {
 			c.log(storageNode).Debugf("deleting kvdb pod: %s/%s", p.Namespace, p.Name)
-			err = c.client.Delete(context.TODO(), &p)
+			err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
 			if err != nil {
 				c.log(storageNode).Warnf("failed to delete pod: %s/%s due to: %v", p.Namespace, p.Name, err)
 			}
