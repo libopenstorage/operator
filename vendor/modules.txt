@@ -94,6 +94,7 @@ github.com/google/gofuzz
 ## explicit
 github.com/google/shlex
 # github.com/google/uuid v1.1.2
+## explicit
 github.com/google/uuid
 # github.com/googleapis/gnostic v0.5.1
 github.com/googleapis/gnostic/compiler
