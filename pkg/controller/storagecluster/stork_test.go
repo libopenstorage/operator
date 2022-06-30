@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"reflect"
 	"strconv"
 	"strings"
@@ -31,6 +30,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
@@ -641,6 +641,21 @@ func TestStorkArgumentsChange(t *testing.T) {
 	require.Contains(t,
 		storkDeployment.Spec.Template.Spec.Containers[0].Command,
 		"--verbose=false",
+	)
+
+	// Check stork-scheduler with explicit verbose
+	cluster.Spec.Stork.Args["verbose"] = "true"
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	storkSchedDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, storkSchedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, storkSchedDeployment.Spec.Template.Spec.Containers[0].Command, 8)
+	require.Equal(t,
+		"--v=5",
+		storkSchedDeployment.Spec.Template.Spec.Containers[0].Command[7],
 	)
 }
 
