@@ -226,6 +226,14 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicSecurityRegression,
 	},
 	{
+		TestName:        "BasicKvdbRegression",
+		TestrailCaseIDs: []string{"C52665", "C52667", "C52670", "C50237", "C53582", "C53583", "C53586", "C57011"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "kvdb-regression-test"},
+		}),
+		TestFunc: BasicKvdbRegression,
+	},
+	{
 		TestName:        "InstallWithNodeTopologyLabels",
 		TestrailCaseIDs: []string{"C59259", "C59260", "C59261"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
@@ -982,6 +990,33 @@ func BasicSecurityRegression(tc *types.TestCase) func(*testing.T) {
 			return cluster
 		}
 		cluster = ci_utils.UpdateAndValidateSecurity(cluster, true, updateParamFunc, t)
+		require.NoError(t, err)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// BasicKvdbRegression test includes the following steps:
+// 1. Deploy PX and validate internal KVDB
+// 2. Validate KVDB pods and other components
+// 3. Delete KVDB pods and validate they get redeployed
+// 4. Delete StorageCluster and validate it got successfully removed
+func BasicKvdbRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// Create and validate StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Delete all KVDB pods and validate the get re-created
+		logrus.Info("Delete portworx KVDB pods and validate they get re-deployed")
+		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"kvdb": "true"}, 120*time.Second)
+		require.NoError(t, err)
+		err = testutil.ValidateKvdb(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
 		require.NoError(t, err)
 
 		// Delete and validate StorageCluster deletion
