@@ -29,7 +29,7 @@ const (
 	defaultAutopilotImage      = "portworx/autopilot:1.3.2.1"
 	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage      = "portworx/px-node-wiper:2.10.0"
-	defaultTelemetryImage      = "purestorage/ccm-service:3.2.10"
+	defaultTelemetryImage      = "purestorage/ccm-service:3.2.11"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
 	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
