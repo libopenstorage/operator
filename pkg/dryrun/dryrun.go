@@ -513,16 +513,18 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Env = nil
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Env = nil
-			}
-
-			if name == "autopilot" {
+			} else if name == "portworx-pvc-controller" {
+				// On IKS, pvc controller container will not have these two arguments after migration: leader-elect-resource-name=portworx-pvc-controller and --secure-port=9031
+				//WARN[0023] command is different: before-migration [kube-controller-manager --leader-elect=true --secure-port=9031 --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps --leader-elect-resource-name=portworx-pvc-controller], after-migration [kube-controller-manager --leader-elect=true --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps]
+				//WARN[0023] Containers are different: container portworx-pvc-controller-manager is different
+				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
+			} else if name == "autopilot" {
 				// To skip expected failure:
 				// "Containers are different: command is different: [/autopilot -f ./etc/config/config.yaml -log-level debug], [/autopilot --config=/etc/config/config.yaml --log-level=debug]\n\n\n"
 				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
-			}
-
-			if name == "px-csi-ext" {
+			} else if name == "px-csi-ext" {
 				err = d.deepEqualCSIPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
 			} else {
 				err = d.deepEqualPod(&dsObj.(*appsv1.Deployment).Spec.Template, &opObj.(*appsv1.Deployment).Spec.Template)
