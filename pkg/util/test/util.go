@@ -568,30 +568,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		}
 	}
 
-	// Construct PX Version string used to match to deployed expected PX version
-	if strings.Contains(pxImageList["version"], "_") {
-		if cluster.Spec.Env != nil {
-			for _, env := range cluster.Spec.Env {
-				if env.Name == PxReleaseManifestURLEnvVarName {
-					// Looking for clear PX version before /version in the URL
-					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
-					if ver != nil {
-						expectedPxVersion = ver[1]
-					} else {
-						// If the above regex found nothing, assuming it was a master version URL
-						expectedPxVersion = PxMasterVersion
-					}
-					break
-				}
-			}
-		}
-	} else {
-		expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
-	}
-
-	if expectedPxVersion == "" {
-		return fmt.Errorf("failed to get expected PX version")
-	}
+	expectedPxVersion = getPxVersion(pxImageList, cluster)
 
 	t := func() (interface{}, bool, error) {
 		// Get all StorageNodes
@@ -1626,7 +1603,7 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		}
 
 		// Validate CSI container images inside px-csi-ext pods
-		if err := validateCsiExtImages(cluster.Namespace, pxImageList); err != nil {
+		if err := validateCsiExtImages(cluster, pxImageList); err != nil {
 			return err
 		}
 
@@ -1875,14 +1852,47 @@ func validateCSITopologyFeatureGate(pod v1.Pod, topologyEnabled bool) error {
 	return nil
 }
 
-func validateCsiExtImages(namespace string, pxImageList map[string]string) error {
+func getPxVersion(pxImageList map[string]string, cluster *corev1.StorageCluster) string {
+	var pxVersion string
+
+	// Construct PX Version string used to match to deployed expected PX version
+	if strings.Contains(pxImageList["version"], "_") {
+		if cluster.Spec.Env != nil {
+			for _, env := range cluster.Spec.Env {
+				if env.Name == PxReleaseManifestURLEnvVarName {
+					// Looking for clear PX version before /version in the URL
+					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
+					if ver != nil {
+						pxVersion = ver[1]
+					} else {
+						// If the above regex found nothing, assuming it was a master version URL
+						pxVersion = PxMasterVersion
+					}
+					break
+				}
+			}
+		}
+	} else {
+		pxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+	}
+
+	if pxVersion == "" {
+		logrus.Error("failed to get PX version")
+		return ""
+	}
+
+	return pxVersion
+}
+
+func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string]string) error {
 	var csiProvisionerImage string
 	var csiSnapshotterImage string
 	var csiResizerImage string
+	var csiHealthMonitorControllerImage string
 
 	logrus.Debug("Validating CSI container images inside px-csi-ext pods")
 
-	deployment, err := appops.Instance().GetDeployment("px-csi-ext", namespace)
+	deployment, err := appops.Instance().GetDeployment("px-csi-ext", cluster.Namespace)
 	if err != nil {
 		return err
 	}
@@ -1911,6 +1921,16 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 		return fmt.Errorf("failed to find image for csiResizer")
 	}
 
+	pxVer2_10, _ := version.NewVersion("2.10")
+	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
+	if pxVersion.GreaterThanOrEqual(pxVer2_10) {
+		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
+			csiHealthMonitorControllerImage = value
+		} else {
+			return fmt.Errorf("failed to find image for csiHealthMonitorController")
+		}
+	}
+
 	// Go through each pod and find all container and match images for each container
 	for _, pod := range pods {
 		for _, container := range pod.Spec.Containers {
@@ -1925,6 +1945,10 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 			} else if container.Name == "csi-resizer" {
 				if container.Image != csiResizerImage {
 					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
+				}
+			} else if container.Name == "csi-health-monitor-controller" {
+				if container.Image != csiHealthMonitorControllerImage {
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiHealthMonitorControllerImage, container.Image)
 				}
 			}
 		}
