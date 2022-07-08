@@ -278,7 +278,7 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 	}
 
 	// For PX 2.12 and earlier, use provisioner fork.
-	if g.pxVersion.GreaterThanOrEqual(pxVer2_12) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_20) {
+	if g.pxVersion.LessThan(pxVer2_12) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_20) {
 		provisionerImage = "docker.io/openstorage/csi-provisioner:v3.1.0-3"
 	}
 
