@@ -25,6 +25,7 @@ var (
 	pxVer2_2, _   = version.NewVersion("2.2")
 	pxVer2_5, _   = version.NewVersion("2.5")
 	pxVer2_10, _  = version.NewVersion("2.10")
+	pxVer2_12, _  = version.NewVersion("2.12")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
@@ -259,9 +260,9 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.1.0-3"
-	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v5.0.1"
-	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v5.0.1"
+	provisionerImage := "k8s.gcr.io/sig-storage/csi-provisioner:v3.2.1"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1"
+	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v6.0.1"
 
 	// For k8s 1.19 and earlier, use older versions
 	if g.kubeVersion.LessThan(k8sVer1_20) {
@@ -276,14 +277,19 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 		snapshotterImage = "docker.io/openstorage/csi-snapshotter:v1.2.2-1"
 	}
 
+	// For PX 2.12 and earlier, use provisioner fork.
+	if g.pxVersion.GreaterThanOrEqual(pxVer2_12) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_20) {
+		provisionerImage = "docker.io/openstorage/csi-provisioner:v3.1.0-3"
+	}
+
 	return &CSIImages{
 		Attacher:                "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.0",
+		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1",
 		Provisioner:             provisionerImage,
 		Snapshotter:             snapshotterImage,
-		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.4.0",
+		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.5.0",
 		SnapshotController:      snapshotControllerImage,
-		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.5.0",
+		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.6.0",
 	}
 }
 
