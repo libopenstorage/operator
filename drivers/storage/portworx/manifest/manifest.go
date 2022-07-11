@@ -43,7 +43,7 @@ const (
 
 	// Default new Prometheus images for k8s 1.22+
 	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
-	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.36.0"
+	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.35.0"
 	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
