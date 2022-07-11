@@ -25,7 +25,6 @@ var (
 	pxVer2_2, _   = version.NewVersion("2.2")
 	pxVer2_5, _   = version.NewVersion("2.5")
 	pxVer2_10, _  = version.NewVersion("2.10")
-	pxVer2_12, _  = version.NewVersion("2.12")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
@@ -260,7 +259,7 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "k8s.gcr.io/sig-storage/csi-provisioner:v3.2.1"
+	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.2.1-1"
 	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1"
 	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v6.0.1"
 
@@ -275,11 +274,6 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 	if g.kubeVersion.LessThan(k8sVer1_17) {
 		provisionerImage = "docker.io/openstorage/csi-provisioner:v1.6.1-1"
 		snapshotterImage = "docker.io/openstorage/csi-snapshotter:v1.2.2-1"
-	}
-
-	// For PX 2.12 and earlier, use provisioner fork.
-	if g.pxVersion.LessThan(pxVer2_12) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_20) {
-		provisionerImage = "docker.io/openstorage/csi-provisioner:v3.1.0-3"
 	}
 
 	return &CSIImages{
