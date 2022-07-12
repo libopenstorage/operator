@@ -3,7 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
-/var	"path"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
