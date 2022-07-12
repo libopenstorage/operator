@@ -48,6 +48,7 @@ const (
 	dsLvmVolumeName                   = "lvm"
 	dsSysVolumeName                   = "sys"
 	dsUdevVolumeName                  = "run-udev-data"
+	dsVarCoresVolumeName              = "varcores"
 	sysdmount                         = "/etc/systemd/system"
 	devMount                          = "/dev"
 	multipathMount                    = "/etc/multipath"
@@ -55,10 +56,12 @@ const (
 	sysMount                          = "/sys"
 	udevMount                         = "/run/udev/data"
 	dbusPath                          = "/var/run/dbus"
+	varCores                          = "/var/cores"
 	pksPersistentStoreRoot            = "/var/vcap/store"
 	pxOptPwx                          = "/opt/pwx"
 	pxEtcPwx                          = "/etc/pwx"
 	pxSockPwx                         = "/var/lib/osd/driver"
+	pxCoresPwx                        = "/var/cores"
 	pxNodeWiperClusterRoleName        = "px-node-wiper"
 	pxNodeWiperClusterRoleBindingName = "px-node-wiper"
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
@@ -285,6 +288,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 									Name:      dsSysVolumeName,
 									MountPath: sysMount,
 								},
+								{
+									Name:      dsVarCoresVolumeName,
+									MountPath: pxCoresPwx,
+								},
 							},
 						},
 					},
@@ -378,6 +385,14 @@ func (u *uninstallPortworx) RunNodeWiper(
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
 									Path: sysMount,
+								},
+							},
+						},
+						{
+							Name: dsVarCoresVolumeName,
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: varCores,
 								},
 							},
 						},
