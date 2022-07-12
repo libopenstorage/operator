@@ -392,7 +392,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 							Name: dsVarCoresVolumeName,
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
-									Path: varCores,
+									Path: path.Join(pwxHostPathRoot + pxCoresPwx),
 								},
 							},
 						},
