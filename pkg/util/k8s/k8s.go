@@ -1836,3 +1836,150 @@ func GetV1beta1CRDFromFile(
 	}
 	return crd, nil
 }
+
+// GetAllObjects gets all objects from k8s
+func GetAllObjects(k8sClient client.Client, namespace string) ([]client.Object, error) {
+	var objs []client.Object
+
+	objectLists := []client.ObjectList{
+		&v1.ServiceList{},
+		&v1.ServiceAccountList{},
+		&v1.SecretList{},
+		&v1.ConfigMapList{},
+		&v1.PodList{},
+		&v1.PersistentVolumeClaimList{},
+		&appsv1.DaemonSetList{},
+		&appsv1.DeploymentList{},
+		&appsv1.StatefulSetList{},
+		&rbacv1.ClusterRoleList{},
+		&rbacv1.ClusterRoleBindingList{},
+		&rbacv1.RoleList{},
+		&rbacv1.RoleBindingList{},
+		&storagev1.StorageClassList{},
+	}
+
+	for _, objectList := range objectLists {
+		if err := AppendObjectList(k8sClient, namespace, objectList, &objs); err != nil {
+			return objs, err
+		}
+	}
+
+	return objs, nil
+}
+
+// AppendObjectList gets objects from k8s and adds to the list
+func AppendObjectList(k8sClient client.Client, namespace string, list client.ObjectList, objs *[]client.Object) error {
+	err := k8sClient.List(
+		context.TODO(),
+		list,
+		&client.ListOptions{
+			Namespace: namespace,
+		})
+	if err != nil {
+		logrus.WithError(err).Errorf("failed to list objects %v", list.GetObjectKind())
+		return err
+	}
+
+	if l, ok := list.(*v1.ServiceList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Service"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*v1.ServiceAccountList); ok {
+		for _, o := range l.Items {
+			o.Kind = "ServiceAccount"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*v1.SecretList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Secret"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*v1.ConfigMapList); ok {
+		for _, o := range l.Items {
+			o.Kind = "ConfigMap"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*v1.PodList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Pod"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*v1.PersistentVolumeClaimList); ok {
+		for _, o := range l.Items {
+			o.Kind = "PersistentVolumeClaim"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*appsv1.DaemonSetList); ok {
+		for _, o := range l.Items {
+			o.Kind = "DaemonSet"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*appsv1.DeploymentList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Deployment"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*appsv1.StatefulSetList); ok {
+		for _, o := range l.Items {
+			o.Kind = "StatefulSet"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*rbacv1.ClusterRoleList); ok {
+		for _, o := range l.Items {
+			o.Kind = "ClusterRole"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*rbacv1.ClusterRoleBindingList); ok {
+		for _, o := range l.Items {
+			o.Kind = "ClusterRoleBinding"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*rbacv1.RoleList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Role"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*rbacv1.RoleBindingList); ok {
+		for _, o := range l.Items {
+			o.Kind = "RoleBinding"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*storagev1.StorageClassList); ok {
+		for _, o := range l.Items {
+			o.Kind = "StorageClass"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*apiextensionsv1.CustomResourceDefinitionList); ok {
+		for _, o := range l.Items {
+			o.Kind = "CustomResourceDefinition"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*monitoringv1.ServiceMonitorList); ok {
+		for _, o := range l.Items {
+			o.Kind = "ServiceMonitor"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*monitoringv1.PrometheusRuleList); ok {
+		for _, o := range l.Items {
+			o.Kind = "PrometheusRule"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*monitoringv1.PrometheusList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Prometheus"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else if l, ok := list.(*monitoringv1.AlertmanagerList); ok {
+		for _, o := range l.Items {
+			o.Kind = "Alertmanager"
+			*objs = append(*objs, o.DeepCopy())
+		}
+	} else {
+		msg := fmt.Sprintf("Unknown object kind %s", list.GetObjectKind())
+		logrus.Error(msg)
+		return fmt.Errorf(msg)
+	}
+
+	return nil
+}

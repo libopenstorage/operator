@@ -819,6 +819,10 @@ func (c *Controller) createStorkSchedDeployment(
 		"--lock-object-name=stork-scheduler",
 	}
 
+	if val, ok := cluster.Spec.Stork.Args["verbose"]; ok && val == "true" {
+		command = append(command, "--v=5")
+	}
+
 	existingDeployment := &apps.Deployment{}
 	err = c.client.Get(
 		context.TODO(),

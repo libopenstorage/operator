@@ -26,12 +26,12 @@ const (
 	// if none specified and if version manifest could not be fetched
 	DefaultPortworxVersion     = "2.8.1.2"
 	defaultStorkImage          = "openstorage/stork:2.7.0"
-	defaultAutopilotImage      = "portworx/autopilot:1.3.1"
+	defaultAutopilotImage      = "portworx/autopilot:1.3.2.1"
 	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage      = "portworx/px-node-wiper:2.10.0"
-	defaultTelemetryImage      = "purestorage/ccm-service:3.0.9"
-	defaultCollectorProxyImage = "envoyproxy/envoy:v1.19.1"
-	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.0"
+	defaultTelemetryImage      = "purestorage/ccm-service:3.2.11"
+	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
+	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
 	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
@@ -43,7 +43,7 @@ const (
 
 	// Default new Prometheus images for k8s 1.22+
 	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
-	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.36.0"
+	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.35.0"
 	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 

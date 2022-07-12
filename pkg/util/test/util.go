@@ -568,30 +568,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 		}
 	}
 
-	// Construct PX Version string used to match to deployed expected PX version
-	if strings.Contains(pxImageList["version"], "_") {
-		if cluster.Spec.Env != nil {
-			for _, env := range cluster.Spec.Env {
-				if env.Name == PxReleaseManifestURLEnvVarName {
-					// Looking for clear PX version before /version in the URL
-					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
-					if ver != nil {
-						expectedPxVersion = ver[1]
-					} else {
-						// If the above regex found nothing, assuming it was a master version URL
-						expectedPxVersion = PxMasterVersion
-					}
-					break
-				}
-			}
-		}
-	} else {
-		expectedPxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
-	}
-
-	if expectedPxVersion == "" {
-		return fmt.Errorf("failed to get expected PX version")
-	}
+	expectedPxVersion = getPxVersion(pxImageList, cluster)
 
 	t := func() (interface{}, bool, error) {
 		// Get all StorageNodes
@@ -779,6 +756,41 @@ func ValidateUninstallStorageCluster(
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
+	// Validate deletion of Portworx ConfigMaps
+	if err := validatePortworxConfigMapsDeleted(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validatePortworxConfigMapsDeleted(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	configMapList := []string{"px-attach-driveset-lock", fmt.Sprintf("px-bootstrap-%s", cluster.Name), "px-bringup-queue-lockdefault", fmt.Sprintf("px-cloud-drive-%s", cluster.Name)}
+
+	t := func() (interface{}, bool, error) {
+		var presentConfigMaps []string
+		for _, configMapName := range configMapList {
+			_, err := coreops.Instance().GetConfigMap(configMapName, "kube-system")
+			if err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return "", true, err
+			}
+			presentConfigMaps = append(presentConfigMaps, configMapName)
+		}
+		if len(presentConfigMaps) > 0 {
+			return "", true, fmt.Errorf("not all expected configMaps have been deleted, waiting for %s to be deleted", presentConfigMaps)
+		}
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Debug("Portworx ConfigMaps have been deleted successfully")
 	return nil
 }
 
@@ -1073,6 +1085,54 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	previouslyEnabled := false
 	if err = ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
 		return err
+	}
+
+	// Validate KVDB
+	if err = ValidateKvdb(cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateKvdb validates Portworx KVDB components
+func ValidateKvdb(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	if cluster.Spec.Kvdb.Internal {
+		logrus.Debug("Internal KVDB is Enabled")
+
+		t := func() (interface{}, bool, error) {
+			// Validate KVDB pods
+			listOptions := map[string]string{"kvdb": "true"}
+			podList, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get KVDB pods, Err: %v", err)
+			}
+
+			desiredKvdbPodCount := 3
+			if len(podList.Items) != desiredKvdbPodCount {
+				return nil, true, fmt.Errorf("failed to validate KVDB pod count, expected: %d, actual: %d", desiredKvdbPodCount, len(podList.Items))
+			}
+			logrus.Debugf("Found all %d/%d Internal KVDB pods", len(podList.Items), desiredKvdbPodCount)
+
+			// Validate Portworx KVDB service
+			portworxKvdbServiceName := "portworx-kvdb-service"
+			_, err = coreops.Instance().GetService(portworxKvdbServiceName, cluster.Namespace)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					return nil, true, fmt.Errorf("failed to validate Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
+				}
+				return nil, true, fmt.Errorf("failed to get Portworx KVDB service %s, Err: %v", portworxKvdbServiceName, err)
+			}
+			return nil, false, nil
+		}
+
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
+		}
+
+		logrus.Debug("Successfully validated Internal KVDB and its components")
+	} else {
+		logrus.Debug("Internal KVDB is Disabled")
 	}
 
 	return nil
@@ -1543,7 +1603,7 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		}
 
 		// Validate CSI container images inside px-csi-ext pods
-		if err := validateCsiExtImages(cluster.Namespace, pxImageList); err != nil {
+		if err := validateCsiExtImages(cluster, pxImageList); err != nil {
 			return err
 		}
 
@@ -1792,14 +1852,47 @@ func validateCSITopologyFeatureGate(pod v1.Pod, topologyEnabled bool) error {
 	return nil
 }
 
-func validateCsiExtImages(namespace string, pxImageList map[string]string) error {
+func getPxVersion(pxImageList map[string]string, cluster *corev1.StorageCluster) string {
+	var pxVersion string
+
+	// Construct PX Version string used to match to deployed expected PX version
+	if strings.Contains(pxImageList["version"], "_") {
+		if cluster.Spec.Env != nil {
+			for _, env := range cluster.Spec.Env {
+				if env.Name == PxReleaseManifestURLEnvVarName {
+					// Looking for clear PX version before /version in the URL
+					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
+					if ver != nil {
+						pxVersion = ver[1]
+					} else {
+						// If the above regex found nothing, assuming it was a master version URL
+						pxVersion = PxMasterVersion
+					}
+					break
+				}
+			}
+		}
+	} else {
+		pxVersion = strings.TrimSpace(regexp.MustCompile(`:(\S+)`).FindStringSubmatch(pxImageList["version"])[1])
+	}
+
+	if pxVersion == "" {
+		logrus.Error("failed to get PX version")
+		return ""
+	}
+
+	return pxVersion
+}
+
+func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string]string) error {
 	var csiProvisionerImage string
 	var csiSnapshotterImage string
 	var csiResizerImage string
+	var csiHealthMonitorControllerImage string
 
 	logrus.Debug("Validating CSI container images inside px-csi-ext pods")
 
-	deployment, err := appops.Instance().GetDeployment("px-csi-ext", namespace)
+	deployment, err := appops.Instance().GetDeployment("px-csi-ext", cluster.Namespace)
 	if err != nil {
 		return err
 	}
@@ -1828,6 +1921,16 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 		return fmt.Errorf("failed to find image for csiResizer")
 	}
 
+	pxVer2_10, _ := version.NewVersion("2.10")
+	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
+	if pxVersion.GreaterThanOrEqual(pxVer2_10) {
+		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
+			csiHealthMonitorControllerImage = value
+		} else {
+			return fmt.Errorf("failed to find image for csiHealthMonitorController")
+		}
+	}
+
 	// Go through each pod and find all container and match images for each container
 	for _, pod := range pods {
 		for _, container := range pod.Spec.Containers {
@@ -1842,6 +1945,10 @@ func validateCsiExtImages(namespace string, pxImageList map[string]string) error
 			} else if container.Name == "csi-resizer" {
 				if container.Image != csiResizerImage {
 					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
+				}
+			} else if container.Name == "csi-health-monitor-controller" {
+				if container.Image != csiHealthMonitorControllerImage {
+					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiHealthMonitorControllerImage, container.Image)
 				}
 			}
 		}
