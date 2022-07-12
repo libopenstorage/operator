@@ -52,6 +52,8 @@ spec:
           readOnly: true
         - name: sys
           mountPath: /sys
+        - name: varcores
+          mountPath: /var/cores
       restartPolicy: Always
       serviceAccountName: px-node-wiper
       volumes:
@@ -90,3 +92,6 @@ spec:
       - name: sys
         hostPath:
           path: /sys
+      - name: varcores
+        hostPath:
+          path: /var/vcap/store/cores
