@@ -3,7 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
-	"path"
+/var	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -167,12 +167,14 @@ func (u *uninstallPortworx) RunNodeWiper(
 	recorder record.EventRecorder,
 ) error {
 	pwxHostPathRoot := "/"
+	coresPwx := varCores
 
 	enabled, err := strconv.ParseBool(u.cluster.Annotations[pxutil.AnnotationIsPKS])
 	isPKS := err == nil && enabled
 
 	if isPKS {
 		pwxHostPathRoot = pksPersistentStoreRoot
+		coresPwx = path.Join(pwxHostPathRoot, path.Base(varCores))
 	}
 
 	trueVar := true
@@ -392,7 +394,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 							Name: dsVarCoresVolumeName,
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
-									Path: path.Join(pwxHostPathRoot + pxCoresPwx),
+									Path: coresPwx,
 								},
 							},
 						},
