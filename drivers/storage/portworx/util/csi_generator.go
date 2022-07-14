@@ -259,9 +259,9 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.1.0-3"
-	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v5.0.1"
-	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v5.0.1"
+	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.2.1-1"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1"
+	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v6.0.1"
 
 	// For k8s 1.19 and earlier, use older versions
 	if g.kubeVersion.LessThan(k8sVer1_20) {
@@ -278,12 +278,12 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 
 	return &CSIImages{
 		Attacher:                "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.0",
+		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1",
 		Provisioner:             provisionerImage,
 		Snapshotter:             snapshotterImage,
-		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.4.0",
+		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.5.0",
 		SnapshotController:      snapshotControllerImage,
-		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.5.0",
+		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.6.0",
 	}
 }
 
