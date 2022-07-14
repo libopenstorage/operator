@@ -237,7 +237,9 @@ func (c *Controller) syncKVDB(
 	}
 
 	// Do not use c.client.List API, as it would hit controller runtime cache, which does not count pod in outOfPods status,
-	// operator would keep creating kvdb pods in this case. https://portworx.atlassian.net/browse/CEE-400
+	// operator would keep creating kvdb pods in this case.
+	// https://portworx.atlassian.net/browse/CEE-400
+	// https://portworx.atlassian.net/browse/OPERATOR-809
 	podList, err := coreops.Instance().GetPods(cluster.Namespace, c.kvdbPodLabels(cluster))
 	if err != nil {
 		return err
@@ -245,9 +247,9 @@ func (c *Controller) syncKVDB(
 	var kvdbPods []v1.Pod
 	for _, p := range podList.Items {
 		if p.Spec.NodeName == storageNode.Name {
-			// Let's delete the pod if it's in outOfPods status, so that a new one will be created.
-			if strings.ToLower(p.Status.Reason) == "outofpods" {
-				logrus.Warningf("Found pod with outOfPods status, will delete it: %+v", p)
+			// Let's delete the pod so that a new one will be created.
+			if strings.ToLower(p.Status.Reason) == "outofpods" || strings.ToLower(p.Status.Reason) == "evicted" {
+				logrus.Warningf("Found pod with %s status, will delete it: %+v", p.Status.Reason, p)
 				err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
 				if err != nil {
 					return err
