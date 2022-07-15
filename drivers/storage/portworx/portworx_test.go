@@ -5802,6 +5802,79 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	require.Empty(t, dsList.Items)
 }
 
+func TestDeleteEssentialSecret(t *testing.T) {
+	testDeleteEssentialSecret(t, true)
+	testDeleteEssentialSecret(t, false)
+}
+
+func testDeleteEssentialSecret(t *testing.T, wipe bool) {
+	deleteType := corev1.UninstallStorageClusterStrategyType
+	if wipe {
+		deleteType = corev1.UninstallAndWipeStorageClusterStrategyType
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: deleteType,
+			},
+		},
+	}
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 1,
+		},
+	}
+	wiperPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
+		},
+	}
+
+	essentialSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.EssentialsSecretName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{},
+	}
+	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, essentialSecret)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// Check condition
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
+
+	secrets := &v1.SecretList{}
+	err = testutil.List(k8sClient, secrets)
+	require.NoError(t, err)
+	if wipe {
+		require.Empty(t, secrets.Items)
+	} else {
+		require.Equal(t, 1, len(secrets.Items))
+	}
+}
+
 func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing.T) {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
