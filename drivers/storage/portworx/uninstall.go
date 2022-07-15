@@ -131,6 +131,10 @@ func (u *uninstallPortworx) GetNodeWiperStatus() (int32, int32, int32, error) {
 }
 
 func (u *uninstallPortworx) WipeMetadata() error {
+	if err := k8sutil.DeleteSecret(u.k8sClient, pxutil.EssentialsSecretName, u.cluster.Namespace); err != nil {
+		return err
+	}
+
 	strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(u.cluster.Name, ""))
 
 	configMaps := []string{
@@ -159,6 +163,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		logrus.Warnf("Failed to create a kvdb client for %v", u.cluster.Spec.Kvdb.Endpoints)
 		return err
 	}
+
 	return kv.DeleteTree(u.cluster.Name)
 }
 

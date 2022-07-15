@@ -1789,8 +1789,8 @@ func DeleteSecret(
 	// even if the object has no owner
 	if (len(secret.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(secret.OwnerReferences) > 0 && len(secret.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete secret %s/%s as it is not owned",
-			namespace, name)
+		logrus.Debugf("Cannot delete secret %s/%s as it is not owned, secret ownerRef: %v, desired ownerRef: %v",
+			namespace, name, secret.OwnerReferences, owners)
 		return nil
 	}
 
