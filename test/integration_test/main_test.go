@@ -1,3 +1,4 @@
+//go:build integrationtest
 // +build integrationtest
 
 package integrationtest
@@ -80,6 +81,10 @@ func setup() error {
 		"is-eks",
 		false,
 		"Is this EKS")
+	flag.BoolVar(&ci_utils.IsAks,
+		"is-aks",
+		false,
+		"Is this AKS")
 	flag.StringVar(&logLevel,
 		"log-level",
 		"",

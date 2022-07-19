@@ -60,6 +60,7 @@ spec:
     - -portworx-env-vars=PORTWORX_ENV_VARS
     - -is-ocp=IS_OCP
     - -is-eks=IS_EKS
+    - -is-aks=IS_AKS
     - -cloud-provider=CLOUD_PROVIDER
     - -px-upgrade-hops-url-list=PX_UPGRADE_HOPS_URL_LIST
     - -operator-upgrade-hops-image-list=OPERATOR_UPGRADE_HOPS_IMAGE_LIST

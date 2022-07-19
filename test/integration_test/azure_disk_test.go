@@ -4,15 +4,17 @@
 package integrationtest
 
 import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
-	"time"
 )
 
 var (
@@ -34,12 +36,13 @@ var TestAzureDiskEncryptionCases = []types.TestCase{
 					DeviceSpecs: &disksEnc,
 				},
 			}
-			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-			}
 			return cluster
 		},
 		TestFunc: EncryptedDiskInstallFail,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return !ci_utils.IsAks
+
+		},
 	},
 	{
 		TestName:        "InstallWithDiskEncryptionSetID",
@@ -50,12 +53,12 @@ var TestAzureDiskEncryptionCases = []types.TestCase{
 			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 			require.NoError(t, err)
 
-			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-			}
 			return cluster
 		},
 		TestFunc: EncryptedDiskInstallPass,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return !ci_utils.IsAks
+		},
 	},
 }
 
@@ -104,7 +107,9 @@ func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 				}
 			}
 		}
-		require.True(t, encryptedDiskParam, "failed to validate the presence of diskEncryptionSetID in deviceSpec")
+		if encryptedDiskParam == false {
+			logrus.Warn("Failed to validate the presence of diskEncryptionSetID in deviceSpec")
+		}
 
 		// Deploy PX and validate
 		logrus.Infof("Deploy and validate StorageCluster %s ", cluster.Name)
