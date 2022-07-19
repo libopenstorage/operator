@@ -109,6 +109,7 @@ func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 		}
 		if encryptedDiskParam == false {
 			logrus.Warn("Failed to validate the presence of diskEncryptionSetID in deviceSpec")
+			return
 		}
 
 		// Deploy PX and validate
