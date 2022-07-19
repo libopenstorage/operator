@@ -49,6 +49,9 @@ var (
 
 	// IsEks is an indication that this is EKS cluster or not
 	IsEks bool
+
+	// IsAks is an indication that this is AKS cluster or not
+	IsAks bool
 )
 
 const (

@@ -2818,6 +2818,30 @@ func ValidateStorageClusterFailedEvents(
 		return err
 	}
 
+	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan)
+}
+
+// ValidateStorageClusterInstallFailedWithEvents checks a StorageCluster installation failed with a logged event
+func ValidateStorageClusterInstallFailedWithEvents(
+	clusterSpec *corev1.StorageCluster,
+	timeout, interval time.Duration,
+	eventsFieldSelector string,
+	eventsNewerThan time.Time,
+) error {
+	// Validate StorageCluster started Initializing  (note: will be stuck in this phase...)
+	err := validateStorageClusterIsInitializing(clusterSpec, timeout, interval)
+	if err != nil {
+		return err
+	}
+	logrus.Debug("Validating K8 event for NodeStartFailure")
+	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan)
+}
+
+func validateK8Events(
+	clusterSpec *corev1.StorageCluster,
+	timeout, interval time.Duration,
+	eventsFieldSelector string,
+	eventsNewerThan time.Time) error {
 	// List newer events -- ensure requested `eventsFieldSelector` is listed
 	t := func() (interface{}, bool, error) {
 		tmout := int64(timeout.Seconds() / 2)
