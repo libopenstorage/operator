@@ -772,7 +772,7 @@ func (t *template) getCloudProvider() string {
 
 func (t *template) getArguments() []string {
 	args := []string{
-		"-c", t.cluster.Name,
+		"-c", pxutil.GetClusterID(t.cluster),
 		"-x", "kubernetes",
 	}
 

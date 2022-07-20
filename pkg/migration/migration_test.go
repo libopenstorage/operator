@@ -4848,6 +4848,117 @@ func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
 	require.False(t, annotationExists)
 }
 
+func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
+	clusterID := "px-cluster_INVALID.Name"
+	stcName := "px-cluster-invalidname"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterID,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	ctrl.SetEventRecorder(record.NewFakeRecorder(10))
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.16.0",
+	}
+
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	time.Sleep(2 * time.Second)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      stcName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+				pxutil.AnnotationClusterID:            clusterID,
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					ExportMetrics: false,
+					// Prometheus is not enabled although prometheus is present. This is because
+					// the portworx metrics are not exported nor alert manager is running.
+					Enabled: false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase:         constants.PhaseAwaitingApproval,
+			DesiredImages: &corev1.ComponentImages{},
+		},
+	}
+	cluster := &corev1.StorageCluster{}
+	err := testutil.Get(k8sClient, cluster, stcName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	expectedCluster.Spec.Env = nil
+	cluster.Spec.Env = nil
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status, cluster.Status)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+}
+
 func validateMigrationIsInProgress(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,

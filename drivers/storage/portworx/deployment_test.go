@@ -3711,6 +3711,35 @@ func TestPruneVolumes(t *testing.T) {
 	assert.Equal(t, expectedMounts, spec.Containers[2].VolumeMounts)
 }
 
+func TestPodSpecWithClusterIDOverwritten(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationClusterID: "cluster-id-overwritten",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.0.3.4",
+		},
+	}
+	driver := portworx{}
+
+	expectedArgs := []string{
+		"-c", "cluster-id-overwritten",
+		"-x", "kubernetes",
+	}
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
 	json, err := ioutil.ReadFile(fileName)
 	assert.NoError(t, err)

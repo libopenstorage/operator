@@ -6267,6 +6267,89 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	require.Empty(t, configMaps.Items)
 }
 
+func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwriteClusterID(t *testing.T) {
+	clusterID := "clusterID_with-special-chars"
+	strippedClusterName := "clusteridwithspecialchars"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationClusterID: clusterID,
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 1,
+		},
+	}
+	wiperPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
+		},
+	}
+	etcdConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      internalEtcdConfigMapPrefix + strippedClusterName,
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	cloudDriveConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cloudDriveConfigMapPrefix + strippedClusterName,
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	pureConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pureStorageCloudDriveConfigMap,
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	configMaps := &v1.ConfigMapList{}
+	err := testutil.List(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Len(t, configMaps.Items, 3)
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// Check condition
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	// Check config maps are deleted
+	configMaps = &v1.ConfigMapList{}
+	err = testutil.List(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Empty(t, configMaps.Items)
+}
+
 func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T) {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6435,6 +6518,64 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
+	require.Error(t, err)
+	require.Equal(t, kvdb.ErrNotFound, err)
+}
+
+func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbDataWhenOverwriteClusterID(t *testing.T) {
+	clusterID := "clusterID_with-special-chars"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationClusterID: clusterID,
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Endpoints: []string{
+					"etcd://kvdb1.com:2001",
+					"etcd://kvdb2.com:2001",
+				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+	}
+
+	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
+	driver := portworx{
+		k8sClient: k8sClient,
+	}
+
+	// Test etcd v3 without http/https
+	kvdbMem, err := kvdb.New(mem.Name, pxKvdbPrefix, nil, nil, kvdb.LogFatalErrorCB)
+	require.NoError(t, err)
+	kvdbMem.Put(clusterID+"/foo", "bar", 0)
+	getKVDBVersion = func(_ string, url string, opts map[string]string) (string, error) {
+		return kvdb.EtcdVersion3, nil
+	}
+	newKVDB = func(name, _ string, machines []string, opts map[string]string, _ kvdb.FatalErrorCB) (kvdb.Kvdb, error) {
+		require.Equal(t, e3.Name, name)
+		require.ElementsMatch(t, []string{"http://kvdb1.com:2001", "http://kvdb2.com:2001"}, machines)
+		require.Empty(t, opts)
+		return kvdbMem, nil
+	}
+
+	kp, err := kvdbMem.Get(clusterID + "/foo")
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(kp.Value))
+
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+
+	_, err = kvdbMem.Get(clusterID + "/foo")
 	require.Error(t, err)
 	require.Equal(t, kvdb.ErrNotFound, err)
 }
@@ -6797,6 +6938,135 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	driver.k8sClient.Delete(context.TODO(), cm)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
+}
+
+func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
+	// Create fake k8s client without any nodes to lookup
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	clusterName := "px-cluster"
+	clusterID := "clusterID_with-special-chars"
+	clusterNS := "kube-system"
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	defer mockSdk.Stop()
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: clusterNS,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: clusterNS,
+			Annotations: map[string]string{
+				pxutil.AnnotationClusterID: clusterID,
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: "Initializing",
+		},
+	}
+
+	cmName := k8s.GetBootstrapConfigMapName(clusterID)
+
+	// TEST 1: Add missing KVDB condition
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		AnyTimes()
+	// Mock node enumerate response
+	expectedNodeOne := &api.StorageNode{
+		Id:                "node-one",
+		SchedulerNodeName: "node-one",
+		DataIp:            "10.0.1.1",
+		MgmtIp:            "10.0.1.2",
+		Status:            api.Status_STATUS_NONE,
+	}
+	expectedNodeTwo := &api.StorageNode{
+		Id:                "node-two",
+		SchedulerNodeName: "node-two",
+		DataIp:            "10.0.2.1",
+		MgmtIp:            "10.0.2.2",
+		Status:            api.Status_STATUS_OK,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
+	}
+
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: clusterNS,
+		},
+		Data: map[string]string{
+			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+		},
+	}
+
+	driver.k8sClient.Create(context.TODO(), cm)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	// check if both storage nodes exist and have the KVDB condition
+	for _, n := range []string{"node-one", "node-two"} {
+		found := false
+		checkStorageNode := &corev1.StorageNode{}
+		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+			Name:      n,
+			Namespace: clusterNS,
+		}, checkStorageNode)
+		require.NoError(t, err)
+
+		for _, c := range checkStorageNode.Status.Conditions {
+			if c.Type == corev1.NodeKVDBCondition {
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+	}
 }
 
 func fakeClientWithWiperPod(namespace string) client.Client {
