@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -184,7 +185,12 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 	for i := 0; i < len(c.Args); i++ {
 		arg := c.Args[i]
 		if arg == "-c" {
-			cluster.Name = c.Args[i+1]
+			clusterID := c.Args[i+1]
+			cluster.Name = getStorageClusterNameFromClusterID(clusterID)
+			// If the cluster name got formatted, save the original cluster ID to storage cluster annotation
+			if cluster.Name != clusterID {
+				cluster.Annotations[pxutil.AnnotationClusterID] = clusterID
+			}
 			i++
 		} else if arg == "-x" {
 			i++
@@ -1150,6 +1156,20 @@ func initRuntimeOptions(cluster *corev1.StorageCluster) {
 	if cluster.Spec.RuntimeOpts == nil {
 		cluster.Spec.RuntimeOpts = map[string]string{}
 	}
+}
+
+func getStorageClusterNameFromClusterID(clusterID string) string {
+	// Must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character
+	// If the cluster ID is a valid k8s object name, just set it as the storage cluster name
+	validNameRegex := regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+	if validNameRegex.MatchString(clusterID) {
+		return clusterID
+	}
+
+	// If the cluster ID is invalid as a k8s object name, replace '_' with '-' then remove all invalid characters
+	invalidCharRegex := regexp.MustCompile(`[^a-z0-9-]+`)
+	clusterID = strings.Trim(strings.ReplaceAll(clusterID, "_", "-"), "-")
+	return invalidCharRegex.ReplaceAllString(strings.ToLower(clusterID), "")
 }
 
 func boolPtr(value bool) *bool {
