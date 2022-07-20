@@ -717,7 +717,7 @@ func getPortworxClusterName(ds *appsv1.DaemonSet) string {
 	c := getPortworxContainer(ds)
 	for i, arg := range c.Args {
 		if arg == "-c" {
-			return c.Args[i+1]
+			return getStorageClusterNameFromClusterID(c.Args[i+1])
 		}
 	}
 	return ""
