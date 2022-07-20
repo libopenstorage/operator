@@ -135,7 +135,8 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		return err
 	}
 
-	strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(u.cluster.Name, ""))
+	clusterID := pxutil.GetClusterID(u.cluster)
+	strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(clusterID, ""))
 
 	configMaps := []string{
 		fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName),
@@ -164,7 +165,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		return err
 	}
 
-	return kv.DeleteTree(u.cluster.Name)
+	return kv.DeleteTree(clusterID)
 }
 
 func (u *uninstallPortworx) RunNodeWiper(

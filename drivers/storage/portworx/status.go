@@ -109,7 +109,8 @@ func (p *portworx) updateStorageNodes(
 	// If cluster is running internal kvdb, get current bootstrap nodes
 	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
 	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
-		strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(cluster.Name, ""))
+		clusterID := pxutil.GetClusterID(cluster)
+		strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(clusterID, ""))
 		cmName := fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName)
 
 		cm := &v1.ConfigMap{}

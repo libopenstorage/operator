@@ -123,6 +123,8 @@ const (
 	AnnotationHostPid = pxAnnotationPrefix + "/host-pid"
 	// AnnotationDNSPolicy configures dns policy for portworx pod.
 	AnnotationDNSPolicy = pxAnnotationPrefix + "/dns-policy"
+	// AnnotationClusterID overwrites portworx cluster ID, which is the storage cluster name by default
+	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -1012,4 +1014,12 @@ func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *app
 			}
 		}
 	}
+}
+
+// GetClusterID returns portworx instance cluster ID
+func GetClusterID(cluster *corev1.StorageCluster) string {
+	if cluster.Annotations[AnnotationClusterID] != "" {
+		return cluster.Annotations[AnnotationClusterID]
+	}
+	return cluster.Name
 }
