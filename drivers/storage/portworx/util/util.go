@@ -217,7 +217,6 @@ var (
 
 	// MinimumSupportedK8sVersion minimum k8s version PX supports
 	MinimumSupportedK8sVersion, _ = version.NewVersion("v1.12.0")
-
 	// MinimumPxVersionCCM minimum PX version to install ccm
 	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
 	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
@@ -823,6 +822,16 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.Monitoring != nil &&
 		spec.Monitoring.Telemetry != nil &&
 		spec.Monitoring.Telemetry.Enabled
+}
+
+// IsCCMGoSupported returns true if px version is higher than 2.12
+func IsCCMGoSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
+}
+
+// RunCCMGo returns whether to run new ccm go or old ccm java based on if the telemetry proxy image is set
+func RunCCMGo(cluster *corev1.StorageCluster) bool {
+	return cluster.Status.DesiredImages.TelemetryProxy != ""
 }
 
 // ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component

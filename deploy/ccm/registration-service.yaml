@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registration-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: registration-service
+  template:
+    metadata:
+      labels:
+        role: registration-service
+    spec:
+      hostNetwork: true
+      containers:
+        - name: registration
+          image: pureezhang/ccm-go:0.0.8
+          env:
+          - name: CONFIG
+            value: "config/config_properties_px.yaml"
+          volumeMounts:
+          - readOnly: true
+            mountPath: /config
+            name: registration-config
+          ports:
+            - name: registration
+              containerPort: 80
+              protocol: TCP
+          imagePullPolicy: Always
+        - name: envoy
+          image: envoyproxy/envoy:v1.22.2
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+          - readOnly: true
+            mountPath: /config
+            name: proxy-config
+          args:
+          - "envoy"
+          - "--config-path"
+          - "/config/envoy-config-register.yaml"
+      volumes:
+        - name: registration-config
+          configMap:
+            name: registration-config
+        - name: proxy-config
+          configMap:
+            name: proxy-config-register

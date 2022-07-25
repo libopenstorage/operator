@@ -3,14 +3,11 @@ package component
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"path"
 	"strings"
 
 	"github.com/hashicorp/go-version"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -22,25 +19,24 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
 const (
 	// TelemetryComponentName name of the telemetry component
 	TelemetryComponentName = "Portworx Telemetry"
-	// TelemetryConfigMapName is the name of the config map that stores the telemetry configuration for CCM
-	TelemetryConfigMapName = "px-telemetry-config"
 	// TelemetryCCMProxyConfigMapName is the name of the config map that stores the PX_HTTP(S)_PROXY env var
 	TelemetryCCMProxyConfigMapName = "px-ccm-service-proxy-config"
 	// TelemetryCCMProxyFilePath path of the http proxy file
 	TelemetryCCMProxyFilePath = "/cache/network/http_proxy"
 	// TelemetryCCMProxyFileName name of the http proxy file
 	TelemetryCCMProxyFileName = "http_proxy"
-	// TelemetryPropertiesFilename is the name of the CCM properties file
-	TelemetryPropertiesFilename = "ccm.properties"
-	// TelemetryArcusLocationFilename is name of the file storing the location of arcus endpoint to use
-	TelemetryArcusLocationFilename = "location"
-	// TelemetryCertName is name of the telemetry cert.
-	TelemetryCertName = "pure-telemetry-certs"
 	// CollectorRoleName is name of the Role for metrics collector.
 	CollectorRoleName = "px-metrics-collector"
 	// CollectorRoleBindingName is name of the role binding for metrics collector.
@@ -59,12 +55,75 @@ const (
 	CollectorProxyConfigMapName = "px-collector-proxy-config"
 	// CollectorDeploymentName is name of metrics collector deployment.
 	CollectorDeploymentName = "px-metrics-collector"
-	// ExternalArcusLocation is the external location customers use, pointing to prod.
-	ExternalArcusLocation = "rest.cloud-support.purestorage.com"
-	// InternalArcusLocation is for internal use only.
-	InternalArcusLocation = "rest.staging-cloud-support.purestorage.com"
 	// CollectorServiceAccountName is name of the metrics collector service account
 	CollectorServiceAccountName = "px-metrics-collector"
+	// TelemetryConfigMapName is the name of the config map that stores the telemetry configuration for CCM
+	TelemetryConfigMapName = "px-telemetry-config"
+	// TelemetryPropertiesFilename is the name of the CCM properties file
+	TelemetryPropertiesFilename = "ccm.properties"
+	// TelemetryArcusLocationFilename is name of the file storing the location of arcus endpoint to use
+	TelemetryArcusLocationFilename = "location"
+	// TelemetryCertName is name of the telemetry cert.
+	TelemetryCertName = "pure-telemetry-certs"
+
+	// RoleNameSecretManager is name of role secret-manager
+	RoleNameSecretManager = "secret-manager"
+	// RoleBindingNameSecretManager is name of role binding registerrolebinding
+	RoleBindingNameSecretManager = "registerrolebinding"
+	// RoleNameSTCReader is name of role stc-reader
+	RoleNameSTCReader = "stc-reader"
+	// RoleBindingNameSTCReader is name of role binding stcrolebinding
+	RoleBindingNameSTCReader = "stcrolebinding"
+	// ConfigMapNameRegistrationConfig is name of config map registration-config
+	ConfigMapNameRegistrationConfig = "registration-config"
+	// ConfigMapNameProxyConfigRegister is name of config map proxy-config-register
+	ConfigMapNameProxyConfigRegister = "proxy-config-register"
+	// ConfigMapNameProxyConfigRest is name of config map proxy-config-rest
+	ConfigMapNameProxyConfigRest = "proxy-config-rest"
+	// ConfigMapNameTLSCertificate is name of config map tls-certificate
+	ConfigMapNameTLSCertificate = "tls-certificate"
+	// ConfigMapNamePxTelemetryConfig is name of config map px-telemetry-config
+	ConfigMapNamePxTelemetryConfig = TelemetryConfigMapName
+	// DeploymentNameRegistrationService is name of deployment registration-servicea
+	DeploymentNameRegistrationService = "registration-service"
+	// DeploymentNamePhonehomeCluster is name of deployment phonehome-cluster
+	DeploymentNamePhonehomeCluster = "phonehome-cluster"
+
+	roleFileNameSecretManager             = "secret-manager-role.yaml"
+	roleBindingFileNameSecretManager      = "secret-manager-role-binding.yaml"
+	roleFileNameSTCReader                 = "stc-reader-role.yaml"
+	roleBindingFileNameSTCReader          = "stc-reader-role-binding.yaml"
+	deploymentFileNameRegistrationService = "registration-service.yaml"
+	deploymentFileNamePhonehomeCluster    = "phonehome-cluster.yaml"
+	containerNameRegistrationService      = "registration"
+	containerNameLogUploader              = "log-upload-service"
+	containerNameTelemetryProxy           = "envoy"
+	portNameLogUploaderContainer          = "loguploader"
+
+	configFileNameRegistrationConfig               = "config_properties_px.yaml"
+	configFileNameProxyConfigRegister              = "envoy-config-register.yaml"
+	configFileNameProxyConfigRegisterCustomerProxy = "envoy-config-register-customer-proxy.yaml"
+	configFileNameProxyConfigRest                  = "envoy-config-rest.yaml"
+	configFileNameTLSCertificate                   = "tls_certificate_sds_secret.yaml"
+	configFileNamePXTelemetryConfig                = TelemetryPropertiesFilename
+	configParameterApplianceID                     = "APPLIANCE_ID"
+	configParameterComponentSN                     = "COMPONENT_SN"
+	configParameterProductVersion                  = "PRODUCT_VERSION"
+	configParameterRegisterProxyURL                = "REGISTER_PROXY_URL"
+	configParameterRestProxyURL                    = "REST_PROXY_URL"
+	configParameterCertSecretNamespace             = "CERT_SECRET_NAMESPACE"
+	configParameterCustomProxyPort                 = "CUSTOM_PROXY_PORT"
+	configParameterPortworxPort                    = "PORTWORX_PORT"
+
+	productionArcusLocation         = "external"
+	productionArcusRestProxyURL     = "rest.cloud-support.purestorage.com"
+	productionArcusRegisterProxyURL = "register.cloud-support.purestorage.com"
+	stagingArcusLocation            = "internal"
+	stagingArcusRestProxyURL        = "rest.staging-cloud-support.purestorage.com"
+	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
+
+	// port for log uploader, avoid 1970 as used by old ccm service, to be configurable in the future
+	logUploaderPort = 9090
 
 	defaultCollectorMemoryRequest = "64Mi"
 	defaultCollectorMemoryLimit   = "128Mi"
@@ -96,22 +155,84 @@ func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTelemetryEnabled(cluster.Spec)
 }
 
+func (t *telemetry) MarkDeleted() {
+	t.isCollectorDeploymentCreated = false
+}
+
+// RegisterTelemetryComponent registers the telemetry  component
+func RegisterTelemetryComponent() {
+	Register(TelemetryComponentName, &telemetry{})
+}
+
 func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := t.createConfigMap(cluster, ownerRef); err != nil {
-		return err
-	}
-	if err := t.reconcileCCMProxyConfigMap(cluster, ownerRef); err != nil {
-		return err
-	}
 	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
 		return err
 	}
 
-	if err := t.deployMetricsCollector(cluster, ownerRef); err != nil {
+	if pxutil.RunCCMGo(cluster) {
+		// Remove old ccm components first if exist
+		if err := t.deleteCCMJava(cluster, ownerRef); err != nil {
+			return err
+		}
+		return t.reconcileCCMGo(cluster, ownerRef)
+	}
+	return t.reconcileCCMJava(cluster, ownerRef)
+}
+
+func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	if err := t.deleteCCMJava(cluster, ownerRef); err != nil {
 		return err
 	}
 
+	if err := t.deleteCCMGo(cluster, ownerRef); err != nil {
+		return err
+	}
+
+	// Both ccm java and go create this config map with same name, only delete it when disabled
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNamePxTelemetryConfig, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+// reconcileCCMJava installs CCM Java on older px versions
+func (t *telemetry) reconcileCCMJava(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := t.createCCMJavaConfigMap(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.reconcileCCMJavaProxyConfigMap(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.deployMetricsCollector(cluster, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+// reconcileCCMGo installs CCM Go on px 2.12+
+func (t *telemetry) reconcileCCMGo(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	logrus.Infof("JLIAO: reconcile new ccm-go")
+	if err := t.reconcileCCMGoRolesAndRoleBindings(cluster, ownerRef); err != nil {
+		return err
+	}
+	if cluster.Status.ClusterUID == "" {
+		logrus.Warn("clusterUID is empty, wait for it to fill telemetry proxy config")
+		return nil
+	}
+	if err := t.reconcileCCMGoConfigMaps(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.reconcileCCMGoDeployments(cluster, ownerRef); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -119,8 +240,8 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 // set owner ref to StorageCluster so it gets deleted.
 func (t *telemetry) setTelemetryCertOwnerRef(
 	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference) error {
-
+	ownerRef *metav1.OwnerReference,
+) error {
 	secret := &v1.Secret{}
 	err := t.k8sClient.Get(
 		context.TODO(),
@@ -133,6 +254,7 @@ func (t *telemetry) setTelemetryCertOwnerRef(
 
 	// The cert is created after ccm container starts, so we may not have it for a while.
 	if errors.IsNotFound(err) {
+		logrus.Infof("JLIAO: not found")
 		return nil
 	} else if err != nil {
 		return err
@@ -149,12 +271,10 @@ func (t *telemetry) setTelemetryCertOwnerRef(
 	return t.k8sClient.Update(context.TODO(), secret)
 }
 
-func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-
+func (t *telemetry) deleteCCMJava(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
@@ -163,17 +283,44 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	t.MarkDeleted()
 	return nil
 }
 
-func (t *telemetry) MarkDeleted() {
-	t.isCollectorDeploymentCreated = false
-}
-
-// RegisterTelemetryComponent registers the telemetry  component
-func RegisterTelemetryComponent() {
-	Register(TelemetryComponentName, &telemetry{})
+func (t *telemetry) deleteCCMGo(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNamePhonehomeCluster, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNameRegistrationService, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameRegistrationConfig, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRegister, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRest, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTLSCertificate, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.OwnerReference) error {
@@ -209,6 +356,7 @@ func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.Ow
 		return err
 	}
 
+	t.isCollectorDeploymentCreated = false
 	return nil
 }
 
@@ -228,11 +376,11 @@ func (t *telemetry) deployMetricsCollector(
 		return nil
 	}
 
-	if err := t.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
+	if err := t.createCollectorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 
-	if err := t.createProxyConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCCMJavaProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
 
@@ -354,7 +502,7 @@ func (t *telemetry) createCollectorDeployment(
 	return nil
 }
 
-func (t *telemetry) createServiceAccount(
+func (t *telemetry) createCollectorServiceAccount(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -371,30 +519,16 @@ func (t *telemetry) createServiceAccount(
 	)
 }
 
-func (t *telemetry) getDesiredCollectorImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil {
-		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollector), nil
-	}
-	return "", fmt.Errorf("metrics collector image is empty")
-}
-
-func (t *telemetry) getDesiredCollectorProxyImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil {
-		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
-	}
-	return "", fmt.Errorf("metrics collector proxy image is empty")
-}
-
 func (t *telemetry) getCollectorDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) (*appsv1.Deployment, error) {
-	collectorImage, err := t.getDesiredCollectorImage(cluster)
+	collectorImage, err := getDesiredCollectorImage(cluster)
 	if err != nil {
 		return nil, err
 	}
 
-	collectorProxyImage, err := t.getDesiredCollectorProxyImage(cluster)
+	collectorProxyImage, err := getDesiredProxyImage(cluster)
 	if err != nil {
 		return nil, err
 	}
@@ -577,17 +711,11 @@ func (t *telemetry) createCollectorRoleBinding(
 	)
 }
 
-func (t *telemetry) createProxyConfigMap(
+func (t *telemetry) createCCMJavaProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	arcusLocation, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]
-	if !present || len(arcusLocation) == 0 || strings.ToLower(arcusLocation) == "external" {
-		arcusLocation = ExternalArcusLocation
-	} else if strings.ToLower(arcusLocation) == "internal" {
-		arcusLocation = InternalArcusLocation
-	}
-
+	arcusRestProxyURL := getArcusRestProxyURL(cluster)
 	config := fmt.Sprintf(
 		`
 admin:
@@ -663,7 +791,7 @@ static_resources:
               filename: /appliance-cert/cert
             private_key:
               filename: /appliance-cert/private_key
-`, cluster.Status.ClusterUID, pxutil.GetPortworxVersion(cluster), arcusLocation, arcusLocation)
+`, cluster.Status.ClusterUID, pxutil.GetPortworxVersion(cluster), arcusRestProxyURL, arcusRestProxyURL)
 
 	data := map[string]string{
 		CollectorProxyConfigFileName: config,
@@ -729,7 +857,7 @@ forwardConfig:
 	)
 }
 
-func (t *telemetry) createConfigMap(
+func (t *telemetry) createCCMJavaConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -806,13 +934,8 @@ func (t *telemetry) createConfigMap(
 `, cluster.Namespace, TelemetryArcusLocationFilename)
 
 	data := map[string]string{
-		TelemetryPropertiesFilename: config,
-	}
-
-	if location, present := cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]; present && len(location) > 0 {
-		data[TelemetryArcusLocationFilename] = location
-	} else {
-		data[TelemetryArcusLocationFilename] = "external"
+		TelemetryPropertiesFilename:    config,
+		TelemetryArcusLocationFilename: getArcusTelemetryLocation(cluster),
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
@@ -829,7 +952,7 @@ func (t *telemetry) createConfigMap(
 	)
 }
 
-func (t *telemetry) reconcileCCMProxyConfigMap(
+func (t *telemetry) reconcileCCMJavaProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -853,6 +976,468 @@ func (t *telemetry) reconcileCCMProxyConfigMap(
 		},
 		ownerRef,
 	)
+}
+
+func (t *telemetry) reconcileCCMGoRolesAndRoleBindings(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Create secret manager role and role binding
+	if err := createRoleFromFile(t.k8sClient, roleFileNameSecretManager, RoleNameSecretManager, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSecretManager)
+		return err
+	}
+	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSecretManager, RoleBindingNameSecretManager, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSecretManager)
+		return err
+	}
+	// Create stc reader role and role binding
+	if err := createRoleFromFile(t.k8sClient, roleFileNameSTCReader, RoleNameSTCReader, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSTCReader)
+		return err
+	}
+	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSTCReader, RoleBindingNameSTCReader, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSTCReader)
+		return err
+	}
+	return nil
+}
+
+// reconcileCCMGoConfigMaps reconcile 5 config maps in total
+func (t *telemetry) reconcileCCMGoConfigMaps(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Reconcile config maps for registration service
+	// Create cm registration-config from config_properties_px.yaml
+	if err := t.createCCMGoConfigMapRegistrationConfig(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm registration-config from config_properties_px.yaml ")
+		return err
+	}
+	logrus.Infof("JLIAO: create cm registration-config from config_properties_px.yaml")
+	// Create cm proxy-config-register from envoy-config-register.yaml
+	if err := t.createCCMGoConfigMapProxyConfigRegister(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm proxy-config-register from envoy-config-register.yaml")
+		return err
+	}
+	logrus.Infof("JLIAO: create cm proxy-config-register from envoy-config-register.yaml")
+
+	// Reconcile config maps for log uploader
+	// Creat cm proxy-config-rest from envoy-config-rest.yaml
+	if err := t.createCCMGoConfigMapProxyConfigRest(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+		return err
+	}
+	logrus.Infof("JLIAO: creat cm proxy-config-rest from envoy-config-rest.yaml")
+	// Create cm tls-certificate from tls_certificate_sds_secret.yaml
+	if err := t.createCCMGoConfigMapTLSCertificate(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+		return err
+	}
+	logrus.Infof("JLIAO: create cm tls-certificate from tls_certificate_sds_secret.yaml")
+	// Create cm px-telemetry-config from ccm.properties and location
+	// CCM Java creates this cm as well, let's delete it and create a new one
+	if err := t.createCCMGoConfigMapPXTelemetryConfig(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm px-telemetry-config from ccm.properties and location")
+		return err
+	}
+	logrus.Infof("JLIAO: create cm px-telemetry-config from ccm.properties and location")
+
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoDeployments(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Create deployment registration-service
+	if err := t.createDeploymentRegistrationService(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameRegistrationService)
+		return err
+	}
+	logrus.Infof("JLIAO: create deployment registration-service")
+	// create deployment phonehone-cluster
+	if err := t.createDeploymentPhonehomeCluster(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNamePhonehomeCluster)
+		return err
+	}
+	logrus.Infof("JLIAO: create deployment phonehone-cluster")
+	return nil
+}
+
+// create cm registration-config from config_properties_px.yaml
+func (t *telemetry) createCCMGoConfigMapRegistrationConfig(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	config, err := readConfigMapDataFromFile(configFileNameRegistrationConfig, map[string]string{
+		configParameterCertSecretNamespace: cluster.Namespace,
+	})
+	if err != nil {
+		return err
+	}
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNameRegistrationConfig,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				configFileNameRegistrationConfig: config,
+			},
+		},
+		ownerRef,
+	)
+}
+
+// create cm proxy-config-register from envoy-config-register.yaml
+func (t *telemetry) createCCMGoConfigMapProxyConfigRegister(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	configFileName := configFileNameProxyConfigRegister
+	replaceMap := map[string]string{
+		configParameterApplianceID:    cluster.Status.ClusterUID,
+		configParameterComponentSN:    cluster.Name,
+		configParameterProductVersion: pxutil.GetPortworxVersion(cluster).String(),
+	}
+
+	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	if proxy == "" {
+		replaceMap[configParameterRegisterProxyURL] = getArcusRegisterProxyURL(cluster)
+	}
+	// TODO: support custom proxy, extract proxy address and port
+
+	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
+	if err != nil {
+		return err
+	}
+
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNameProxyConfigRegister,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				configFileNameProxyConfigRegister: config,
+			},
+		},
+		ownerRef,
+	)
+}
+
+// creat cm proxy-config-rest from envoy-config-rest.yaml
+func (t *telemetry) createCCMGoConfigMapProxyConfigRest(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	configFileName := configFileNameProxyConfigRest
+	replaceMap := map[string]string{
+		configParameterApplianceID:    cluster.Status.ClusterUID,
+		configParameterProductVersion: pxutil.GetPortworxVersion(cluster).String(),
+	}
+
+	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	if proxy == "" {
+		replaceMap[configParameterRestProxyURL] = getArcusRestProxyURL(cluster)
+	}
+	// TODO: support custom proxy
+
+	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
+	if err != nil {
+		return err
+	}
+
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNameProxyConfigRest,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				configFileNameProxyConfigRest: config,
+			},
+		},
+		ownerRef,
+	)
+}
+
+// create cm tls-certificate from tls_certificate_sds_secret.yaml
+func (t *telemetry) createCCMGoConfigMapTLSCertificate(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	config, err := readConfigMapDataFromFile(configFileNameTLSCertificate, nil)
+	if err != nil {
+		return err
+	}
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNameTLSCertificate,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				configFileNameTLSCertificate: config,
+			},
+		},
+		ownerRef,
+	)
+}
+
+// create cm px-telemetry-config from ccm.properties and location
+func (t *telemetry) createCCMGoConfigMapPXTelemetryConfig(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	config, err := readConfigMapDataFromFile(configFileNamePXTelemetryConfig, map[string]string{
+		configParameterPortworxPort: fmt.Sprintf(`"%v"`, logUploaderPort),
+	})
+	if err != nil {
+		return err
+	}
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNamePxTelemetryConfig,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				configFileNamePXTelemetryConfig: config,
+				TelemetryArcusLocationFilename:  getArcusTelemetryLocation(cluster),
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (t *telemetry) createDeploymentRegistrationService(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	deployment, err := k8sutil.GetDeploymentFromFile(deploymentFileNameRegistrationService, pxutil.SpecsBaseDir())
+	if err != nil {
+		return err
+	}
+	telemetryImage, err := GetDesiredTelemetryImage(cluster)
+	if err != nil {
+		return err
+	}
+	proxyImage, err := getDesiredProxyImage(cluster)
+	if err != nil {
+		return err
+	}
+	var containers []v1.Container
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == containerNameRegistrationService {
+			c.Image = telemetryImage
+		} else if c.Name == containerNameTelemetryProxy {
+			c.Image = proxyImage
+		}
+		containers = append(containers, *c.DeepCopy())
+	}
+	deployment.Name = DeploymentNameRegistrationService
+	deployment.Namespace = cluster.Namespace
+	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	deployment.Spec.Template.Spec.Containers = containers
+	return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
+}
+
+func (t *telemetry) createDeploymentPhonehomeCluster(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	deployment, err := k8sutil.GetDeploymentFromFile(deploymentFileNamePhonehomeCluster, pxutil.SpecsBaseDir())
+	if err != nil {
+		return err
+	}
+	logUploaderImage, err := getDesiredLogUploaderImage(cluster)
+	if err != nil {
+		return err
+	}
+	proxyImage, err := getDesiredProxyImage(cluster)
+	if err != nil {
+		return err
+	}
+	var containers []v1.Container
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == containerNameLogUploader {
+			c.Image = logUploaderImage
+			var ports []v1.ContainerPort
+			for _, p := range c.Ports {
+				if p.Name == portNameLogUploaderContainer {
+					p.HostPort = logUploaderPort
+					p.ContainerPort = logUploaderPort
+				}
+				ports = append(ports, *p.DeepCopy())
+			}
+			c.Ports = ports
+		} else if c.Name == containerNameTelemetryProxy {
+			c.Image = proxyImage
+		}
+		containers = append(containers, *c.DeepCopy())
+	}
+	deployment.Name = DeploymentNamePhonehomeCluster
+	deployment.Namespace = cluster.Namespace
+	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+		NodeAffinity: cluster.Spec.Placement.NodeAffinity,
+	}
+	deployment.Spec.Template.Spec.Containers = containers
+	// TODO: better way to count num of replicas, use num of px nodes
+	list, err := testutil.GetExpectedPxNodeNameList(cluster)
+	if err != nil {
+		return err
+	}
+	num := int32(len(list))
+	deployment.Spec.Replicas = &num
+	return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
+}
+
+func getArcusTelemetryLocation(cluster *corev1.StorageCluster) string {
+	if cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation] != "" {
+		location := strings.ToLower(strings.TrimSpace(cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]))
+		if location == stagingArcusLocation {
+			return location
+		}
+	}
+	return productionArcusLocation
+}
+
+func getArcusRestProxyURL(cluster *corev1.StorageCluster) string {
+	if getArcusTelemetryLocation(cluster) == stagingArcusLocation {
+		return stagingArcusRestProxyURL
+	}
+	return productionArcusRestProxyURL
+}
+
+func getArcusRegisterProxyURL(cluster *corev1.StorageCluster) string {
+	if getArcusTelemetryLocation(cluster) == stagingArcusLocation {
+		return stagingArcusRegisterProxyURL
+	}
+	return productionArcusRegisterProxyURL
+}
+
+// GetDesiredTelemetryImage returns desired telemetry container image
+func GetDesiredTelemetryImage(cluster *corev1.StorageCluster) (string, error) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) {
+		if cluster.Spec.Monitoring.Telemetry.Image != "" {
+			return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.Image), nil
+		}
+
+		if cluster.Status.DesiredImages != nil {
+			return util.GetImageURN(cluster, cluster.Status.DesiredImages.Telemetry), nil
+		}
+	}
+	return "", fmt.Errorf("telemetry image is empty")
+}
+
+func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) {
+		if cluster.Spec.Monitoring.Telemetry.ImageLogUpload != "" {
+			return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.ImageLogUpload), nil
+		}
+
+		if cluster.Status.DesiredImages != nil {
+			return util.GetImageURN(cluster, cluster.Status.DesiredImages.LogUploader), nil
+		}
+	}
+	return "", fmt.Errorf("log uploader image is empty")
+}
+
+func getDesiredProxyImage(cluster *corev1.StorageCluster) (string, error) {
+	if cluster.Status.DesiredImages != nil {
+		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
+			return util.GetImageURN(cluster, cluster.Status.DesiredImages.TelemetryProxy), nil
+		}
+		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
+	}
+	return "", fmt.Errorf("telemetry proxy image is empty")
+}
+
+func getDesiredCollectorImage(cluster *corev1.StorageCluster) (string, error) {
+	if cluster.Status.DesiredImages != nil {
+		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollector), nil
+	}
+	return "", fmt.Errorf("metrics collector image is empty")
+}
+
+func createRoleFromFile(
+	k8sClient client.Client,
+	filename string,
+	name string,
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	role, err := k8sutil.GetRoleFromFile(filename, pxutil.SpecsBaseDir())
+	if err != nil {
+		return err
+	}
+	role.Name = name
+	role.Namespace = cluster.Namespace
+	role.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	return k8sutil.CreateOrUpdateRole(
+		k8sClient,
+		role,
+		ownerRef,
+	)
+}
+
+func createRoleBindingFromFile(
+	k8sClient client.Client,
+	filename string,
+	name string,
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	roleBinding, err := k8sutil.GetRoleBindingFromFile(filename, pxutil.SpecsBaseDir())
+	if err != nil {
+		return err
+	}
+	roleBinding.Name = name
+	roleBinding.Namespace = cluster.Namespace
+	roleBinding.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	roleBinding.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      "default",
+			APIGroup:  "",
+			Namespace: cluster.Namespace,
+		},
+	}
+	return k8sutil.CreateOrUpdateRoleBinding(
+		k8sClient,
+		roleBinding,
+		ownerRef,
+	)
+}
+
+func readConfigMapDataFromFile(
+	filename string,
+	replace map[string]string,
+) (string, error) {
+	filepath := path.Join(pxutil.SpecsBaseDir(), filename)
+	fileBytes, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	data := string(fileBytes)
+	for k, v := range replace {
+		data = strings.ReplaceAll(data, k, v)
+	}
+
+	return data, nil
 }
 
 func init() {
