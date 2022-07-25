@@ -230,6 +230,11 @@ var (
 	// SpecsBaseDir functions returns the base directory for specs. This is extracted as
 	// variable for testing. DO NOT change the value of the function unless for testing.
 	SpecsBaseDir = getSpecsBaseDir
+
+	// MinimumPxVersionCCM minimum PX version to install ccm
+	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
+	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
+	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 )
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
@@ -960,6 +965,16 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.Monitoring != nil &&
 		spec.Monitoring.Telemetry != nil &&
 		spec.Monitoring.Telemetry.Enabled
+}
+
+// IsCCMGoSupported returns true if px version is higher than 2.12
+func IsCCMGoSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
+}
+
+// RunCCMGo returns whether to run new ccm go or old ccm java based on if the telemetry proxy image is set
+func RunCCMGo(cluster *corev1.StorageCluster) bool {
+	return cluster.Status.DesiredImages.TelemetryProxy != ""
 }
 
 // IsPxRepoEnabled returns true is pxRepo is enabled
