@@ -1829,6 +1829,57 @@ func GetV1beta1CRDFromFile(
 	return crd, nil
 }
 
+// GetRoleFromFile parses a Role object from a file
+func GetRoleFromFile(
+	filename string,
+	baseDir string,
+) (*rbacv1.Role, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	role := &rbacv1.Role{}
+	if err := ParseObjectFromFile(filepath, scheme, role); err != nil {
+		return nil, err
+	}
+	return role, nil
+}
+
+// GetRoleBindingFromFile parses a RoleBinding object from a file
+func GetRoleBindingFromFile(
+	filename string,
+	baseDir string,
+) (*rbacv1.RoleBinding, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	roleBinding := &rbacv1.RoleBinding{}
+	if err := ParseObjectFromFile(filepath, scheme, roleBinding); err != nil {
+		return nil, err
+	}
+	return roleBinding, nil
+}
+
+// GetDeploymentFromFile parses a Deployment object from a file
+func GetDeploymentFromFile(
+	filename string,
+	baseDir string,
+) (*appsv1.Deployment, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	deployment := &appsv1.Deployment{}
+	if err := ParseObjectFromFile(filepath, scheme, deployment); err != nil {
+		return nil, err
+	}
+	return deployment, nil
+}
+
 // GetAllObjects gets all objects from k8s
 func GetAllObjects(k8sClient client.Client, namespace string) ([]client.Object, error) {
 	var objs []client.Object

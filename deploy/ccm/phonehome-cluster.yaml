@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phonehome-cluster
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      role: phonehome-cluster
+  template:
+    metadata:
+      labels:
+        role: phonehome-cluster
+    spec:
+      containers:
+        - name: log-upload-service
+          image: pureezhang/log-upload:0.0.11
+          volumeMounts:
+          - name: etcpwx
+            mountPath: /etc/pwx
+          - mountPath: /var/cache
+            name: varcache
+          - mountPath: /var/log
+            name: journalmount2
+            readOnly: true
+          - mountPath: /var/cores
+            name: varcores
+          - readOnly: true
+            mountPath: /config
+            name: ccm-config
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: loguploader
+              containerPort: 9090
+              hostPort: 9090
+              protocol: TCP
+          imagePullPolicy: Always
+        - name: envoy
+          image: envoyproxy/envoy:v1.22.2
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+          - readOnly: true
+            mountPath: /config
+            name: proxy-config
+          - readOnly: true
+            mountPath: /etc/envoy/
+            name: tls-certificate
+          - readOnly: true
+            mountPath: /appliance-cert
+            name: pure-telemetry-certs
+          args:
+          - "envoy"
+          - "--config-path"
+          - "/config/envoy-config-rest.yaml"
+          ports:
+            - name: envoy
+              containerPort: 12002
+              hostPort: 12002
+              protocol: TCP
+      initContainers:
+        - name: init-cont
+          image: bitnami/kubectl:1.24.3
+          command: ['/bin/bash', '-c', "cert=$(kubectl get secrets -n kube-system --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); until [[ ${#cert} -gt 4 ]]; do echo waiting for cert generation; sleep 4; cert=$(kubectl get secrets -n kube-system --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); done;"]
+      volumes:
+        - name: etcpwx
+          hostPath:
+            path: /etc/pwx
+        - hostPath:
+            path: /var/cache
+          name: varcache
+        - name: varcores
+          hostPath:
+            path: /var/cores
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - configMap:
+            items:
+              - key: ccm.properties
+                path: ccm.properties
+              - key: location
+                path: location
+            name: px-telemetry-config
+          name: ccm-config
+        - name: proxy-config
+          configMap:
+            name: proxy-config-rest
+        - name: tls-certificate
+          configMap:
+            name: tls-certificate
+        - name: pure-telemetry-certs
+          secret:
+            secretName: pure-telemetry-certs

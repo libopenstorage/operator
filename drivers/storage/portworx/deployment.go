@@ -285,7 +285,7 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
-	if pxutil.IsTelemetryEnabled(cluster.Spec) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) && !pxutil.RunCCMGo(cluster) {
 		telemetryContainer := t.telemetryContainer()
 		if telemetryContainer != nil {
 			if len(telemetryContainer.Image) == 0 {
@@ -294,7 +294,6 @@ func (p *portworx) GetStoragePodSpec(
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			} else {
 				podSpec.Containers = append(podSpec.Containers, *telemetryContainer)
-
 			}
 		}
 	}
@@ -599,12 +598,10 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 }
 
 func (t *template) telemetryContainer() *v1.Container {
+	telemetryImage, _ := component.GetDesiredTelemetryImage(t.cluster)
 	container := v1.Container{
-		Name: pxutil.TelemetryContainerName,
-		Image: util.GetImageURN(
-			t.cluster,
-			t.getDesiredTelemetryImage(t.cluster),
-		),
+		Name:            pxutil.TelemetryContainerName,
+		Image:           telemetryImage,
 		ImagePullPolicy: t.imagePullPolicy,
 		Resources: v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -1495,20 +1492,6 @@ func (t *template) loadKvdbAuth() map[string]string {
 		t.kvdb[k] = string(v)
 	}
 	return t.kvdb
-}
-
-func (t *template) getDesiredTelemetryImage(cluster *corev1.StorageCluster) string {
-	if pxutil.IsTelemetryEnabled(cluster.Spec) {
-		if cluster.Spec.Monitoring.Telemetry.Image != "" {
-			return cluster.Spec.Monitoring.Telemetry.Image
-		}
-
-		if cluster.Status.DesiredImages != nil {
-			return cluster.Status.DesiredImages.Telemetry
-		}
-	}
-
-	return ""
 }
 
 func (t *template) setOSImage(osImage string) {
