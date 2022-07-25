@@ -8127,6 +8127,7 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		cluster := createStorageCluster()
 		// use monitoring spec from TC
 		cluster.Spec.Monitoring = tc.old.Monitoring
+		cluster.Spec.Image = "portworx:2.10.1"
 		k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 		driver := testutil.MockDriver(mockCtrl)
 		storageLabels := map[string]string{

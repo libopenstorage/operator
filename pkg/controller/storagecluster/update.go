@@ -707,7 +707,8 @@ func matchSelectedFields(
 		return false, nil
 	} else if !elementsMatch(oldSpec.Volumes, currentSpec.Volumes) {
 		return false, nil
-	} else if !doesTelemetryMatch(oldSpec, currentSpec) {
+	} else if !doesTelemetryMatch(oldSpec, currentSpec) && !util.IsCCMGoSupported(util.GetPortworxVersion(cluster)) {
+		// only check for old px version, ccm upgrade should be triggered by px upgrade
 		return false, nil
 	} else if isBounceRequired(oldSpec, currentSpec) {
 		return false, nil
