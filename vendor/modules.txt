@@ -286,7 +286,7 @@ golang.org/x/text/unicode/norm
 golang.org/x/text/width
 # golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
 golang.org/x/time/rate
-# golang.org/x/tools v0.1.11
+# golang.org/x/tools v0.1.12 => golang.org/x/tools v0.1.11
 ## explicit
 golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/imports
@@ -923,6 +923,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 sigs.k8s.io/yaml
 # github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 # github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
+# golang.org/x/tools => golang.org/x/tools v0.1.11
 # google.golang.org/grpc => google.golang.org/grpc v1.29.1
 # google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
 # gopkg.in/fsnotify.v1 v1.4.7 => github.com/fsnotify/fsnotify v1.4.7
