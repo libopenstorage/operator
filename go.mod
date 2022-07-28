@@ -22,7 +22,7 @@ require (
 	github.com/urfave/cli v1.22.2
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/sys v0.0.0-20220429233432-b5fbb4746d32 // indirect
-	golang.org/x/tools v0.1.11 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/grpc v1.36.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -43,6 +43,7 @@ require (
 replace (
 	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
+	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
 	gopkg.in/fsnotify.v1 v1.4.7 => github.com/fsnotify/fsnotify v1.4.7
