@@ -710,7 +710,7 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 			// if the user specified a CA cert though k8s secret in spec.tls.rootCA.secretRef, use that
 			if !IsEmptyOrNilSecretReference(clusterSpec.Security.TLS.RootCA.SecretRef) {
 				rootCASecret := clusterSpec.Security.TLS.RootCA.SecretRef
-				logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+				logrus.Infof("Reference secret name containing CA cert: %v", rootCASecret.SecretName)
 				envMap[EnvKeyCASecretName] = &v1.EnvVar{
 					Name:  EnvKeyCASecretName,
 					Value: rootCASecret.SecretName,
@@ -721,7 +721,7 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 				}
 			} else {
 				// The user installed a CA cert on the host file system. We assume that user has also uploaded it to the default k8s secret with the default key
-				logrus.Infof("Secret name containing CA cert: %v", DefaultCASecretName)
+				logrus.Infof("Default secret name containing CA cert: %v", DefaultCASecretName)
 				envMap[EnvKeyCASecretName] = &v1.EnvVar{
 					Name:  EnvKeyCASecretName,
 					Value: DefaultCASecretName,
