@@ -1,14 +1,11 @@
 package component
 
 import (
-	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,13 +13,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -111,55 +106,10 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 		return err
 	}
 
-	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
 	if err != nil {
 		c.closeSdkConn()
 		return err
-	}
-
-	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		ctx,
-		&api.SdkNodeEnumerateWithFiltersRequest{},
-	)
-	if err != nil {
-		c.closeSdkConn()
-		return fmt.Errorf("failed to enumerate nodes: %v", err)
-	}
-
-	k8sNodeList := &v1.NodeList{}
-	err = c.k8sClient.List(context.TODO(), k8sNodeList)
-	if err != nil {
-		return err
-	}
-	k8sNodesStoragePodCouldRun := make(map[string]bool)
-	for _, node := range k8sNodeList.Items {
-		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
-		if err != nil {
-			return err
-		}
-		if shouldRun || shouldContinueRunning {
-			k8sNodesStoragePodCouldRun[node.Name] = true
-		}
-	}
-
-	storageNodesCount := 0
-	for _, node := range nodeEnumerateResponse.Nodes {
-		if node.SchedulerNodeName == "" {
-			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
-				[]string{node.DataIp, node.MgmtIp, node.Hostname},
-			)
-			if err != nil {
-				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
-				continue
-			}
-			node.SchedulerNodeName = k8sNode.Name
-		}
-		if len(node.Pools) > 0 && node.Pools[0] != nil {
-			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
-				storageNodesCount++
-			}
-		}
 	}
 
 	// Create PDB only if there are at least 3 nodes. With 2 nodes are less, if 1
