@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	pvccontroller "github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -1156,7 +1157,7 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		}
 
 		// Validate PVC Controller custom port, if any were set
-		if err := validatePvcControllerPorts(cluster.Annotations, pvcControllerDp, timeout, interval); err != nil {
+		if err := validatePvcControllerPorts(cluster, pvcControllerDp, timeout, interval); err != nil {
 			return err
 		}
 
@@ -1689,9 +1690,9 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 	return nil
 }
 
-func validatePvcControllerPorts(annotations map[string]string, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate PVC Controller custom ports")
-
+	annotations := cluster.Annotations
 	if annotations == nil {
 		return nil
 	}
@@ -1713,10 +1714,16 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 					if len(container.Command) > 0 {
 						for _, containerCommand := range container.Command {
 							if strings.Contains(containerCommand, "--secure-port") {
-								if len(pvcSecurePort) == 0 {
-									return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
-								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
-									return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
+								if isAKS(cluster) {
+									if strings.Split(containerCommand, "=")[1] != pvccontroller.AksPVCControllerSecurePort {
+										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
+									}
+								} else {
+									if len(pvcSecurePort) == 0 {
+										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+									} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
+										return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
+									}
 								}
 								logrus.Debugf("Value for secure-port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								securePortExist = true
