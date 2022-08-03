@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -25,7 +26,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
 const (
@@ -132,6 +132,7 @@ const (
 
 type telemetry struct {
 	k8sClient                    client.Client
+	sdkConn                      *grpc.ClientConn
 	isCollectorDeploymentCreated bool
 }
 
@@ -194,7 +195,21 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNamePxTelemetryConfig, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+
+	t.closeSdkConn()
 	return nil
+}
+
+// closeSdkConn closes the sdk connection and resets it to nil
+func (t *telemetry) closeSdkConn() {
+	if t.sdkConn == nil {
+		return
+	}
+
+	if err := t.sdkConn.Close(); err != nil {
+		logrus.Errorf("Failed to close sdk connection: %s", err.Error())
+	}
+	t.sdkConn = nil
 }
 
 // reconcileCCMJava installs CCM Java on older px versions
@@ -1295,13 +1310,21 @@ func (t *telemetry) createDeploymentPhonehomeCluster(
 		NodeAffinity: cluster.Spec.Placement.NodeAffinity,
 	}
 	deployment.Spec.Template.Spec.Containers = containers
-	// TODO: better way to count num of replicas, use num of px nodes
-	list, err := testutil.GetExpectedPxNodeNameList(cluster)
+
+	// Count number of replicas using number of storage node on this cluster
+	t.sdkConn, err = pxutil.GetPortworxConn(t.sdkConn, t.k8sClient, cluster.Namespace)
 	if err != nil {
 		return err
 	}
-	num := int32(len(list))
+
+	replicasCount, err := pxutil.CountStorageNodes(cluster, t.sdkConn, t.k8sClient)
+	if err != nil {
+		t.closeSdkConn()
+		return err
+	}
+	num := int32(replicasCount)
 	deployment.Spec.Replicas = &num
+
 	return k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef)
 }
 
