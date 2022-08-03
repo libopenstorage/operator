@@ -20,11 +20,14 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1037,4 +1040,63 @@ func GetClusterID(cluster *corev1.StorageCluster) string {
 		return cluster.Annotations[AnnotationClusterID]
 	}
 	return cluster.Name
+}
+
+// CountStorageNodes counts how many px storage node are there on given k8s cluster,
+// use this to count number of storage pods as well
+func CountStorageNodes(
+	cluster *corev1.StorageCluster,
+	sdkConn *grpc.ClientConn,
+	k8sClient client.Client,
+) (int, error) {
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	if err != nil {
+		return -1, err
+	}
+
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	k8sNodeList := &v1.NodeList{}
+	err = k8sClient.List(context.TODO(), k8sNodeList)
+	if err != nil {
+		return -1, err
+	}
+	k8sNodesStoragePodCouldRun := make(map[string]bool)
+	for _, node := range k8sNodeList.Items {
+		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
+		if err != nil {
+			return -1, err
+		}
+		if shouldRun || shouldContinueRunning {
+			k8sNodesStoragePodCouldRun[node.Name] = true
+		}
+	}
+
+	storageNodesCount := 0
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.SchedulerNodeName == "" {
+			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
+				[]string{node.DataIp, node.MgmtIp, node.Hostname},
+			)
+			if err != nil {
+				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
+				continue
+			}
+			node.SchedulerNodeName = k8sNode.Name
+		}
+		if len(node.Pools) > 0 && node.Pools[0] != nil {
+			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+				storageNodesCount++
+			}
+		}
+	}
+
+	return storageNodesCount, nil
 }
