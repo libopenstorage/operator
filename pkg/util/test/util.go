@@ -1716,16 +1716,16 @@ func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDep
 					if len(container.Command) > 0 {
 						for _, containerCommand := range container.Command {
 							if strings.Contains(containerCommand, "--secure-port") {
-								if isAKS(cluster) {
-									if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
-										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
-									}
-								} else {
-									if len(pvcSecurePort) == 0 {
+								if len(pvcSecurePort) == 0 {
+									if isAKS(cluster) {
+										if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
+											return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
+										}
+									} else {
 										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
-									} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
-										return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 									}
+								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
+									return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								}
 								logrus.Debugf("Value for secure-port inside PVC Controller pod [%s]: expected %s, got %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								securePortExist = true
