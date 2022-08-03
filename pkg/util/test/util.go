@@ -53,7 +53,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	pvccontroller "github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -90,6 +89,9 @@ const (
 
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
+
+	// AksPVCControllerSecurePort is the PVC controller secure port.
+	AksPVCControllerSecurePort = "10261"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -1715,7 +1717,7 @@ func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDep
 						for _, containerCommand := range container.Command {
 							if strings.Contains(containerCommand, "--secure-port") {
 								if isAKS(cluster) {
-									if strings.Split(containerCommand, "=")[1] != pvccontroller.AksPVCControllerSecurePort {
+									if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
 										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
 									}
 								} else {
