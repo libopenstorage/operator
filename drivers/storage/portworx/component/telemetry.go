@@ -1310,6 +1310,16 @@ func (t *telemetry) createDeploymentPhonehomeCluster(
 		NodeAffinity: cluster.Spec.Placement.NodeAffinity,
 	}
 	deployment.Spec.Template.Spec.Containers = containers
+	deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
+		Name:  "init-cont",
+		Image: "bitnami/kubectl:1.24.3",
+		Command: []string{
+			"/bin/bash", "-c",
+			fmt.Sprintf("cert=$(kubectl get secrets -n %s --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); until [[ ${#cert} -gt 4 ]]; do echo waiting for cert generation; sleep 4; cert=$(kubectl get secrets -n %s --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); done;",
+				cluster.Namespace,
+				cluster.Namespace),
+		},
+	}}
 
 	// Count number of replicas using number of storage node on this cluster
 	t.sdkConn, err = pxutil.GetPortworxConn(t.sdkConn, t.k8sClient, cluster.Namespace)
