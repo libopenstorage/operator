@@ -503,8 +503,8 @@ type TelemetrySpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Image is docker image of the telemetry container
 	Image string `json:"image,omitempty"`
-	// ImageLogUpload is docker image of the log-upload-service container.
-	ImageLogUpload string `json:"imageLogUpload,omitempty"`
+	// LogUploaderImage is docker image of the log-upload-service container.
+	LogUploaderImage string `json:"logUploaderImage,omitempty"`
 }
 
 // PrometheusSpec contains configuration of Prometheus stack

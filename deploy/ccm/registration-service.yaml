@@ -15,7 +15,7 @@ spec:
       hostNetwork: true
       containers:
         - name: registration
-          image: pureezhang/ccm-go:0.0.8
+          image: purestorage/ccm-go:1.0.0
           env:
           - name: CONFIG
             value: "config/config_properties_px.yaml"

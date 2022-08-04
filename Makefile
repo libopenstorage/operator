@@ -241,7 +241,7 @@ downloads: getconfigs get-release-manifest
 cleanconfigs:
 	rm -rf bin/configs
 
-# ccm config templates need to be synced with repo: https://github.dev.purestorage.com/parts/ccm-go
+# TODO: import ccm-go repo as a git submodule: https://github.dev.purestorage.com/parts/ccm-go
 getccmconfigs:
 	mkdir -p bin/configs
 	cp deploy/ccm/* bin/configs/
