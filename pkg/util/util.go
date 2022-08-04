@@ -222,6 +222,10 @@ func DeepEqualObjects(
 func DeepEqualDeployment(d1 *appsv1.Deployment, d2 *appsv1.Deployment) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
 	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
+	if (d1 == nil && d2 != nil) || (d1 != nil && d2 == nil) {
+		return false, fmt.Errorf("one deployment is nil, first: %v, second: %v", d1 == nil, d2 == nil)
+	}
+
 	if !equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) {
 		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers)
 	}

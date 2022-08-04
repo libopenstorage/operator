@@ -251,9 +251,9 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:3.2.11",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
+			Telemetry:                 "image/ccm-go:1.0.0",
+			TelemetryProxy:            "envoyproxy/envoy:v1.22.2",
+			LogUploader:               "purestorage/log-upload:1.0.0",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -767,6 +767,21 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	// TestCase: default CCM Go images
 	expected = &Version{
 		PortworxVersion: "2.12.0",
+	}
+	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
+	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
+	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
+	require.Empty(t, rel.Components.MetricsCollector)
+	require.Empty(t, rel.Components.MetricsCollectorProxy)
+
+	// TestCase: default non-SemVerCCM use run CCM Go images
+	expected = &Version{
+		PortworxVersion: "abc_abc",
 	}
 	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
 	body, _ = yaml.Marshal(expected)

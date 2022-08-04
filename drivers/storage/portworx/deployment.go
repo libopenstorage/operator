@@ -287,7 +287,7 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
-	if pxutil.IsTelemetryEnabled(cluster.Spec) && !pxutil.RunCCMGo(cluster) {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) && !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
 		telemetryContainer := t.telemetryContainer()
 		if telemetryContainer != nil {
 			if len(telemetryContainer.Image) == 0 {

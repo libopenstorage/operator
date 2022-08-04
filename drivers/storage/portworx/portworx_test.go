@@ -7331,8 +7331,29 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
+	// Overwrite telemetry image and upgrade PX to 2.12, old image should be reset and use new one from manifest
+	cluster.Spec.Image = "px/image: 2.12.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
+	require.Equal(t, "purestorage/log-upload:1.2.3", cluster.Status.DesiredImages.LogUploader)
+
+	// Set telemetry images explicitly
+	cluster.Spec.Monitoring.Telemetry.Image = "portworx/ccm-go:1.2.3"
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = "portworx/log-upload:1.2.3"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
+
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Spec.Monitoring.Telemetry.Image = ""
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = ""
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
