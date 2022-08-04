@@ -12616,11 +12616,10 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
-	logrus.Infof("JLIAO: re enabled")
 	// Now enabled again with custom telemetry image.
 	cluster.Spec.Monitoring.Telemetry.Enabled = true
 	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.3"
-	cluster.Spec.Monitoring.Telemetry.ImageLogUpload = "log-uploader-image"
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = "log-uploader-image"
 	cluster.Status = corev1.StorageClusterStatus{
 		ClusterUID: "test-clusteruid",
 	}
@@ -12772,30 +12771,17 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	}
 	validateCCMJavaComponents()
 
-	logrus.Infof("JLIAO: upgrade px")
-	// TestCase: upgrade PX version, ccm should not upgrade as image is specified
+	// TestCase: upgrade PX version, ccm should force upgrade if image is specified and reset the image
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
-	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
-	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
-	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
-	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
-	validateCCMJavaComponents()
-
-	// TestCase: clear telemetry image, ccm should upgrade
-	cluster.Spec.Monitoring.Telemetry.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
-
 	validateCCMGoComponents := func() {
 		// validate ccm go components exist
 		role := &rbacv1.Role{}

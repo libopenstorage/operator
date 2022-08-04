@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: log-upload-service
-          image: pureezhang/log-upload:0.0.11
+          image: purestorage/log-upload:1.0.0
           volumeMounts:
           - name: etcpwx
             mountPath: /etc/pwx

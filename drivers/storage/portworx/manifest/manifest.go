@@ -20,7 +20,7 @@ import (
 const (
 	// envKeyReleaseManifestURL is an environment variable to override the
 	// default release manifest download URL
-	envKeyReleaseManifestURL             = "PX_RELEASE_MANIFEST_URL"
+	envKeyReleaseManifestURL             = pxutil.EnvKeyPXReleaseManifestURL
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
@@ -311,8 +311,7 @@ func fillTelemetryDefaults(
 	rel *Version,
 ) {
 	pxVersion, err := version.NewSemver(rel.PortworxVersion)
-	if err != nil || !pxutil.IsCCMGoSupported(pxVersion) {
-		// Old CCM Java telemetry
+	if err == nil && !pxutil.IsCCMGoSupported(pxVersion) {
 		if rel.Components.Telemetry == "" {
 			rel.Components.Telemetry = defaultCCMJavaImage
 		}
@@ -323,7 +322,6 @@ func fillTelemetryDefaults(
 			rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
 		}
 	} else {
-		// New CCM Go telemetry
 		if rel.Components.Telemetry == "" {
 			rel.Components.Telemetry = defaultCCMGoImage
 		}

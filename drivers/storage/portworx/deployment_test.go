@@ -2503,16 +2503,10 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assertPodSpecEqual(t, expected, &actual)
 
-	// Upgrade px version, ccm upgrade should be blocked as telemetry image specified
+	// Upgrade px version, ccm should upgrade and reset telemetry image specified, ccm container should be removed
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
 	driver.SetDefaultsOnStorageCluster(cluster)
-	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Equal(t, len(expected.Containers), len(actual.Containers))
-
-	// Remove telemetry image, ccm should upgrade and telemetry container should be removed from px pod
-	cluster.Spec.Monitoring.Telemetry.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.Equal(t, len(expected.Containers)-1, len(actual.Containers))

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -131,6 +132,8 @@ const (
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
+	// EnvKeyPXReleaseManifestURL key for the environment variable that specifies release manifest
+	EnvKeyPXReleaseManifestURL = "PX_RELEASE_MANIFEST_URL"
 	// EnvKeyPortworxNamespace key for the env var which tells namespace in which
 	// Portworx is installed
 	EnvKeyPortworxNamespace = "PX_NAMESPACE"
@@ -433,7 +436,8 @@ func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
 // GetPortworxVersion returns the Portworx version based on the image provided.
 // We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
 // env variable. If that is not present or invalid semvar, then we fallback to an
-// annotation portworx.io/px-version; else we return int max as the version.
+// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
+// env variable, else we return int max as the version.
 func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	var (
 		err       error
@@ -441,10 +445,12 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	)
 
 	pxImage := cluster.Spec.Image
+	var manifestURL string
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyPXImage {
 			pxImage = env.Value
-			break
+		} else if env.Name == EnvKeyPXReleaseManifestURL {
+			manifestURL = env.Value
 		}
 	}
 
@@ -458,6 +464,11 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 				pxVersion, err = version.NewSemver(pxVersionStr)
 				if err != nil {
 					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
+					pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+					pxVersion, err = version.NewSemver(pxVersionStr)
+					if err != nil {
+						logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
+					}
 				}
 			}
 		}
@@ -467,6 +478,15 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
+}
+
+func getPortworxVersionFromManifestURL(url string) string {
+	regex := regexp.MustCompile(`.*portworx\.com\/(.*)\/version`)
+	version := regex.FindStringSubmatch(url)
+	if len(version) >= 2 {
+		return version[1]
+	}
+	return ""
 }
 
 // GetStorkVersion returns the stork version based on the image provided.
@@ -973,11 +993,6 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 // IsCCMGoSupported returns true if px version is higher than 2.12
 func IsCCMGoSupported(pxVersion *version.Version) bool {
 	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
-}
-
-// RunCCMGo returns whether to run new ccm go or old ccm java based on if the telemetry proxy image is set
-func RunCCMGo(cluster *corev1.StorageCluster) bool {
-	return cluster.Status.DesiredImages.TelemetryProxy != ""
 }
 
 // IsPxRepoEnabled returns true is pxRepo is enabled
