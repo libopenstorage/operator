@@ -913,6 +913,29 @@ func DeleteService(
 	return k8sClient.Update(context.TODO(), service)
 }
 
+// GetDeployment get deployment
+func GetDeployment(
+	k8sClient client.Client,
+	deployment *appsv1.Deployment,
+) (*appsv1.Deployment, error) {
+	existingDeployment := &appsv1.Deployment{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+		},
+		existingDeployment,
+	)
+	if errors.IsNotFound(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return existingDeployment, nil
+}
+
 // CreateOrUpdateDeployment creates a deployment if not present, else updates it
 func CreateOrUpdateDeployment(
 	k8sClient client.Client,
