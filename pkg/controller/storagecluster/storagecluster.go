@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"reflect"
 	"sort"
 	"strconv"
@@ -54,7 +55,6 @@ import (
 
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -104,7 +104,8 @@ type Controller struct {
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
 	// Node to NodeInfo map
-	nodeInfoMap map[string]*k8s.NodeInfo
+	nodeInfoMap       map[string]*k8s.NodeInfo
+	cloudProviderName string
 }
 
 // Init initialize the storage cluster controller
@@ -723,6 +724,44 @@ func (c *Controller) updateStorageClusterStatus(
 	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
 }
 
+// For each node, if the node is running the storage pod but isn't supposed to, kill the storage pod.
+// If the node is supposed to run the storage pod, but isn't, create the storage pod on the node.
+func (c *Controller) getZoneMap(
+	cluster *corev1.StorageCluster,
+) (*v1.NodeList, map[string]uint64, error) {
+	nodeList := &v1.NodeList{}
+	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
+			cluster, err)
+	}
+	var cloudProviderName string
+	zoneMap := make(map[string]uint64)
+
+	for _, node := range nodeList.Items {
+		// Get the cloud provider
+		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
+		if len(node.Spec.ProviderID) != 0 {
+			tokens := strings.Split(node.Spec.ProviderID, "://")
+			if len(tokens) == 2 {
+				cloudProviderName = tokens[0]
+				break
+			} // else provider id is invalid
+		}
+	}
+
+	c.cloudProviderName = cloudProviderName
+	cloudProvider := cloudprovider.New(cloudProviderName)
+
+	for _, node := range nodeList.Items {
+		if zone, err := cloudProvider.GetZone(&node); err == nil {
+			instancesCount := zoneMap[zone]
+			zoneMap[zone] = instancesCount + 1
+		}
+	}
+	return nodeList, zoneMap, nil
+}
+
 func (c *Controller) manage(
 	cluster *corev1.StorageCluster,
 	hash string,
@@ -738,45 +777,16 @@ func (c *Controller) manage(
 		return fmt.Errorf("couldn't get node to storage cluster pods mapping for storage cluster %v: %v",
 			cluster.Name, err)
 	}
+	var nodesNeedingStoragePods, podsToDelete []string
 
-	// For each node, if the node is running the storage pod but isn't supposed to, kill the storage pod.
-	// If the node is supposed to run the storage pod, but isn't, create the storage pod on the node.
-	nodeList := &v1.NodeList{}
-	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	nodeList, zoneMap, err := c.getZoneMap(cluster)
 	if err != nil {
-		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
-			cluster, err)
-	}
-	var (
-		nodesNeedingStoragePods, podsToDelete []string
-		cloudProviderName                     string
-	)
-	zoneMap := make(map[string]uint64)
-
-	for _, node := range nodeList.Items {
-		// Get the cloud provider
-		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
-		if len(node.Spec.ProviderID) != 0 {
-			tokens := strings.Split(node.Spec.ProviderID, "://")
-			if len(tokens) == 2 {
-				cloudProviderName = tokens[0]
-				break
-			} // else provider id is invalid
-		}
-	}
-
-	cloudProvider := cloudprovider.New(cloudProviderName)
-
-	for _, node := range nodeList.Items {
-		if zone, err := cloudProvider.GetZone(&node); err == nil {
-			instancesCount := zoneMap[zone]
-			zoneMap[zone] = instancesCount + 1
-		}
+		return err
 	}
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
 		ZoneToInstancesMap: zoneMap,
-		CloudProvider:      cloudProviderName,
+		CloudProvider:      c.cloudProviderName,
 	}); err != nil {
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
@@ -1155,6 +1165,24 @@ func (c *Controller) CreatePodTemplate(
 	return newTemplate, nil
 }
 
+// The aim of this function is to return a good value for MaStorageNodesPerZone with the
+// intention of having at least 3 nodes in the cluster.
+func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
+	numZones := len(zoneMap)
+	switch numZones {
+	case 0, 1:
+		// If there is a single Zone, have all 3 nodes in the same zone
+		return 3
+	case 2:
+		// If there are two zones, it'll be tricky since we'll always lose quorum when a zone
+		// goes down. Let's have 2 nodes in a zone so that we have a 4 node cluster.
+		return 2
+	default:
+		// In a cluster with 3 or more zones, let's have one node in each zone.
+		return 1
+	}
+}
+
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
 
@@ -1206,6 +1234,19 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		toUpdate.Spec.CloudStorage.NodePoolLabel = key
 	}
 
+	_, zoneMap, err := c.getZoneMap(toUpdate)
+	if err != nil {
+		return err
+	}
+
+	if toUpdate.Status.Phase == "" &&
+		toUpdate.Spec.CloudStorage != nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
+		// Let's do this only when it's a fresh install of px
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = new(uint32)
+		*toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
+	}
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
 	// Update the cluster only if anything has changed
