@@ -89,6 +89,9 @@ const (
 
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
+
+	// AksPVCControllerSecurePort is the PVC controller secure port.
+	AksPVCControllerSecurePort = "10261"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -1156,7 +1159,7 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		}
 
 		// Validate PVC Controller custom port, if any were set
-		if err := validatePvcControllerPorts(cluster.Annotations, pvcControllerDp, timeout, interval); err != nil {
+		if err := validatePvcControllerPorts(cluster, pvcControllerDp, timeout, interval); err != nil {
 			return err
 		}
 
@@ -1689,9 +1692,9 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 	return nil
 }
 
-func validatePvcControllerPorts(annotations map[string]string, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate PVC Controller custom ports")
-
+	annotations := cluster.Annotations
 	if annotations == nil {
 		return nil
 	}
@@ -1714,7 +1717,13 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 						for _, containerCommand := range container.Command {
 							if strings.Contains(containerCommand, "--secure-port") {
 								if len(pvcSecurePort) == 0 {
-									return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+									if isAKS(cluster) {
+										if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
+											return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
+										}
+									} else {
+										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+									}
 								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
 									return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								}
