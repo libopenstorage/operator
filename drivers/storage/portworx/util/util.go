@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,11 +21,14 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -130,6 +134,8 @@ const (
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
+	// EnvKeyPXReleaseManifestURL key for the environment variable that specifies release manifest
+	EnvKeyPXReleaseManifestURL = "PX_RELEASE_MANIFEST_URL"
 	// EnvKeyPortworxNamespace key for the env var which tells namespace in which
 	// Portworx is installed
 	EnvKeyPortworxNamespace = "PX_NAMESPACE"
@@ -232,6 +238,11 @@ var (
 	// SpecsBaseDir functions returns the base directory for specs. This is extracted as
 	// variable for testing. DO NOT change the value of the function unless for testing.
 	SpecsBaseDir = getSpecsBaseDir
+
+	// MinimumPxVersionCCM minimum PX version to install ccm
+	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
+	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
+	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 )
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
@@ -427,7 +438,8 @@ func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
 // GetPortworxVersion returns the Portworx version based on the image provided.
 // We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
 // env variable. If that is not present or invalid semvar, then we fallback to an
-// annotation portworx.io/px-version; else we return int max as the version.
+// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
+// env variable, else we return int max as the version.
 func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	var (
 		err       error
@@ -435,10 +447,12 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	)
 
 	pxImage := cluster.Spec.Image
+	var manifestURL string
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyPXImage {
 			pxImage = env.Value
-			break
+		} else if env.Name == EnvKeyPXReleaseManifestURL {
+			manifestURL = env.Value
 		}
 	}
 
@@ -452,6 +466,11 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 				pxVersion, err = version.NewSemver(pxVersionStr)
 				if err != nil {
 					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
+					pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+					pxVersion, err = version.NewSemver(pxVersionStr)
+					if err != nil {
+						logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
+					}
 				}
 			}
 		}
@@ -461,6 +480,15 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 	}
 	return pxVersion
+}
+
+func getPortworxVersionFromManifestURL(url string) string {
+	regex := regexp.MustCompile(`.*portworx\.com\/(.*)\/version`)
+	version := regex.FindStringSubmatch(url)
+	if len(version) >= 2 {
+		return version[1]
+	}
+	return ""
 }
 
 // GetStorkVersion returns the stork version based on the image provided.
@@ -964,6 +992,11 @@ func IsTelemetryEnabled(spec corev1.StorageClusterSpec) bool {
 		spec.Monitoring.Telemetry.Enabled
 }
 
+// IsCCMGoSupported returns true if px version is higher than 2.12
+func IsCCMGoSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
+}
+
 // IsPxRepoEnabled returns true is pxRepo is enabled
 func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.PxRepo != nil &&
@@ -1024,4 +1057,63 @@ func GetClusterID(cluster *corev1.StorageCluster) string {
 		return cluster.Annotations[AnnotationClusterID]
 	}
 	return cluster.Name
+}
+
+// CountStorageNodes counts how many px storage node are there on given k8s cluster,
+// use this to count number of storage pods as well
+func CountStorageNodes(
+	cluster *corev1.StorageCluster,
+	sdkConn *grpc.ClientConn,
+	k8sClient client.Client,
+) (int, error) {
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	if err != nil {
+		return -1, err
+	}
+
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	k8sNodeList := &v1.NodeList{}
+	err = k8sClient.List(context.TODO(), k8sNodeList)
+	if err != nil {
+		return -1, err
+	}
+	k8sNodesStoragePodCouldRun := make(map[string]bool)
+	for _, node := range k8sNodeList.Items {
+		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
+		if err != nil {
+			return -1, err
+		}
+		if shouldRun || shouldContinueRunning {
+			k8sNodesStoragePodCouldRun[node.Name] = true
+		}
+	}
+
+	storageNodesCount := 0
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.SchedulerNodeName == "" {
+			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
+				[]string{node.DataIp, node.MgmtIp, node.Hostname},
+			)
+			if err != nil {
+				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
+				continue
+			}
+			node.SchedulerNodeName = k8sNode.Name
+		}
+		if len(node.Pools) > 0 && node.Pools[0] != nil {
+			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+				storageNodesCount++
+			}
+		}
+	}
+
+	return storageNodesCount, nil
 }

@@ -926,6 +926,9 @@ spec:
                       image:
                         type: string
                         description: Docker image of the telemetry container.
+                      logUploaderImage:
+                        type: string
+                        description: Docker image of the log-upload-service container.
               security:
                 type: object
                 description: Contains security configuration for the storage cluster.
@@ -1467,6 +1470,12 @@ spec:
                   metricsCollectorProxy:
                     type: string
                     description: Desired image for metrics collector proxy.
+                  telemetryProxy:
+                    type: string
+                    description: Desired image for telemetry proxy.
+                  logUploader:
+                    type: string
+                    description: Desired image for log uploader.
                   pxRepo:
                     type: string
                     description: Desired image for pxRepo.

@@ -251,9 +251,9 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
-			Telemetry:                 "image/ccm-service:3.2.11",
-			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
+			Telemetry:                 "image/ccm-go:1.0.0",
+			TelemetryProxy:            "envoyproxy/envoy:v1.22.2",
+			LogUploader:               "purestorage/log-upload:1.0.0",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -362,7 +362,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 
 func TestManifestWithPartialComponents(t *testing.T) {
 	expected := &Version{
-		PortworxVersion: "3.0.0",
+		PortworxVersion: "2.11.0",
 	}
 
 	k8sVersion, _ := version.NewSemver("1.16.8")
@@ -409,7 +409,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
 	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
 	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
-	require.Equal(t, defaultTelemetryImage, rel.Components.Telemetry)
+	require.Equal(t, defaultCCMJavaImage, rel.Components.Telemetry)
 	require.Equal(t, "image/csiprovisioner:3.0.0", rel.Components.CSIProvisioner)
 	require.Empty(t, rel.Components.CSIAttacher)
 
@@ -730,6 +730,69 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 	os.Setenv(envKeyReleaseManifestRefreshInterval, "0")
 	rel = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
+}
+
+func TestManifestFillTelemetryDefaults(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.20.0")
+	expected := &Version{
+		PortworxVersion: "2.9.0",
+	}
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DefaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			VersionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+
+	// TestCase: default CCM Java images
+	m := Instance()
+	m.Init(k8sClient, nil, k8sVersion)
+	rel := m.GetVersions(cluster, true)
+	require.Equal(t, defaultCCMJavaImage, rel.Components.Telemetry)
+	require.Equal(t, defaultCollectorProxyImage, rel.Components.MetricsCollectorProxy)
+	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
+	require.Empty(t, rel.Components.LogUploader)
+	require.Empty(t, rel.Components.TelemetryProxy)
+
+	// TestCase: default CCM Go images
+	expected = &Version{
+		PortworxVersion: "2.12.0",
+	}
+	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
+	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
+	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
+	require.Empty(t, rel.Components.MetricsCollector)
+	require.Empty(t, rel.Components.MetricsCollectorProxy)
+
+	// TestCase: default non-SemVerCCM use run CCM Go images
+	expected = &Version{
+		PortworxVersion: "abc_abc",
+	}
+	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	k8sClient.Update(context.TODO(), versionsConfigMap)
+	rel = m.GetVersions(cluster, true)
+	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
+	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
+	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
+	require.Empty(t, rel.Components.MetricsCollector)
+	require.Empty(t, rel.Components.MetricsCollectorProxy)
 }
 
 func TestMain(m *testing.M) {

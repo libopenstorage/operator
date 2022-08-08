@@ -20,7 +20,7 @@ import (
 const (
 	// envKeyReleaseManifestURL is an environment variable to override the
 	// default release manifest download URL
-	envKeyReleaseManifestURL             = "PX_RELEASE_MANIFEST_URL"
+	envKeyReleaseManifestURL             = pxutil.EnvKeyPXReleaseManifestURL
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
@@ -29,9 +29,12 @@ const (
 	defaultAutopilotImage      = "portworx/autopilot:1.3.2.1"
 	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
 	defaultNodeWiperImage      = "portworx/px-node-wiper:2.10.0"
-	defaultTelemetryImage      = "purestorage/ccm-service:3.2.11"
+	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
+	defaultCCMGoImage          = "purestorage/ccm-go:1.0.0"
+	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
+	defaultCCMGoProxyImage     = "envoyproxy/envoy:v1.22.2"
 	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
@@ -77,6 +80,8 @@ type Release struct {
 	Telemetry                  string `yaml:"telemetry,omitempty"`
 	MetricsCollector           string `yaml:"metricsCollector,omitempty"`
 	MetricsCollectorProxy      string `yaml:"metricsCollectorProxy,omitempty"`
+	LogUploader                string `yaml:"logUploader,omitempty"`
+	TelemetryProxy             string `yaml:"telemetryProxy,omitempty"` // Use a new field for easy backward compatibility
 	PxRepo                     string `yaml:"pxRepo,omitempty"`
 }
 
@@ -205,18 +210,16 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:                 defaultStorkImage,
-			Autopilot:             defaultAutopilotImage,
-			Lighthouse:            defaultLighthouseImage,
-			NodeWiper:             defaultNodeWiperImage,
-			Telemetry:             defaultTelemetryImage,
-			MetricsCollector:      defaultCollectorImage,
-			MetricsCollectorProxy: defaultCollectorProxyImage,
-			PxRepo:                defaultPxRepoImage,
+			Stork:      defaultStorkImage,
+			Autopilot:  defaultAutopilotImage,
+			Lighthouse: defaultLighthouseImage,
+			NodeWiper:  defaultNodeWiperImage,
+			PxRepo:     defaultPxRepoImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
+	fillTelemetryDefaults(rel)
 	return rel
 }
 
@@ -236,20 +239,12 @@ func fillDefaults(
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
 	}
-	if rel.Components.Telemetry == "" {
-		rel.Components.Telemetry = defaultTelemetryImage
-	}
-	if rel.Components.MetricsCollector == "" {
-		rel.Components.MetricsCollector = defaultCollectorImage
-	}
-	if rel.Components.MetricsCollectorProxy == "" {
-		rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
-	}
 	if rel.Components.PxRepo == "" {
 		rel.Components.PxRepo = defaultPxRepoImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
+	fillTelemetryDefaults(rel)
 }
 
 func fillCSIDefaults(
@@ -309,6 +304,33 @@ func fillPrometheusDefaults(
 	}
 	if rel.Components.AlertManager == "" {
 		rel.Components.AlertManager = defaultAlertManagerImage
+	}
+}
+
+func fillTelemetryDefaults(
+	rel *Version,
+) {
+	pxVersion, err := version.NewSemver(rel.PortworxVersion)
+	if err == nil && !pxutil.IsCCMGoSupported(pxVersion) {
+		if rel.Components.Telemetry == "" {
+			rel.Components.Telemetry = defaultCCMJavaImage
+		}
+		if rel.Components.MetricsCollector == "" {
+			rel.Components.MetricsCollector = defaultCollectorImage
+		}
+		if rel.Components.MetricsCollectorProxy == "" {
+			rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
+		}
+	} else {
+		if rel.Components.Telemetry == "" {
+			rel.Components.Telemetry = defaultCCMGoImage
+		}
+		if rel.Components.LogUploader == "" {
+			rel.Components.LogUploader = defaultLogUploaderImage
+		}
+		if rel.Components.TelemetryProxy == "" {
+			rel.Components.TelemetryProxy = defaultCCMGoProxyImage
+		}
 	}
 }
 
