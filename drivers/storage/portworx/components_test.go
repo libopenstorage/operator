@@ -12595,6 +12595,20 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
 
+	// Validate ccm-go service account, cluster role and cluster role binding
+	serviceAccount := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNamePxTelemetry, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, serviceAccount.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceAccount.OwnerReferences[0].Name)
+
+	clusterRole := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNamePxTelemetry, "")
+	require.NoError(t, err)
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNamePxTelemetry, "")
+	require.NoError(t, err)
+
 	// Validate ccm-go role and role bindings
 	role := &rbacv1.Role{}
 	err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
@@ -12816,17 +12830,20 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 
 	validateCCMJavaComponents := func() {
 		// validate ccm java components exist
-		role := &rbacv1.Role{}
-		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-		require.NoError(t, err)
-		roleBinding := &rbacv1.RoleBinding{}
-		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+		serviceAccount := &v1.ServiceAccount{}
+		err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
 		require.NoError(t, err)
 		clusterRole := &rbacv1.ClusterRole{}
 		err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
 		require.NoError(t, err)
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
 		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+		require.NoError(t, err)
+		role := &rbacv1.Role{}
+		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+		require.NoError(t, err)
+		roleBinding := &rbacv1.RoleBinding{}
+		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
 		require.NoError(t, err)
 		configMap := &v1.ConfigMap{}
 		err = testutil.Get(k8sClient, configMap, component.TelemetryConfigMapName, cluster.Namespace)
@@ -12841,6 +12858,12 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 		require.NoError(t, err)
 		// validate ccm go components don't exist
+		err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNamePxTelemetry, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNamePxTelemetry, "")
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNamePxTelemetry, "")
+		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSecretManager, cluster.Namespace)
@@ -12877,6 +12900,15 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
 	validateCCMGoComponents := func() {
 		// validate ccm go components exist
+		serviceAccount := &v1.ServiceAccount{}
+		err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNamePxTelemetry, cluster.Namespace)
+		require.NoError(t, err)
+		clusterRole := &rbacv1.ClusterRole{}
+		err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNamePxTelemetry, "")
+		require.NoError(t, err)
+		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNamePxTelemetry, "")
+		require.NoError(t, err)
 		role := &rbacv1.Role{}
 		err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
 		require.NoError(t, err)
@@ -12911,15 +12943,15 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		err = testutil.Get(k8sClient, deployment, component.DeploymentNamePhonehomeCluster, cluster.Namespace)
 		require.NoError(t, err)
 		// validate ccm java components don't exist
+		err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		clusterRole := &rbacv1.ClusterRole{}
-		err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
-		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))

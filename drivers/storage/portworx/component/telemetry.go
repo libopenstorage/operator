@@ -21,6 +21,7 @@ import (
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -48,6 +49,12 @@ const (
 	DeploymentNameRegistrationService = "registration-service"
 	// DeploymentNamePhonehomeCluster is name of deployment phonehome-cluster
 	DeploymentNamePhonehomeCluster = "phonehome-cluster"
+	// ServiceAccountNamePxTelemetry is name of service account px-telemetry
+	ServiceAccountNamePxTelemetry = "px-telemetry"
+	// ClusterRoleNamePxTelemetry is name of cluster role px-telemetry
+	ClusterRoleNamePxTelemetry = "px-telemetry"
+	// ClusterRoleBindingNamePxTelemetry is name of cluster role binding px-telemetry
+	ClusterRoleBindingNamePxTelemetry = "px-telemetry"
 
 	roleFileNameSecretManager             = "secret-manager-role.yaml"
 	roleBindingFileNameSecretManager      = "secret-manager-role-binding.yaml"
@@ -178,6 +185,11 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	// TODO: add metrics collector back
+	// TODO: let metrics collector use new serviceaccount, clusterrole, clusterrolebining
+	if err := t.createCCMGoSCCComponents(cluster, ownerRef); err != nil {
+		return err
+	}
 	if err := t.reconcileCCMGoRolesAndRoleBindings(cluster, ownerRef); err != nil {
 		return err
 	}
@@ -263,6 +275,41 @@ func (t *telemetry) deleteCCMGo(
 	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+	if err := t.deleteCCMGoSCCComponents(cluster, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) createCCMGoSCCComponents(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := t.createServiceAccountPxTelemetry(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.createClusterRolePxTelemetry(); err != nil {
+		return err
+	}
+	if err := t.createClusterRoleBindingPxTelemetry(cluster.Namespace); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoSCCComponents(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteClusterRoleBinding(t.k8sClient, ClusterRoleBindingNamePxTelemetry); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRole(t.k8sClient, ClusterRoleNamePxTelemetry); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteServiceAccount(t.k8sClient, ServiceAccountNamePxTelemetry, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -344,6 +391,71 @@ func (t *telemetry) reconcileCCMGoDeployments(
 		return err
 	}
 	return nil
+}
+
+func (t *telemetry) createServiceAccountPxTelemetry(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		t.k8sClient,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ServiceAccountNamePxTelemetry,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+func (t *telemetry) createClusterRolePxTelemetry() error {
+	return k8sutil.CreateOrUpdateClusterRole(
+		t.k8sClient,
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ClusterRoleNamePxTelemetry,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{PxSCCName},
+					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					ResourceNames: []string{constants.PrivilegedPSPName},
+					Verbs:         []string{"use"},
+				},
+			},
+		},
+	)
+}
+
+func (t *telemetry) createClusterRoleBindingPxTelemetry(clusterNamespace string) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		t.k8sClient,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ClusterRoleBindingNamePxTelemetry,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ServiceAccountNamePxTelemetry,
+					Namespace: clusterNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     ClusterRoleNamePxTelemetry,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+	)
 }
 
 // create cm registration-config from config_properties_px.yaml
@@ -531,6 +643,7 @@ func (t *telemetry) createDeploymentRegistrationService(
 	deployment.Name = DeploymentNameRegistrationService
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.Containers = containers
+	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
 	pxutil.ApplyStorageClusterSettings(cluster, deployment)
 
 	existingDeployment, err := k8sutil.GetDeployment(t.k8sClient, deployment)
@@ -614,6 +727,7 @@ func (t *telemetry) createDeploymentPhonehomeCluster(
 	}
 	num := int32(replicasCount)
 	deployment.Spec.Replicas = &num
+	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
 	pxutil.ApplyStorageClusterSettings(cluster, deployment)
 
 	existingDeployment, err := k8sutil.GetDeployment(t.k8sClient, deployment)
@@ -740,7 +854,7 @@ func createRoleBindingFromFile(
 	roleBinding.Subjects = []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
-			Name:      "default",
+			Name:      ServiceAccountNamePxTelemetry,
 			APIGroup:  "",
 			Namespace: cluster.Namespace,
 		},
