@@ -153,7 +153,7 @@ func (t *telemetry) deployMetricsCollector(
 		return err
 	}
 
-	if err := t.createCCMJavaProxyConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCollectorProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
 
@@ -484,7 +484,7 @@ func (t *telemetry) createCollectorRoleBinding(
 	)
 }
 
-func (t *telemetry) createCCMJavaProxyConfigMap(
+func (t *telemetry) createCollectorProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
