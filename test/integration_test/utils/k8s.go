@@ -113,12 +113,28 @@ func CreateObjects(objects []runtime.Object) error {
 		} else if sc, ok := obj.(*storagev1.StorageClass); ok {
 			_, err = storageops.Instance().CreateStorageClass(sc)
 		} else if sm, ok := obj.(*monitoringv1.ServiceMonitor); ok {
+			err = apiextensionsops.Instance().ValidateCRD("servicemonitors.monitoring.coreos.com", 1*time.Minute, 1*time.Second)
+			if err != nil {
+				return err
+			}
 			_, err = prometheusops.Instance().CreateServiceMonitor(sm)
 		} else if pr, ok := obj.(*monitoringv1.PrometheusRule); ok {
+			err = apiextensionsops.Instance().ValidateCRD("prometheusrules.monitoring.coreos.com", 1*time.Minute, 1*time.Second)
+			if err != nil {
+				return err
+			}
 			_, err = prometheusops.Instance().CreatePrometheusRule(pr)
 		} else if prom, ok := obj.(*monitoringv1.Prometheus); ok {
+			err = apiextensionsops.Instance().ValidateCRD("prometheuses.monitoring.coreos.com", 1*time.Minute, 1*time.Second)
+			if err != nil {
+				return err
+			}
 			_, err = prometheusops.Instance().CreatePrometheus(prom)
 		} else if am, ok := obj.(*monitoringv1.Alertmanager); ok {
+			err = apiextensionsops.Instance().ValidateCRD("alertmanagers.monitoring.coreos.com", 1*time.Minute, 1*time.Second)
+			if err != nil {
+				return err
+			}
 			_, err = prometheusops.Instance().CreateAlertManager(am)
 		} else {
 			err = fmt.Errorf("unsupported object: %v", reflect.TypeOf(obj))
