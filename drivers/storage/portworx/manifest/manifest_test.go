@@ -254,6 +254,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-go:1.0.0",
 			TelemetryProxy:            "envoyproxy/envoy:v1.22.2",
 			LogUploader:               "purestorage/log-upload:1.0.0",
+			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			PxRepo:                    "portworx/px-repo:1.1.0",
 		},
 	}
@@ -776,7 +777,7 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
 	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
-	require.Empty(t, rel.Components.MetricsCollector)
+	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
 	require.Empty(t, rel.Components.MetricsCollectorProxy)
 
 	// TestCase: default non-SemVerCCM use run CCM Go images
@@ -791,7 +792,7 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
 	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
-	require.Empty(t, rel.Components.MetricsCollector)
+	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
 	require.Empty(t, rel.Components.MetricsCollectorProxy)
 }
 

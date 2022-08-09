@@ -7337,7 +7337,7 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
-	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Equal(t, "purestorage/realtime-metrics:latest", cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
 	require.Equal(t, "purestorage/log-upload:1.2.3", cluster.Status.DesiredImages.LogUploader)
