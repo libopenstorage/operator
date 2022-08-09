@@ -227,11 +227,18 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 		if autoUpdateMetricsCollector(toUpdate) &&
 			(toUpdate.Status.DesiredImages.MetricsCollector == "" ||
-				toUpdate.Status.DesiredImages.MetricsCollectorProxy == "" ||
+				(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+					toUpdate.Status.DesiredImages.MetricsCollectorProxy == "") ||
+				(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+					toUpdate.Status.DesiredImages.TelemetryProxy == "") ||
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
-			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
+			if !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) {
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
+			} else {
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
+			}
 		}
 
 		if autoUpdateLogUploader(toUpdate) &&
@@ -1023,7 +1030,10 @@ func hasTelemetryProxyChanged(cluster *corev1.StorageCluster) bool {
 func hasMetricsCollectorChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateMetricsCollector(cluster) &&
 		(cluster.Status.DesiredImages.MetricsCollector == "" ||
-			cluster.Status.DesiredImages.MetricsCollectorProxy == "")
+			(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+				cluster.Status.DesiredImages.MetricsCollectorProxy == "") ||
+			(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+				cluster.Status.DesiredImages.TelemetryProxy == ""))
 }
 
 func hasLogUploaderChanged(cluster *corev1.StorageCluster) bool {
@@ -1084,8 +1094,7 @@ func autoUpdateTelemetryProxy(cluster *corev1.StorageCluster) bool {
 }
 
 func autoUpdateMetricsCollector(cluster *corev1.StorageCluster) bool {
-	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
-		!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
+	return pxutil.IsTelemetryEnabled(cluster.Spec)
 }
 
 func autoUpdateLogUploader(cluster *corev1.StorageCluster) bool {

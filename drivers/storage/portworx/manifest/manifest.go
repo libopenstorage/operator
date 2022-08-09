@@ -309,9 +309,6 @@ func fillTelemetryDefaults(
 		if rel.Components.Telemetry == "" {
 			rel.Components.Telemetry = defaultCCMJavaImage
 		}
-		if rel.Components.MetricsCollector == "" {
-			rel.Components.MetricsCollector = defaultCollectorImage
-		}
 		if rel.Components.MetricsCollectorProxy == "" {
 			rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
 		}
@@ -325,6 +322,9 @@ func fillTelemetryDefaults(
 		if rel.Components.TelemetryProxy == "" {
 			rel.Components.TelemetryProxy = defaultCCMGoProxyImage
 		}
+	}
+	if rel.Components.MetricsCollector == "" {
+		rel.Components.MetricsCollector = defaultCollectorImage
 	}
 }
 
