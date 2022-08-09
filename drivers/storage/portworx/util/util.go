@@ -856,6 +856,11 @@ func RunCCMGo(cluster *corev1.StorageCluster) bool {
 	return cluster.Status.DesiredImages.TelemetryProxy != ""
 }
 
+// IsMetricsCollectorSupported returns true if px version is higher than 2.9.1
+func IsMetricsCollectorSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionMetricsCollector)
+}
+
 // ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component
 // Which includes:
 //   namespace
