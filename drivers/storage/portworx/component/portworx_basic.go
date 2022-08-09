@@ -435,7 +435,7 @@ func getPortworxServiceSpec(
 ) *v1.Service {
 	labels := pxutil.SelectorLabels()
 	startPort := pxutil.StartPort(cluster)
-	_, sdkTargetPort, restGatewayTargetPort := getTargetPorts(startPort)
+	_, sdkTargetPort, restGatewayTargetPort, pxAPITLSPort := getTargetPorts(startPort)
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -469,6 +469,18 @@ func getPortworxServiceSpec(
 		},
 	}
 
+	// TLS secured port 9023 added in PX 2.9.0, only add it is 2.9.0 or later
+	pxAPITLSVersion, _ := version.NewVersion("2.9.0")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxAPITLSVersion) {
+		newService.Spec.Ports = append(newService.Spec.Ports,
+			v1.ServicePort{
+				Name:       pxutil.PortworxRESTTLSPortName,
+				Protocol:   v1.ProtocolTCP,
+				Port:       int32(9023),
+				TargetPort: intstr.FromInt(pxAPITLSPort),
+			})
+	}
+
 	if ownerRef != nil {
 		newService.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	}
@@ -497,7 +509,7 @@ func getPortworxKVDBServiceSpec(
 ) *v1.Service {
 	labels := pxutil.SelectorLabels()
 	startPort := pxutil.StartPort(cluster)
-	kvdbTargetPort, _, _ := getTargetPorts(startPort)
+	kvdbTargetPort, _, _, _ := getTargetPorts(startPort)
 
 	newService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -535,16 +547,18 @@ func getPortworxKVDBServiceSpec(
 	return newService
 }
 
-func getTargetPorts(startPort int) (int, int, int) {
+func getTargetPorts(startPort int) (int, int, int, int) {
 	kvdbTargetPort := 9019
 	sdkTargetPort := 9020
 	restGatewayTargetPort := 9021
+	pxAPITLSPort := 9023
 	if startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = startPort + 15
 		sdkTargetPort = startPort + 16
 		restGatewayTargetPort = startPort + 17
+		pxAPITLSPort = startPort + 19
 	}
-	return kvdbTargetPort, sdkTargetPort, restGatewayTargetPort
+	return kvdbTargetPort, sdkTargetPort, restGatewayTargetPort, pxAPITLSPort
 }
 
 func getSecretsNamespace(cluster *corev1.StorageCluster) string {
