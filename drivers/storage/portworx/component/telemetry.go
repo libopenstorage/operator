@@ -96,6 +96,7 @@ const (
 type telemetry struct {
 	k8sClient                              client.Client
 	sdkConn                                *grpc.ClientConn
+	isCCMGoSupported                       bool
 	isCollectorDeploymentCreated           bool
 	isDeploymentRegistrationServiceCreated bool
 	isDeploymentPhonehonmeClusterCreated   bool
@@ -137,19 +138,21 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
 		return err
 	}
-
-	if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
-		// Remove old ccm components first if exist
-		if err := t.deleteCCMJava(cluster, ownerRef); err != nil {
-			return err
-		}
+	if cluster.Status.ClusterUID == "" {
+		logrus.Warn("clusterUID is empty, wait for it to reconcile telemetry components")
+		return nil
+	}
+	t.isCCMGoSupported = pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
+	if t.isCCMGoSupported {
 		return t.reconcileCCMGo(cluster, ownerRef)
 	}
 	return t.reconcileCCMJava(cluster, ownerRef)
 }
 
 func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
+	// When disabling telemetry, try to cleanup both new and old components
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+
 	if err := t.deleteCCMJava(cluster, ownerRef); err != nil {
 		return err
 	}
@@ -157,13 +160,8 @@ func (t *telemetry) Delete(cluster *corev1.StorageCluster) error {
 	if err := t.deleteCCMGo(cluster, ownerRef); err != nil {
 		return err
 	}
-
-	// Both ccm java and go create this config map with same name, only delete it when disabled
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNamePxTelemetryConfig, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-
 	t.closeSdkConn()
+
 	t.MarkDeleted()
 	return nil
 }
@@ -185,24 +183,277 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	// TODO: add metrics collector back
-	// TODO: let metrics collector use new serviceaccount, clusterrole, clusterrolebining
-	if err := t.createCCMGoSCCComponents(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoServiceAccount(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.reconcileCCMGoClusterRolesAndClusterRoleBindings(cluster); err != nil {
 		return err
 	}
 	if err := t.reconcileCCMGoRolesAndRoleBindings(cluster, ownerRef); err != nil {
 		return err
 	}
-	if cluster.Status.ClusterUID == "" {
-		logrus.Warn("clusterUID is empty, wait for it to fill telemetry proxy config")
-		return nil
-	}
-	if err := t.reconcileCCMGoConfigMaps(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoRegistrationService(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.reconcileCCMGoDeployments(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoPhonehomeCluster(cluster, ownerRef); err != nil {
 		return err
 	}
+	if err := t.reconcileCCMGoMetricsCollectorV2(cluster, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGo(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteServiceAccount(t.k8sClient, ServiceAccountNamePxTelemetry, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := t.deleteCCMGoClusterRoleAndClusterRoleBinding(); err != nil {
+		return err
+	}
+	if err := t.deleteCCMGoRolesAndRoleBindings(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.deleteCCMGoRegistrationService(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.deleteCCMGoPhonehomeCluster(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.deleteCCMGoMetricsCollectorV2(cluster, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoServiceAccount(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Create service account for registration service, log uploader and metrics collector v2
+	if err := t.createServiceAccountPxTelemetry(cluster, ownerRef); err != nil {
+		return err
+	}
+	// Delete service account used by metrics collector v1
+	if err := k8sutil.DeleteServiceAccount(t.k8sClient, CollectorServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoClusterRolesAndClusterRoleBindings(
+	cluster *corev1.StorageCluster,
+) error {
+	// Create cluster role and cluster role binding for registration service, log uploader and metrics collector v2
+	if err := t.createClusterRolePxTelemetry(); err != nil {
+		return err
+	}
+	if err := t.createClusterRoleBindingPxTelemetry(cluster.Namespace); err != nil {
+		return err
+	}
+	// Delete cluster role and cluster role binding used by metrics collector v1
+	if err := k8sutil.DeleteClusterRole(t.k8sClient, CollectorClusterRoleName); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(t.k8sClient, CollectorClusterRoleBindingName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoClusterRoleAndClusterRoleBinding() error {
+	if err := k8sutil.DeleteClusterRole(t.k8sClient, ClusterRoleNamePxTelemetry); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteClusterRoleBinding(t.k8sClient, ClusterRoleBindingNamePxTelemetry); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoRolesAndRoleBindings(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Create secret manager role and role binding
+	if err := createRoleFromFile(t.k8sClient, roleFileNameSecretManager, RoleNameSecretManager, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSecretManager)
+		return err
+	}
+	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSecretManager, RoleBindingNameSecretManager, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSecretManager)
+		return err
+	}
+	// Create stc reader role and role binding
+	if err := createRoleFromFile(t.k8sClient, roleFileNameSTCReader, RoleNameSTCReader, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSTCReader)
+		return err
+	}
+	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSTCReader, RoleBindingNameSTCReader, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSTCReader)
+		return err
+	}
+	// Create metrics collector role and role binding
+	if err := t.createCollectorRole(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, CollectorRoleName)
+		return err
+	}
+	if err := t.createCollectorRoleBinding(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, CollectorRoleBindingName)
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoRolesAndRoleBindings(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRole(t.k8sClient, CollectorRoleName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, CollectorRoleBindingName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoRegistrationService(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Delete unused old components from ccm java
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	// Create cm registration-config from config_properties_px.yaml
+	if err := t.createCCMGoConfigMapRegistrationConfig(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm registration-config from config_properties_px.yaml ")
+		return err
+	}
+	// Create cm proxy-config-register from envoy-config-register.yaml
+	if err := t.createCCMGoConfigMapProxyConfigRegister(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm proxy-config-register from envoy-config-register.yaml")
+		return err
+	}
+	// Create deployment registration-service
+	if err := t.createDeploymentRegistrationService(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameRegistrationService)
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoRegistrationService(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameRegistrationConfig, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRegister, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNameRegistrationService, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	t.isDeploymentRegistrationServiceCreated = false
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoPhonehomeCluster(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	// Reconcile config maps for log uploader
+	// Creat cm proxy-config-rest from envoy-config-rest.yaml
+	if err := t.createCCMGoConfigMapProxyConfigRest(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+		return err
+	}
+	// Create cm tls-certificate from tls_certificate_sds_secret.yaml
+	if err := t.createCCMGoConfigMapTLSCertificate(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+		return err
+	}
+	// Create cm px-telemetry-config from ccm.properties and location
+	// CCM Java creates this cm as well, let's delete it and create a new one
+	if err := t.createCCMGoConfigMapPXTelemetryConfig(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Error("failed to create cm px-telemetry-config from ccm.properties and location")
+		return err
+	}
+	// create deployment phonehone-cluster
+	if err := t.createDeploymentPhonehomeCluster(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNamePhonehomeCluster)
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoPhonehomeCluster(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNamePhonehomeCluster, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRest, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTLSCertificate, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNamePxTelemetryConfig, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) reconcileCCMGoMetricsCollectorV2(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := t.createCollectorProxyConfigMap(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.createCollectorConfigMap(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.createCollectorDeployment(cluster, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *telemetry) deleteCCMGoMetricsCollectorV2(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, CollectorProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, CollectorConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDeployment(t.k8sClient, CollectorDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	t.isCollectorDeploymentCreated = false
 	return nil
 }
 
@@ -239,158 +490,6 @@ func (t *telemetry) setTelemetryCertOwnerRef(
 	secret.OwnerReferences = append(secret.OwnerReferences, *ownerRef)
 
 	return t.k8sClient.Update(context.TODO(), secret)
-}
-
-func (t *telemetry) deleteCCMGo(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNamePhonehomeCluster, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNameRegistrationService, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameRegistrationConfig, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRegister, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRest, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTLSCertificate, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := t.deleteCCMGoSCCComponents(cluster, ownerRef); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *telemetry) createCCMGoSCCComponents(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	if err := t.createServiceAccountPxTelemetry(cluster, ownerRef); err != nil {
-		return err
-	}
-	if err := t.createClusterRolePxTelemetry(); err != nil {
-		return err
-	}
-	if err := t.createClusterRoleBindingPxTelemetry(cluster.Namespace); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *telemetry) deleteCCMGoSCCComponents(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	if err := k8sutil.DeleteClusterRoleBinding(t.k8sClient, ClusterRoleBindingNamePxTelemetry); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteClusterRole(t.k8sClient, ClusterRoleNamePxTelemetry); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteServiceAccount(t.k8sClient, ServiceAccountNamePxTelemetry, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *telemetry) reconcileCCMGoRolesAndRoleBindings(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	// Create secret manager role and role binding
-	if err := createRoleFromFile(t.k8sClient, roleFileNameSecretManager, RoleNameSecretManager, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSecretManager)
-		return err
-	}
-	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSecretManager, RoleBindingNameSecretManager, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSecretManager)
-		return err
-	}
-	// Create stc reader role and role binding
-	if err := createRoleFromFile(t.k8sClient, roleFileNameSTCReader, RoleNameSTCReader, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSTCReader)
-		return err
-	}
-	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSTCReader, RoleBindingNameSTCReader, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSTCReader)
-		return err
-	}
-	return nil
-}
-
-// reconcileCCMGoConfigMaps reconcile 5 config maps in total
-func (t *telemetry) reconcileCCMGoConfigMaps(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	// Reconcile config maps for registration service
-	// Create cm registration-config from config_properties_px.yaml
-	if err := t.createCCMGoConfigMapRegistrationConfig(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm registration-config from config_properties_px.yaml ")
-		return err
-	}
-	// Create cm proxy-config-register from envoy-config-register.yaml
-	if err := t.createCCMGoConfigMapProxyConfigRegister(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm proxy-config-register from envoy-config-register.yaml")
-		return err
-	}
-
-	// Reconcile config maps for log uploader
-	// Creat cm proxy-config-rest from envoy-config-rest.yaml
-	if err := t.createCCMGoConfigMapProxyConfigRest(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
-		return err
-	}
-	// Create cm tls-certificate from tls_certificate_sds_secret.yaml
-	if err := t.createCCMGoConfigMapTLSCertificate(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
-		return err
-	}
-	// Create cm px-telemetry-config from ccm.properties and location
-	// CCM Java creates this cm as well, let's delete it and create a new one
-	if err := t.createCCMGoConfigMapPXTelemetryConfig(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm px-telemetry-config from ccm.properties and location")
-		return err
-	}
-
-	return nil
-}
-
-func (t *telemetry) reconcileCCMGoDeployments(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	// Create deployment registration-service
-	if err := t.createDeploymentRegistrationService(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameRegistrationService)
-		return err
-	}
-	// create deployment phonehone-cluster
-	if err := t.createDeploymentPhonehomeCluster(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNamePhonehomeCluster)
-		return err
-	}
-	return nil
 }
 
 func (t *telemetry) createServiceAccountPxTelemetry(

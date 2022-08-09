@@ -243,6 +243,8 @@ var (
 	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
 	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
+	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
+	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
 )
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
@@ -1001,6 +1003,11 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.PxRepo != nil &&
 		spec.PxRepo.Enabled
+}
+
+// IsMetricsCollectorSupported returns true if px version is higher than 2.9.1
+func IsMetricsCollectorSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionMetricsCollector)
 }
 
 // ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component

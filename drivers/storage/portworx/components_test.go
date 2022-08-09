@@ -12590,7 +12590,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
-	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
@@ -12684,6 +12684,23 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
+	// Validate metrics collector
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, configMap.OwnerReferences[0].Name, cluster.Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, configMap.OwnerReferences[0].Name, cluster.Name)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
 	driver.SetDefaultsOnStorageCluster(cluster)
@@ -12718,6 +12735,12 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSTCReader, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
@@ -12735,7 +12758,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
-	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
@@ -12894,7 +12917,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
-	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
@@ -12949,16 +12972,21 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
 		require.True(t, errors.IsNotFound(err))
+		// validate metrics collector components exist
+		role = &rbacv1.Role{}
 		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
+		require.NoError(t, err)
+		roleBinding = &rbacv1.RoleBinding{}
 		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
+		deployment = &appsv1.Deployment{}
 		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
 	}
 	validateCCMGoComponents()
 }
