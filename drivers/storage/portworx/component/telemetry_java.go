@@ -1,17 +1,14 @@
 package component
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -236,20 +233,12 @@ func (t *telemetry) createCollectorDeployment(
 	}
 
 	existingDeployment := &appsv1.Deployment{}
-	err = t.k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      CollectorDeploymentName,
-			Namespace: cluster.Namespace,
-		},
-		existingDeployment,
-	)
-	if err != nil && !errors.IsNotFound(err) {
+	if err := k8sutil.GetDeployment(t.k8sClient, deployment.Name, deployment.Namespace, existingDeployment); err != nil {
 		return err
 	}
 
 	modified := false
-	if equal, _ := util.DeepEqualDeployment(deployment, existingDeployment); !equal {
+	if equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template); !equal {
 		modified = true
 	}
 
@@ -422,7 +411,8 @@ func (t *telemetry) getCollectorDeployment(
 		},
 	}
 
-	pxutil.ApplyStorageClusterSettings(cluster, deployment)
+	deployment.Namespace = cluster.Namespace
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
 	return deployment, nil
 }

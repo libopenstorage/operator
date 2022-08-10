@@ -11773,31 +11773,11 @@ func TestTelemetryCCMProxy(t *testing.T) {
 }
 
 func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
-	sdkServerIP := "127.0.0.1"
-	sdkServerPort := 9020
-	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
-	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
-	defer mockSdk.Stop()
-
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-	}}
-	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
-		Nodes: []*osdapi.StorageNode{
-			{SchedulerNodeName: "node1"},
-		},
-	}
-	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
-
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -11815,26 +11795,6 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	k8sClient := testutil.FakeK8sClient(&v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.PortworxServiceName,
-			Namespace: cluster.Namespace,
-		},
-		Spec: v1.ServiceSpec{
-			ClusterIP: sdkServerIP,
-			Ports: []v1.ServicePort{
-				{
-					Name: pxutil.PortworxSDKPortName,
-					Port: int32(sdkServerPort),
-				},
-			},
-		},
-	}, fakeK8sNodes)
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
 	k8sClient.Create(
@@ -11935,11 +11895,11 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 
-	deployment = &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, component.DeploymentNamePhonehomeCluster, cluster.Namespace)
+	daemonset := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
 
 	secret := v1.Secret{}
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
@@ -11977,7 +11937,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameRegistrationService, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, deployment, component.DeploymentNamePhonehomeCluster, cluster.Namespace)
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameRegistrationConfig, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -12027,31 +11987,11 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 }
 
 func TestTelemetryCCMGoUpgrade(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
-	sdkServerIP := "127.0.0.1"
-	sdkServerPort := 9020
-	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
-	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
-	defer mockSdk.Stop()
-
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-	}}
-	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
-		Nodes: []*osdapi.StorageNode{
-			{SchedulerNodeName: "node1"},
-		},
-	}
-	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
-		Return(expectedNodeEnumerateResp, nil).
-		AnyTimes()
-
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	// Deploy px with CCM Java enabled and telemetry image specified
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12071,27 +12011,6 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	k8sClient := testutil.FakeK8sClient(&v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.PortworxServiceName,
-			Namespace: cluster.Namespace,
-		},
-		Spec: v1.ServiceSpec{
-			ClusterIP: sdkServerIP,
-			Ports: []v1.ServicePort{
-				{
-					Name: pxutil.PortworxSDKPortName,
-					Port: int32(sdkServerPort),
-				},
-			},
-		},
-	}, fakeK8sNodes)
-
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-
 	// This cert is created by ccm container outside of operator, let's simulate it.
 	k8sClient.Create(
 		context.TODO(),
@@ -12167,7 +12086,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, deployment, component.DeploymentNameRegistrationService, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, deployment, component.DeploymentNamePhonehomeCluster, cluster.Namespace)
+		daemonset := &appsv1.DaemonSet{}
+		err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
 	}
 	validateCCMJavaComponents()
@@ -12224,8 +12144,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		deployment := &appsv1.Deployment{}
 		err = testutil.Get(k8sClient, deployment, component.DeploymentNameRegistrationService, cluster.Namespace)
 		require.NoError(t, err)
-		deployment = &appsv1.Deployment{}
-		err = testutil.Get(k8sClient, deployment, component.DeploymentNamePhonehomeCluster, cluster.Namespace)
+		daemonset := &appsv1.DaemonSet{}
+		err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 		require.NoError(t, err)
 		// validate ccm java components don't exist
 		err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)

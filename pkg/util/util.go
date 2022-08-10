@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-version"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -238,37 +237,33 @@ func DeepEqualObjects(
 	return nil
 }
 
-// DeepEqualDeployment compares if two deployments are same.
-func DeepEqualDeployment(d1 *appsv1.Deployment, d2 *appsv1.Deployment) (bool, error) {
+// DeepEqualPodTemplate compares if two pod template specs are same.
+func DeepEqualPodTemplate(t1, t2 *v1.PodTemplateSpec) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
-	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
-	if (d1 == nil && d2 != nil) || (d1 != nil && d2 == nil) {
-		return false, fmt.Errorf("one deployment is nil, first: %v, second: %v", d1 == nil, d2 == nil)
+	// The reason we don't2 use deepEqual for volumes is k8s API server may add defaultMode to it.
+	if !equality.Semantic.DeepDerivative(t1.Spec.Containers, t2.Spec.Containers) {
+		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", t1.Spec.Containers, t2.Spec.Containers)
 	}
 
-	if !equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers) {
-		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Containers, d2.Spec.Template.Spec.Containers)
+	if !(len(t1.Spec.Volumes) == len(t2.Spec.Volumes) &&
+		equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes)) {
+		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", t1.Spec.Volumes, t2.Spec.Volumes)
 	}
 
-	if !(len(d1.Spec.Template.Spec.Volumes) == len(d2.Spec.Template.Spec.Volumes) &&
-		equality.Semantic.DeepDerivative(d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes)) {
-		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Volumes, d2.Spec.Template.Spec.Volumes)
+	if !equality.Semantic.DeepEqual(t1.Spec.ImagePullSecrets, t2.Spec.ImagePullSecrets) {
+		return false, fmt.Errorf("image pull secrets not equal, first: %+v, second: %+v", t1.Spec.ImagePullSecrets, t2.Spec.ImagePullSecrets)
 	}
 
-	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets) {
-		return false, fmt.Errorf("image pull secrets not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.ImagePullSecrets, d2.Spec.Template.Spec.ImagePullSecrets)
+	if !equality.Semantic.DeepEqual(t1.Spec.Affinity, t2.Spec.Affinity) {
+		return false, fmt.Errorf("affinity not equal, first: %+v, second: %+v", t1.Spec.Affinity, t2.Spec.Affinity)
 	}
 
-	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity) {
-		return false, fmt.Errorf("affinity not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Affinity, d2.Spec.Template.Spec.Affinity)
+	if !equality.Semantic.DeepEqual(t1.Spec.Tolerations, t2.Spec.Tolerations) {
+		return false, fmt.Errorf("tolerations not equal, first: %+v, second: %+v", t1.Spec.Tolerations, t2.Spec.Tolerations)
 	}
 
-	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations) {
-		return false, fmt.Errorf("tolerations not equal, first: %+v, second: %+v", d1.Spec.Template.Spec.Tolerations, d2.Spec.Template.Spec.Tolerations)
-	}
-
-	if !equality.Semantic.DeepEqual(d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName) {
-		return false, fmt.Errorf("service account name not equal, first: %s, second: %s", d1.Spec.Template.Spec.ServiceAccountName, d2.Spec.Template.Spec.ServiceAccountName)
+	if !equality.Semantic.DeepEqual(t1.Spec.ServiceAccountName, t2.Spec.ServiceAccountName) {
+		return false, fmt.Errorf("service account name not equal, first: %s, second: %s", t1.Spec.ServiceAccountName, t2.Spec.ServiceAccountName)
 	}
 
 	return true, nil
