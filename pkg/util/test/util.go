@@ -90,6 +90,9 @@ const (
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
 
+	// PxOperatorMasterVersion is a tag for PX Operator master version
+	PxOperatorMasterVersion = "9.9.9.9"
+
 	// AksPVCControllerSecurePort is the PVC controller secure port.
 	AksPVCControllerSecurePort = "10261"
 )
@@ -97,6 +100,10 @@ const (
 // TestSpecPath is the path for all test specs. Due to currently functional test and
 // unit test use different path, this needs to be set accordingly.
 var TestSpecPath = "testspec"
+
+var (
+	opVer1_9_1, _ = version.NewVersion("1.9.1")
+)
 
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
@@ -2333,6 +2340,96 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	}
 
 	return ValidateTelemetryUninstalled(pxImageList, cluster, timeout, interval)
+}
+
+// GetPortworxVersion returns Portworx version from StorageCluster
+func GetPortworxVersion(cluster *corev1.StorageCluster) (*version.Version, error) {
+	pxVersionTag := strings.Split(cluster.Spec.Image, ":")[1]
+
+	pxVersion, err := version.NewVersion(pxVersionTag)
+	if err != nil {
+		logrus.WithError(err).Warnf("Failed to parse Portworx tag to version, checking version in %s", PxReleaseManifestURLEnvVarName)
+		for _, value := range cluster.Spec.Env {
+			if value.Name == PxReleaseManifestURLEnvVarName {
+				regVersion := regexp.MustCompile(`\/(\d\S+\d)\/version$`)
+				regver := regVersion.FindStringSubmatch(value.Value)
+
+				var ver string
+				if regver != nil {
+					ver = regver[1]
+				}
+
+				if len(ver) == 0 {
+					ver = PxMasterVersion
+					logrus.Warnf("%s=%s doesn't have version set, assuming its latest and setting it to %s", PxReleaseManifestURLEnvVarName, value.Value, ver)
+				} else {
+					logrus.Warnf("Found version in %s=%s, assuming its %s", PxReleaseManifestURLEnvVarName, value.Value, ver)
+				}
+
+				pxVersion, _ = version.NewVersion(ver)
+				return pxVersion, nil
+			}
+		}
+
+		logrus.WithError(err).Warnf("Failed to parse version %s and find %s Env Var in the StorageCluster, assuming its latest and setting it to %s", pxVersionTag, PxReleaseManifestURLEnvVarName, PxMasterVersion)
+		pxVersion, _ = version.NewVersion(PxMasterVersion)
+		return pxVersion, nil
+	}
+
+	logrus.Infof("Portworx version in StorageCluster is %s", pxVersion)
+	return pxVersion, nil
+}
+
+// GetPxOperatorVersion returns PX Operator version
+func GetPxOperatorVersion() (*version.Version, error) {
+	image, err := getPxOperatorImage()
+	if err != nil {
+		return nil, err
+	}
+
+	// We may run the automation on operator installed using private images,
+	// so assume we are testing the latest operator version if failed to parse the tag
+	var versionTag string
+	versionTag = strings.Split(image, ":")[1]
+	if strings.Contains(versionTag, "-dev") {
+		versionTag = strings.Split(versionTag, "-")[0]
+	}
+	opVersion, err := version.NewVersion(versionTag)
+	if err != nil {
+		masterVersionTag := PxOperatorMasterVersion
+		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", PxOperatorMasterVersion)
+		opVersion, _ = version.NewVersion(masterVersionTag)
+	}
+
+	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())
+	return opVersion, nil
+}
+
+func getPxOperatorImage() (string, error) {
+	labelSelector := map[string]string{}
+	var image string
+
+	NamespaceList, err := coreops.Instance().ListNamespaces(labelSelector)
+	if err != nil {
+		return image, err
+	}
+
+	for _, ns := range NamespaceList.Items {
+		operatorDeployment, err := appops.Instance().GetDeployment("portworx-operator", ns.Name)
+		if errors.IsNotFound(err) {
+			continue
+		}
+		logrus.Infof("Found deployment name: %s in namespace: %s", operatorDeployment.Name, operatorDeployment.Namespace)
+
+		for _, container := range operatorDeployment.Spec.Template.Spec.Containers {
+			if container.Name == "portworx-operator" {
+				image = container.Image
+				logrus.Infof("Get portworx-operator image installed: %s", image)
+				break
+			}
+		}
+	}
+	return image, nil
 }
 
 // ValidateAlertManager validates alertManager components
