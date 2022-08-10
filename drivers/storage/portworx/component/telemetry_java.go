@@ -296,10 +296,6 @@ func (t *telemetry) getCollectorDeployment(
 	if err != nil {
 		return nil, err
 	}
-	serviceAccountName := CollectorServiceAccountName
-	if t.isCCMGoSupported {
-		serviceAccountName = ServiceAccountNamePxTelemetry
-	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CollectorDeploymentName,
@@ -312,7 +308,7 @@ func (t *telemetry) getCollectorDeployment(
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
-					ServiceAccountName: serviceAccountName,
+					ServiceAccountName: CollectorServiceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:  "collector",
@@ -409,6 +405,19 @@ func (t *telemetry) getCollectorDeployment(
 				},
 			},
 		},
+	}
+	// Update V2 metrics collector deployment
+	if t.isCCMGoSupported {
+		deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
+			Name:  "init-cont",
+			Image: collectorProxyImage,
+			Env: []v1.EnvVar{{
+				Name:  "K8S_NAMESPACE",
+				Value: cluster.Namespace,
+			}},
+			Args: []string{"cert_checker"},
+		}}
+		deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
 	}
 
 	deployment.Namespace = cluster.Namespace
