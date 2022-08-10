@@ -1,16 +1,22 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: phonehome-cluster
+  name: px-telemetry-phonehome
+  labels:
+    name: px-telemetry-phonehome
 spec:
-  replicas: 3
   selector:
     matchLabels:
-      role: phonehome-cluster
+      name: px-telemetry-phonehome
+  minReadySeconds: 0
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
   template:
     metadata:
       labels:
-        role: phonehome-cluster
+        name: px-telemetry-phonehome
     spec:
       containers:
         - name: log-upload-service

@@ -916,24 +916,25 @@ func DeleteService(
 // GetDeployment get deployment
 func GetDeployment(
 	k8sClient client.Client,
+	name string,
+	namespace string,
 	deployment *appsv1.Deployment,
-) (*appsv1.Deployment, error) {
-	existingDeployment := &appsv1.Deployment{}
+) error {
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      deployment.Name,
-			Namespace: deployment.Namespace,
+			Name:      name,
+			Namespace: namespace,
 		},
-		existingDeployment,
+		deployment,
 	)
 	if errors.IsNotFound(err) {
-		return nil, nil
+		return nil
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 
-	return existingDeployment, nil
+	return nil
 }
 
 // CreateOrUpdateDeployment creates a deployment if not present, else updates it
@@ -1076,6 +1077,30 @@ func DeleteStatefulSet(
 	statefulSet.OwnerReferences = newOwners
 	logrus.Debugf("Disowning %s/%s StatefulSet", namespace, name)
 	return k8sClient.Update(context.TODO(), statefulSet)
+}
+
+// GetDaemonSet get daemonset
+func GetDaemonSet(
+	k8sClient client.Client,
+	name string,
+	namespace string,
+	daemonset *appsv1.DaemonSet,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		daemonset,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CreateOrUpdateDaemonSet creates a daemon set if not present, else updates it
@@ -1901,6 +1926,23 @@ func GetDeploymentFromFile(
 		return nil, err
 	}
 	return deployment, nil
+}
+
+// GetDaemonSetFromFile parses a DaemonSet object from a file
+func GetDaemonSetFromFile(
+	filename string,
+	baseDir string,
+) (*appsv1.DaemonSet, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	daemonset := &appsv1.DaemonSet{}
+	if err := ParseObjectFromFile(filepath, scheme, daemonset); err != nil {
+		return nil, err
+	}
+	return daemonset, nil
 }
 
 // GetAllObjects gets all objects from k8s
