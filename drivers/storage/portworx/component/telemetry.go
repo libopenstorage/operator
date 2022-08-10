@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
+// TODO: change all names to be px specific
 const (
 	// RoleNameSecretManager is name of role secret-manager
 	RoleNameSecretManager = "secret-manager"
@@ -47,8 +49,8 @@ const (
 	ConfigMapNamePxTelemetryConfig = TelemetryConfigMapName
 	// DeploymentNameRegistrationService is name of deployment registration-servicea
 	DeploymentNameRegistrationService = "registration-service"
-	// DeploymentNamePhonehomeCluster is name of deployment phonehome-cluster
-	DeploymentNamePhonehomeCluster = "phonehome-cluster"
+	// DaemonSetNameTelemetryPhonehome is name of deployment phonehome-cluster
+	DaemonSetNameTelemetryPhonehome = "px-telemetry-phonehome"
 	// ServiceAccountNamePxTelemetry is name of service account px-telemetry
 	ServiceAccountNamePxTelemetry = "px-telemetry"
 	// ClusterRoleNamePxTelemetry is name of cluster role px-telemetry
@@ -61,7 +63,7 @@ const (
 	roleFileNameSTCReader                 = "stc-reader-role.yaml"
 	roleBindingFileNameSTCReader          = "stc-reader-role-binding.yaml"
 	deploymentFileNameRegistrationService = "registration-service.yaml"
-	deploymentFileNamePhonehomeCluster    = "phonehome-cluster.yaml"
+	daemonsetFileNameTelemetryPhonehome   = "phonehome-cluster.yaml"
 	containerNameRegistrationService      = "registration"
 	containerNameLogUploader              = "log-upload-service"
 	containerNameTelemetryProxy           = "envoy"
@@ -99,7 +101,7 @@ type telemetry struct {
 	isCCMGoSupported                       bool
 	isCollectorDeploymentCreated           bool
 	isDeploymentRegistrationServiceCreated bool
-	isDeploymentPhonehonmeClusterCreated   bool
+	isDaemonSetTelemetryPhonehonmeCreated  bool
 }
 
 func (t *telemetry) Name() string {
@@ -125,7 +127,7 @@ func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
 func (t *telemetry) MarkDeleted() {
 	t.isCollectorDeploymentCreated = false
 	t.isDeploymentRegistrationServiceCreated = false
-	t.isDeploymentPhonehonmeClusterCreated = false
+	t.isDaemonSetTelemetryPhonehonmeCreated = false
 }
 
 // RegisterTelemetryComponent registers the telemetry  component
@@ -195,7 +197,7 @@ func (t *telemetry) reconcileCCMGo(
 	if err := t.reconcileCCMGoRegistrationService(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.reconcileCCMGoPhonehomeCluster(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef); err != nil {
 		return err
 	}
 	if err := t.reconcileCCMGoMetricsCollectorV2(cluster, ownerRef); err != nil {
@@ -376,7 +378,7 @@ func (t *telemetry) deleteCCMGoRegistrationService(
 	return nil
 }
 
-func (t *telemetry) reconcileCCMGoPhonehomeCluster(
+func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -397,9 +399,9 @@ func (t *telemetry) reconcileCCMGoPhonehomeCluster(
 		logrus.WithError(err).Error("failed to create cm px-telemetry-config from ccm.properties and location")
 		return err
 	}
-	// create deployment phonehone-cluster
-	if err := t.createDeploymentPhonehomeCluster(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNamePhonehomeCluster)
+	// create daemonset px-telemetry-phonehome
+	if err := t.createDaemonSetPXTelemetryPhonehome(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create daemonset %s/%s", cluster.Namespace, DaemonSetNameTelemetryPhonehome)
 		return err
 	}
 	return nil
@@ -409,9 +411,6 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if err := k8sutil.DeleteDeployment(t.k8sClient, DeploymentNamePhonehomeCluster, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameProxyConfigRest, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
@@ -419,6 +418,9 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 		return err
 	}
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNamePxTelemetryConfig, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteDaemonSet(t.k8sClient, DaemonSetNameTelemetryPhonehome, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	return nil
@@ -740,17 +742,18 @@ func (t *telemetry) createDeploymentRegistrationService(
 		containers = append(containers, *c.DeepCopy())
 	}
 	deployment.Name = DeploymentNameRegistrationService
+	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.Containers = containers
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
-	pxutil.ApplyStorageClusterSettings(cluster, deployment)
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
-	existingDeployment, err := k8sutil.GetDeployment(t.k8sClient, deployment)
-	if err != nil {
+	existingDeployment := &appsv1.Deployment{}
+	if err := k8sutil.GetDeployment(t.k8sClient, deployment.Name, deployment.Namespace, existingDeployment); err != nil {
 		return err
 	}
 
-	equal, _ := util.DeepEqualDeployment(deployment, existingDeployment)
+	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
 	if !t.isDeploymentRegistrationServiceCreated || !equal {
 		logrus.WithFields(logrus.Fields{
 			"isCreated": t.isDeploymentRegistrationServiceCreated,
@@ -765,11 +768,11 @@ func (t *telemetry) createDeploymentRegistrationService(
 	return nil
 }
 
-func (t *telemetry) createDeploymentPhonehomeCluster(
+func (t *telemetry) createDaemonSetPXTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	deployment, err := k8sutil.GetDeploymentFromFile(deploymentFileNamePhonehomeCluster, pxutil.SpecsBaseDir())
+	daemonset, err := k8sutil.GetDaemonSetFromFile(daemonsetFileNameTelemetryPhonehome, pxutil.SpecsBaseDir())
 	if err != nil {
 		return err
 	}
@@ -781,28 +784,26 @@ func (t *telemetry) createDeploymentPhonehomeCluster(
 	if err != nil {
 		return err
 	}
-	var containers []v1.Container
-	for _, c := range deployment.Spec.Template.Spec.Containers {
-		if c.Name == containerNameLogUploader {
-			c.Image = logUploaderImage
-			var ports []v1.ContainerPort
-			for _, p := range c.Ports {
-				if p.Name == portNameLogUploaderContainer {
-					p.HostPort = logUploaderPort
-					p.ContainerPort = logUploaderPort
+	for i := 0; i < len(daemonset.Spec.Template.Spec.Containers); i++ {
+		container := &daemonset.Spec.Template.Spec.Containers[i]
+		if container.Name == containerNameLogUploader {
+			container.Image = logUploaderImage
+			for j := 0; j < len(container.Ports); j++ {
+				port := &container.Ports[j]
+				if port.Name == portNameLogUploaderContainer {
+					port.HostPort = logUploaderPort
+					port.ContainerPort = logUploaderPort
 				}
-				ports = append(ports, *p.DeepCopy())
 			}
-			c.Ports = ports
-		} else if c.Name == containerNameTelemetryProxy {
-			c.Image = proxyImage
+		} else if container.Name == containerNameTelemetryProxy {
+			container.Image = proxyImage
 		}
-		containers = append(containers, *c.DeepCopy())
 	}
-	deployment.Name = DeploymentNamePhonehomeCluster
-	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	deployment.Spec.Template.Spec.Containers = containers
-	deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
+	daemonset.Name = DaemonSetNameTelemetryPhonehome
+	daemonset.Namespace = cluster.Namespace
+	daemonset.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	// TODO: delete when new enovy image ready
+	daemonset.Spec.Template.Spec.InitContainers = []v1.Container{{
 		Name:  "init-cont",
 		Image: "bitnami/kubectl:1.24.3",
 		Command: []string{
@@ -813,39 +814,26 @@ func (t *telemetry) createDeploymentPhonehomeCluster(
 		},
 	}}
 
-	// Count number of replicas using number of storage node on this cluster
-	t.sdkConn, err = pxutil.GetPortworxConn(t.sdkConn, t.k8sClient, cluster.Namespace)
-	if err != nil {
+	daemonset.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonset.Spec.Template.Spec)
+
+	existingDaemonSet := &appsv1.DaemonSet{}
+	if err := k8sutil.GetDaemonSet(t.k8sClient, daemonset.Name, daemonset.Namespace, existingDaemonSet); err != nil {
 		return err
 	}
 
-	replicasCount, err := pxutil.CountStorageNodes(cluster, t.sdkConn, t.k8sClient)
-	if err != nil {
-		t.closeSdkConn()
-		return err
-	}
-	num := int32(replicasCount)
-	deployment.Spec.Replicas = &num
-	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
-	pxutil.ApplyStorageClusterSettings(cluster, deployment)
-
-	existingDeployment, err := k8sutil.GetDeployment(t.k8sClient, deployment)
-	if err != nil {
-		return err
-	}
-
-	equal, _ := util.DeepEqualDeployment(deployment, existingDeployment)
-	if !t.isDeploymentPhonehonmeClusterCreated || !equal {
+	equal, _ := util.DeepEqualPodTemplate(&daemonset.Spec.Template, &existingDaemonSet.Spec.Template)
+	if !t.isDaemonSetTelemetryPhonehonmeCreated || !equal {
 		logrus.WithFields(logrus.Fields{
-			"isCreated": t.isDeploymentRegistrationServiceCreated,
+			"isCreated": t.isDaemonSetTelemetryPhonehonmeCreated,
 			"equal":     equal,
-		}).Infof("will create/update the deployment %s/%s", deployment.Namespace, deployment.Name)
-		if err := k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef); err != nil {
+		}).Infof("will create/update the daemonset %s/%s", daemonset.Namespace, daemonset.Name)
+		if err := k8sutil.CreateOrUpdateDaemonSet(t.k8sClient, daemonset, ownerRef); err != nil {
 			return err
 		}
 	}
 
-	t.isDeploymentRegistrationServiceCreated = true
+	t.isDaemonSetTelemetryPhonehonmeCreated = true
 	return nil
 }
 

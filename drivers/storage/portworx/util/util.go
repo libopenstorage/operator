@@ -29,7 +29,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -1010,19 +1009,16 @@ func IsMetricsCollectorSupported(pxVersion *version.Version) bool {
 	return pxVersion.GreaterThanOrEqual(MinimumPxVersionMetricsCollector)
 }
 
-// ApplyStorageClusterSettings applies settings from StorageCluster to deployment of any component
+// ApplyStorageClusterSettingsToPodSpec applies settings from StorageCluster to pod spec of any component
 // Which includes:
-//   namespace
 //   custom image registry for images
 //   ImagePullPolicy
 //   ImagePullSecret
 //   affinity
 //   toleration
-func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *appsv1.Deployment) {
-	deployment.Namespace = cluster.Namespace
-
-	for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
-		container := &deployment.Spec.Template.Spec.Containers[i]
+func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpec *v1.PodSpec) {
+	for i := 0; i < len(podSpec.Containers); i++ {
+		container := &podSpec.Containers[i]
 		// Change image to custom repository if it has not been done
 		if !strings.HasPrefix(container.Image, strings.TrimSuffix(cluster.Spec.CustomImageRegistry, "/")) {
 			container.Image = util.GetImageURN(cluster, container.Image)
@@ -1031,7 +1027,7 @@ func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *app
 	}
 
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+		podSpec.ImagePullSecrets = append(
 			[]v1.LocalObjectReference{},
 			v1.LocalObjectReference{
 				Name: *cluster.Spec.ImagePullSecret,
@@ -1041,16 +1037,16 @@ func ApplyStorageClusterSettings(cluster *corev1.StorageCluster, deployment *app
 
 	if cluster.Spec.Placement != nil {
 		if cluster.Spec.Placement.NodeAffinity != nil {
-			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+			podSpec.Affinity = &v1.Affinity{
 				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 			}
 		}
 
 		if len(cluster.Spec.Placement.Tolerations) > 0 {
-			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			podSpec.Tolerations = make([]v1.Toleration, 0)
 			for _, toleration := range cluster.Spec.Placement.Tolerations {
-				deployment.Spec.Template.Spec.Tolerations = append(
-					deployment.Spec.Template.Spec.Tolerations,
+				podSpec.Tolerations = append(
+					podSpec.Tolerations,
 					*(toleration.DeepCopy()),
 				)
 			}
