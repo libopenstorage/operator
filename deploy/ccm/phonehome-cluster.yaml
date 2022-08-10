@@ -46,7 +46,7 @@ spec:
               protocol: TCP
           imagePullPolicy: Always
         - name: envoy
-          image: envoyproxy/envoy:v1.22.2
+          image: purestorage/telemetry-envoy:1.0.0
           securityContext:
             runAsUser: 1111
           volumeMounts:
@@ -70,8 +70,15 @@ spec:
               protocol: TCP
       initContainers:
         - name: init-cont
-          image: bitnami/kubectl:1.24.3
-          command: ['/bin/bash', '-c', "cert=$(kubectl get secrets -n kube-system --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); until [[ ${#cert} -gt 4 ]]; do echo waiting for cert generation; sleep 4; cert=$(kubectl get secrets -n kube-system --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); done;"]
+          image: purestorage/telemetry-envoy:1.0.0
+          env:
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          args:
+            - "cert_checker"
+          imagePullPolicy: Always
       volumes:
         - name: etcpwx
           hostPath:
