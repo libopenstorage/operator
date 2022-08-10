@@ -29,7 +29,7 @@ spec:
               protocol: TCP
           imagePullPolicy: Always
         - name: envoy
-          image: envoyproxy/envoy:v1.22.2
+          image: purestorage/telemetry-envoy:1.0.0
           securityContext:
             runAsUser: 1111
           volumeMounts:

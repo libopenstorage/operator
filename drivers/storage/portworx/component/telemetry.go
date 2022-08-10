@@ -732,19 +732,17 @@ func (t *telemetry) createDeploymentRegistrationService(
 	if err != nil {
 		return err
 	}
-	var containers []v1.Container
-	for _, c := range deployment.Spec.Template.Spec.Containers {
-		if c.Name == containerNameRegistrationService {
-			c.Image = telemetryImage
-		} else if c.Name == containerNameTelemetryProxy {
-			c.Image = proxyImage
+	for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		if container.Name == containerNameRegistrationService {
+			container.Image = telemetryImage
+		} else if container.Name == containerNameTelemetryProxy {
+			container.Image = proxyImage
 		}
-		containers = append(containers, *c.DeepCopy())
 	}
 	deployment.Name = DeploymentNameRegistrationService
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	deployment.Spec.Template.Spec.Containers = containers
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
@@ -799,21 +797,16 @@ func (t *telemetry) createDaemonSetPXTelemetryPhonehome(
 			container.Image = proxyImage
 		}
 	}
+	for i := 0; i < len(daemonset.Spec.Template.Spec.InitContainers); i++ {
+		container := &daemonset.Spec.Template.Spec.InitContainers[i]
+		if container.Name == "init-cont" {
+			container.Image = proxyImage
+			break
+		}
+	}
 	daemonset.Name = DaemonSetNameTelemetryPhonehome
 	daemonset.Namespace = cluster.Namespace
 	daemonset.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	// TODO: delete when new enovy image ready
-	daemonset.Spec.Template.Spec.InitContainers = []v1.Container{{
-		Name:  "init-cont",
-		Image: "bitnami/kubectl:1.24.3",
-		Command: []string{
-			"/bin/bash", "-c",
-			fmt.Sprintf("cert=$(kubectl get secrets -n %s --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); until [[ ${#cert} -gt 4 ]]; do echo waiting for cert generation; sleep 4; cert=$(kubectl get secrets -n %s --field-selector=metadata.name=pure-telemetry-certs -ojson |jq .items[0].data.cert); done;",
-				cluster.Namespace,
-				cluster.Namespace),
-		},
-	}}
-
 	daemonset.Spec.Template.Spec.ServiceAccountName = ServiceAccountNamePxTelemetry
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonset.Spec.Template.Spec)
 
