@@ -12061,6 +12061,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		deployment := &appsv1.Deployment{}
 		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
 		require.NoError(t, err)
+		require.Len(t, deployment.Spec.Template.Spec.InitContainers, 0)
+		require.Equal(t, component.CollectorServiceAccountName, deployment.Spec.Template.Spec.ServiceAccountName)
 		// validate ccm go components don't exist
 		err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNamePxTelemetry, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
@@ -12160,15 +12162,17 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		require.NoError(t, err)
 		roleBinding = &rbacv1.RoleBinding{}
 		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-		deployment = &appsv1.Deployment{}
-		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-		require.NoError(t, err)
 		configMap = &v1.ConfigMap{}
 		err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
 		require.NoError(t, err)
 		configMap = &v1.ConfigMap{}
 		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
 		require.NoError(t, err)
+		deployment = &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Len(t, deployment.Spec.Template.Spec.InitContainers, 1)
+		require.Equal(t, component.ServiceAccountNamePxTelemetry, deployment.Spec.Template.Spec.ServiceAccountName)
 	}
 	validateCCMGoComponents()
 }

@@ -868,8 +868,14 @@ func IsMetricsCollectorSupported(pxVersion *version.Version) bool {
 //   affinity
 //   toleration
 func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpec *v1.PodSpec) {
+	var containers []*v1.Container
 	for i := 0; i < len(podSpec.Containers); i++ {
-		container := &podSpec.Containers[i]
+		containers = append(containers, &podSpec.Containers[i])
+	}
+	for i := 0; i < len(podSpec.InitContainers); i++ {
+		containers = append(containers, &podSpec.InitContainers[i])
+	}
+	for _, container := range containers {
 		// Change image to custom repository if it has not been done
 		if !strings.HasPrefix(container.Image, strings.TrimSuffix(cluster.Spec.CustomImageRegistry, "/")) {
 			container.Image = util.GetImageURN(cluster, container.Image)

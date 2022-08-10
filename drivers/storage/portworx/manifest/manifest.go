@@ -34,7 +34,7 @@ const (
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
 	defaultCCMGoImage          = "purestorage/ccm-go:1.0.0"
 	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
-	defaultCCMGoProxyImage     = "envoyproxy/envoy:v1.22.2"
+	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.0"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
