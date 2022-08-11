@@ -2,13 +2,13 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   namespace: kube-system
-  name: stcrolebinding
+  name: px-telemetry-stc-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: stc-reader
+  name: px-telemetry-stc-reader
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: px-telemetry
   apiGroup: ""
   namespace: kube-system
