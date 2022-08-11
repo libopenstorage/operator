@@ -63,12 +63,18 @@ const (
 	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
 
+	// AnnotationPXVersion annotation indicating the portworx semantic version
+	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
+
 	// PxRegistryUserEnvVarName is a Docker username Env variable name
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
+
 	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
+
 	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
 	PxImageEnvVarName = "PX_IMAGE"
+
 	// StorkNamespaceEnvVarName is the namespace where stork is deployed
 	StorkNamespaceEnvVarName = "STORK-NAMESPACE"
 
@@ -90,8 +96,13 @@ const (
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
 
+	// PxOperatorMasterVersion is a tag for PX Operator master version
+	PxOperatorMasterVersion = "9.9.9.9"
+
 	// AksPVCControllerSecurePort is the PVC controller secure port.
 	AksPVCControllerSecurePort = "10261"
+
+	pxAnnotationPrefix = "portworx.io"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -2333,6 +2344,120 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	}
 
 	return ValidateTelemetryUninstalled(pxImageList, cluster, timeout, interval)
+}
+
+// GetPortworxVersion returns the Portworx version based on the image provided.
+// We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
+// env variable. If that is not present or invalid semvar, then we fallback to an
+// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
+// env variable, else we return master version
+func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
+	var (
+		err       error
+		pxVersion *version.Version
+	)
+
+	pxImage := cluster.Spec.Image
+	var manifestURL string
+	for _, env := range cluster.Spec.Env {
+		if env.Name == PxImageEnvVarName {
+			pxImage = env.Value
+		} else if env.Name == PxReleaseManifestURLEnvVarName {
+			manifestURL = env.Value
+		}
+	}
+
+	pxVersionStr := strings.Split(pxImage, ":")[len(strings.Split(pxImage, ":"))-1]
+	pxVersion, err = version.NewSemver(pxVersionStr)
+	if err != nil {
+		logrus.WithError(err).Warnf("Invalid PX version %s extracted from image name", pxVersionStr)
+		if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
+			logrus.Infof("Checking version in annotations %s", AnnotationPXVersion)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from annotation", pxVersionStr)
+			}
+		} else {
+			logrus.Infof("Checking version in %s", PxReleaseManifestURLEnvVarName)
+			pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from %s", pxVersionStr, PxReleaseManifestURLEnvVarName)
+			}
+		}
+	}
+
+	if pxVersion == nil {
+		logrus.Warnf("Failed to determine PX version, assuming its latest and setting it to master: %s", PxMasterVersion)
+		pxVersion, _ = version.NewVersion(PxMasterVersion)
+	}
+	return pxVersion
+}
+
+func getPortworxVersionFromManifestURL(url string) string {
+	regex := regexp.MustCompile(`.*portworx\.com\/(.*)\/version`)
+	version := regex.FindStringSubmatch(url)
+	if len(version) >= 2 {
+		return version[1]
+	}
+	return ""
+}
+
+// GetPxOperatorVersion returns PX Operator version
+func GetPxOperatorVersion() (*version.Version, error) {
+	image, err := getPxOperatorImage()
+	if err != nil {
+		return nil, err
+	}
+
+	// We may run the automation on operator installed using private images,
+	// so assume we are testing the latest operator version if failed to parse the tag
+	versionTag := strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
+	/*
+		if strings.Contains(versionTag, "-dev") {
+			versionTag = strings.Split(versionTag, "-")[0]
+		}
+	*/
+	opVersion, err := version.NewVersion(versionTag)
+	if err != nil {
+		masterVersionTag := PxOperatorMasterVersion
+		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", PxOperatorMasterVersion)
+		opVersion, _ = version.NewVersion(masterVersionTag)
+	}
+
+	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())
+	return opVersion, nil
+}
+
+func getPxOperatorImage() (string, error) {
+	labelSelector := map[string]string{}
+	var image string
+
+	NamespaceList, err := coreops.Instance().ListNamespaces(labelSelector)
+	if err != nil {
+		return "", err
+	}
+
+	for _, ns := range NamespaceList.Items {
+		operatorDeployment, err := appops.Instance().GetDeployment("portworx-operator", ns.Name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return "", err
+		}
+
+		logrus.Infof("Found deployment name: %s in namespace: %s", operatorDeployment.Name, operatorDeployment.Namespace)
+
+		for _, container := range operatorDeployment.Spec.Template.Spec.Containers {
+			if container.Name == "portworx-operator" {
+				image = container.Image
+				logrus.Infof("Get portworx-operator image installed: %s", image)
+				break
+			}
+		}
+	}
+	return image, nil
 }
 
 // ValidateAlertManager validates alertManager components
