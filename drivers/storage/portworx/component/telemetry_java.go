@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -75,8 +74,10 @@ func (t *telemetry) reconcileCCMJava(
 	if err := t.reconcileCCMJavaProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.deployMetricsCollector(cluster, ownerRef); err != nil {
-		return err
+	if pxutil.IsMetricsCollectorSupported(pxutil.GetPortworxVersion(cluster)) {
+		if err := t.deployMetricsCollectorV1(cluster, ownerRef); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -85,18 +86,21 @@ func (t *telemetry) deleteCCMJava(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 
-	if err := t.deleteMetricsCollector(cluster.Namespace, ownerRef); err != nil {
+	if err := t.deleteMetricsCollectorV1(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.OwnerReference) error {
+func (t *telemetry) deleteMetricsCollectorV1(namespace string, ownerRef *metav1.OwnerReference) error {
 	if err := k8sutil.DeleteServiceAccount(t.k8sClient, CollectorServiceAccountName, namespace, *ownerRef); err != nil {
 		return err
 	}
@@ -133,31 +137,19 @@ func (t *telemetry) deleteMetricsCollector(namespace string, ownerRef *metav1.Ow
 	return nil
 }
 
-func (t *telemetry) deployMetricsCollector(
+func (t *telemetry) deployMetricsCollectorV1(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	pxVer2_9_1, _ := version.NewVersion("2.9.1")
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	if pxVersion.LessThan(pxVer2_9_1) {
-		// Run metrics collector only for portworx version 2.9.1+
-		return nil
-	}
-
-	if len(cluster.Status.ClusterUID) == 0 {
-		logrus.Warn("clusterUID is empty, wait for it to fill collector proxy config")
-		return nil
-	}
-
 	if err := t.createCollectorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 
-	if err := t.createCCMJavaProxyConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCollectorClusterRole(); err != nil {
 		return err
 	}
 
-	if err := t.createCollectorConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCollectorClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
 
@@ -169,11 +161,11 @@ func (t *telemetry) deployMetricsCollector(
 		return err
 	}
 
-	if err := t.createCollectorClusterRole(); err != nil {
+	if err := t.createCollectorProxyConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
 
-	if err := t.createCollectorClusterRoleBinding(cluster.Namespace); err != nil {
+	if err := t.createCollectorConfigMap(cluster, ownerRef); err != nil {
 		return err
 	}
 
@@ -315,6 +307,10 @@ func (t *telemetry) getCollectorDeployment(
 	if err != nil {
 		return nil, err
 	}
+	serviceAccountName := CollectorServiceAccountName
+	if t.isCCMGoSupported {
+		serviceAccountName = ServiceAccountNamePxTelemetry
+	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CollectorDeploymentName,
@@ -327,7 +323,7 @@ func (t *telemetry) getCollectorDeployment(
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
-					ServiceAccountName: CollectorServiceAccountName,
+					ServiceAccountName: serviceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:  "collector",
@@ -459,6 +455,10 @@ func (t *telemetry) createCollectorRoleBinding(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	serviceAccountName := CollectorServiceAccountName
+	if t.isCCMGoSupported {
+		serviceAccountName = ServiceAccountNamePxTelemetry
+	}
 	return k8sutil.CreateOrUpdateRoleBinding(
 		t.k8sClient,
 		&rbacv1.RoleBinding{
@@ -470,7 +470,7 @@ func (t *telemetry) createCollectorRoleBinding(
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      CollectorServiceAccountName,
+					Name:      serviceAccountName,
 					Namespace: cluster.Namespace,
 				},
 			},
@@ -484,7 +484,7 @@ func (t *telemetry) createCollectorRoleBinding(
 	)
 }
 
-func (t *telemetry) createCCMJavaProxyConfigMap(
+func (t *telemetry) createCollectorProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -516,6 +516,8 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
           http_filters:
           - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
           route_config:
             name: local_route
             virtual_hosts:
