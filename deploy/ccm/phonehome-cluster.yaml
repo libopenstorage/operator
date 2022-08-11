@@ -98,14 +98,14 @@ spec:
                 path: ccm.properties
               - key: location
                 path: location
-            name: px-telemetry-config
+            name: px-telemetry-phonehome
           name: ccm-config
         - name: proxy-config
           configMap:
-            name: proxy-config-rest
+            name: px-telemetry-phonehome-proxy
         - name: tls-certificate
           configMap:
-            name: tls-certificate
+            name: px-telemetry-tls-certificate
         - name: pure-telemetry-certs
           secret:
             secretName: pure-telemetry-certs
