@@ -1947,7 +1947,8 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
 			csiHealthMonitorControllerImage = value
 		} else {
-			return fmt.Errorf("failed to find image for csiHealthMonitorController")
+			// CEE-452: csi-external-health-monitor-controller is removed from manifest, add back when resolved
+			logrus.Warnf("failed to find image for csiHealthMonitorController")
 		}
 	}
 
