@@ -1517,6 +1517,42 @@ func TestPVCControllerInstall(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
+func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.24.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment_k8s_1.24.yaml")
+	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
+	expectedContainer.Command = expectedContainer.Command[0:4]
+	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.24.0"
+	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
+	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
+	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
+}
+
 func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
