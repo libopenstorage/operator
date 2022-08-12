@@ -12569,37 +12569,15 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
 	require.NoError(t, err)
 
-	// Validate ccm-go role and role bindings
+	// Validate ccm-go role and role binding
 	role := &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
+	err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, role.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
 
 	roleBinding := &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSecretManager, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, roleBinding.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
-
-	role = &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.RoleNameSTCReader, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, role.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
-	roleBinding = &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSTCReader, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, roleBinding.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
-
-	role = &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.RoleNameTelemetryCollectorV2, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, role.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
-	roleBinding = &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetryCollectorV2, cluster.Namespace)
+	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, roleBinding.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
@@ -12705,17 +12683,9 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
+	err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSecretManager, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, role, component.RoleNameSTCReader, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSTCReader, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, role, component.RoleNameTelemetryCollectorV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetryCollectorV2, cluster.Namespace)
+	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNameTelemetry, "")
 	require.True(t, errors.IsNotFound(err))
@@ -12830,17 +12800,9 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
 		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
+		err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSecretManager, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, role, component.RoleNameTelemetryCollectorV2, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetryCollectorV2, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, role, component.RoleNameSTCReader, cluster.Namespace)
-		require.True(t, errors.IsNotFound(err))
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSTCReader, cluster.Namespace)
+		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
 		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
 		require.True(t, errors.IsNotFound(err))
@@ -12889,22 +12851,10 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
 		require.NoError(t, err)
 		role := &rbacv1.Role{}
-		err = testutil.Get(k8sClient, role, component.RoleNameSecretManager, cluster.Namespace)
+		err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
 		require.NoError(t, err)
 		roleBinding := &rbacv1.RoleBinding{}
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSecretManager, cluster.Namespace)
-		require.NoError(t, err)
-		role = &rbacv1.Role{}
-		err = testutil.Get(k8sClient, role, component.RoleNameSTCReader, cluster.Namespace)
-		require.NoError(t, err)
-		roleBinding = &rbacv1.RoleBinding{}
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameSTCReader, cluster.Namespace)
-		require.NoError(t, err)
-		role = &rbacv1.Role{}
-		err = testutil.Get(k8sClient, role, component.RoleNameTelemetryCollectorV2, cluster.Namespace)
-		require.NoError(t, err)
-		roleBinding = &rbacv1.RoleBinding{}
-		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetryCollectorV2, cluster.Namespace)
+		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
 		require.NoError(t, err)
 		configMap := &v1.ConfigMap{}
 		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)

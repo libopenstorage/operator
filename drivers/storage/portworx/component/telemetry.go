@@ -27,7 +27,6 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
-// TODO: change all names to be px specific
 const (
 	// ServiceAccountNameTelemetry is name of telemetry service account
 	ServiceAccountNameTelemetry = "px-telemetry"
@@ -35,18 +34,10 @@ const (
 	ClusterRoleNameTelemetry = "px-telemetry"
 	// ClusterRoleBindingNameTelemetry is name of telemetry cluster role binding
 	ClusterRoleBindingNameTelemetry = "px-telemetry"
-	// RoleNameSecretManager is name of secret manager role
-	RoleNameSecretManager = "px-telemetry-secret-manager"
-	// RoleBindingNameSecretManager is name of secret manager role binding
-	RoleBindingNameSecretManager = "px-telemetry-secret-manager"
-	// RoleNameSTCReader is name of stc reader role
-	RoleNameSTCReader = "px-telemetry-stc-reader"
-	// RoleBindingNameSTCReader is name of stc reader role binding
-	RoleBindingNameSTCReader = "px-telemetry-stc-reader"
-	// RoleNameTelemetryCollectorV2 is name of role for metrics collector V2
-	RoleNameTelemetryCollectorV2 = "px-telemetry-collector"
-	// RoleBindingNameTelemetryCollectorV2 is name of role binding for metrics collector V2
-	RoleBindingNameTelemetryCollectorV2 = "px-telemetry-collector"
+	// RoleNameTelemetry is name of telemetry role
+	RoleNameTelemetry = "px-telemetry"
+	// RoleBindingNameTelemetry is name of telemetry role binding
+	RoleBindingNameTelemetry = "px-telemetry"
 	// ConfigMapNameTelemetryRegister is name of config map for registration
 	ConfigMapNameTelemetryRegister = "px-telemetry-register"
 	// ConfigMapNameTelemetryRegisterProxy is name of config map for registration proxy
@@ -68,10 +59,8 @@ const (
 	// DeploymentNameTelemetryCollectorV2 is name of telemetry metrics collector
 	DeploymentNameTelemetryCollectorV2 = "px-telemetry-metrics-collector"
 
-	roleFileNameSecretManager                    = "secret-manager-role.yaml"
-	roleBindingFileNameSecretManager             = "secret-manager-role-binding.yaml"
-	roleFileNameSTCReader                        = "stc-reader-role.yaml"
-	roleBindingFileNameSTCReader                 = "stc-reader-role-binding.yaml"
+	roleFileNameTelemetry                        = "px-telemetry-role.yaml"
+	roleBindingFileNameTelemetry                 = "px-telemetry-role-binding.yaml"
 	configFileNameTelemetryRegister              = "config_properties_px.yaml"
 	configFileNameTelemetryRegisterProxy         = "envoy-config-register.yaml"
 	configFileNameTelemetryRegisterCustomerProxy = "envoy-config-register-customer-proxy.yaml"
@@ -204,13 +193,13 @@ func (t *telemetry) reconcileCCMGo(
 	if err := t.reconcileCCMGoRolesAndRoleBindings(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.reconcileCCMGoRegistrationService(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoTelemetryRegistration(cluster, ownerRef); err != nil {
 		return err
 	}
 	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := t.reconcileCCMGoMetricsCollectorV2(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoTelemetryCollectorV2(cluster, ownerRef); err != nil {
 		return err
 	}
 	return nil
@@ -279,31 +268,13 @@ func (t *telemetry) reconcileCCMGoRolesAndRoleBindings(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	// Create secret manager role and role binding
-	if err := createRoleFromFile(t.k8sClient, roleFileNameSecretManager, RoleNameSecretManager, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSecretManager)
+	// Create telemetry role and role binding
+	if err := createRoleFromFile(t.k8sClient, roleFileNameTelemetry, RoleNameTelemetry, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameTelemetry)
 		return err
 	}
-	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSecretManager, RoleBindingNameSecretManager, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSecretManager)
-		return err
-	}
-	// Create stc reader role and role binding
-	if err := createRoleFromFile(t.k8sClient, roleFileNameSTCReader, RoleNameSTCReader, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, RoleNameSTCReader)
-		return err
-	}
-	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameSTCReader, RoleBindingNameSTCReader, cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameSTCReader)
-		return err
-	}
-	// Create metrics collector role and role binding
-	if err := t.createCollectorRole(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role %s/%s", cluster.Namespace, CollectorRoleName)
-		return err
-	}
-	if err := t.createCollectorRoleBinding(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, CollectorRoleBindingName)
+	if err := createRoleBindingFromFile(t.k8sClient, roleBindingFileNameTelemetry, RoleBindingNameTelemetry, cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create role binding %s/%s", cluster.Namespace, RoleBindingNameTelemetry)
 		return err
 	}
 	return nil
@@ -313,43 +284,31 @@ func (t *telemetry) deleteCCMGoRolesAndRoleBindings(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameTelemetry, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSecretManager, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameSTCReader, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameTelemetryCollectorV2, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
-	if err := k8sutil.DeleteRoleBinding(t.k8sClient, RoleBindingNameTelemetryCollectorV2, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteRole(t.k8sClient, RoleNameTelemetry, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *telemetry) reconcileCCMGoRegistrationService(
+func (t *telemetry) reconcileCCMGoTelemetryRegistration(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	// Create cm registration-config from config_properties_px.yaml
-	if err := t.createCCMGoConfigMapRegistrationConfig(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm registration-config from config_properties_px.yaml ")
+	// Create cm for register
+	if err := t.createCCMGoConfigMapRegister(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryRegister, configFileNameTelemetryRegister)
 		return err
 	}
-	// Create cm proxy-config-register from envoy-config-register.yaml
-	if err := t.createCCMGoConfigMapProxyConfigRegister(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm proxy-config-register from envoy-config-register.yaml")
+	// Create cm for register proxy
+	if err := t.createCCMGoConfigMapRegisterProxy(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryRegisterProxy, configFileNameTelemetryRegisterProxy)
 		return err
 	}
-	// Create deployment registration-service
-	if err := t.createDeploymentRegistrationService(cluster, ownerRef); err != nil {
+	// Create deployment for register
+	if err := t.createDeploymentTelemetryRegistration(cluster, ownerRef); err != nil {
 		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameTelemetryRegistration)
 		return err
 	}
@@ -385,24 +344,23 @@ func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 		return err
 	}
 	// Reconcile config maps for log uploader
-	// Creat cm proxy-config-rest from envoy-config-rest.yaml
-	if err := t.createCCMGoConfigMapProxyConfigRest(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+	// Create cm for phonehome
+	if err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
 		return err
 	}
-	// Create cm tls-certificate from tls_certificate_sds_secret.yaml
+	// Creat cm for phonehome proxy
+	if err := t.createCCMGoConfigMapTelemetryPhonehomeProxy(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehomeProxy, configFileNameTelemetryPhonehomeProxy)
+		return err
+	}
+	// Create cm for TLS certificate
 	if err := t.createCCMGoConfigMapTLSCertificate(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to creat cm proxy-config-rest from envoy-config-rest.yaml")
+		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryTLSCertificate, configFileNameTelemetryTLSCertificate)
 		return err
 	}
-	// Create cm px-telemetry-config from ccm.properties and location
-	// CCM Java creates this cm as well, let's delete it and create a new one
-	if err := t.createCCMGoConfigMapPXTelemetryConfig(cluster, ownerRef); err != nil {
-		logrus.WithError(err).Error("failed to create cm px-telemetry-config from ccm.properties and location")
-		return err
-	}
-	// create daemonset px-telemetry-phonehome
-	if err := t.createDaemonSetPXTelemetryPhonehome(cluster, ownerRef); err != nil {
+	// create daemonset for phonehome
+	if err := t.createDaemonSetTelemetryPhonehome(cluster, ownerRef); err != nil {
 		logrus.WithError(err).Errorf("failed to create daemonset %s/%s", cluster.Namespace, DaemonSetNameTelemetryPhonehome)
 		return err
 	}
@@ -428,7 +386,7 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	return nil
 }
 
-func (t *telemetry) reconcileCCMGoMetricsCollectorV2(
+func (t *telemetry) reconcileCCMGoTelemetryCollectorV2(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -437,13 +395,16 @@ func (t *telemetry) reconcileCCMGoMetricsCollectorV2(
 		return err
 	}
 	// Deploy metrics collector V2 with all new object names
-	if err := t.createCollectorProxyConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCollectorConfigMap(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s", ConfigMapNameTelemetryCollectorV2)
 		return err
 	}
-	if err := t.createCollectorConfigMap(cluster, ownerRef); err != nil {
+	if err := t.createCollectorProxyConfigMap(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create cm %s", ConfigMapNameTelemetryCollectorProxyV2)
 		return err
 	}
 	if err := t.createCollectorDeployment(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameTelemetryCollectorV2)
 		return err
 	}
 	return nil
@@ -567,7 +528,7 @@ func (t *telemetry) createClusterRoleBindingPxTelemetry(clusterNamespace string)
 }
 
 // create cm registration-config from config_properties_px.yaml
-func (t *telemetry) createCCMGoConfigMapRegistrationConfig(
+func (t *telemetry) createCCMGoConfigMapRegister(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -594,7 +555,7 @@ func (t *telemetry) createCCMGoConfigMapRegistrationConfig(
 }
 
 // create cm proxy-config-register from envoy-config-register.yaml
-func (t *telemetry) createCCMGoConfigMapProxyConfigRegister(
+func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -633,7 +594,7 @@ func (t *telemetry) createCCMGoConfigMapProxyConfigRegister(
 }
 
 // creat cm proxy-config-rest from envoy-config-rest.yaml
-func (t *telemetry) createCCMGoConfigMapProxyConfigRest(
+func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -696,7 +657,7 @@ func (t *telemetry) createCCMGoConfigMapTLSCertificate(
 }
 
 // create cm px-telemetry-config from ccm.properties and location
-func (t *telemetry) createCCMGoConfigMapPXTelemetryConfig(
+func (t *telemetry) createCCMGoConfigMapTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -723,7 +684,7 @@ func (t *telemetry) createCCMGoConfigMapPXTelemetryConfig(
 	)
 }
 
-func (t *telemetry) createDeploymentRegistrationService(
+func (t *telemetry) createDeploymentTelemetryRegistration(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
@@ -773,7 +734,7 @@ func (t *telemetry) createDeploymentRegistrationService(
 	return nil
 }
 
-func (t *telemetry) createDaemonSetPXTelemetryPhonehome(
+func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
