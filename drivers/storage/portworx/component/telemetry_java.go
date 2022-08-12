@@ -439,15 +439,11 @@ func (t *telemetry) createCollectorRole(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	roleName := CollectorRoleName
-	if t.isCCMGoSupported {
-		roleName = RoleNameTelemetryCollectorV2
-	}
 	return k8sutil.CreateOrUpdateRole(
 		t.k8sClient,
 		&rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            roleName,
+				Name:            CollectorRoleName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -467,32 +463,24 @@ func (t *telemetry) createCollectorRoleBinding(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	roleName := CollectorRoleName
-	roleBindingName := CollectorRoleBindingName
-	serviceAccountName := CollectorServiceAccountName
-	if t.isCCMGoSupported {
-		roleName = RoleNameTelemetryCollectorV2
-		roleBindingName = RoleBindingNameTelemetryCollectorV2
-		serviceAccountName = ServiceAccountNameTelemetry
-	}
 	return k8sutil.CreateOrUpdateRoleBinding(
 		t.k8sClient,
 		&rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            roleBindingName,
+				Name:            CollectorRoleBindingName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName,
+					Name:      CollectorServiceAccountName,
 					Namespace: cluster.Namespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "Role",
-				Name:     roleName,
+				Name:     CollectorRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
