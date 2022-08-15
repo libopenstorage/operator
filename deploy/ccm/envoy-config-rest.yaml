@@ -12,7 +12,7 @@ static_resources:
     address:
       socket_address:
         address: 0.0.0.0
-        port_value: 12002
+        port_value: CLOUD_SUPPORT_PORT
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -37,14 +37,14 @@ static_resources:
                   prefix: "/"
                 request_headers_to_add:
                 - header:
-                   key: "product-name"
-                   value: "portworx"
+                    key: "product-name"
+                    value: "portworx"
                 - header:
-                   key: "appliance-id"
-                   value: APPLIANCE_ID
+                    key: "appliance-id"
+                    value: APPLIANCE_ID
                 - header:
-                   key: "product-version"
-                   value: PRODUCT_VERSION
+                    key: "product-version"
+                    value: PRODUCT_VERSION
                 route:
                   host_rewrite_literal: REST_PROXY_URL
                   cluster: cluster_cloud_support

@@ -411,6 +411,7 @@ func (t *telemetry) getCollectorDeployment(
 		},
 	}
 	// Update V2 metrics collector deployment
+	// TODO: have a separate spec for collector V2
 	if t.isCCMGoSupported {
 		deployment.Name = DeploymentNameTelemetryCollectorV2
 		deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
@@ -434,6 +435,21 @@ func (t *telemetry) getCollectorDeployment(
 				volume.ConfigMap.Name = ConfigMapNameTelemetryCollectorProxyV2
 			}
 		}
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, v1.Volume{
+			Name: "tls-certificate",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: ConfigMapNameTelemetryTLSCertificate,
+					},
+				},
+			},
+		})
+		deployment.Spec.Template.Spec.Containers[1].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[1].VolumeMounts, v1.VolumeMount{
+			Name:      "tls-certificate",
+			ReadOnly:  true,
+			MountPath: "/etc/envoy/",
+		})
 	}
 
 	deployment.Namespace = cluster.Namespace
@@ -499,10 +515,17 @@ func (t *telemetry) createCollectorProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	configMap := getCollectorProxyConfigMapV1(cluster, ownerRef)
+	return k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
+}
+
+func getCollectorProxyConfigMapV1(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) *v1.ConfigMap {
 	arcusRestProxyURL := getArcusRestProxyURL(cluster)
 	config := fmt.Sprintf(
-		`
-admin:
+		`admin:
   address:
     socket_address:
       address: 127.0.0.1
@@ -539,17 +562,17 @@ static_resources:
                   prefix: "/"
                 request_headers_to_add:
                 - header:
-                   key: "product-name"
-                   value: "portworx"
+                    key: "product-name"
+                    value: "portworx"
                 - header:
-                   key: "appliance-id"
-                   value: "%s"
+                    key: "appliance-id"
+                    value: "%s"
                 - header:
-                   key: "component-sn"
-                   value: "portworx-metrics-node"
+                    key: "component-sn"
+                    value: "portworx-metrics-node"
                 - header:
-                   key: "product-version"
-                   value: "%s"
+                    key: "product-version"
+                    value: "%s"
                 route:
                   host_rewrite_literal: %s
                   cluster: cluster_cloud_support
@@ -576,30 +599,20 @@ static_resources:
           - certificate_chain:
               filename: /appliance-cert/cert
             private_key:
-              filename: /appliance-cert/private_key
-`, cluster.Status.ClusterUID, pxutil.GetPortworxVersion(cluster), arcusRestProxyURL, arcusRestProxyURL)
+              filename: /appliance-cert/private_key`, cluster.Status.ClusterUID, pxutil.GetPortworxVersion(cluster), arcusRestProxyURL, arcusRestProxyURL)
 
 	data := map[string]string{
 		CollectorProxyConfigFileName: config,
 	}
 
-	configMapName := CollectorProxyConfigMapName
-	if t.isCCMGoSupported {
-		configMapName = ConfigMapNameTelemetryCollectorProxyV2
-	}
-
-	return k8sutil.CreateOrUpdateConfigMap(
-		t.k8sClient,
-		&v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            configMapName,
-				Namespace:       cluster.Namespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			},
-			Data: data,
+	return &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            CollectorProxyConfigMapName,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
-		ownerRef,
-	)
+		Data: data,
+	}
 }
 
 func (t *telemetry) createCollectorConfigMap(
