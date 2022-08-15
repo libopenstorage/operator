@@ -53,6 +53,8 @@ var (
 	K8sVer1_20, _ = version.NewVersion("1.20")
 	// K8sVer1_22 k8s 1.22
 	K8sVer1_22, _ = version.NewVersion("1.22")
+	// K8sVer1_24 k8s 1.24
+	K8sVer1_24, _ = version.NewVersion("1.24")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
