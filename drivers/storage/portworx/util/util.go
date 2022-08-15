@@ -584,6 +584,20 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) string {
 	return httpProxy
 }
 
+// SplitPxProxyHostPort trims protocol prefix then splits the proxy address of the form "host:port"
+func SplitPxProxyHostPort(proxy string) (string, string, error) {
+	proxy = strings.TrimPrefix(proxy, "http://")
+	proxy = strings.TrimPrefix(proxy, "https://")
+	address, port, err := net.SplitHostPort(proxy)
+	if err != nil {
+		logrus.Info(err)
+		return "", "", err
+	} else if address == "" || port == "" {
+		return "", "", fmt.Errorf("failed to split px proxy address %s", proxy)
+	}
+	return address, port, nil
+}
+
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
 func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
 

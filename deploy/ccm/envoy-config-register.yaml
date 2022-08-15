@@ -3,14 +3,13 @@ admin:
     socket_address:
       address: 127.0.0.1
       port_value: 9901
-
 static_resources:
   listeners:
   - name: listener_register_cloud_support
     address:
       socket_address:
         address: 127.0.0.1
-        port_value: 12001
+        port_value: CLOUD_SUPPORT_PORT
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -35,17 +34,17 @@ static_resources:
                   prefix: "/"
                 request_headers_to_add:
                 - header:
-                   key: "product-name"
-                   value: "portworx"
+                    key: "product-name"
+                    value: "portworx"
                 - header:
-                   key: "appliance-id"
-                   value: APPLIANCE_ID
+                    key: "appliance-id"
+                    value: APPLIANCE_ID
                 - header:
-                   key: "component-sn"
-                   value: COMPONENT_SN
+                    key: "component-sn"
+                    value: COMPONENT_SN
                 - header:
-                   key: "product-version"
-                   value: PRODUCT_VERSION
+                    key: "product-version"
+                    value: PRODUCT_VERSION
                 route:
                   host_rewrite_literal: REGISTER_PROXY_URL
                   cluster: cluster_register_cloud_support
