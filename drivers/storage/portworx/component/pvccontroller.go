@@ -304,10 +304,13 @@ func (c *pvcController) createDeployment(
 		"--controllers=persistentvolume-binder,persistentvolume-expander",
 		"--use-service-account-credentials=true",
 	}
-	if pxutil.IsOpenshift(cluster) {
-		command = append(command, "--leader-elect-resource-lock=endpoints")
-	} else {
-		command = append(command, "--leader-elect-resource-lock=configmaps")
+
+	if c.k8sVersion.LessThan(k8sutil.K8sVer1_24) {
+		if pxutil.IsOpenshift(cluster) {
+			command = append(command, "--leader-elect-resource-lock=endpoints")
+		} else {
+			command = append(command, "--leader-elect-resource-lock=configmaps")
+		}
 	}
 
 	if c.k8sVersion.LessThan(k8sutil.K8sVer1_22) {
