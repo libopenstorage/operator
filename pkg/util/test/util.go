@@ -109,6 +109,11 @@ const (
 // unit test use different path, this needs to be set accordingly.
 var TestSpecPath = "testspec"
 
+var (
+	pxVer2_12, _  = version.NewVersion("2.12.0")
+	opVer1_9_1, _ = version.NewVersion("1.9.1")
+)
+
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
@@ -774,6 +779,12 @@ func ValidateUninstallStorageCluster(
 	// Validate deletion of Portworx ConfigMaps
 	if err := validatePortworxConfigMapsDeleted(cluster, timeout, interval); err != nil {
 		return err
+	}
+
+	// Verify telemetry secret is deleted on UninstallAndWipe
+	_, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("telemetry secret pure-telemetry-certs was found when shouldn't have been")
 	}
 
 	return nil
@@ -2222,7 +2233,10 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
-	if err := ValidateTelemetry(pxImageList, cluster, timeout, interval); err != nil {
+	// Increasing timeout for Telemetry components as they take quite long time to initialize
+	defaultTelemetryRetryInterval := 30 * time.Second
+	defaultTelemetryTimeout := 10 * time.Minute
+	if err := ValidateTelemetry(pxImageList, cluster, defaultTelemetryTimeout, defaultTelemetryRetryInterval); err != nil {
 		return err
 	}
 
@@ -2286,8 +2300,8 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-// ValidateTelemetryUninstalled validates telemetry component is uninstalled as expected
-func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryUninstalled validates telemetry components are uninstalled as expected
+func ValidateTelemetryUninstalled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
 		_, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
@@ -2337,13 +2351,31 @@ func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1
 
 // ValidateTelemetry validates telemetry component is installed/uninstalled as expected
 func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components")
+	logrus.Info("Check PX and PX Operator versions to determine which telemetry to validate against..")
+	pxVersion := GetPortworxVersion(cluster)
+	fmt.Printf("PX Version: %v", pxVersion)
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	logrus.Infof("PX Operator version: %v", opVersion)
+
 	if cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Telemetry != nil &&
 		cluster.Spec.Monitoring.Telemetry.Enabled {
+		logrus.Info("Telemetry is enabled in StorageCluster")
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && pxVersion.GreaterThanOrEqual(opVer1_9_1) {
+			return ValidateTelemetryEnabled(pxImageList, cluster, timeout, interval)
+		}
 		return ValidateTelemetryInstalled(pxImageList, cluster, timeout, interval)
 	}
 
-	return ValidateTelemetryUninstalled(pxImageList, cluster, timeout, interval)
+	logrus.Info("Telemetry is disabled in StorageCluster")
+	if pxVersion.GreaterThanOrEqual(pxVer2_12) && pxVersion.GreaterThanOrEqual(opVer1_9_1) {
+		return ValidateTelemetryDisabled(cluster, timeout, interval)
+	}
+	return ValidateTelemetryUninstalled(cluster, timeout, interval)
 }
 
 // GetPortworxVersion returns the Portworx version based on the image provided.
@@ -2575,6 +2607,255 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 	}
 
 	logrus.Infof("Alert manager components do not exist")
+	return nil
+}
+
+// ValidateTelemetryEnabled validates telemetry component is running as expected
+func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	// Wait for the deployment to become online
+	logrus.Info("Validate px-telemetry-registration deployment and images")
+	registrationServiceDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-telemetry-registration",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
+		return err
+	}
+	registrationServiceDep, err := appops.Instance().GetDeployment(registrationServiceDep.Name, registrationServiceDep.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify registration container image inside px-telemetry-registration
+	telemetryImageName, ok := pxImageList["telemetry"]
+	if !ok {
+		return fmt.Errorf("failed to find image for telemetry")
+	}
+	telemetryImageName = util.GetImageURN(cluster, telemetryImageName)
+
+	if registrationServiceDep.Spec.Template.Spec.Containers[0].Image != telemetryImageName {
+		return fmt.Errorf("registration image mismatch, image: %s, expected: %s",
+			registrationServiceDep.Spec.Template.Spec.Containers[0].Image,
+			telemetryImageName)
+	}
+	// Verify envoy container image inside registration-service
+	envoyImageName, ok := pxImageList["telemetryProxy"]
+	if !ok {
+		return fmt.Errorf("failed to find image for envoy")
+	}
+	envoyImageName = util.GetImageURN(cluster, envoyImageName)
+	if registrationServiceDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			registrationServiceDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify px-telemetry-metrics-collector deployment and images
+	logrus.Info("Validate px-telemetry-metrics-collector deployment and images")
+	metricsCollectorDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-telemetry-metrics-collector",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateDeployment(metricsCollectorDep, timeout, interval); err != nil {
+		return err
+	}
+	metricsCollectorDep, err = appops.Instance().GetDeployment(metricsCollectorDep.Name, metricsCollectorDep.Namespace)
+	if err != nil {
+		return err
+	}
+	// Verify collector container image inside px-metrics-collector
+	collectorImageName, ok := pxImageList["metricsCollector"]
+	if !ok {
+		return fmt.Errorf("failed to find image for metrics collector")
+	}
+	collectorImageName = util.GetImageURN(cluster, collectorImageName)
+
+	if metricsCollectorDep.Spec.Template.Spec.Containers[0].Image != collectorImageName {
+		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[0].Image,
+			collectorImageName)
+	}
+	// Verify envoy container image inside px-metrics-collector
+	if metricsCollectorDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Wait for the daemonset to become online
+	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
+	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
+		return err
+	}
+	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify collector container image inside px-telemetry-phonehome
+	logUploaderImageName, ok := pxImageList["logUploader"]
+	if !ok {
+		return fmt.Errorf("failed to find image for log uploader")
+	}
+	logUploaderImageName = util.GetImageURN(cluster, logUploaderImageName)
+
+	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image != logUploaderImageName {
+		return fmt.Errorf("log uploader image mismatch, image: %s, expected: %s",
+			telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image,
+			logUploaderImageName)
+	}
+
+	// Verify envoy container image inside px-telemetry-phonehome
+	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify telemetry roles
+	_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry secrets
+	_, err = coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry rolebindings
+	_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry configmaps
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry serviceaccounts
+	_, err = coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("All Telemetry components were successfully enabled/installed")
+	return nil
+}
+
+// ValidateTelemetryDisabled validates telemetry component is running as expected
+func ValidateTelemetryDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		_, err := appops.Instance().GetDeployment("px-telemetry-metrics-collector", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-metrics-collector deployment, waiting for deletion")
+		}
+
+		_, err = appops.Instance().GetDeployment("px-telemetry-registration", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-registration deployment, waiting for deletion")
+		}
+
+		_, err = appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome daemonset, waiting for deletion")
+		}
+
+		// Verify telemetry roles are removed
+		_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Name)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry role, waiting for deletion")
+		}
+
+		// Verify telemetry rolebindings
+		_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Name)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry rolebinding, waiting for deletion")
+		}
+
+		// Verify telemetry configmaps
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-collector configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-collector-proxy configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome-proxy configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-register configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-register-proxy configmap, wait for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-tls-certificate configmap, waiting for deletion")
+		}
+
+		// Verify telemetry serviceaccounts
+		_, err = coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry serviceaccount, waiting for deletion")
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Infof("All Telemetry components were successfully disabled/uninstalled")
 	return nil
 }
 
