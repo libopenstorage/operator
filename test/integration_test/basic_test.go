@@ -123,35 +123,12 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicUpgradeOperator,
 	},
 	{
-		TestName:        "InstallWithTelemetry",
-		TestrailCaseIDs: []string{"C55909"},
-		TestSpec: func(t *testing.T) interface{} {
-			cluster := &corev1.StorageCluster{}
-			cluster.Name = "telemetry-test"
-			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
-			require.NoError(t, err)
-			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-				},
-			}
-			trueVal := true
-			cluster.Spec.Storage = &corev1.StorageSpec{
-				UseAll:               nil,
-				UseAllWithPartitions: &trueVal,
-				ForceUseDisks:        &trueVal,
-				Devices:              nil,
-				CacheDevices:         nil,
-				JournalDevice:        nil,
-				SystemMdDevice:       nil,
-				KvdbDevice:           nil,
-			}
-			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-			}
-			return cluster
-		},
-		TestFunc: InstallWithTelemetry,
+		TestName:        "BasicTelemetryRegression",
+		TestrailCaseIDs: []string{"C54888, C83063, C83064, C83160, C83161, C83076, C83077, C83078, C83082, C83162, C83163, C83164, C83165, C54892, C82916, C83083"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "telemetry-regression-test"},
+		}),
+		TestFunc: BasicTelemetryRegression,
 		ShouldSkip: func(tc *types.TestCase) bool {
 			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_7)
 		},
@@ -439,67 +416,56 @@ func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func InstallWithTelemetry(tc *types.TestCase) func(*testing.T) {
+// BasicTelemetryRegression test includes the following steps:
+// 1. Deploy PX and validate Telemetry is not enabled by default
+// 2. Enable Telemetry and validate all its components got deployed
+// 3. Disable Telemetry and validate its components got deleted
+// 4. Delete StorageCluster and validate it got successfully removed (including px-telemetry-certs secret)
+func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
+		var err error
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		testInstallWithTelemetry(t, cluster)
+		// Create StorageCluster
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Validate Telemetry is not enabled by default
+		logrus.Info("Validate Telemetry is not enabled by default")
+		if cluster.Spec.Monitoring != nil {
+			if cluster.Spec.Monitoring.Telemetry != nil {
+				if cluster.Spec.Monitoring.Telemetry.Enabled {
+					require.False(t, cluster.Spec.Security.Enabled, "failed to validate default Telemetry status: expected: false, actual: %v", cluster.Spec.Monitoring.Telemetry.Enabled)
+				}
+			}
+		}
+
+		// Enable Telemetry
+		logrus.Info("Enable Telemetry and validate")
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
+
+		// Disable Telemetry and validate
+		logrus.Info("Disable Telemetry and validate")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Telemetry.Enabled = false
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
+
+		// Delete and validate the deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
-}
-
-func testInstallWithTelemetry(t *testing.T, cluster *corev1.StorageCluster) {
-	// Deploy portworx with telemetry set to true
-	cluster, err := ci_utils.CreateStorageCluster(cluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateTelemetryInstalled(
-		ci_utils.PxSpecImages,
-		cluster,
-		ci_utils.DefaultValidateDeployTimeout,
-		ci_utils.DefaultValidateDeployRetryInterval)
-	require.NoError(t, err)
-
-	// Disable telemetry and validate un-installation
-	cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-
-	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	cluster, err = ci_utils.UpdateStorageCluster(cluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateTelemetryUninstalled(
-		ci_utils.PxSpecImages,
-		cluster,
-		ci_utils.DefaultValidateDeployTimeout,
-		ci_utils.DefaultValidateDeployRetryInterval)
-	require.NoError(t, err)
-
-	// Enable it back and validate installation
-	cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-
-	cluster.Spec.Monitoring.Telemetry.Enabled = true
-	cluster, err = ci_utils.UpdateStorageCluster(cluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateTelemetryInstalled(
-		ci_utils.PxSpecImages,
-		cluster,
-		ci_utils.DefaultValidateDeployTimeout,
-		ci_utils.DefaultValidateDeployRetryInterval)
-	require.NoError(t, err)
-
-	// Delete and validate the deletion
-	ci_utils.UninstallAndValidateStorageCluster(cluster, t)
-
-	err = testutil.ValidateTelemetryUninstalled(
-		ci_utils.PxSpecImages,
-		cluster,
-		ci_utils.DefaultValidateDeployTimeout,
-		ci_utils.DefaultValidateDeployRetryInterval)
-	require.NoError(t, err)
 }
 
 // BasicCsiRegression test includes the following steps:
