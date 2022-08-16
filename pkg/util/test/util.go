@@ -2300,8 +2300,8 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-// ValidateTelemetryUninstalled validates telemetry components are uninstalled as expected
-func ValidateTelemetryUninstalled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV1Disabled validates telemetry components are uninstalled as expected
+func ValidateTelemetryV1Disabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
 		_, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
@@ -2365,17 +2365,17 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 		cluster.Spec.Monitoring.Telemetry != nil &&
 		cluster.Spec.Monitoring.Telemetry.Enabled {
 		logrus.Info("Telemetry is enabled in StorageCluster")
-		if pxVersion.GreaterThanOrEqual(pxVer2_12) && pxVersion.GreaterThanOrEqual(opVer1_9_1) {
-			return ValidateTelemetryEnabled(pxImageList, cluster, timeout, interval)
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_9_1) {
+			return ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval)
 		}
-		return ValidateTelemetryInstalled(pxImageList, cluster, timeout, interval)
+		return ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval)
 	}
 
 	logrus.Info("Telemetry is disabled in StorageCluster")
-	if pxVersion.GreaterThanOrEqual(pxVer2_12) && pxVersion.GreaterThanOrEqual(opVer1_9_1) {
-		return ValidateTelemetryDisabled(cluster, timeout, interval)
+	if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_9_1) {
+		return ValidateTelemetryV2Disabled(cluster, timeout, interval)
 	}
-	return ValidateTelemetryUninstalled(cluster, timeout, interval)
+	return ValidateTelemetryV1Disabled(cluster, timeout, interval)
 }
 
 // GetPortworxVersion returns the Portworx version based on the image provided.
@@ -2610,8 +2610,10 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 	return nil
 }
 
-// ValidateTelemetryEnabled validates telemetry component is running as expected
-func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV2Enabled validates telemetry component is running as expected
+func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components are enabled")
+
 	// Wait for the deployment to become online
 	logrus.Info("Validate px-telemetry-registration deployment and images")
 	registrationServiceDep := &appsv1.Deployment{
@@ -2667,6 +2669,14 @@ func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.Sto
 	if err != nil {
 		return err
 	}
+
+	// Verify init-cont image inside px-metric-collector
+	if metricsCollectorDep.Spec.Template.Spec.InitContainers != nil && metricsCollectorDep.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
+		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
 	// Verify collector container image inside px-metrics-collector
 	collectorImageName, ok := pxImageList["metricsCollector"]
 	if !ok {
@@ -2696,6 +2706,13 @@ func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.Sto
 		return err
 	}
 
+	// Verify init-cont image inside px-telemetry-phonehome
+	if telemetryPhonehomeDs.Spec.Template.Spec.InitContainers != nil && telemetryPhonehomeDs.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
+		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
 	// Verify collector container image inside px-telemetry-phonehome
 	logUploaderImageName, ok := pxImageList["logUploader"]
 	if !ok {
@@ -2716,20 +2733,32 @@ func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.Sto
 			envoyImageName)
 	}
 
-	// Verify telemetry roles
-	_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
 	// Verify telemetry secrets
 	_, err = coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
 	if err != nil {
 		return err
 	}
 
+	// Verify telemetry roles
+	_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
 	// Verify telemetry rolebindings
 	_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterroles
+	_, err = rbacops.Instance().GetClusterRole("px-telemetry")
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterrolebindings
+	_, err = rbacops.Instance().GetClusterRoleBinding("px-telemetry")
 	if err != nil {
 		return err
 	}
@@ -2776,8 +2805,9 @@ func ValidateTelemetryEnabled(pxImageList map[string]string, cluster *corev1.Sto
 	return nil
 }
 
-// ValidateTelemetryDisabled validates telemetry component is running as expected
-func ValidateTelemetryDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV2Disabled validates telemetry component is running as expected
+func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components are disabled")
 	t := func() (interface{}, bool, error) {
 		_, err := appops.Instance().GetDeployment("px-telemetry-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
@@ -2794,7 +2824,7 @@ func ValidateTelemetryDisabled(cluster *corev1.StorageCluster, timeout, interval
 			return "", true, fmt.Errorf("found px-telemetry-phonehome daemonset, waiting for deletion")
 		}
 
-		// Verify telemetry roles are removed
+		// Verify telemetry roles
 		_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Name)
 		if !errors.IsNotFound(err) {
 			return "", true, fmt.Errorf("found px-telemetry role, waiting for deletion")
@@ -2804,6 +2834,18 @@ func ValidateTelemetryDisabled(cluster *corev1.StorageCluster, timeout, interval
 		_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Name)
 		if !errors.IsNotFound(err) {
 			return "", true, fmt.Errorf("found px-telemetry rolebinding, waiting for deletion")
+		}
+
+		// Verify telemetry clusterroles
+		_, err = rbacops.Instance().GetClusterRole("px-telemetry")
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry clusterrole, waiting for deletion")
+		}
+
+		// Verify telemetry clusterrolebindings
+		_, err = rbacops.Instance().GetClusterRoleBinding("px-telemetry")
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry clusterrolebinding, waiting for deletion")
 		}
 
 		// Verify telemetry configmaps
@@ -2859,8 +2901,8 @@ func ValidateTelemetryDisabled(cluster *corev1.StorageCluster, timeout, interval
 	return nil
 }
 
-// ValidateTelemetryInstalled validates telemetry component is running as expected
-func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV1Enabled validates telemetry component is running as expected
+func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	// Wait for the deployment to become online
 	dep := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
