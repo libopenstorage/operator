@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: registration-service
+  name: px-telemetry-registration
 spec:
   replicas: 1
   selector:
     matchLabels:
-      role: registration-service
+      role: px-telemetry-registration
   template:
     metadata:
       labels:
-        role: registration-service
+        role: px-telemetry-registration
     spec:
       hostNetwork: true
       containers:
@@ -29,7 +29,7 @@ spec:
               protocol: TCP
           imagePullPolicy: Always
         - name: envoy
-          image: envoyproxy/envoy:v1.22.2
+          image: purestorage/telemetry-envoy:1.0.0
           securityContext:
             runAsUser: 1111
           volumeMounts:
@@ -43,7 +43,7 @@ spec:
       volumes:
         - name: registration-config
           configMap:
-            name: registration-config
+            name: px-telemetry-register
         - name: proxy-config
           configMap:
-            name: proxy-config-register
+            name: px-telemetry-register-proxy

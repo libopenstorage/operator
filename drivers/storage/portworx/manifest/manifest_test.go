@@ -252,7 +252,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
 			Telemetry:                 "image/ccm-go:1.0.0",
-			TelemetryProxy:            "envoyproxy/envoy:v1.22.2",
+			TelemetryProxy:            "purestorage/telemetry-envoy:1.0.0",
 			LogUploader:               "purestorage/log-upload:1.0.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			PxRepo:                    "portworx/px-repo:1.1.0",

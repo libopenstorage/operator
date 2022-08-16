@@ -296,10 +296,6 @@ func (t *telemetry) getCollectorDeployment(
 	if err != nil {
 		return nil, err
 	}
-	serviceAccountName := CollectorServiceAccountName
-	if t.isCCMGoSupported {
-		serviceAccountName = ServiceAccountNamePxTelemetry
-	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CollectorDeploymentName,
@@ -312,7 +308,7 @@ func (t *telemetry) getCollectorDeployment(
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
-					ServiceAccountName: serviceAccountName,
+					ServiceAccountName: CollectorServiceAccountName,
 					Containers: []v1.Container{
 						{
 							Name:  "collector",
@@ -410,6 +406,28 @@ func (t *telemetry) getCollectorDeployment(
 			},
 		},
 	}
+	// Update V2 metrics collector deployment
+	if t.isCCMGoSupported {
+		deployment.Name = DeploymentNameTelemetryCollectorV2
+		deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
+			Name:  "init-cont",
+			Image: collectorProxyImage,
+			Env: []v1.EnvVar{{
+				Name:  "K8S_NAMESPACE",
+				Value: cluster.Namespace,
+			}},
+			Args: []string{"cert_checker"},
+		}}
+		deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+		for i := 0; i < len(deployment.Spec.Template.Spec.Volumes); i++ {
+			volume := &deployment.Spec.Template.Spec.Volumes[i]
+			if volume.Name == CollectorConfigMapName {
+				volume.ConfigMap.Name = ConfigMapNameTelemetryCollectorV2
+			} else if volume.Name == CollectorProxyConfigMapName {
+				volume.ConfigMap.Name = ConfigMapNameTelemetryCollectorProxyV2
+			}
+		}
+	}
 
 	deployment.Namespace = cluster.Namespace
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
@@ -445,10 +463,6 @@ func (t *telemetry) createCollectorRoleBinding(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	serviceAccountName := CollectorServiceAccountName
-	if t.isCCMGoSupported {
-		serviceAccountName = ServiceAccountNamePxTelemetry
-	}
 	return k8sutil.CreateOrUpdateRoleBinding(
 		t.k8sClient,
 		&rbacv1.RoleBinding{
@@ -460,7 +474,7 @@ func (t *telemetry) createCollectorRoleBinding(
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName,
+					Name:      CollectorServiceAccountName,
 					Namespace: cluster.Namespace,
 				},
 			},
@@ -562,11 +576,16 @@ static_resources:
 		CollectorProxyConfigFileName: config,
 	}
 
+	configMapName := CollectorProxyConfigMapName
+	if t.isCCMGoSupported {
+		configMapName = ConfigMapNameTelemetryCollectorProxyV2
+	}
+
 	return k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            CollectorProxyConfigMapName,
+				Name:            configMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -608,11 +627,16 @@ forwardConfig:
 		CollectorConfigFileName: config,
 	}
 
+	configMapName := CollectorConfigMapName
+	if t.isCCMGoSupported {
+		configMapName = ConfigMapNameTelemetryCollectorV2
+	}
+
 	return k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            CollectorConfigMapName,
+				Name:            configMapName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
