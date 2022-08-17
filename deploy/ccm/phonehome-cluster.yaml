@@ -79,6 +79,8 @@ spec:
           args:
             - "cert_checker"
           imagePullPolicy: Always
+          securityContext:
+            runAsUser: 1111
       volumes:
         - name: etcpwx
           hostPath:
