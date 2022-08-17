@@ -417,6 +417,9 @@ func (t *telemetry) getCollectorDeployment(
 				Value: cluster.Namespace,
 			}},
 			Args: []string{"cert_checker"},
+			SecurityContext: &v1.SecurityContext{
+				RunAsUser: &runAsUser,
+			},
 		}}
 		deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
 		for i := 0; i < len(deployment.Spec.Template.Spec.Volumes); i++ {
