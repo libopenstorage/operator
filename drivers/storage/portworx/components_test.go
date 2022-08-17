@@ -2450,7 +2450,7 @@ func TestLighthouseInstall(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:2.1.1",
+				Image:   "docker.io/portworx/px-lighthouse:2.1.1",
 			},
 		},
 	}
@@ -2766,7 +2766,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 		},
 		Status: corev1.StorageClusterStatus{
 			DesiredImages: &corev1.ComponentImages{
-				UserInterface: "portworx/px-lighthouse:status",
+				UserInterface: "docker.io/portworx/px-lighthouse:status",
 			},
 		},
 	}
@@ -2778,7 +2778,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:status", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:status", image)
 
 	// If image is present in spec, then use that instead of the desired image
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:spec"
@@ -2789,7 +2789,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:spec", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:spec", image)
 }
 
 func TestLighthouseImageChange(t *testing.T) {
@@ -2807,7 +2807,7 @@ func TestLighthouseImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2819,7 +2819,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:v1", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:v1", image)
 
 	// Change the lighthouse image
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:v2"
@@ -2830,7 +2830,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:v2", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:v2", image)
 }
 
 func TestLighthouseConfigInitImageChange(t *testing.T) {
@@ -2848,7 +2848,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2860,7 +2860,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync:v1", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync:v1", image)
 
 	// Change the lighthouse config init container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
@@ -2876,7 +2876,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "test/config-sync:v2", image)
+	require.Equal(t, "docker.io/test/config-sync:v2", image)
 }
 
 func TestLighthouseStorkConnectorImageChange(t *testing.T) {
@@ -2894,7 +2894,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2906,7 +2906,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector:v1", image)
+	require.Equal(t, "docker.io/portworx/lh-stork-connector:v1", image)
 
 	// Change the lighthouse config sync container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
@@ -2922,7 +2922,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "test/stork-connector:v2", image)
+	require.Equal(t, "docker.io/test/stork-connector:v2", image)
 }
 
 func TestLighthouseWithoutImageTag(t *testing.T) {
@@ -2954,13 +2954,13 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector", image)
+	require.Equal(t, "docker.io/portworx/lh-stork-connector", image)
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
@@ -3002,13 +3002,13 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "test/config-sync:t1", image)
+	require.Equal(t, "docker.io/test/config-sync:t1", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "test/config-sync:t1", image)
+	require.Equal(t, "docker.io/test/config-sync:t1", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "test/stork-connector:t2", image)
+	require.Equal(t, "docker.io/test/stork-connector:t2", image)
 }
 
 func TestAutopilotInstall(t *testing.T) {
@@ -3449,7 +3449,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:status", image)
+	require.Equal(t, "docker.io/portworx/autopilot:status", image)
 
 	// If image is present in spec, then use that instead of the desired image
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:spec"
@@ -3460,7 +3460,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:spec", image)
+	require.Equal(t, "docker.io/portworx/autopilot:spec", image)
 }
 
 func TestAutopilotImageChange(t *testing.T) {
@@ -3490,7 +3490,7 @@ func TestAutopilotImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:v1", image)
+	require.Equal(t, "docker.io/portworx/autopilot:v1", image)
 
 	// Change the autopilot image
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:v2"
@@ -3501,7 +3501,7 @@ func TestAutopilotImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:v2", image)
+	require.Equal(t, "docker.io/portworx/autopilot:v2", image)
 }
 
 func TestAutopilotArgumentsChange(t *testing.T) {
@@ -7333,19 +7333,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:"+newCompVersion(),
+		"docker.io/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:"+newCompVersion(),
+		"docker.io/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -7353,7 +7353,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:"+newCompVersion(),
+		"docker.io/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7412,7 +7412,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
 	require.Equal(t,
-		cluster.Spec.PxRepo.Image,
+		"docker.io/"+cluster.Spec.PxRepo.Image,
 		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7421,11 +7421,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -8312,19 +8312,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:"+newCompVersion(),
+		"docker.io/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:"+newCompVersion(),
+		"docker.io/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -8332,7 +8332,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:"+newCompVersion(),
+		"docker.io/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8391,7 +8391,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
 	require.Equal(t,
-		cluster.Spec.PxRepo.Image,
+		"docker.io/"+cluster.Spec.PxRepo.Image,
 		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8400,11 +8400,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -8897,11 +8897,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
