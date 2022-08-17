@@ -103,6 +103,10 @@ const (
 	AksPVCControllerSecurePort = "10261"
 
 	pxAnnotationPrefix = "portworx.io"
+
+	masterLabelKey           = "node-role.kubernetes.io/master"
+	controlplaneLabelKey     = "node-role.kubernetes.io/controlplane"
+	controlDashPlaneLabelKey = "node-role.kubernetes.io/control-plane"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -110,8 +114,8 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	pxVer2_12, _  = version.NewVersion("2.12.0")
-	opVer1_9_1, _ = version.NewVersion("1.9.1")
+	pxVer2_12, _ = version.NewVersion("2.12.0")
+	opVer1_10, _ = version.NewVersion("1.10.0")
 )
 
 // MockDriver creates a mock storage driver
@@ -1027,7 +1031,7 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	for _, node := range nodeList.Items {
-		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() {
+		if isNodeMaster(node) && !IsK3sCluster() {
 			continue
 		}
 
@@ -1037,6 +1041,17 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	return nodeNameListWithPxPods, nil
+}
+
+func isNodeMaster(node v1.Node) bool {
+	// for newer k8s these fields exist but they are empty
+	_, hasMasterLabel := node.Labels[masterLabelKey]
+	_, hasControlPlaneLabel := node.Labels[controlplaneLabelKey]
+	_, hasControlDashPlaneLabel := node.Labels[controlDashPlaneLabelKey]
+	if hasMasterLabel || hasControlPlaneLabel || hasControlDashPlaneLabel {
+		return true
+	}
+	return false
 }
 
 // GetFullVersion returns the full kubernetes server version
@@ -2366,14 +2381,14 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 		cluster.Spec.Monitoring.Telemetry != nil &&
 		cluster.Spec.Monitoring.Telemetry.Enabled {
 		logrus.Info("Telemetry is enabled in StorageCluster")
-		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_9_1) {
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_10) {
 			return ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval)
 		}
 		return ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval)
 	}
 
 	logrus.Info("Telemetry is disabled in StorageCluster")
-	if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_9_1) {
+	if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_10) {
 		return ValidateTelemetryV2Disabled(cluster, timeout, interval)
 	}
 	return ValidateTelemetryV1Disabled(cluster, timeout, interval)
