@@ -1123,9 +1123,9 @@ func (c *Controller) CreatePodTemplate(
 	return newTemplate, nil
 }
 
-// GetDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
+// getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
 // intention of having at least 3 nodes in the cluster.
-func (c *Controller) GetDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
+func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
 	numZones := len(zoneMap)
 	switch numZones {
 	case 0, 1:
@@ -1235,7 +1235,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
 		// Let's do this only when it's a fresh install of px
 		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = new(uint32)
-		*toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = c.GetDefaultMaxStorageNodesPerZone(zoneMap)
+		*toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
 	}
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
