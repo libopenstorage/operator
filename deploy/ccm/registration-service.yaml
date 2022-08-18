@@ -23,10 +23,6 @@ spec:
           - readOnly: true
             mountPath: /config
             name: registration-config
-          ports:
-            - name: registration
-              containerPort: 80
-              protocol: TCP
           imagePullPolicy: Always
         - name: envoy
           image: purestorage/telemetry-envoy:1.0.0
