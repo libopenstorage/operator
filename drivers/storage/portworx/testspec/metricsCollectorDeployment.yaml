@@ -43,7 +43,7 @@ spec:
         - env:
             - name: CONFIG
               value: config/portworx.yaml
-          image: purestorage/realtime-metrics:latest
+          image: docker.io/purestorage/realtime-metrics:latest
           imagePullPolicy: Always
           name: collector
           securityContext:
@@ -66,7 +66,7 @@ spec:
             - envoy
             - --config-path
             - /config/envoy-config.yaml
-          image: envoyproxy/envoy:v1.19.1
+          image: docker.io/envoyproxy/envoy:v1.19.1
           imagePullPolicy: Always
           name: envoy
           securityContext:

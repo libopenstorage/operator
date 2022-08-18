@@ -188,6 +188,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Spec.Image = toUpdate.Spec.Image + ":" + release.PortworxVersion
 			toUpdate.Spec.Version = release.PortworxVersion
 		}
+
 		toUpdate.Status.Version = toUpdate.Spec.Version
 
 		if autoUpdateStork(toUpdate) &&
@@ -218,13 +219,34 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
 		}
 
+		if autoUpdateTelemetryProxy(toUpdate) &&
+			(toUpdate.Status.DesiredImages.TelemetryProxy == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
+			toUpdate.Status.DesiredImages.TelemetryProxy = release.Components.TelemetryProxy
+		}
+
 		if autoUpdateMetricsCollector(toUpdate) &&
 			(toUpdate.Status.DesiredImages.MetricsCollector == "" ||
-				toUpdate.Status.DesiredImages.MetricsCollectorProxy == "" ||
+				(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+					toUpdate.Status.DesiredImages.MetricsCollectorProxy == "") ||
+				(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+					toUpdate.Status.DesiredImages.TelemetryProxy == "") ||
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
-			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
+			if !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) {
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
+			} else {
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
+			}
+		}
+
+		if autoUpdateLogUploader(toUpdate) &&
+			(toUpdate.Status.DesiredImages.LogUploader == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
+			toUpdate.Status.DesiredImages.LogUploader = release.Components.LogUploader
 		}
 
 		if autoUpdatePxRepo(toUpdate) &&
@@ -294,9 +316,17 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.Telemetry = ""
 	}
 
+	if !autoUpdateTelemetryProxy(toUpdate) {
+		toUpdate.Status.DesiredImages.TelemetryProxy = ""
+	}
+
 	if !autoUpdateMetricsCollector(toUpdate) {
 		toUpdate.Status.DesiredImages.MetricsCollector = ""
 		toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
+	}
+
+	if !autoUpdateLogUploader(toUpdate) {
+		toUpdate.Status.DesiredImages.LogUploader = ""
 	}
 
 	if !autoUpdatePxRepo(toUpdate) {
@@ -640,8 +670,7 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		}
 	}
 
-	pxVer2_8, _ := version.NewVersion("2.8")
-	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxVer2_8) {
+	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
 		toUpdate.Spec.Monitoring.Telemetry.Image = ""
 	}
@@ -930,7 +959,9 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasLighthouseChanged(cluster) ||
 		hasCSIChanged(cluster) ||
 		hasTelemetryChanged(cluster) ||
+		hasTelemetryProxyChanged(cluster) ||
 		hasMetricsCollectorChanged(cluster) ||
+		hasLogUploaderChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
@@ -968,10 +999,23 @@ func hasTelemetryChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Status.DesiredImages.Telemetry == ""
 }
 
+func hasTelemetryProxyChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateTelemetryProxy(cluster) &&
+		cluster.Status.DesiredImages.TelemetryProxy == ""
+}
+
 func hasMetricsCollectorChanged(cluster *corev1.StorageCluster) bool {
 	return autoUpdateMetricsCollector(cluster) &&
 		(cluster.Status.DesiredImages.MetricsCollector == "" ||
-			cluster.Status.DesiredImages.MetricsCollectorProxy == "")
+			(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+				cluster.Status.DesiredImages.MetricsCollectorProxy == "") ||
+			(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+				cluster.Status.DesiredImages.TelemetryProxy == ""))
+}
+
+func hasLogUploaderChanged(cluster *corev1.StorageCluster) bool {
+	return autoUpdateLogUploader(cluster) &&
+		cluster.Status.DesiredImages.LogUploader == ""
 }
 
 func hasPxRepoChanged(cluster *corev1.StorageCluster) bool {
@@ -1012,12 +1056,32 @@ func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
 }
 
 func autoUpdateTelemetry(cluster *corev1.StorageCluster) bool {
+	if pxutil.IsTelemetryEnabled(cluster.Spec) {
+		if cluster.Spec.Monitoring.Telemetry.Image == "" {
+			return true
+		} else if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+			!strings.Contains(cluster.Spec.Monitoring.Telemetry.Image, "ccm-go") {
+			// reset telemetry image when new ccm is supported but old ccm image is set explicitly
+			cluster.Spec.Monitoring.Telemetry.Image = ""
+			return true
+		}
+	}
+	return false
+}
+
+func autoUpdateTelemetryProxy(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
-		cluster.Spec.Monitoring.Telemetry.Image == ""
+		pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
 }
 
 func autoUpdateMetricsCollector(cluster *corev1.StorageCluster) bool {
 	return pxutil.IsTelemetryEnabled(cluster.Spec)
+}
+
+func autoUpdateLogUploader(cluster *corev1.StorageCluster) bool {
+	return pxutil.IsTelemetryEnabled(cluster.Spec) &&
+		pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) &&
+		cluster.Spec.Monitoring.Telemetry.LogUploaderImage == ""
 }
 
 func autoUpdatePxRepo(cluster *corev1.StorageCluster) bool {

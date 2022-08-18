@@ -53,6 +53,8 @@ var (
 	K8sVer1_20, _ = version.NewVersion("1.20")
 	// K8sVer1_22 k8s 1.22
 	K8sVer1_22, _ = version.NewVersion("1.22")
+	// K8sVer1_24 k8s 1.24
+	K8sVer1_24, _ = version.NewVersion("1.24")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -906,6 +908,30 @@ func DeleteService(
 	return k8sClient.Update(context.TODO(), service)
 }
 
+// GetDeployment get deployment
+func GetDeployment(
+	k8sClient client.Client,
+	name string,
+	namespace string,
+	deployment *appsv1.Deployment,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		deployment,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // CreateOrUpdateDeployment creates a deployment if not present, else updates it
 func CreateOrUpdateDeployment(
 	k8sClient client.Client,
@@ -1046,6 +1072,30 @@ func DeleteStatefulSet(
 	statefulSet.OwnerReferences = newOwners
 	logrus.Debugf("Disowning %s/%s StatefulSet", namespace, name)
 	return k8sClient.Update(context.TODO(), statefulSet)
+}
+
+// GetDaemonSet get daemonset
+func GetDaemonSet(
+	k8sClient client.Client,
+	name string,
+	namespace string,
+	daemonset *appsv1.DaemonSet,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		daemonset,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CreateOrUpdateDaemonSet creates a daemon set if not present, else updates it
@@ -1835,6 +1885,74 @@ func GetV1beta1CRDFromFile(
 		return nil, err
 	}
 	return crd, nil
+}
+
+// GetRoleFromFile parses a Role object from a file
+func GetRoleFromFile(
+	filename string,
+	baseDir string,
+) (*rbacv1.Role, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	role := &rbacv1.Role{}
+	if err := ParseObjectFromFile(filepath, scheme, role); err != nil {
+		return nil, err
+	}
+	return role, nil
+}
+
+// GetRoleBindingFromFile parses a RoleBinding object from a file
+func GetRoleBindingFromFile(
+	filename string,
+	baseDir string,
+) (*rbacv1.RoleBinding, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	roleBinding := &rbacv1.RoleBinding{}
+	if err := ParseObjectFromFile(filepath, scheme, roleBinding); err != nil {
+		return nil, err
+	}
+	return roleBinding, nil
+}
+
+// GetDeploymentFromFile parses a Deployment object from a file
+func GetDeploymentFromFile(
+	filename string,
+	baseDir string,
+) (*appsv1.Deployment, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	deployment := &appsv1.Deployment{}
+	if err := ParseObjectFromFile(filepath, scheme, deployment); err != nil {
+		return nil, err
+	}
+	return deployment, nil
+}
+
+// GetDaemonSetFromFile parses a DaemonSet object from a file
+func GetDaemonSetFromFile(
+	filename string,
+	baseDir string,
+) (*appsv1.DaemonSet, error) {
+	filepath := path.Join(baseDir, filename)
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
+	daemonset := &appsv1.DaemonSet{}
+	if err := ParseObjectFromFile(filepath, scheme, daemonset); err != nil {
+		return nil, err
+	}
+	return daemonset, nil
 }
 
 // GetAllObjects gets all objects from k8s

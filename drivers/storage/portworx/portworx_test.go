@@ -254,9 +254,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Use default image from release manifest when spec.image is not set
-	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
-	require.Equal(t, "3.0.0", cluster.Spec.Version)
-	require.Equal(t, "3.0.0", cluster.Status.Version)
+	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, "2.10.0", cluster.Spec.Version)
+	require.Equal(t, "2.10.0", cluster.Status.Version)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
 	require.Equal(t, uint32(pxutil.DefaultStartPort), *cluster.Spec.StartPort)
@@ -267,9 +267,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Image = "  "
 	cluster.Spec.Version = "  "
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, defaultPortworxImage+":3.0.0", cluster.Spec.Image)
-	require.Equal(t, "3.0.0", cluster.Spec.Version)
-	require.Equal(t, "3.0.0", cluster.Status.Version)
+	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, "2.10.0", cluster.Spec.Version)
+	require.Equal(t, "2.10.0", cluster.Status.Version)
 
 	// Don't use default image when spec.image has a value
 	cluster.Spec.Image = "foo/image:1.0.0"
@@ -282,9 +282,9 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Image = "test/image"
 	cluster.Spec.Version = ""
 	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, "test/image:3.0.0", cluster.Spec.Image)
-	require.Equal(t, "3.0.0", cluster.Spec.Version)
-	require.Equal(t, "3.0.0", cluster.Status.Version)
+	require.Equal(t, "test/image:2.10.0", cluster.Spec.Image)
+	require.Equal(t, "2.10.0", cluster.Spec.Version)
+	require.Equal(t, "2.10.0", cluster.Status.Version)
 
 	// Empty kvdb spec should still set internal kvdb as default
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{}
@@ -7331,8 +7331,29 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
+	// Overwrite telemetry image and upgrade PX to 2.12, old image should be reset and use new one from manifest
+	cluster.Spec.Image = "px/image: 2.12.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "portworx/px-telemetry:old"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
+	require.Equal(t, "purestorage/realtime-metrics:latest", cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
+	require.Equal(t, "purestorage/log-upload:1.2.3", cluster.Status.DesiredImages.LogUploader)
+
+	// Set telemetry images explicitly
+	cluster.Spec.Monitoring.Telemetry.Image = "portworx/ccm-go:1.2.3"
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = "portworx/log-upload:1.2.3"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
+
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Spec.Monitoring.Telemetry.Image = ""
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = ""
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
@@ -7525,7 +7546,7 @@ func (m *fakeManifest) GetVersions(
 		compVersion = newCompVersion()
 	}
 	version := &manifest.Version{
-		PortworxVersion: "3.0.0",
+		PortworxVersion: "2.10.0",
 		Components: manifest.Release{
 			Stork:                      "openstorage/stork:" + compVersion,
 			Autopilot:                  "portworx/autopilot:" + compVersion,
@@ -7547,6 +7568,8 @@ func (m *fakeManifest) GetVersions(
 			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
 			MetricsCollector:           "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
+			LogUploader:                "purestorage/log-upload:1.2.3",
+			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			PxRepo:                     "portworx/px-repo:" + compVersion,
 		},
 	}
@@ -7556,7 +7579,6 @@ func (m *fakeManifest) GetVersions(
 		version.Components.PrometheusConfigMapReload = ""
 		version.Components.PrometheusConfigReloader = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
 		version.Components.AlertManager = "quay.io/prometheus/alertmanager:v0.22.2"
-
 	}
 	return version
 }

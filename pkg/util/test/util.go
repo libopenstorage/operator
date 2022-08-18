@@ -63,12 +63,18 @@ const (
 	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
 
+	// AnnotationPXVersion annotation indicating the portworx semantic version
+	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
+
 	// PxRegistryUserEnvVarName is a Docker username Env variable name
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
+
 	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
 	PxRegistryPasswordEnvVarName = "REGISTRY_PASS"
+
 	// PxImageEnvVarName is the env variable to specify a specific Portworx image to install
 	PxImageEnvVarName = "PX_IMAGE"
+
 	// StorkNamespaceEnvVarName is the namespace where stork is deployed
 	StorkNamespaceEnvVarName = "STORK-NAMESPACE"
 
@@ -89,11 +95,28 @@ const (
 
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
+
+	// PxOperatorMasterVersion is a tag for PX Operator master version
+	PxOperatorMasterVersion = "9.9.9.9"
+
+	// AksPVCControllerSecurePort is the PVC controller secure port.
+	AksPVCControllerSecurePort = "10261"
+
+	pxAnnotationPrefix = "portworx.io"
+
+	masterLabelKey           = "node-role.kubernetes.io/master"
+	controlplaneLabelKey     = "node-role.kubernetes.io/controlplane"
+	controlDashPlaneLabelKey = "node-role.kubernetes.io/control-plane"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
 // unit test use different path, this needs to be set accordingly.
 var TestSpecPath = "testspec"
+
+var (
+	pxVer2_12, _ = version.NewVersion("2.12.0")
+	opVer1_10, _ = version.NewVersion("1.10.0")
+)
 
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
@@ -762,6 +785,12 @@ func ValidateUninstallStorageCluster(
 		return err
 	}
 
+	// Verify telemetry secret is deleted on UninstallAndWipe
+	_, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("telemetry secret pure-telemetry-certs was found when shouldn't have been")
+	}
+
 	return nil
 }
 
@@ -1002,7 +1031,7 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	for _, node := range nodeList.Items {
-		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() {
+		if isNodeMaster(node) && !IsK3sCluster() {
 			continue
 		}
 
@@ -1012,6 +1041,17 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	return nodeNameListWithPxPods, nil
+}
+
+func isNodeMaster(node v1.Node) bool {
+	// for newer k8s these fields exist but they are empty
+	_, hasMasterLabel := node.Labels[masterLabelKey]
+	_, hasControlPlaneLabel := node.Labels[controlplaneLabelKey]
+	_, hasControlDashPlaneLabel := node.Labels[controlDashPlaneLabelKey]
+	if hasMasterLabel || hasControlPlaneLabel || hasControlDashPlaneLabel {
+		return true
+	}
+	return false
 }
 
 // GetFullVersion returns the full kubernetes server version
@@ -1156,7 +1196,7 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		}
 
 		// Validate PVC Controller custom port, if any were set
-		if err := validatePvcControllerPorts(cluster.Annotations, pvcControllerDp, timeout, interval); err != nil {
+		if err := validatePvcControllerPorts(cluster, pvcControllerDp, timeout, interval); err != nil {
 			return err
 		}
 
@@ -1689,9 +1729,9 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 	return nil
 }
 
-func validatePvcControllerPorts(annotations map[string]string, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
+func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDeployment *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Debug("Validate PVC Controller custom ports")
-
+	annotations := cluster.Annotations
 	if annotations == nil {
 		return nil
 	}
@@ -1714,7 +1754,13 @@ func validatePvcControllerPorts(annotations map[string]string, pvcControllerDepl
 						for _, containerCommand := range container.Command {
 							if strings.Contains(containerCommand, "--secure-port") {
 								if len(pvcSecurePort) == 0 {
-									return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+									if isAKS(cluster) {
+										if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
+											return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
+										}
+									} else {
+										return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing from annotations in the StorageCluster, but is found in the PVC Controler pod %s", pod.Name)
+									}
 								} else if pvcSecurePort != strings.Split(containerCommand, "=")[1] {
 									return nil, true, fmt.Errorf("failed to validate secure-port, wrong --secure-port value in the command in PVC Controller pod [%s]: expected: %s, got: %s", pod.Name, pvcSecurePort, strings.Split(containerCommand, "=")[1])
 								}
@@ -1927,7 +1973,8 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
 			csiHealthMonitorControllerImage = value
 		} else {
-			return fmt.Errorf("failed to find image for csiHealthMonitorController")
+			// CEE-452: csi-external-health-monitor-controller is removed from manifest, add back when resolved
+			logrus.Warnf("failed to find image for csiHealthMonitorController")
 		}
 	}
 
@@ -2202,7 +2249,10 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 		return err
 	}
 
-	if err := ValidateTelemetry(pxImageList, cluster, timeout, interval); err != nil {
+	// Increasing timeout for Telemetry components as they take quite long time to initialize
+	defaultTelemetryRetryInterval := 30 * time.Second
+	defaultTelemetryTimeout := 10 * time.Minute
+	if err := ValidateTelemetry(pxImageList, cluster, defaultTelemetryTimeout, defaultTelemetryRetryInterval); err != nil {
 		return err
 	}
 
@@ -2266,8 +2316,8 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-// ValidateTelemetryUninstalled validates telemetry component is uninstalled as expected
-func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV1Disabled validates telemetry components are uninstalled as expected
+func ValidateTelemetryV1Disabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
 		_, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
@@ -2317,13 +2367,145 @@ func ValidateTelemetryUninstalled(pxImageList map[string]string, cluster *corev1
 
 // ValidateTelemetry validates telemetry component is installed/uninstalled as expected
 func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components")
+	logrus.Info("Check PX and PX Operator versions to determine which telemetry to validate against..")
+	pxVersion := GetPortworxVersion(cluster)
+	fmt.Printf("PX Version: %v", pxVersion)
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	logrus.Infof("PX Operator version: %v", opVersion)
+
 	if cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Telemetry != nil &&
 		cluster.Spec.Monitoring.Telemetry.Enabled {
-		return ValidateTelemetryInstalled(pxImageList, cluster, timeout, interval)
+		logrus.Info("Telemetry is enabled in StorageCluster")
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_10) {
+			return ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval)
+		}
+		return ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval)
 	}
 
-	return ValidateTelemetryUninstalled(pxImageList, cluster, timeout, interval)
+	logrus.Info("Telemetry is disabled in StorageCluster")
+	if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(opVer1_10) {
+		return ValidateTelemetryV2Disabled(cluster, timeout, interval)
+	}
+	return ValidateTelemetryV1Disabled(cluster, timeout, interval)
+}
+
+// GetPortworxVersion returns the Portworx version based on the image provided.
+// We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
+// env variable. If that is not present or invalid semvar, then we fallback to an
+// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
+// env variable, else we return master version
+func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
+	var (
+		err       error
+		pxVersion *version.Version
+	)
+
+	pxImage := cluster.Spec.Image
+	var manifestURL string
+	for _, env := range cluster.Spec.Env {
+		if env.Name == PxImageEnvVarName {
+			pxImage = env.Value
+		} else if env.Name == PxReleaseManifestURLEnvVarName {
+			manifestURL = env.Value
+		}
+	}
+
+	pxVersionStr := strings.Split(pxImage, ":")[len(strings.Split(pxImage, ":"))-1]
+	pxVersion, err = version.NewSemver(pxVersionStr)
+	if err != nil {
+		logrus.WithError(err).Warnf("Invalid PX version %s extracted from image name", pxVersionStr)
+		if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
+			logrus.Infof("Checking version in annotations %s", AnnotationPXVersion)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from annotation", pxVersionStr)
+			}
+		} else {
+			logrus.Infof("Checking version in %s", PxReleaseManifestURLEnvVarName)
+			pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from %s", pxVersionStr, PxReleaseManifestURLEnvVarName)
+			}
+		}
+	}
+
+	if pxVersion == nil {
+		logrus.Warnf("Failed to determine PX version, assuming its latest and setting it to master: %s", PxMasterVersion)
+		pxVersion, _ = version.NewVersion(PxMasterVersion)
+	}
+	return pxVersion
+}
+
+func getPortworxVersionFromManifestURL(url string) string {
+	regex := regexp.MustCompile(`.*portworx\.com\/(.*)\/version`)
+	version := regex.FindStringSubmatch(url)
+	if len(version) >= 2 {
+		return version[1]
+	}
+	return ""
+}
+
+// GetPxOperatorVersion returns PX Operator version
+func GetPxOperatorVersion() (*version.Version, error) {
+	image, err := getPxOperatorImage()
+	if err != nil {
+		return nil, err
+	}
+
+	// We may run the automation on operator installed using private images,
+	// so assume we are testing the latest operator version if failed to parse the tag
+	versionTag := strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
+	/*
+		if strings.Contains(versionTag, "-dev") {
+			versionTag = strings.Split(versionTag, "-")[0]
+		}
+	*/
+	opVersion, err := version.NewVersion(versionTag)
+	if err != nil {
+		masterVersionTag := PxOperatorMasterVersion
+		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", PxOperatorMasterVersion)
+		opVersion, _ = version.NewVersion(masterVersionTag)
+	}
+
+	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())
+	return opVersion, nil
+}
+
+func getPxOperatorImage() (string, error) {
+	labelSelector := map[string]string{}
+	var image string
+
+	NamespaceList, err := coreops.Instance().ListNamespaces(labelSelector)
+	if err != nil {
+		return "", err
+	}
+
+	for _, ns := range NamespaceList.Items {
+		operatorDeployment, err := appops.Instance().GetDeployment("portworx-operator", ns.Name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return "", err
+		}
+
+		logrus.Infof("Found deployment name: %s in namespace: %s", operatorDeployment.Name, operatorDeployment.Namespace)
+
+		for _, container := range operatorDeployment.Spec.Template.Spec.Containers {
+			if container.Name == "portworx-operator" {
+				image = container.Image
+				logrus.Infof("Get portworx-operator image installed: %s", image)
+				break
+			}
+		}
+	}
+	return image, nil
 }
 
 // ValidateAlertManager validates alertManager components
@@ -2444,8 +2626,299 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 	return nil
 }
 
-// ValidateTelemetryInstalled validates telemetry component is running as expected
-func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateTelemetryV2Enabled validates telemetry component is running as expected
+func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components are enabled")
+
+	// Wait for the deployment to become online
+	logrus.Info("Validate px-telemetry-registration deployment and images")
+	registrationServiceDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-telemetry-registration",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
+		return err
+	}
+	registrationServiceDep, err := appops.Instance().GetDeployment(registrationServiceDep.Name, registrationServiceDep.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify registration container image inside px-telemetry-registration
+	telemetryImageName, ok := pxImageList["telemetry"]
+	if !ok {
+		return fmt.Errorf("failed to find image for telemetry")
+	}
+	telemetryImageName = util.GetImageURN(cluster, telemetryImageName)
+
+	if registrationServiceDep.Spec.Template.Spec.Containers[0].Image != telemetryImageName {
+		return fmt.Errorf("registration image mismatch, image: %s, expected: %s",
+			registrationServiceDep.Spec.Template.Spec.Containers[0].Image,
+			telemetryImageName)
+	}
+	// Verify envoy container image inside registration-service
+	envoyImageName, ok := pxImageList["telemetryProxy"]
+	if !ok {
+		return fmt.Errorf("failed to find image for envoy")
+	}
+	envoyImageName = util.GetImageURN(cluster, envoyImageName)
+	if registrationServiceDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			registrationServiceDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify px-telemetry-metrics-collector deployment and images
+	logrus.Info("Validate px-telemetry-metrics-collector deployment and images")
+	metricsCollectorDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-telemetry-metrics-collector",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateDeployment(metricsCollectorDep, timeout, interval); err != nil {
+		return err
+	}
+	metricsCollectorDep, err = appops.Instance().GetDeployment(metricsCollectorDep.Name, metricsCollectorDep.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify init-cont image inside px-metric-collector
+	if metricsCollectorDep.Spec.Template.Spec.InitContainers != nil && metricsCollectorDep.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
+		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify collector container image inside px-metrics-collector
+	collectorImageName, ok := pxImageList["metricsCollector"]
+	if !ok {
+		return fmt.Errorf("failed to find image for metrics collector")
+	}
+	collectorImageName = util.GetImageURN(cluster, collectorImageName)
+
+	if metricsCollectorDep.Spec.Template.Spec.Containers[0].Image != collectorImageName {
+		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[0].Image,
+			collectorImageName)
+	}
+	// Verify envoy container image inside px-metrics-collector
+	if metricsCollectorDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Wait for the daemonset to become online
+	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
+	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
+		return err
+	}
+	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify init-cont image inside px-telemetry-phonehome
+	if telemetryPhonehomeDs.Spec.Template.Spec.InitContainers != nil && telemetryPhonehomeDs.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
+		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
+			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify collector container image inside px-telemetry-phonehome
+	logUploaderImageName, ok := pxImageList["logUploader"]
+	if !ok {
+		return fmt.Errorf("failed to find image for log uploader")
+	}
+	logUploaderImageName = util.GetImageURN(cluster, logUploaderImageName)
+
+	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image != logUploaderImageName {
+		return fmt.Errorf("log uploader image mismatch, image: %s, expected: %s",
+			telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image,
+			logUploaderImageName)
+	}
+
+	// Verify envoy container image inside px-telemetry-phonehome
+	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image != envoyImageName {
+		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
+			telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image,
+			envoyImageName)
+	}
+
+	// Verify telemetry secrets
+	_, err = coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry roles
+	_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry rolebindings
+	_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterroles
+	_, err = rbacops.Instance().GetClusterRole("px-telemetry")
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterrolebindings
+	_, err = rbacops.Instance().GetClusterRoleBinding("px-telemetry")
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry configmaps
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	_, err = coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Verify telemetry serviceaccounts
+	_, err = coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("All Telemetry components were successfully enabled/installed")
+	return nil
+}
+
+// ValidateTelemetryV2Disabled validates telemetry component is running as expected
+func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Telemetry components are disabled")
+	t := func() (interface{}, bool, error) {
+		_, err := appops.Instance().GetDeployment("px-telemetry-metrics-collector", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-metrics-collector deployment, waiting for deletion")
+		}
+
+		_, err = appops.Instance().GetDeployment("px-telemetry-registration", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-registration deployment, waiting for deletion")
+		}
+
+		_, err = appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome daemonset, waiting for deletion")
+		}
+
+		// Verify telemetry roles
+		_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Name)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry role, waiting for deletion")
+		}
+
+		// Verify telemetry rolebindings
+		_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Name)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry rolebinding, waiting for deletion")
+		}
+
+		// Verify telemetry clusterroles
+		_, err = rbacops.Instance().GetClusterRole("px-telemetry")
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry clusterrole, waiting for deletion")
+		}
+
+		// Verify telemetry clusterrolebindings
+		_, err = rbacops.Instance().GetClusterRoleBinding("px-telemetry")
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry clusterrolebinding, waiting for deletion")
+		}
+
+		// Verify telemetry configmaps
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-collector configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-collector-proxy configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-phonehome-proxy configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-register configmap, waiting for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-register-proxy configmap, wait for deletion")
+		}
+
+		_, err = coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry-tls-certificate configmap, waiting for deletion")
+		}
+
+		// Verify telemetry serviceaccounts
+		_, err = coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace)
+		if !errors.IsNotFound(err) {
+			return "", true, fmt.Errorf("found px-telemetry serviceaccount, waiting for deletion")
+		}
+
+		return "", false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Infof("All Telemetry components were successfully disabled/uninstalled")
+	return nil
+}
+
+// ValidateTelemetryV1Enabled validates telemetry component is running as expected
+func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	// Wait for the deployment to become online
 	dep := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
