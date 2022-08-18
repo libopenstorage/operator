@@ -755,6 +755,7 @@ func TestCloudStorageLabelSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	// Node pool label get set by default
+	driver.EXPECT().UpdateDriver(gomock.Any())
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	cluster.Spec.CloudStorage.NodePoolLabel = ""
 	err = controller.setStorageClusterDefaults(cluster)
@@ -784,6 +785,7 @@ func TestStorageClusterDefaults(t *testing.T) {
 	controller.log(cluster).Debugf("testing default cluster")
 
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 
 	// Use default revision history limit if not set
 	err := controller.setStorageClusterDefaults(cluster)
@@ -829,6 +831,7 @@ func TestStorageClusterDefaultsForUpdateStrategy(t *testing.T) {
 		Driver: driver,
 	}
 
+	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 
 	// Use rolling update as default update strategy if nothing specified
@@ -898,6 +901,7 @@ func TestStorageClusterDefaultsForFinalizer(t *testing.T) {
 		Driver: driver,
 	}
 
+	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 
 	// Add delete finalizer if no finalizers are present
@@ -921,6 +925,97 @@ func TestStorageClusterDefaultsForFinalizer(t *testing.T) {
 	require.Equal(t, expectedFinalizers, cluster.Finalizers)
 }
 
+func getk8sCLientWithNodesZones(
+	nodeCount uint32,
+	totalZones uint32,
+	cluster *corev1.StorageCluster,
+) client.Client {
+	k8sClient := testutil.FakeK8sClient(cluster)
+	zoneCount := uint32(0)
+	for node := uint32(0); node < nodeCount; node++ {
+		k8sNode := createK8sNode("k8s-node-"+strconv.Itoa(int(node)), 10)
+		zoneCount = zoneCount % totalZones
+		k8sNode.Labels[v1.LabelTopologyZone] = "Zone-" + strconv.Itoa(int(zoneCount))
+		k8sClient.Create(context.TODO(), k8sNode)
+		zoneCount++
+	}
+	return k8sClient
+}
+
+func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	driver := testutil.MockDriver(mockCtrl)
+	/* 1 zone */
+	k8sClient := getk8sCLientWithNodesZones(6, 1, cluster)
+
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+	driver.EXPECT().UpdateDriver(gomock.Any()).MinTimes(1)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).MinTimes(1)
+
+	err := controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.Equal(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, "", cluster.Status.Phase)
+
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(3), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(3), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	/* 2 zones */
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	controller.client = getk8sCLientWithNodesZones(8, 2, cluster)
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(2), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	/* 3 zones */
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	controller.client = getk8sCLientWithNodesZones(9, 3, cluster)
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(1), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	/* 4 zones */
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	controller.client = getk8sCLientWithNodesZones(8, 4, cluster)
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(1), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	/* Value specified */
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		MaxStorageNodesPerZone: new(uint32),
+	}
+	*cluster.Spec.CloudStorage.MaxStorageNodesPerZone = 7
+	controller.client = getk8sCLientWithNodesZones(30, 3, cluster)
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(7), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+}
+
 func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -940,6 +1035,7 @@ func TestStorageClusterDefaultsWithDriverOverrides(t *testing.T) {
 		Driver: driver,
 	}
 
+	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 	driver.EXPECT().
 		SetDefaultsOnStorageCluster(gomock.Any()).
 		Do(func(cluster *corev1.StorageCluster) {
@@ -1119,6 +1215,7 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(fmt.Errorf("preinstall error"))
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1176,6 +1273,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
@@ -1335,6 +1433,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
 		Do(func(c *corev1.StorageCluster) {
 			hash := computeHash(&c.Spec, nil)
@@ -1516,9 +1615,9 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(storageLabels).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -2771,6 +2870,7 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2821,22 +2921,23 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
-	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
-	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
-	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	expectedDriverInfo := &storage.UpdateDriverInfo{
 		ZoneToInstancesMap: map[string]uint64{
 			"z1": 2,
 			"z2": 1,
 		},
 	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(expectedDriverInfo).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
