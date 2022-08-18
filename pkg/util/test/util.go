@@ -532,6 +532,9 @@ func ValidateStorageCluster(
 		return validateStorageClusterIsFailed(clusterSpec, timeout, interval)
 	}
 
+	// Add default registry pre-fix for images that need it
+	pxImageList = addDefaultRegistryToImageList(pxImageList)
+
 	// Validate that spec matches live spec
 	if err = validateDeployedSpec(clusterSpec, liveCluster); err != nil {
 		return err
@@ -576,6 +579,13 @@ func ValidateStorageCluster(
 	}
 
 	return nil
+}
+
+func addDefaultRegistryToImageList(pxImageList map[string]string) map[string]string {
+	for name, image := range pxImageList {
+		pxImageList[name] = util.AddDefaultRegistryToImage(image)
+	}
+	return pxImageList
 }
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -2269,6 +2279,7 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 		((cluster.Spec.Monitoring.EnableMetrics != nil && *cluster.Spec.Monitoring.EnableMetrics) ||
 			(cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.ExportMetrics)) {
 		if cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled {
+			logrus.Info("Prometheus is enabled in the StorageCluster")
 			dep := appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "px-prometheus-operator",
@@ -2288,28 +2299,27 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 			if err := appops.Instance().ValidateStatefulSet(&st, timeout); err != nil {
 				return err
 			}
-		}
-
-		t := func() (interface{}, bool, error) {
-			_, err := prometheusops.Instance().GetPrometheusRule("portworx", cluster.Namespace)
-			if err != nil {
-				return nil, true, err
+			t := func() (interface{}, bool, error) {
+				_, err := prometheusops.Instance().GetPrometheusRule("portworx", cluster.Namespace)
+				if err != nil {
+					return nil, true, err
+				}
+				return nil, false, nil
 			}
-			return nil, false, nil
-		}
-		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
-			return err
-		}
-
-		t = func() (interface{}, bool, error) {
-			_, err := prometheusops.Instance().GetServiceMonitor("portworx", cluster.Namespace)
-			if err != nil {
-				return nil, true, err
+			if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+				return err
 			}
-			return nil, false, nil
-		}
-		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
-			return err
+
+			t = func() (interface{}, bool, error) {
+				_, err := prometheusops.Instance().GetServiceMonitor("portworx", cluster.Namespace)
+				if err != nil {
+					return nil, true, err
+				}
+				return nil, false, nil
+			}
+			if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+				return err
+			}
 		}
 	}
 
