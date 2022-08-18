@@ -45,8 +45,11 @@ const (
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
-	// MigrationDryRunFailedReason is aded to an event when dry run fails.
+	// MigrationDryRunFailedReason is added to an event when dry run fails.
 	MigrationDryRunFailedReason = "MigrationDryRunFailed"
+
+	// DefaultImageRegistry is the default registry when no registry is provided
+	DefaultImageRegistry = "docker.io"
 )
 
 var (
@@ -58,12 +61,28 @@ var (
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
 	}
+
 	// podTopologySpreadConstraintKeys is a list of topology keys considered for pod spread constraints
 	podTopologySpreadConstraintKeys = []string{
 		"topology.kubernetes.io/region",
 		"topology.kubernetes.io/zone",
 	}
 )
+
+// AddDefaultRegistryToImage adds default registry to image.
+func AddDefaultRegistryToImage(image string) string {
+	if image == "" {
+		return ""
+	}
+
+	for k := range commonDockerRegistries {
+		if strings.HasPrefix(image, k) || strings.HasPrefix(image, "gcr.io") || strings.HasPrefix(image, "k8s.gcr.io") {
+			return image
+		}
+	}
+
+	return DefaultImageRegistry + "/" + image
+}
 
 func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
 	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
@@ -103,7 +122,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 	registryAndRepo = strings.TrimRight(registryAndRepo, "/")
 	if registryAndRepo == "" {
 		// no registry/repository specifed, return image
-		return image
+		return AddDefaultRegistryToImage(image)
 	}
 
 	imgParts := strings.Split(image, "/")
@@ -122,6 +141,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 			imgParts = imgParts[len(imgParts)-1:]
 		}
 	}
+
 	return registryAndRepo + "/" + path.Join(imgParts...)
 }
 
