@@ -499,7 +499,7 @@ func TestStorkWithDesiredImage(t *testing.T) {
 	storkDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "osd/stork:status", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "docker.io/osd/stork:status", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 
 	// If image is present in spec, then use that instead of desired image
 	cluster.Spec.Stork.Image = "osd/stork:spec"
@@ -509,7 +509,7 @@ func TestStorkWithDesiredImage(t *testing.T) {
 
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "osd/stork:spec", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "docker.io/osd/stork:spec", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 }
 
 func TestStorkImageChange(t *testing.T) {
@@ -557,7 +557,7 @@ func TestStorkImageChange(t *testing.T) {
 	storkDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "osd/stork:v1", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "docker.io/osd/stork:v1", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 
 	// Change the stork image
 	cluster.Spec.Stork.Image = "osd/stork:v2"
@@ -567,7 +567,7 @@ func TestStorkImageChange(t *testing.T) {
 
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "osd/stork:v2", storkDeployment.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "docker.io/osd/stork:v2", storkDeployment.Spec.Template.Spec.Containers[0].Image)
 }
 
 func TestStorkArgumentsChange(t *testing.T) {
@@ -846,7 +846,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"osd/stork:test",
+		"docker.io/osd/stork:test",
 		storkDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -978,7 +978,7 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, storkDeployment, storkDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"osd/stork:test",
+		"docker.io/osd/stork:test",
 		storkDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
