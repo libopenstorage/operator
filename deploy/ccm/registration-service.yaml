@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-telemetry-registration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: px-telemetry-registration
+  template:
+    metadata:
+      labels:
+        role: px-telemetry-registration
+    spec:
+      hostNetwork: true
+      containers:
+        - name: registration
+          image: purestorage/ccm-go:1.0.0
+          env:
+          - name: CONFIG
+            value: "config/config_properties_px.yaml"
+          volumeMounts:
+          - readOnly: true
+            mountPath: /config
+            name: registration-config
+          ports:
+            - name: registration
+              containerPort: 80
+              protocol: TCP
+          imagePullPolicy: Always
+        - name: envoy
+          image: purestorage/telemetry-envoy:1.0.0
+          securityContext:
+            runAsUser: 1111
+          volumeMounts:
+          - readOnly: true
+            mountPath: /config
+            name: proxy-config
+          args:
+          - "envoy"
+          - "--config-path"
+          - "/config/envoy-config-register.yaml"
+      volumes:
+        - name: registration-config
+          configMap:
+            name: px-telemetry-register
+        - name: proxy-config
+          configMap:
+            name: px-telemetry-register-proxy

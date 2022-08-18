@@ -102,7 +102,97 @@ func TestOrderOfComponents(t *testing.T) {
 	}
 }
 
+// TestBasicComponentsInstallWithPreTLSPx validates that for px versions before 2.9,
+//   the TLS secured port 9023 is not exposed
+func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			StartPort: &startPort,
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	legacyImage := "portworx/oci-monitor:2.8.0"
+	cluster.Spec.Image = legacyImage
+
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Portworx Service with legacy px (pre 2.9) should not expose 9023 TSL secured port
+	// s, _ := json.MarshalIndent(cluster.Spec, "", "\t")
+	// t.Logf("cluster spec under validation for legacy portworxService.yaml: %+v", string(s))
+	expectedPXService := testutil.GetExpectedService(t, "portworxService_pre_29.yaml")
+	pxService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxService, pxutil.PortworxServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXService.Name, pxService.Name)
+	require.Equal(t, expectedPXService.Namespace, pxService.Namespace)
+	require.Len(t, pxService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPXService.Labels, pxService.Labels)
+	require.Equal(t, expectedPXService.Spec, pxService.Spec)
+
+	// Portworx API Service with legacy px (pre 2.9) should not expose 9023 TSL secured port
+	expectedPxAPIService := testutil.GetExpectedService(t, "portworxAPIService_pre_29.yaml")
+	pxAPIService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxAPIService, component.PxAPIServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxAPIService.Name, pxAPIService.Name)
+	require.Equal(t, expectedPxAPIService.Namespace, pxAPIService.Namespace)
+	require.Len(t, pxAPIService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, pxAPIService.OwnerReferences[0].Name)
+	require.Equal(t, expectedPxAPIService.Labels, pxAPIService.Labels)
+	require.Equal(t, expectedPxAPIService.Spec, pxAPIService.Spec)
+
+	// Portworx Proxy Service
+	expectedPxProxyService := testutil.GetExpectedService(t, "pxProxyService_pre_29.yaml")
+	pxProxyService := &v1.Service{}
+	err = testutil.Get(k8sClient, pxProxyService, pxutil.PortworxServiceName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedPxProxyService.Name, pxProxyService.Name)
+	require.Equal(t, expectedPxProxyService.Namespace, pxProxyService.Namespace)
+	require.Empty(t, pxProxyService.OwnerReferences)
+	require.Equal(t, expectedPxProxyService.Labels, pxProxyService.Labels)
+	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
+}
+
 func TestBasicComponentsInstall(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -196,6 +286,9 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, actualRB.OwnerReferences[0].Name)
 	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
 	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
+
+	s, _ := json.MarshalIndent(cluster.Spec, "", "\t")
+	t.Logf("cluster spec under validation for portworxService.yaml: %+v", string(s))
 
 	// Portworx Service
 	expectedPXService := testutil.GetExpectedService(t, "portworxService.yaml")
@@ -1424,6 +1517,42 @@ func TestPVCControllerInstall(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
+func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.24.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment_k8s_1.24.yaml")
+	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
+	expectedContainer.Command = expectedContainer.Command[0:4]
+	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.24.0"
+	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
+	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
+	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
+}
+
 func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -2321,7 +2450,7 @@ func TestLighthouseInstall(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:2.1.1",
+				Image:   "docker.io/portworx/px-lighthouse:2.1.1",
 			},
 		},
 	}
@@ -2637,7 +2766,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 		},
 		Status: corev1.StorageClusterStatus{
 			DesiredImages: &corev1.ComponentImages{
-				UserInterface: "portworx/px-lighthouse:status",
+				UserInterface: "docker.io/portworx/px-lighthouse:status",
 			},
 		},
 	}
@@ -2649,7 +2778,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:status", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:status", image)
 
 	// If image is present in spec, then use that instead of the desired image
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:spec"
@@ -2660,7 +2789,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:spec", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:spec", image)
 }
 
 func TestLighthouseImageChange(t *testing.T) {
@@ -2678,7 +2807,7 @@ func TestLighthouseImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2690,7 +2819,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:v1", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:v1", image)
 
 	// Change the lighthouse image
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:v2"
@@ -2701,7 +2830,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse:v2", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:v2", image)
 }
 
 func TestLighthouseConfigInitImageChange(t *testing.T) {
@@ -2719,7 +2848,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2731,7 +2860,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync:v1", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync:v1", image)
 
 	// Change the lighthouse config init container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
@@ -2747,7 +2876,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "test/config-sync:v2", image)
+	require.Equal(t, "docker.io/test/config-sync:v2", image)
 }
 
 func TestLighthouseStorkConnectorImageChange(t *testing.T) {
@@ -2765,7 +2894,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse:v1",
+				Image:   "docker.io/portworx/px-lighthouse:v1",
 			},
 		},
 	}
@@ -2777,7 +2906,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector:v1", image)
+	require.Equal(t, "docker.io/portworx/lh-stork-connector:v1", image)
 
 	// Change the lighthouse config sync container image
 	cluster.Spec.UserInterface.Env = []v1.EnvVar{
@@ -2793,7 +2922,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "test/stork-connector:v2", image)
+	require.Equal(t, "docker.io/test/stork-connector:v2", image)
 }
 
 func TestLighthouseWithoutImageTag(t *testing.T) {
@@ -2825,13 +2954,13 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "portworx/lh-stork-connector", image)
+	require.Equal(t, "docker.io/portworx/lh-stork-connector", image)
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
@@ -2873,13 +3002,13 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "test/config-sync:t1", image)
+	require.Equal(t, "docker.io/test/config-sync:t1", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "test/config-sync:t1", image)
+	require.Equal(t, "docker.io/test/config-sync:t1", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "test/stork-connector:t2", image)
+	require.Equal(t, "docker.io/test/stork-connector:t2", image)
 }
 
 func TestAutopilotInstall(t *testing.T) {
@@ -3320,7 +3449,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:status", image)
+	require.Equal(t, "docker.io/portworx/autopilot:status", image)
 
 	// If image is present in spec, then use that instead of the desired image
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:spec"
@@ -3331,7 +3460,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:spec", image)
+	require.Equal(t, "docker.io/portworx/autopilot:spec", image)
 }
 
 func TestAutopilotImageChange(t *testing.T) {
@@ -3361,7 +3490,7 @@ func TestAutopilotImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:v1", image)
+	require.Equal(t, "docker.io/portworx/autopilot:v1", image)
 
 	// Change the autopilot image
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:v2"
@@ -3372,7 +3501,7 @@ func TestAutopilotImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image = k8sutil.GetImageFromDeployment(autopilotDeployment, component.AutopilotContainerName)
-	require.Equal(t, "portworx/autopilot:v2", image)
+	require.Equal(t, "docker.io/portworx/autopilot:v2", image)
 }
 
 func TestAutopilotArgumentsChange(t *testing.T) {
@@ -7204,19 +7333,19 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:"+newCompVersion(),
+		"docker.io/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:"+newCompVersion(),
+		"docker.io/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -7224,7 +7353,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:"+newCompVersion(),
+		"docker.io/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7283,7 +7412,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
 	require.Equal(t,
-		cluster.Spec.PxRepo.Image,
+		"docker.io/"+cluster.Spec.PxRepo.Image,
 		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7292,11 +7421,11 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -8183,19 +8312,19 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/px-lighthouse:"+newCompVersion(),
+		"docker.io/portworx/px-lighthouse:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-stork-connector:"+newCompVersion(),
+		"docker.io/portworx/lh-stork-connector:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName),
 	)
 	require.Equal(t,
-		"portworx/lh-config-sync:"+newCompVersion(),
+		"docker.io/portworx/lh-config-sync:"+newCompVersion(),
 		k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName),
 	)
 
@@ -8203,7 +8332,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"portworx/autopilot:"+newCompVersion(),
+		"docker.io/portworx/autopilot:"+newCompVersion(),
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8262,7 +8391,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pxRepoDeployment.Spec.Template.Spec.Containers, 1)
 	require.Equal(t,
-		cluster.Spec.PxRepo.Image,
+		"docker.io/"+cluster.Spec.PxRepo.Image,
 		pxRepoDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8271,11 +8400,11 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -8768,11 +8897,11 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, collectorDeployment.Spec.Template.Spec.Containers, 2)
 	require.Equal(t,
-		"purestorage/realtime-metrics:latest",
+		"docker.io/purestorage/realtime-metrics:latest",
 		collectorDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 	require.Equal(t,
-		"envoyproxy/envoy:v1.19.1",
+		"docker.io/envoyproxy/envoy:v1.19.1",
 		collectorDeployment.Spec.Template.Spec.Containers[1].Image,
 	)
 
@@ -12117,6 +12246,11 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
+	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 
 	// CCM config map
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmconfig.yaml")
@@ -12222,9 +12356,15 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 
 	err = testutil.Get(k8sClient, telemetryConfigMap, component.TelemetryConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -12264,8 +12404,11 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEqual(t, cluster.Status.DesiredImages.MetricsCollector, "")
 	require.NotEqual(t, cluster.Status.DesiredImages.MetricsCollectorProxy, "")
+	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 }
 
 func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
@@ -12401,6 +12544,408 @@ func TestTelemetryCCMProxy(t *testing.T) {
 	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
 	require.Error(t, err)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.1",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	// This cert is created by ccm container outside of operator, let's simulate it.
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
+
+	// Validate ccm-go service account, cluster role and cluster role binding
+	serviceAccount := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNameTelemetry, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, serviceAccount.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceAccount.OwnerReferences[0].Name)
+
+	clusterRole := &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNameTelemetry, "")
+	require.NoError(t, err)
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
+	require.NoError(t, err)
+
+	// Validate ccm-go role and role binding
+	role := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, role.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, role.OwnerReferences[0].Name)
+
+	roleBinding := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, roleBinding.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
+
+	// Validate config maps
+	// TODO: validate config map content
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryTLSCertificate, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+
+	// Validate deployments
+	// TODO: validate deployment specs
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+
+	daemonset := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+
+	secret := v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
+
+	// Now disable telemetry
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryTLSCertificate, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNameTelemetry, "")
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNameTelemetry, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Now enabled again with custom telemetry image.
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.3"
+	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = "log-uploader-image"
+	cluster.Status = corev1.StorageClusterStatus{
+		ClusterUID: "test-clusteruid",
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+}
+
+func TestTelemetryCCMGoUpgrade(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	// Deploy px with CCM Java enabled and telemetry image specified
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.10.1",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "purestorage/telemetry:1.2.3",
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+	// This cert is created by ccm container outside of operator, let's simulate it.
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.Empty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+
+	validateCCMJavaComponents := func() {
+		// validate ccm java components exist
+		serviceAccount := &v1.ServiceAccount{}
+		err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
+		require.NoError(t, err)
+		clusterRole := &rbacv1.ClusterRole{}
+		err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+		require.NoError(t, err)
+		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+		require.NoError(t, err)
+		role := &rbacv1.Role{}
+		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+		require.NoError(t, err)
+		roleBinding := &rbacv1.RoleBinding{}
+		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+		require.NoError(t, err)
+		configMap := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.TelemetryConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		deployment := &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Len(t, deployment.Spec.Template.Spec.InitContainers, 0)
+		require.Equal(t, component.CollectorServiceAccountName, deployment.Spec.Template.Spec.ServiceAccountName)
+		// validate ccm go components don't exist
+		err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNameTelemetry, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNameTelemetry, "")
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryTLSCertificate, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		daemonset := &appsv1.DaemonSet{}
+		err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+	}
+	validateCCMJavaComponents()
+
+	// TestCase: upgrade PX version, ccm should force upgrade if image is specified and reset the image
+	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
+	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
+	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
+	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
+	require.NotEmpty(t, cluster.Status.DesiredImages.LogUploader)
+	validateCCMGoComponents := func() {
+		// validate ccm go components exist
+		serviceAccount := &v1.ServiceAccount{}
+		err = testutil.Get(k8sClient, serviceAccount, component.ServiceAccountNameTelemetry, cluster.Namespace)
+		require.NoError(t, err)
+		clusterRole := &rbacv1.ClusterRole{}
+		err = testutil.Get(k8sClient, clusterRole, component.ClusterRoleNameTelemetry, "")
+		require.NoError(t, err)
+		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.ClusterRoleBindingNameTelemetry, "")
+		require.NoError(t, err)
+		role := &rbacv1.Role{}
+		err = testutil.Get(k8sClient, role, component.RoleNameTelemetry, cluster.Namespace)
+		require.NoError(t, err)
+		roleBinding := &rbacv1.RoleBinding{}
+		err = testutil.Get(k8sClient, roleBinding, component.RoleBindingNameTelemetry, cluster.Namespace)
+		require.NoError(t, err)
+		configMap := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryTLSCertificate, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+		require.NoError(t, err)
+		configMap = &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+		require.NoError(t, err)
+		deployment := &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+		require.NoError(t, err)
+		daemonset := &appsv1.DaemonSet{}
+		err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+		require.NoError(t, err)
+		deployment = &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+		require.NoError(t, err)
+		require.Len(t, deployment.Spec.Template.Spec.InitContainers, 1)
+		require.Equal(t, component.ServiceAccountNameTelemetry, deployment.Spec.Template.Spec.ServiceAccountName)
+		// validate ccm java components don't exist
+		err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+		require.True(t, errors.IsNotFound(err))
+		role = &rbacv1.Role{}
+		err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.TelemetryConfigMapName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+		err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
+		require.True(t, errors.IsNotFound(err))
+	}
+	validateCCMGoComponents()
 }
 
 func TestPortworxAPIServiceCustomLabels(t *testing.T) {

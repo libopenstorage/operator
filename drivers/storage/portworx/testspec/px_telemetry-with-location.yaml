@@ -45,7 +45,7 @@ spec:
       hostPID: false
       containers:
         - name: portworx
-          image: portworx/oci-monitor:2.8.0
+          image: docker.io/portworx/oci-monitor:2.8.0
           imagePullPolicy: Always
           args:
             ["-c", "px-cluster", "-a", "-b",
@@ -111,7 +111,7 @@ spec:
               value: /etc/ccm/ccm.properties
             - name: PX_NAMESPACE
               value: kube-system
-          image: portworx/px-telemetry:2.1.2
+          image: docker.io/portworx/px-telemetry:2.1.2
           imagePullPolicy: Always
           args:
             - "-Dserver.rest_server.core_pool_size=2"

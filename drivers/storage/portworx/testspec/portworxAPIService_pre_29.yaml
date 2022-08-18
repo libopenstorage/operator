@@ -1,0 +1,24 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: portworx-api
+  namespace: kube-test
+  labels:
+    name: portworx-api
+spec:
+  selector:
+    name: portworx-api
+  type: ClusterIP
+  ports:
+    - name: px-api
+      protocol: TCP
+      port: 9001
+      targetPort: 10001
+    - name: px-sdk
+      protocol: TCP
+      port: 9020
+      targetPort: 10017
+    - name: px-rest-gateway
+      protocol: TCP
+      port: 9021
+      targetPort: 10018

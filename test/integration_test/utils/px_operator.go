@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	nextReleaseTag = "1.8.1-dev"
+	pxOperatorMasterVersion = "9.9.9.9"
 )
 
 var (
@@ -38,8 +38,8 @@ func GetPXOperatorVersion() (*version.Version, error) {
 	// so assume we are testing the latest operator version if failed to parse the tag
 	opVersion, err := version.NewVersion(pxImageTag)
 	if err != nil {
-		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming next release tag")
-		opVersion, _ = version.NewVersion(nextReleaseTag)
+		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", pxOperatorMasterVersion)
+		opVersion, _ = version.NewVersion(pxOperatorMasterVersion)
 	}
 
 	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())

@@ -35,7 +35,7 @@ spec:
         - --lock-object-namespace=kube-test
         - --verbose=true
         imagePullPolicy: Always
-        image: osd/stork:test
+        image: docker.io/osd/stork:test
         env:
         - name: PX_NAMESPACE
           value: kube-test

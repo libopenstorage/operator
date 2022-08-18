@@ -1,0 +1,32 @@
+actKeyRequired: false
+cert:
+  keySize: 2048
+  renewWindowInDays: 30
+  registrationEnabled: true
+  renewEnabled: true
+  keyAlgorithm: "RSA"
+  noRelCertEnabled: true
+  release:
+    staging: 
+      private: "/opt/ccm/cert/rel_priv_staging.pem"
+    production:
+      private: "/opt/ccm/cert/rel_priv.pem"
+subscription:
+  useApplianceId: true
+  accountType: "UNKNOWN"
+standalone:
+  applianceIdPath: "/var/cache/appliance_id"
+  generateApplianceIdEnabled: false
+envoy:
+  protocol: "http"
+  registrationHost: "localhost"
+  registrationPort: "12001"
+  renewalHost: "localhost"
+  renewalPort: "12002"
+cloud:
+  auth:
+    version: "1.0"
+productName: "portworx"
+k8s:
+  certSecretName: "pure-telemetry-certs"
+  certSecretNamespace: CERT_SECRET_NAMESPACE

@@ -2469,6 +2469,57 @@ func TestPodWithTelemetry(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodWithTelemetryUpgrade(t *testing.T) {
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(fakeClient))
+	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.4",
+	}
+	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.8.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "portworx/px-telemetry:2.1.2",
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+		},
+	}
+	driver := portworx{}
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assertPodSpecEqual(t, expected, &actual)
+
+	// Upgrade px version, ccm should upgrade and reset telemetry image specified, ccm container should be removed
+	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Equal(t, len(expected.Containers)-1, len(actual.Containers))
+
+	// Disable telemetry
+	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	driver.SetDefaultsOnStorageCluster(cluster)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Equal(t, len(expected.Containers), len(actual.Containers))
+}
+
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_master.yaml")
