@@ -25,7 +25,7 @@ func TestImageURN(t *testing.T) {
 
 	// TestCase: Empty repo and registry
 	out = getImageURN("", "", "test/image")
-	require.Equal(t, "test/image", out)
+	require.Equal(t, "docker.io/test/image", out)
 
 	// TestCase: Registry without repo but image with repo
 	out = getImageURN("", "registry.io", "test/image")
@@ -117,7 +117,7 @@ func TestImageURNPreserved(t *testing.T) {
 
 	// Ensure original behaviour remains
 	out = getImageURNPreserved("", "", "test/image")
-	require.Equal(t, "test/image", out)
+	require.Equal(t, "docker.io/test/image", out)
 
 	// Ensure original behaviour remains
 	out = getImageURNPreserved("", "registry.io", "test/image")
