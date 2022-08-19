@@ -4,6 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	schedulehelper "k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 
@@ -185,7 +186,8 @@ func CheckPredicatesForStoragePod(
 	taints := node.Spec.Taints
 	fitsNodeName := len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
 	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
-	fitsTaints := helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+
+	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
 	})
 	if !fitsNodeName || !fitsNodeAffinity {
@@ -196,16 +198,16 @@ func CheckPredicatesForStoragePod(
 		}).Debug("pod does not fit")
 		return false, false, nil
 	}
-	if !fitsTaints {
+	if taintsUntolerated {
 		// Scheduled storage pods should continue running if they tolerate NoExecute taint
-		shouldContinueRunning := helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, func(t *v1.Taint) bool {
+		_, shouldStopRunning := schedulehelper.FindMatchingUntoleratedTaint(taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 			return t.Effect == v1.TaintEffectNoExecute
 		})
 		logrus.WithFields(logrus.Fields{
 			"nodeName":              node.Name,
-			"shouldContinueRunning": shouldContinueRunning,
+			"shouldContinueRunning": !shouldStopRunning,
 		}).Debug("pod does not fit taints")
-		return false, shouldContinueRunning, nil
+		return false, !shouldStopRunning, nil
 	}
 	return true, true, nil
 }
