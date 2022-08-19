@@ -740,6 +740,10 @@ func defaultPxNodeAffinityRules() *v1.NodeAffinity {
 							Key:      "node-role.kubernetes.io/master",
 							Operator: v1.NodeSelectorOpDoesNotExist,
 						},
+						{
+							Key:      "node-role.kubernetes.io/control-plane",
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
 					},
 				},
 			},

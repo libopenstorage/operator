@@ -659,7 +659,7 @@ func (t *template) telemetryContainer() *v1.Container {
 	return &container
 }
 
-func (t *template) getSelectorTerms() []v1.NodeSelectorTerm {
+func (t *template) getSelectorTerms(k8sVersion *version.Version) []v1.NodeSelectorTerm {
 	selectorRequirements := []v1.NodeSelectorRequirement{
 		{
 			Key:      "px/enabled",
@@ -680,21 +680,34 @@ func (t *template) getSelectorTerms() []v1.NodeSelectorTerm {
 		selectorRequirements = append(
 			selectorRequirements,
 			v1.NodeSelectorRequirement{
-				Key:      "node-role.kubernetes.io/infra",
+				Key:      k8sutil.NodeRoleLabelInfra,
 				Operator: v1.NodeSelectorOpDoesNotExist,
 			},
 		)
 	}
 
+	var nodeSelectorTerms []v1.NodeSelectorTerm
 	// requirements1 defines it should not run on master.
 	requirements1 := t.copySelectorRequirements(selectorRequirements)
 	requirements1 = append(
 		requirements1,
 		v1.NodeSelectorRequirement{
-			Key:      "node-role.kubernetes.io/master",
+			Key:      k8sutil.NodeRoleLabelMaster,
 			Operator: v1.NodeSelectorOpDoesNotExist,
 		},
 	)
+	if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
+		requirements1 = append(
+			requirements1,
+			v1.NodeSelectorRequirement{
+				Key:      k8sutil.NodeRoleLabelControlPlane,
+				Operator: v1.NodeSelectorOpDoesNotExist,
+			},
+		)
+	}
+	nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+		MatchExpressions: requirements1,
+	})
 
 	// requirements2 defines it could run on a node that is master and worker.
 	// This is needed for IBM OCP cluster where all nodes are master and worker.
@@ -702,23 +715,39 @@ func (t *template) getSelectorTerms() []v1.NodeSelectorTerm {
 	requirements2 = append(
 		requirements2,
 		v1.NodeSelectorRequirement{
-			Key:      "node-role.kubernetes.io/master",
+			Key:      k8sutil.NodeRoleLabelMaster,
 			Operator: v1.NodeSelectorOpExists,
 		},
 		v1.NodeSelectorRequirement{
-			Key:      "node-role.kubernetes.io/worker",
+			Key:      k8sutil.NodeRoleLabelWorker,
 			Operator: v1.NodeSelectorOpExists,
 		},
 	)
+	nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+		MatchExpressions: requirements2,
+	})
 
-	return []v1.NodeSelectorTerm{
-		{
-			MatchExpressions: requirements1,
-		},
-		{
-			MatchExpressions: requirements2,
-		},
+	if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
+		// requirements3 defines it could run on a node that is master and worker.
+		// on k8s 1.24+, master label will be replaced by control-plane
+		requirements3 := t.copySelectorRequirements(selectorRequirements)
+		requirements3 = append(
+			requirements3,
+			v1.NodeSelectorRequirement{
+				Key:      k8sutil.NodeRoleLabelControlPlane,
+				Operator: v1.NodeSelectorOpExists,
+			},
+			v1.NodeSelectorRequirement{
+				Key:      k8sutil.NodeRoleLabelWorker,
+				Operator: v1.NodeSelectorOpExists,
+			},
+		)
+		nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+			MatchExpressions: requirements3,
+		})
 	}
+
+	return nodeSelectorTerms
 }
 
 func (t *template) copySelectorRequirements(reqs []v1.NodeSelectorRequirement) []v1.NodeSelectorRequirement {

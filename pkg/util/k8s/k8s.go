@@ -39,6 +39,11 @@ import (
 const (
 	Pod     = "pod"
 	Service = "service"
+
+	NodeRoleLabelMaster       = "node-role.kubernetes.io/master"
+	NodeRoleLabelControlPlane = "node-role.kubernetes.io/control-plane"
+	NodeRoleLabelInfra        = "node-role.kubernetes.io/infra"
+	NodeRoleLabelWorker       = "node-role.kubernetes.io/worker"
 )
 
 var (

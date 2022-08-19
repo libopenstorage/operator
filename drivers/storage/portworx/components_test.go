@@ -3562,7 +3562,7 @@ func TestSecurityInstall(t *testing.T) {
 		},
 	}
 	// Initial run
-	SetPortworxDefaults(cluster, nil)
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3786,7 +3786,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 		},
 	}
 	// Initial run
-	SetPortworxDefaults(cluster, nil)
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// token should be refreshed if the issuer changes
 	err = driver.PreInstall(cluster) // regenerate token with long lifetime
@@ -3934,7 +3934,7 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
-	SetPortworxDefaults(cluster, nil)
+	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)

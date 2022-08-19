@@ -160,8 +160,11 @@ func TestGetStorkEnvMap(t *testing.T) {
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -352,6 +355,137 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.False(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
 	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
+}
+
+func TestStorageClusterPlacementDefaults(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.23.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	k8sClient := testutil.FakeK8sClient()
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: placement spec below k8s 1.24
+	expectedPlacement := &corev1.PlacementSpec{
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+						},
+					},
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpExists,
+							},
+							{
+								Key:      "node-role.kubernetes.io/worker",
+								Operator: v1.NodeSelectorOpExists,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
+
+	// TestCase: placement above k8s 1.24
+	expectedPlacement = &corev1.PlacementSpec{
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+							{
+								Key:      "node-role.kubernetes.io/control-plane",
+								Operator: v1.NodeSelectorOpDoesNotExist,
+							},
+						},
+					},
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/master",
+								Operator: v1.NodeSelectorOpExists,
+							},
+							{
+								Key:      "node-role.kubernetes.io/worker",
+								Operator: v1.NodeSelectorOpExists,
+							},
+						},
+					},
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "px/enabled",
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"false"},
+							},
+							{
+								Key:      "node-role.kubernetes.io/control-plane",
+								Operator: v1.NodeSelectorOpExists,
+							},
+							{
+								Key:      "node-role.kubernetes.io/worker",
+								Operator: v1.NodeSelectorOpExists,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cluster.Spec.Placement = nil
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.24.0",
+	}
+	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
 func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
@@ -814,9 +948,17 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForCSI(t *testing.T) {
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(fakeClient))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.12.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -853,7 +995,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Enable CSI if running in k3s cluster
-	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.18.4+k3s",
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)

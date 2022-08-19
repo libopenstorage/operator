@@ -208,6 +208,9 @@ var (
 	// SpecsBaseDir functions returns the base directory for specs. This is extracted as
 	// variable for testing. DO NOT change the value of the function unless for testing.
 	SpecsBaseDir = getSpecsBaseDir
+
+	// MinimumSupportedK8sVersion minimum k8s version PX supports
+	MinimumSupportedK8sVersion, _ = version.NewVersion("v1.12.0")
 )
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
