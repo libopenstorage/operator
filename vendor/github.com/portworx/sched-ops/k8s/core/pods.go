@@ -24,6 +24,8 @@ type PodOps interface {
 	CreatePod(pod *corev1.Pod) (*corev1.Pod, error)
 	// UpdatePod updates the given pod
 	UpdatePod(pod *corev1.Pod) (*corev1.Pod, error)
+	// ListPods returns pods from all namespaces matching the given label
+	ListPods(map[string]string) (*corev1.PodList, error)
 	// GetPods returns pods for the given namespace
 	GetPods(string, map[string]string) (*corev1.PodList, error)
 	// GetPodsByNode returns all pods in given namespace and given k8s node name.
@@ -91,6 +93,17 @@ func (c *Client) UpdatePod(pod *corev1.Pod) (*corev1.Pod, error) {
 	}
 
 	return c.kubernetes.CoreV1().Pods(pod.Namespace).Update(context.TODO(), pod, metav1.UpdateOptions{})
+}
+
+// ListPods returns pods from all namespaces matching the given label
+func (c *Client) ListPods(labelSelector map[string]string) (*corev1.PodList, error) {
+	if err := c.initClient(); err != nil {
+		return nil, err
+	}
+	opts := metav1.ListOptions{
+		LabelSelector: mapToCSV(labelSelector),
+	}
+	return c.kubernetes.CoreV1().Pods("").List(context.TODO(), opts)
 }
 
 // GetPods returns pods for the given namespace
@@ -333,12 +346,8 @@ func (c *Client) IsPodReady(pod corev1.Pod) bool {
 
 // IsPodBeingManaged returns true if the pod is being managed by a controller
 func (c *Client) IsPodBeingManaged(pod corev1.Pod) bool {
-	if len(pod.OwnerReferences) == 0 {
-		return false
-	}
-
 	for _, owner := range pod.OwnerReferences {
-		if *owner.Controller {
+		if owner.Controller != nil && *owner.Controller {
 			// We are assuming that if a pod has a owner who has set itself as
 			// a controller, the pod is managed. We are not checking for specific
 			// contollers like ReplicaSet, StatefulSet as that is
@@ -348,7 +357,6 @@ func (c *Client) IsPodBeingManaged(pod corev1.Pod) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
