@@ -23,6 +23,7 @@ import (
 const (
 	masterLabelKey           = "node-role.kubernetes.io/master"
 	controlplaneLabelKey     = "node-role.kubernetes.io/controlplane"
+	controlDashPlaneLabelKey = "node-role.kubernetes.io/control-plane"
 	pvcStorageProvisionerKey = "volume.beta.kubernetes.io/storage-provisioner"
 	labelUpdateMaxRetries    = 5
 )
@@ -48,6 +49,7 @@ type Ops interface {
 	ServiceOps
 	ServiceAccountOps
 	LimitRangeOps
+	NetworkPolicyOps
 
 	// SetConfig sets the config and resets the client
 	SetConfig(config *rest.Config)
