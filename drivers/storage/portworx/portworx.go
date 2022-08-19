@@ -589,6 +589,9 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cl
 
 // SetPortworxDefaults populates default storage cluster spec values
 func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) {
+	if k8sVersion == nil {
+		k8sVersion = pxutil.MinimumSupportedK8sVersion
+	}
 	t, err := newTemplate(toUpdate, "")
 	if err != nil {
 		return
@@ -642,14 +645,15 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 	if toUpdate.Spec.Placement.NodeAffinity == nil {
 		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: t.getSelectorTerms(),
+				NodeSelectorTerms: t.getSelectorTerms(k8sVersion),
 			},
 		}
 	}
 	if t.runOnMaster {
 		masterTolerationFound := false
 		for _, t := range toUpdate.Spec.Placement.Tolerations {
-			if t.Key == "node-role.kubernetes.io/master" &&
+			if (t.Key == k8sutil.NodeRoleLabelMaster ||
+				t.Key == k8sutil.NodeRoleLabelControlPlane) &&
 				t.Effect == v1.TaintEffectNoSchedule {
 				masterTolerationFound = true
 				break
@@ -659,10 +663,19 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 			toUpdate.Spec.Placement.Tolerations = append(
 				toUpdate.Spec.Placement.Tolerations,
 				v1.Toleration{
-					Key:    "node-role.kubernetes.io/master",
+					Key:    k8sutil.NodeRoleLabelMaster,
 					Effect: v1.TaintEffectNoSchedule,
 				},
 			)
+			if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
+				toUpdate.Spec.Placement.Tolerations = append(
+					toUpdate.Spec.Placement.Tolerations,
+					v1.Toleration{
+						Key:    k8sutil.NodeRoleLabelControlPlane,
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				)
+			}
 		}
 	}
 

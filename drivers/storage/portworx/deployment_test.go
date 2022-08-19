@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
@@ -23,6 +25,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
@@ -2143,11 +2146,14 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 }
 
 func TestPodSpecForK3s(t *testing.T) {
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(fakeClient))
-	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.4+k3s1",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	k8sClient := testutil.FakeK8sClient()
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_k3s.yaml")
 
 	nodeName := "testNode"
@@ -2162,6 +2168,8 @@ func TestPodSpecForK3s(t *testing.T) {
 		},
 	}
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
@@ -2170,7 +2178,7 @@ func TestPodSpecForK3s(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 
 	// retry w/ RKE2 version identifier0 -- should also default to K3s distro tweaks
-	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.21.4+rke2r2",
 	}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -2254,11 +2262,14 @@ func TestPodSpecForBottleRocketAMI(t *testing.T) {
 }
 
 func TestPodWithTelemetry(t *testing.T) {
-	fakeClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(fakeClient))
-	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.4",
 	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	k8sClient := testutil.FakeK8sClient()
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry-with-location.yaml")
 
 	nodeName := "testNode"
@@ -2285,6 +2296,8 @@ func TestPodWithTelemetry(t *testing.T) {
 		},
 	}
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
@@ -2339,6 +2352,7 @@ func TestPodWithTelemetry(t *testing.T) {
 }
 
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px_master.yaml")
 
@@ -2357,6 +2371,8 @@ func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 		},
 	}
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
