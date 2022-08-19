@@ -83,7 +83,8 @@ func AddDefaultRegistryToImage(image string) string {
 	return DefaultImageRegistry + "/" + image
 }
 
-func getMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
+// GetMergedCommonRegistries return merged common registries
+func GetMergedCommonRegistries(cluster *corev1.StorageCluster) map[string]bool {
 	val, ok := cluster.Annotations[constants.AnnotationCommonImageRegistries]
 
 	if !ok {
@@ -110,7 +111,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 	}
 
 	registryAndRepo := cluster.Spec.CustomImageRegistry
-	mergedCommonRegistries := getMergedCommonRegistries(cluster)
+	mergedCommonRegistries := GetMergedCommonRegistries(cluster)
 	preserveFullCustomImageRegistry := cluster.Spec.PreserveFullCustomImageRegistry
 
 	omitRepo := false

@@ -114,8 +114,9 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	pxVer2_12, _ = version.NewVersion("2.12.0")
-	opVer1_10, _ = version.NewVersion("1.10.0")
+	pxVer2_12, _  = version.NewVersion("2.12.0")
+	opVer1_10, _  = version.NewVersion("1.10.0")
+	opVer1_9_1, _ = version.NewVersion("1.9.1")
 )
 
 // MockDriver creates a mock storage driver
@@ -532,9 +533,6 @@ func ValidateStorageCluster(
 		return validateStorageClusterIsFailed(clusterSpec, timeout, interval)
 	}
 
-	// Add default registry pre-fix for images that need it
-	pxImageList = addDefaultRegistryToImageList(pxImageList)
-
 	// Validate that spec matches live spec
 	if err = validateDeployedSpec(clusterSpec, liveCluster); err != nil {
 		return err
@@ -579,13 +577,6 @@ func ValidateStorageCluster(
 	}
 
 	return nil
-}
-
-func addDefaultRegistryToImageList(pxImageList map[string]string) map[string]string {
-	for name, image := range pxImageList {
-		pxImageList[name] = util.AddDefaultRegistryToImage(image)
-	}
-	return pxImageList
 }
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -1290,7 +1281,7 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 			storkImageName = cluster.Spec.Stork.Image
 		}
 
-		storkImage := util.GetImageURN(cluster, storkImageName)
+		storkImage := GetImageURN(cluster, storkImageName)
 		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
 		if err != nil {
 			return err
@@ -1384,7 +1375,7 @@ func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageClu
 			autopilotImageName = cluster.Spec.Autopilot.Image
 		}
 
-		autopilotImage := util.GetImageURN(cluster, autopilotImageName)
+		autopilotImage := GetImageURN(cluster, autopilotImageName)
 		if err := validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": autopilotDp.Name}); err != nil {
 			return err
 		}
@@ -1960,19 +1951,19 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 
 	// We looking for these 3 images in 3 containers in the 3 px-csi-ext pods
 	if value, ok := pxImageList["csiProvisioner"]; ok {
-		csiProvisionerImage = value
+		csiProvisionerImage = util.GetImageURN(cluster, value)
 	} else {
 		return fmt.Errorf("failed to find image for csiProvisioner")
 	}
 
 	if value, ok := pxImageList["csiSnapshotter"]; ok {
-		csiSnapshotterImage = value
+		csiSnapshotterImage = util.GetImageURN(cluster, value)
 	} else {
 		return fmt.Errorf("failed to find image for csiSnapshotter")
 	}
 
 	if value, ok := pxImageList["csiResizer"]; ok {
-		csiResizerImage = value
+		csiResizerImage = util.GetImageURN(cluster, value)
 	} else {
 		return fmt.Errorf("failed to find image for csiResizer")
 	}
@@ -1981,7 +1972,7 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
 	if pxVersion.GreaterThanOrEqual(pxVer2_10) {
 		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
-			csiHealthMonitorControllerImage = value
+			csiHealthMonitorControllerImage = util.GetImageURN(cluster, value)
 		} else {
 			// CEE-452: csi-external-health-monitor-controller is removed from manifest, add back when resolved
 			logrus.Warnf("failed to find image for csiHealthMonitorController")
@@ -2471,11 +2462,6 @@ func GetPxOperatorVersion() (*version.Version, error) {
 	// We may run the automation on operator installed using private images,
 	// so assume we are testing the latest operator version if failed to parse the tag
 	versionTag := strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
-	/*
-		if strings.Contains(versionTag, "-dev") {
-			versionTag = strings.Split(versionTag, "-")[0]
-		}
-	*/
 	opVersion, err := version.NewVersion(versionTag)
 	if err != nil {
 		masterVersionTag := PxOperatorMasterVersion
@@ -2568,8 +2554,7 @@ func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.
 	if !ok {
 		return fmt.Errorf("failed to find image for alert manager")
 	}
-
-	imageName = util.GetImageURN(cluster, imageName)
+	imageName = GetImageURN(cluster, imageName)
 
 	if statefulSet.Spec.Template.Spec.Containers[0].Image != imageName {
 		return fmt.Errorf("alertmanager image mismatch, image: %s, expected: %s",
@@ -2595,8 +2580,8 @@ func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.
 			return fmt.Errorf("failed to find image for prometheus configmap reloader")
 		}
 	}
+	imageName = GetImageURN(cluster, imageName)
 
-	imageName = util.GetImageURN(cluster, imageName)
 	if statefulSet.Spec.Template.Spec.Containers[1].Image != imageName {
 		return fmt.Errorf("config-reloader image mismatch, image: %s, expected: %s",
 			statefulSet.Spec.Template.Spec.Containers[1].Image,
@@ -2661,7 +2646,7 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for telemetry")
 	}
-	telemetryImageName = util.GetImageURN(cluster, telemetryImageName)
+	telemetryImageName = GetImageURN(cluster, telemetryImageName)
 
 	if registrationServiceDep.Spec.Template.Spec.Containers[0].Image != telemetryImageName {
 		return fmt.Errorf("registration image mismatch, image: %s, expected: %s",
@@ -2673,7 +2658,7 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for envoy")
 	}
-	envoyImageName = util.GetImageURN(cluster, envoyImageName)
+	envoyImageName = GetImageURN(cluster, envoyImageName)
 	if registrationServiceDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
 		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
 			registrationServiceDep.Spec.Template.Spec.Containers[1].Image,
@@ -2708,7 +2693,7 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector")
 	}
-	collectorImageName = util.GetImageURN(cluster, collectorImageName)
+	collectorImageName = GetImageURN(cluster, collectorImageName)
 
 	if metricsCollectorDep.Spec.Template.Spec.Containers[0].Image != collectorImageName {
 		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
@@ -2744,7 +2729,7 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for log uploader")
 	}
-	logUploaderImageName = util.GetImageURN(cluster, logUploaderImageName)
+	logUploaderImageName = GetImageURN(cluster, logUploaderImageName)
 
 	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image != logUploaderImageName {
 		return fmt.Errorf("log uploader image mismatch, image: %s, expected: %s",
@@ -2994,8 +2979,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector")
 	}
-
-	imageName = util.GetImageURN(cluster, imageName)
+	imageName = GetImageURN(cluster, imageName)
 
 	if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
 		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
@@ -3008,8 +2992,8 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector proxy")
 	}
+	imageName = GetImageURN(cluster, imageName)
 
-	imageName = util.GetImageURN(cluster, imageName)
 	if deployment.Spec.Template.Spec.Containers[1].Image != imageName {
 		return fmt.Errorf("collector proxy image mismatch, image: %s, expected: %s",
 			deployment.Spec.Template.Spec.Containers[1].Image,
@@ -3230,6 +3214,51 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 
 		return nil, false, nil
 	}
+}
+
+// GetImageURN returns the complete image name based on the registry and repo
+func GetImageURN(cluster *corev1.StorageCluster, image string) string {
+	if image == "" {
+		return ""
+	}
+
+	registryAndRepo := cluster.Spec.CustomImageRegistry
+	mergedCommonRegistries := util.GetMergedCommonRegistries(cluster)
+	preserveFullCustomImageRegistry := cluster.Spec.PreserveFullCustomImageRegistry
+
+	omitRepo := false
+	if strings.HasSuffix(registryAndRepo, "//") {
+		omitRepo = true
+	}
+
+	registryAndRepo = strings.TrimRight(registryAndRepo, "/")
+	if registryAndRepo == "" {
+		// no registry/repository specifed, return image
+		opVersion, _ := GetPxOperatorVersion()
+		if opVersion.GreaterThanOrEqual(opVer1_9_1) {
+			return util.AddDefaultRegistryToImage(image)
+		}
+		return image
+	}
+
+	imgParts := strings.Split(image, "/")
+	if len(imgParts) > 1 {
+		// advance imgParts to swallow the common registry
+		if _, present := mergedCommonRegistries[imgParts[0]]; present {
+			imgParts = imgParts[1:]
+		}
+	}
+
+	if !preserveFullCustomImageRegistry {
+		// if we have '/' in the registryAndRepo, return <registry/repository/><only-image>
+		// else (registry only) -- return <registry/><image-with-repository>
+		if strings.Contains(registryAndRepo, "/") || omitRepo {
+			// advance to the last element, skipping image's repository
+			imgParts = imgParts[len(imgParts)-1:]
+		}
+	}
+
+	return registryAndRepo + "/" + path.Join(imgParts...)
 }
 
 // ValidateStorageClusterIsOnline wait for storage cluster to become online.
