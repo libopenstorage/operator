@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.2
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/sys v0.0.0-20220429233432-b5fbb4746d32 // indirect
+	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/grpc v1.40.0
@@ -30,6 +30,7 @@ require (
 	k8s.io/apimachinery v0.21.4
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.21.4
+	k8s.io/component-helpers v0.21.4
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.20.11
 	k8s.io/utils v0.0.0-20210802155522-efc7438f0176

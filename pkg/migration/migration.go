@@ -17,8 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	schedulehelper "k8s.io/component-helpers/scheduling/corev1"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -688,10 +688,10 @@ func sortedPortworxNodes(cluster *corev1.StorageCluster, nodes []*v1.Node) []*v1
 
 func fitsNode(pod *v1.Pod, node *v1.Node) bool {
 	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
-	fitsTaints := v1helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(t *v1.Taint) bool {
+	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(node.Spec.Taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
 	})
-	return fitsNodeAffinity && fitsTaints
+	return fitsNodeAffinity && !taintsUntolerated
 }
 
 func newSimulationPod(cluster *corev1.StorageCluster) *v1.Pod {
