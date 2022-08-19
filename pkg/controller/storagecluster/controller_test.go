@@ -47,7 +47,6 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	api "k8s.io/kubernetes/pkg/apis/core"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -2055,7 +2054,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 					{
 						MatchFields: []v1.NodeSelectorRequirement{
 							{
-								Key:      api.ObjectNameField,
+								Key:      metav1.ObjectNameField,
 								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{k8sNode.Name},
 							},
@@ -2204,7 +2203,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 					{
 						MatchFields: []v1.NodeSelectorRequirement{
 							{
-								Key:      api.ObjectNameField,
+								Key:      metav1.ObjectNameField,
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"k8s-node-1", "k8s-node-2"},
 							},
@@ -3239,10 +3238,8 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.Empty(t, recorder.Events)
 
 	updatedCluster = &corev1.StorageCluster{}
-	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.Len(t, updatedCluster.Status.Conditions, 2)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
-	require.Empty(t, updatedCluster.Finalizers)
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
@@ -3442,12 +3439,8 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 	require.Empty(t, recorder.Events)
 
 	updatedCluster := &corev1.StorageCluster{}
-	testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.Len(t, updatedCluster.Status.Conditions, 1)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[0])
-	require.Empty(t, updatedCluster.Finalizers)
-	require.NoError(t, err)
-	require.Empty(t, result)
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 
 	nodeList := &v1.NodeList{}
 	err = k8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
@@ -4069,8 +4062,8 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Empty(t, podControl.DeletePodName)
-	// One pod is still being deleted, so only 1 template created instead of 2
-	require.Len(t, podControl.Templates, 1)
+	// Both pods are deleted
+	require.Len(t, podControl.Templates, 2)
 
 	// If the pods are created but not ready, even then no extra pod should be deleted
 	replacedPod1, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
@@ -8176,6 +8169,12 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 		driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
 		driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+		condition := &corev1.ClusterCondition{
+			Type:   corev1.ClusterConditionTypeDelete,
+			Status: corev1.ClusterOperationCompleted,
+		}
+		driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
 		// This will create a revision which we will map to our pre-created pods
 		rev1Hash, err := createRevision(k8sClient, cluster, driverName)
