@@ -14,6 +14,8 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -117,6 +119,11 @@ func (h *Handler) createStorageCluster(
 }
 
 func parseCustomImageRegistry(pxImage string, componentImages []string) (string, bool) {
+	// Let's remove docker.io prefix, so we don't take docker.io as custom image registry.
+	if strings.HasPrefix(pxImage, util.DefaultImageRegistry) {
+		pxImage = strings.TrimPrefix(pxImage, util.DefaultImageRegistry+"/")
+	}
+
 	// PX image could be
 	// 1. portworx/oci-monitor:image
 	// 2. custom-registry/oci-monitor:tag
