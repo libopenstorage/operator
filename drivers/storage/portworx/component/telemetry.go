@@ -139,10 +139,6 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
 		return err
 	}
-	if cluster.Status.ClusterUID == "" {
-		logrus.Warn("clusterUID is empty, wait for it to reconcile telemetry components")
-		return nil
-	}
 	t.isCCMGoSupported = pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
 	if t.isCCMGoSupported {
 		return t.reconcileCCMGo(cluster, ownerRef)
@@ -184,6 +180,10 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if cluster.Status.ClusterUID == "" {
+		logrus.Warn("clusterUID is empty, wait for it to reconcile telemetry components")
+		return nil
+	}
 	if err := t.reconcileCCMGoServiceAccount(cluster, ownerRef); err != nil {
 		return err
 	}
