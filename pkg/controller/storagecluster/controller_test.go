@@ -1301,41 +1301,73 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 }
 
-func getDefaultNodeAffinity() *v1.NodeAffinity {
+func getDefaultNodeAffinity(k8sVersion *version.Version) *v1.NodeAffinity {
+	var nodeSelectorTerms []v1.NodeSelectorTerm
+	requirements1 := []v1.NodeSelectorRequirement{
+		{
+			Key:      "px/enabled",
+			Operator: v1.NodeSelectorOpNotIn,
+			Values:   []string{"false"},
+		},
+		{
+			Key:      k8s.NodeRoleLabelMaster,
+			Operator: v1.NodeSelectorOpDoesNotExist,
+		},
+	}
+	if k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_24) {
+		requirements1 = append(requirements1, v1.NodeSelectorRequirement{
+			Key:      k8s.NodeRoleLabelControlPlane,
+			Operator: v1.NodeSelectorOpDoesNotExist,
+		})
+	}
+	nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+		MatchExpressions: requirements1,
+	})
+
+	requirements2 := []v1.NodeSelectorRequirement{
+		{
+			Key:      "px/enabled",
+			Operator: v1.NodeSelectorOpNotIn,
+			Values:   []string{"false"},
+		},
+		{
+			Key:      k8s.NodeRoleLabelMaster,
+			Operator: v1.NodeSelectorOpExists,
+		},
+		{
+			Key:      k8s.NodeRoleLabelWorker,
+			Operator: v1.NodeSelectorOpExists,
+		},
+	}
+	nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+		MatchExpressions: requirements2,
+	})
+
+	if k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_24) {
+		requirements3 := []v1.NodeSelectorRequirement{
+			{
+				Key:      "px/enabled",
+				Operator: v1.NodeSelectorOpNotIn,
+				Values:   []string{"false"},
+			},
+			{
+				Key:      k8s.NodeRoleLabelControlPlane,
+				Operator: v1.NodeSelectorOpExists,
+			},
+			{
+				Key:      k8s.NodeRoleLabelWorker,
+				Operator: v1.NodeSelectorOpExists,
+			},
+		}
+		nodeSelectorTerms = append(nodeSelectorTerms, v1.NodeSelectorTerm{
+			MatchExpressions: requirements3,
+		})
+
+	}
+
 	return &v1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-			NodeSelectorTerms: []v1.NodeSelectorTerm{
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "px/enabled",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"false"},
-						},
-						{
-							Key:      "node-role.kubernetes.io/master",
-							Operator: v1.NodeSelectorOpDoesNotExist,
-						},
-					},
-				},
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "px/enabled",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"false"},
-						},
-						{
-							Key:      "node-role.kubernetes.io/master",
-							Operator: v1.NodeSelectorOpExists,
-						},
-						{
-							Key:      "node-role.kubernetes.io/worker",
-							Operator: v1.NodeSelectorOpExists,
-						},
-					},
-				},
-			},
+			NodeSelectorTerms: nodeSelectorTerms,
 		},
 	}
 }
@@ -1344,9 +1376,10 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	cluster.Spec.Placement.NodeAffinity = getDefaultNodeAffinity()
+	cluster.Spec.Placement.NodeAffinity = getDefaultNodeAffinity(k8sVersion)
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
 	// Kubernetes node with resources to create a pod
@@ -1362,7 +1395,6 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	k8sNode3 := createK8sNode("k8s-node-3", 1)
 	k8sNode3.Labels["node-role.kubernetes.io/master"] = ""
 
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3)
 	podControl := &k8scontroller.FakePodControl{}
@@ -1381,7 +1413,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
 	expectedPodSpec.Affinity = &v1.Affinity{
-		NodeAffinity: getDefaultNodeAffinity(),
+		NodeAffinity: getDefaultNodeAffinity(k8sVersion),
 	}
 	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1440,6 +1472,112 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	}
 	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
 	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
+	require.ElementsMatch(t, expectedPodTemplates, podControl.Templates)
+	require.Len(t, podControl.ControllerRefs, 2)
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
+}
+
+func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	k8sVersion := k8s.K8sVer1_24
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Spec.Placement.NodeAffinity = getDefaultNodeAffinity(k8sVersion)
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	// Kubernetes node with resources to create a pod
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode1.Labels["node-role.kubernetes.io/worker"] = ""
+
+	// This node is labeled as control-plane and worker, storage pod will be scheduled on it.
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
+	k8sNode2.Labels["node-role.kubernetes.io/control-plane"] = ""
+	k8sNode2.Labels["node-role.kubernetes.io/worker"] = ""
+
+	// This node is labled as control-plane, storage pod will not be scheduled on it.
+	k8sNode3 := createK8sNode("k8s-node-3", 1)
+	k8sNode3.Labels["node-role.kubernetes.io/control-plane"] = ""
+
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	expectedPodSpec := v1.PodSpec{
+		Containers: []v1.Container{{Name: "test"}},
+	}
+	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
+	expectedPodSpec.Affinity = &v1.Affinity{
+		NodeAffinity: getDefaultNodeAffinity(k8sVersion),
+	}
+	expectedPodTemplate := &v1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				constants.LabelKeyClusterName: cluster.Name,
+				constants.LabelKeyDriverName:  driverName,
+			},
+			Annotations: make(map[string]string),
+		},
+		Spec: expectedPodSpec,
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil)
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
+		Do(func(c *corev1.StorageCluster) {
+			hash := computeHash(&c.Spec, nil)
+			expectedPodTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
+		})
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).
+		Return(expectedPodSpec, nil).
+		AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Verify there is no event raised
+	require.Empty(t, recorder.Events)
+
+	// Verify there is one revision for the new StorageCluster object
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+
+	// Verify a pod is created for the given node with correct owner ref
+	require.Len(t, podControl.Templates, 2)
+	expectedPodTemplates := []v1.PodTemplateSpec{
+		*expectedPodTemplate.DeepCopy(),
+		*expectedPodTemplate.DeepCopy(),
+	}
+	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
+	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/control-plane\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
 	require.ElementsMatch(t, expectedPodTemplates, podControl.Templates)
 	require.Len(t, podControl.ControllerRefs, 2)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
