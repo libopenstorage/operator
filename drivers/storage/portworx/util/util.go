@@ -238,6 +238,8 @@ var (
 	// variable for testing. DO NOT change the value of the function unless for testing.
 	SpecsBaseDir = getSpecsBaseDir
 
+	// MinimumSupportedK8sVersion minimum k8s version PX supports
+	MinimumSupportedK8sVersion, _ = version.NewVersion("v1.12.0")
 	// MinimumPxVersionCCM minimum PX version to install ccm
 	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
 	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
