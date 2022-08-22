@@ -1969,52 +1969,47 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 	return nil
 }
 
-func validateContainerImageInsidePods(cluster *corev1.StorageCluster, image, containerName string, pods *v1.PodList) error {
+func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedImage, containerName string, pods *v1.PodList) error {
 	logrus.Infof("Validating image for %s container inside pod(s)", containerName)
 
 	// Get PX Operator version
 	opVersion, _ := GetPxOperatorVersion()
 	if opVersion.GreaterThanOrEqual(opVer1_9_1) {
-		image = util.GetImageURN(cluster, image)
+		expectedImage = util.GetImageURN(cluster, expectedImage)
 	}
 
 	for _, pod := range pods.Items {
 		foundContainer := false
 		foundImage := ""
-		if containerName == "init-cont" {
-			for _, initContainer := range pod.Spec.InitContainers {
-				if initContainer.Name == containerName {
-					if opVersion.GreaterThanOrEqual(opVer1_9_1) && initContainer.Image == image {
-						logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, image, initContainer.Image)
-						foundContainer = true
-						break
-					} else if strings.Contains(initContainer.Image, image) {
-						logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, image, initContainer.Image)
-						foundContainer = true
-						break
-					}
-				}
-			}
-		} else {
-			for _, container := range pod.Spec.Containers {
-				if container.Name == containerName {
-					if opVersion.GreaterThanOrEqual(opVer1_9_1) && container.Image == image {
-						logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, image, container.Image)
-						foundContainer = true
-						break
-					} else if strings.Contains(container.Image, image) {
-						logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, image, container.Image)
-						foundContainer = true
-						break
-					}
-					foundImage = container.Image
+		containerList := make([]v1.Container, 0)
+
+		// Get list of Init Containers
+		if pod.Spec.InitContainers != nil {
+			containerList = append(containerList, pod.Spec.InitContainers...)
+		}
+
+		// Get list of Containers
+		if pod.Spec.Containers != nil {
+			containerList = append(containerList, pod.Spec.Containers...)
+		}
+
+		for _, container := range containerList {
+			if container.Name == containerName {
+				if opVersion.GreaterThanOrEqual(opVer1_9_1) && container.Image == expectedImage {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+					foundContainer = true
+					break
+				} else if strings.Contains(container.Image, expectedImage) {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+					foundContainer = true
+					break
 				}
 			}
 		}
 
 		if !foundContainer {
 			return fmt.Errorf("failed to match container %s[%s] image, expected: %s, actual: %s",
-				pod.Name, containerName, image, foundImage)
+				pod.Name, containerName, expectedImage, foundImage)
 		}
 	}
 	return nil
