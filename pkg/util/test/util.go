@@ -114,8 +114,9 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	pxVer2_12, _ = version.NewVersion("2.12.0")
-	opVer1_10, _ = version.NewVersion("1.10.0")
+	pxVer2_12, _  = version.NewVersion("2.12.0")
+	opVer1_10, _  = version.NewVersion("1.10.0")
+	opVer1_9_1, _ = version.NewVersion("1.9.1")
 )
 
 // MockDriver creates a mock storage driver
@@ -532,9 +533,6 @@ func ValidateStorageCluster(
 		return validateStorageClusterIsFailed(clusterSpec, timeout, interval)
 	}
 
-	// Add default registry pre-fix for images that need it
-	pxImageList = addDefaultRegistryToImageList(pxImageList)
-
 	// Validate that spec matches live spec
 	if err = validateDeployedSpec(clusterSpec, liveCluster); err != nil {
 		return err
@@ -579,13 +577,6 @@ func ValidateStorageCluster(
 	}
 
 	return nil
-}
-
-func addDefaultRegistryToImageList(pxImageList map[string]string) map[string]string {
-	for name, image := range pxImageList {
-		pxImageList[name] = util.AddDefaultRegistryToImage(image)
-	}
-	return pxImageList
 }
 
 func validateStorageNodes(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -1283,20 +1274,23 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 			return err
 		}
 
-		var storkImageName string
+		var storkImage string
 		if cluster.Spec.Stork.Image == "" {
 			if value, ok := pxImageList["stork"]; ok {
-				storkImageName = value
+				storkImage = value
 			} else {
 				return fmt.Errorf("failed to find image for stork")
 			}
 		} else {
-			storkImageName = cluster.Spec.Stork.Image
+			storkImage = cluster.Spec.Stork.Image
 		}
 
-		storkImage := util.GetImageURN(cluster, storkImageName)
-		err := validateImageOnPods(storkImage, cluster.Namespace, map[string]string{"name": "stork"})
+		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "stork"})
 		if err != nil {
+			return err
+		}
+
+		if err := validateContainerImageInsidePods(cluster, storkImage, "stork", pods); err != nil {
 			return err
 		}
 
@@ -1377,24 +1371,27 @@ func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageClu
 			return err
 		}
 
-		var autopilotImageName string
+		var autopilotImage string
 		if cluster.Spec.Autopilot.Image == "" {
 			if value, ok := pxImageList[autopilotDp.Name]; ok {
-				autopilotImageName = value
+				autopilotImage = value
 			} else {
 				return fmt.Errorf("failed to find image for %s", autopilotDp.Name)
 			}
 		} else {
-			autopilotImageName = cluster.Spec.Autopilot.Image
+			autopilotImage = cluster.Spec.Autopilot.Image
 		}
 
-		autopilotImage := util.GetImageURN(cluster, autopilotImageName)
-		if err := validateImageOnPods(autopilotImage, cluster.Namespace, map[string]string{"name": autopilotDp.Name}); err != nil {
+		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "autopilot"})
+		if err != nil {
+			return err
+		}
+		if err := validateContainerImageInsidePods(cluster, autopilotImage, "autopilot", pods); err != nil {
 			return err
 		}
 
 		// Validate Autopilot ClusterRole
-		_, err := rbacops.Instance().GetClusterRole(autopilotDp.Name)
+		_, err = rbacops.Instance().GetClusterRole(autopilotDp.Name)
 		if errors.IsNotFound(err) {
 			return fmt.Errorf("failed to validate ClusterRole %s, Err: %v", autopilotDp.Name, err)
 		}
@@ -1647,7 +1644,19 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 		}
 
 		// Validate CSI container image inside Portworx OCI Monitor pods
-		if err := validatePortworxOciMonCsiImage(cluster.Namespace, pxImageList); err != nil {
+		var csiNodeDriverRegistrarImage string
+		if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
+			csiNodeDriverRegistrarImage = value
+		} else {
+			return fmt.Errorf("failed to find image for csiNodeDriverRegistrar")
+		}
+
+		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
+		if err != nil {
+			return err
+		}
+
+		if err := validateContainerImageInsidePods(cluster, csiNodeDriverRegistrarImage, "csi-node-driver-registrar", pods); err != nil {
 			return err
 		}
 
@@ -1827,40 +1836,6 @@ func validateTerminatedDeployment(deployment *appsv1.Deployment, timeout, interv
 	return appops.Instance().ValidateTerminatedDeployment(deployment, timeout, interval)
 }
 
-func validatePortworxOciMonCsiImage(namespace string, pxImageList map[string]string) error {
-	var csiNodeDriverRegistrar string
-
-	logrus.Debug("Validating CSI container images inside Portworx OCI Monitor pods")
-
-	// Get Portworx pods
-	listOptions := map[string]string{"name": "portworx"}
-	pods, err := coreops.Instance().GetPods(namespace, listOptions)
-	if err != nil {
-		return err
-	}
-
-	// We looking for this image in the container
-	if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
-		csiNodeDriverRegistrar = value
-	} else {
-		return fmt.Errorf("failed to find image for csiNodeDriverRegistrar")
-	}
-
-	// Go through each pod and find all container and match images for each container
-	for _, pod := range pods.Items {
-		for _, container := range pod.Spec.Containers {
-			if container.Name == "csi-node-driver-registrar" {
-				if container.Image != csiNodeDriverRegistrar {
-					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiNodeDriverRegistrar, container.Image)
-				}
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
 func validateCSITopologySpecs(namespace string, topologySpec *corev1.CSITopologySpec, timeout, interval time.Duration) error {
 	logrus.Debug("Validating CSI topology specs inside px-csi-ext pods")
 	topologyEnabled := false
@@ -1945,11 +1920,6 @@ func getPxVersion(pxImageList map[string]string, cluster *corev1.StorageCluster)
 }
 
 func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string]string) error {
-	var csiProvisionerImage string
-	var csiSnapshotterImage string
-	var csiResizerImage string
-	var csiHealthMonitorControllerImage string
-
 	logrus.Debug("Validating CSI container images inside px-csi-ext pods")
 
 	deployment, err := appops.Instance().GetDeployment("px-csi-ext", cluster.Namespace)
@@ -1962,21 +1932,27 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 		return err
 	}
 
-	// We looking for these 3 images in 3 containers in the 3 px-csi-ext pods
-	if value, ok := pxImageList["csiProvisioner"]; ok {
-		csiProvisionerImage = value
+	// Validate images inside csi-external-provisioner containers
+	if image, ok := pxImageList["csiProvisioner"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "csi-external-provisioner", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
 	} else {
 		return fmt.Errorf("failed to find image for csiProvisioner")
 	}
 
-	if value, ok := pxImageList["csiSnapshotter"]; ok {
-		csiSnapshotterImage = value
+	if image, ok := pxImageList["csiSnapshotter"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "csi-snapshotter", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
 	} else {
 		return fmt.Errorf("failed to find image for csiSnapshotter")
 	}
 
-	if value, ok := pxImageList["csiResizer"]; ok {
-		csiResizerImage = value
+	if image, ok := pxImageList["csiResizer"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "csi-resizer", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
 	} else {
 		return fmt.Errorf("failed to find image for csiResizer")
 	}
@@ -1984,56 +1960,60 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 	pxVer2_10, _ := version.NewVersion("2.10")
 	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
 	if pxVersion.GreaterThanOrEqual(pxVer2_10) {
-		if value, ok := pxImageList["csiHealthMonitorController"]; ok {
-			csiHealthMonitorControllerImage = value
+		if image, ok := pxImageList["csiHealthMonitorController"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "csi-external-health-monitor-controller", &v1.PodList{Items: pods}); err != nil {
+				return err
+			}
 		} else {
 			// CEE-452: csi-external-health-monitor-controller is removed from manifest, add back when resolved
 			logrus.Warnf("failed to find image for csiHealthMonitorController")
 		}
 	}
 
-	// Go through each pod and find all container and match images for each container
-	for _, pod := range pods {
-		for _, container := range pod.Spec.Containers {
-			if container.Name == "csi-external-provisioner" {
-				if container.Image != csiProvisionerImage {
-					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiProvisionerImage, container.Image)
-				}
-			} else if container.Name == "csi-snapshotter" {
-				if container.Image != csiSnapshotterImage {
-					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiSnapshotterImage, container.Image)
-				}
-			} else if container.Name == "csi-resizer" {
-				if container.Image != csiResizerImage {
-					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiResizerImage, container.Image)
-				}
-			} else if container.Name == "csi-health-monitor-controller" {
-				if container.Image != csiHealthMonitorControllerImage {
-					return fmt.Errorf("found container %s, expected image: %s, actual image: %s", container.Name, csiHealthMonitorControllerImage, container.Image)
-				}
-			}
-		}
-	}
 	return nil
 }
 
-func validateImageOnPods(image, namespace string, listOptions map[string]string) error {
-	pods, err := coreops.Instance().GetPods(namespace, listOptions)
-	if err != nil {
-		return err
+func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedImage, containerName string, pods *v1.PodList) error {
+	logrus.Infof("Validating image for %s container inside pod(s)", containerName)
+
+	// Get PX Operator version
+	opVersion, _ := GetPxOperatorVersion()
+	if opVersion.GreaterThanOrEqual(opVer1_9_1) {
+		expectedImage = util.GetImageURN(cluster, expectedImage)
 	}
+
 	for _, pod := range pods.Items {
-		foundImage := false
-		for _, container := range pod.Spec.Containers {
-			if container.Image == image {
-				foundImage = true
-				break
+		foundContainer := false
+		foundImage := ""
+		containerList := make([]v1.Container, 0)
+
+		// Get list of Init Containers
+		if pod.Spec.InitContainers != nil {
+			containerList = append(containerList, pod.Spec.InitContainers...)
+		}
+
+		// Get list of Containers
+		if pod.Spec.Containers != nil {
+			containerList = append(containerList, pod.Spec.Containers...)
+		}
+
+		for _, container := range containerList {
+			if container.Name == containerName {
+				if opVersion.GreaterThanOrEqual(opVer1_9_1) && container.Image == expectedImage {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+					foundContainer = true
+					break
+				} else if strings.Contains(container.Image, expectedImage) {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+					foundContainer = true
+					break
+				}
 			}
 		}
 
-		if !foundImage {
-			return fmt.Errorf("failed to validate image %s on pod: %v",
-				image, pod)
+		if !foundContainer {
+			return fmt.Errorf("failed to match container %s[%s] image, expected: %s, actual: %s",
+				pod.Name, containerName, expectedImage, foundImage)
 		}
 	}
 	return nil
@@ -2475,11 +2455,6 @@ func GetPxOperatorVersion() (*version.Version, error) {
 	// We may run the automation on operator installed using private images,
 	// so assume we are testing the latest operator version if failed to parse the tag
 	versionTag := strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
-	/*
-		if strings.Contains(versionTag, "-dev") {
-			versionTag = strings.Split(versionTag, "-")[0]
-		}
-	*/
 	opVersion, err := version.NewVersion(versionTag)
 	if err != nil {
 		masterVersionTag := PxOperatorMasterVersion
@@ -2526,35 +2501,75 @@ func getPxOperatorImage() (string, error) {
 func ValidateAlertManager(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Prometheus != nil {
 		if cluster.Spec.Monitoring.Prometheus.Enabled {
-			logrus.Infof("Prometheus is enabled")
+			logrus.Infof("Prometheus is enabled in StorageCluster")
 			if cluster.Spec.Monitoring.Prometheus.AlertManager != nil && cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
-				logrus.Infof("AlertManager is enabled")
+				logrus.Infof("AlertManager is enabled in StorageCluster")
 				return ValidateAlertManagerEnabled(pxImageList, cluster, timeout, interval)
 			}
-			logrus.Infof("AlertManager is not enabled")
+			logrus.Infof("AlertManager is not enabled in StorageCluster")
 			return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
 		}
 	}
 
-	logrus.Infof("AlertManager is disabled")
+	logrus.Infof("AlertManager is disabled in StorageCluster")
 	return ValidateAlertManagerDisabled(pxImageList, cluster, timeout, interval)
 }
 
 // ValidateAlertManagerEnabled validates alert manager components are enabled/installed as expected
 func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	// Wait for the statefulset to become online
-	sset := appsv1.StatefulSet{
+	// Validate Alert Manager statefulset, pods and images
+	logrus.Info("Validating AlertManager components")
+	alertManagerSset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "alertmanager-portworx",
 			Namespace: cluster.Namespace,
 		},
 	}
-	if err := appops.Instance().ValidateStatefulSet(&sset, timeout); err != nil {
+	if err := appops.Instance().ValidateStatefulSet(alertManagerSset, timeout); err != nil {
 		return err
 	}
 
-	statefulSet, err := appops.Instance().GetStatefulSet(sset.Name, sset.Namespace)
+	alertManagerSset, err := appops.Instance().GetStatefulSet(alertManagerSset.Name, alertManagerSset.Namespace)
 	if err != nil {
+		return err
+	}
+
+	pods, err := appops.Instance().GetStatefulSetPods(alertManagerSset)
+	if err != nil {
+		return err
+	}
+
+	if image, ok := pxImageList["alertManager"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "alertmanager", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for telemetry")
+	}
+
+	K8sVer1_22, _ := version.NewVersion("1.22")
+	kubeVersion, _, err := GetFullVersion()
+	if err != nil {
+		return err
+	}
+
+	// NOTE: Prometheus uses different images for k8s 1.22 and up then for 1.21 and below
+	var configReloaderImageName string
+	if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+		value, ok := pxImageList["prometheusConfigReloader"]
+		if !ok {
+			return fmt.Errorf("failed to find image for prometheus config reloader")
+		}
+		configReloaderImageName = value
+	} else {
+		value, ok := pxImageList["prometheusConfigMapReload"]
+		if !ok {
+			return fmt.Errorf("failed to find image for prometheus configmap reloader")
+		}
+		configReloaderImageName = value
+	}
+
+	if err := validateContainerImageInsidePods(cluster, configReloaderImageName, "config-reloader", &v1.PodList{Items: pods}); err != nil {
 		return err
 	}
 
@@ -2565,46 +2580,6 @@ func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.
 
 	if _, err := coreops.Instance().GetService("alertmanager-operated", cluster.Namespace); err != nil {
 		return fmt.Errorf("failed to get service alertmanager-operated")
-	}
-
-	// Verify alert manager image
-	imageName, ok := pxImageList["alertManager"]
-	if !ok {
-		return fmt.Errorf("failed to find image for alert manager")
-	}
-
-	imageName = util.GetImageURN(cluster, imageName)
-
-	if statefulSet.Spec.Template.Spec.Containers[0].Image != imageName {
-		return fmt.Errorf("alertmanager image mismatch, image: %s, expected: %s",
-			statefulSet.Spec.Template.Spec.Containers[0].Image,
-			imageName)
-	}
-
-	K8sVer1_22, _ := version.NewVersion("1.22")
-	kubeVersion, _, err := GetFullVersion()
-	if err != nil {
-		return err
-	}
-
-	// NOTE: Prometheus uses different images for k8s 1.22 and up then for 1.21 and below
-	if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
-		imageName, ok = pxImageList["prometheusConfigReloader"]
-		if !ok {
-			return fmt.Errorf("failed to find image for prometheus config reloader")
-		}
-	} else {
-		imageName, ok = pxImageList["prometheusConfigMapReload"]
-		if !ok {
-			return fmt.Errorf("failed to find image for prometheus configmap reloader")
-		}
-	}
-
-	imageName = util.GetImageURN(cluster, imageName)
-	if statefulSet.Spec.Template.Spec.Containers[1].Image != imageName {
-		return fmt.Errorf("config-reloader image mismatch, image: %s, expected: %s",
-			statefulSet.Spec.Template.Spec.Containers[1].Image,
-			imageName)
 	}
 
 	logrus.Infof("Alert manager is enabled and deployed")
@@ -2644,47 +2619,133 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
 
-	// Wait for the deployment to become online
-	logrus.Info("Validate px-telemetry-registration deployment and images")
-	registrationServiceDep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-telemetry-registration",
-			Namespace: cluster.Namespace,
-		},
-	}
-	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
+	// Validate px-telemetry-registration deployment, pods and container images
+	if err := validatePxTelemetryRegistrationV2(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
-	registrationServiceDep, err := appops.Instance().GetDeployment(registrationServiceDep.Name, registrationServiceDep.Namespace)
+
+	// Validate px-telemetry-metrics  deployment, pods and container images
+	if err := validatePxTelemetryMetricsCollectorV2(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	// Validate px-telemetry-phonehome daemonset, pods and container images
+	if err := validatePxTelemetryPhonehomeV2(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	// Verify telemetry secrets
+	if _, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace); err != nil {
+		return err
+	}
+
+	// Verify telemetry roles
+	if _, err := rbacops.Instance().GetRole("px-telemetry", cluster.Namespace); err != nil {
+		return err
+	}
+
+	// Verify telemetry rolebindings
+	if _, err := rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Namespace); err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterroles
+	if _, err := rbacops.Instance().GetClusterRole("px-telemetry"); err != nil {
+		return err
+	}
+
+	// Verify telemetry clusterrolebindings
+	if _, err := rbacops.Instance().GetClusterRoleBinding("px-telemetry"); err != nil {
+		return err
+	}
+
+	// Verify telemetry configmaps
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace); err != nil {
+		return err
+	}
+
+	if _, err := coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace); err != nil {
+		return err
+	}
+
+	// Verify telemetry serviceaccounts
+	if _, err := coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace); err != nil {
+		return err
+	}
+
+	logrus.Infof("All Telemetry components were successfully enabled/installed")
+	return nil
+}
+
+func validatePxTelemetryPhonehomeV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	// Validate px-telemetry-phonehome daemonset, pods and container images
+	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
+	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
+		return err
+	}
+
+	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
 	if err != nil {
 		return err
 	}
 
-	// Verify registration container image inside px-telemetry-registration
-	telemetryImageName, ok := pxImageList["telemetry"]
-	if !ok {
-		return fmt.Errorf("failed to find image for telemetry")
-	}
-	telemetryImageName = util.GetImageURN(cluster, telemetryImageName)
-
-	if registrationServiceDep.Spec.Template.Spec.Containers[0].Image != telemetryImageName {
-		return fmt.Errorf("registration image mismatch, image: %s, expected: %s",
-			registrationServiceDep.Spec.Template.Spec.Containers[0].Image,
-			telemetryImageName)
-	}
-	// Verify envoy container image inside registration-service
-	envoyImageName, ok := pxImageList["telemetryProxy"]
-	if !ok {
-		return fmt.Errorf("failed to find image for envoy")
-	}
-	envoyImageName = util.GetImageURN(cluster, envoyImageName)
-	if registrationServiceDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
-		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
-			registrationServiceDep.Spec.Template.Spec.Containers[1].Image,
-			envoyImageName)
+	pods, err := appops.Instance().GetDaemonSetPods(telemetryPhonehomeDs)
+	if err != nil {
+		return err
 	}
 
-	// Verify px-telemetry-metrics-collector deployment and images
+	// Verify init-cont image inside px-telemetry-phonehome[init-cont]
+	if image, ok := pxImageList["telemetryProxy"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "init-cont", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-phonehome[init-cont]")
+	}
+
+	// Verify init-cont image inside px-telemetry-phonehome[log-upload-service]
+	if image, ok := pxImageList["logUploader"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "log-upload-service", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-phonehome[log-upload-service]")
+	}
+
+	// Verify collector container image inside px-telemetry-phonehome[envoy]
+	if image, ok := pxImageList["telemetryProxy"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "envoy", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-phonehome[envoy]")
+	}
+
+	return nil
+}
+
+func validatePxTelemetryMetricsCollectorV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	// Validate px-telemetry-metrics-collector deployment, pods and container images
 	logrus.Info("Validate px-telemetry-metrics-collector deployment and images")
 	metricsCollectorDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2695,143 +2756,76 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	if err := appops.Instance().ValidateDeployment(metricsCollectorDep, timeout, interval); err != nil {
 		return err
 	}
-	metricsCollectorDep, err = appops.Instance().GetDeployment(metricsCollectorDep.Name, metricsCollectorDep.Namespace)
+
+	pods, err := appops.Instance().GetDeploymentPods(metricsCollectorDep)
 	if err != nil {
 		return err
 	}
 
-	// Verify init-cont image inside px-metric-collector
-	if metricsCollectorDep.Spec.Template.Spec.InitContainers != nil && metricsCollectorDep.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
-		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
-			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
-			envoyImageName)
+	// Validate image inside px-metric-collector[init-cont]
+	if image, ok := pxImageList["telemetryProxy"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "init-cont", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-metrics-collector[init-cont]")
 	}
 
-	// Verify collector container image inside px-metrics-collector
-	collectorImageName, ok := pxImageList["metricsCollector"]
-	if !ok {
-		return fmt.Errorf("failed to find image for metrics collector")
-	}
-	collectorImageName = util.GetImageURN(cluster, collectorImageName)
-
-	if metricsCollectorDep.Spec.Template.Spec.Containers[0].Image != collectorImageName {
-		return fmt.Errorf("collector image mismatch, image: %s, expected: %s",
-			metricsCollectorDep.Spec.Template.Spec.Containers[0].Image,
-			collectorImageName)
-	}
-	// Verify envoy container image inside px-metrics-collector
-	if metricsCollectorDep.Spec.Template.Spec.Containers[1].Image != envoyImageName {
-		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
-			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
-			envoyImageName)
+	// Validate image inside px-metrics-collector[collector]
+	if image, ok := pxImageList["metricsCollector"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "collector", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-metrics-collector[collector]")
 	}
 
-	// Wait for the daemonset to become online
-	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
-	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
+	// Validate image inside px-metric-collector[envoy]
+	if image, ok := pxImageList["telemetryProxy"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "envoy", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for px-telemetry-metrics-collector[envoy]")
+	}
+
+	return nil
+}
+
+func validatePxTelemetryRegistrationV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	// Validate px-telemetry-registration deployment, pods and container images
+	logrus.Info("Validate px-telemetry-registration deployment and images")
+	registrationServiceDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-telemetry-registration",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
 		return err
 	}
-	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
+
+	pods, err := appops.Instance().GetDeploymentPods(registrationServiceDep)
 	if err != nil {
 		return err
 	}
 
-	// Verify init-cont image inside px-telemetry-phonehome
-	if telemetryPhonehomeDs.Spec.Template.Spec.InitContainers != nil && telemetryPhonehomeDs.Spec.Template.Spec.InitContainers[0].Image != envoyImageName {
-		return fmt.Errorf("init-cont image mismatch, image: %s, expected: %s",
-			metricsCollectorDep.Spec.Template.Spec.Containers[1].Image,
-			envoyImageName)
+	if image, ok := pxImageList["telemetry"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "registration", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for telemetry")
 	}
 
-	// Verify collector container image inside px-telemetry-phonehome
-	logUploaderImageName, ok := pxImageList["logUploader"]
-	if !ok {
-		return fmt.Errorf("failed to find image for log uploader")
-	}
-	logUploaderImageName = util.GetImageURN(cluster, logUploaderImageName)
-
-	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image != logUploaderImageName {
-		return fmt.Errorf("log uploader image mismatch, image: %s, expected: %s",
-			telemetryPhonehomeDs.Spec.Template.Spec.Containers[0].Image,
-			logUploaderImageName)
+	if image, ok := pxImageList["telemetryProxy"]; ok {
+		if err := validateContainerImageInsidePods(cluster, image, "envoy", &v1.PodList{Items: pods}); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("failed to find image for envoy")
 	}
 
-	// Verify envoy container image inside px-telemetry-phonehome
-	if telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image != envoyImageName {
-		return fmt.Errorf("envoy image mismatch, image: %s, expected: %s",
-			telemetryPhonehomeDs.Spec.Template.Spec.Containers[1].Image,
-			envoyImageName)
-	}
-
-	// Verify telemetry secrets
-	_, err = coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry roles
-	_, err = rbacops.Instance().GetRole("px-telemetry", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry rolebindings
-	_, err = rbacops.Instance().GetRoleBinding("px-telemetry", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry clusterroles
-	_, err = rbacops.Instance().GetClusterRole("px-telemetry")
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry clusterrolebindings
-	_, err = rbacops.Instance().GetClusterRoleBinding("px-telemetry")
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry configmaps
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-phonehome-proxy", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-register-proxy", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	_, err = coreops.Instance().GetConfigMap("px-telemetry-tls-certificate", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	// Verify telemetry serviceaccounts
-	_, err = coreops.Instance().GetServiceAccount("px-telemetry", cluster.Namespace)
-	if err != nil {
-		return err
-	}
-
-	logrus.Infof("All Telemetry components were successfully enabled/installed")
 	return nil
 }
 
@@ -2998,7 +2992,6 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector")
 	}
-
 	imageName = util.GetImageURN(cluster, imageName)
 
 	if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
@@ -3012,8 +3005,8 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	if !ok {
 		return fmt.Errorf("failed to find image for metrics collector proxy")
 	}
-
 	imageName = util.GetImageURN(cluster, imageName)
+
 	if deployment.Spec.Template.Spec.Containers[1].Image != imageName {
 		return fmt.Errorf("collector proxy image mismatch, image: %s, expected: %s",
 			deployment.Spec.Template.Spec.Containers[1].Image,
