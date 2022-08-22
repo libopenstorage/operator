@@ -72,6 +72,10 @@ func (t *telemetry) reconcileCCMJava(
 		return err
 	}
 	if pxutil.IsMetricsCollectorSupported(pxutil.GetPortworxVersion(cluster)) {
+		if cluster.Status.ClusterUID == "" {
+			logrus.Warn("clusterUID is empty, wait for it to fill collector proxy config")
+			return nil
+		}
 		if err := t.deployMetricsCollectorV1(cluster, ownerRef); err != nil {
 			return err
 		}
