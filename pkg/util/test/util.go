@@ -116,7 +116,7 @@ var TestSpecPath = "testspec"
 var (
 	pxVer2_12, _  = version.NewVersion("2.12.0")
 	opVer1_10, _  = version.NewVersion("1.10.0")
-	opVer1_9_1, _ = version.NewVersion("1.9.1")
+	opVer1_9_1, _ = version.NewVersion("1.9.1-")
 )
 
 // MockDriver creates a mock storage driver
@@ -1999,14 +1999,18 @@ func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedIm
 
 		for _, container := range containerList {
 			if container.Name == containerName {
-				if opVersion.GreaterThanOrEqual(opVer1_9_1) && container.Image == expectedImage {
-					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+				foundImage = container.Image
+				if opVersion.GreaterThanOrEqual(opVer1_9_1) && foundImage == expectedImage {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, foundImage)
 					foundContainer = true
 					break
-				} else if strings.Contains(container.Image, expectedImage) {
-					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, container.Image)
+				} else if strings.Contains(foundImage, expectedImage) {
+					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, foundImage)
 					foundContainer = true
 					break
+				} else {
+					return fmt.Errorf("failed to match container %s[%s] image, expected: %s, actual: %s",
+						pod.Name, containerName, expectedImage, foundImage)
 				}
 			}
 		}
