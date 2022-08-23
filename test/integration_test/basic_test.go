@@ -135,7 +135,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "BasicCsiRegression",
-		TestrailCaseIDs: []string{"C55919", "C51020", "C51025", "C51026", "C54701", "C54706", "C58194", "C58195", "C60349", "C60350"},
+		TestrailCaseIDs: []string{"C55919", "C51020", "C51025", "C51026", "C54701", "C54706", "C58194", "C58195", "C60349", "C60350", "C79785", "C79788", "C79789"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "csi-regression-test"},
 		}),
@@ -475,7 +475,8 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 // 4. Delete "px-csi-ext" pods and validate they get re-deployed
 // 5. Disable CSI and validate CSI components got successfully removed
 // 6. Enabled CSI and topology and validate CSI components and images
-// 7. Delete StorageCluster and validate it got successfully removed
+// 7. Validate CSI snapshot controller is enabled by default on k8s 1.17+, disable and re-enabled it
+// 8. Delete StorageCluster and validate it got successfully removed
 func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		var err error
@@ -524,6 +525,31 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 			require.True(t, cluster.Spec.CSI.Enabled)
 			require.NotNil(t, cluster.Spec.CSI.Topology)
 			require.True(t, cluster.Spec.CSI.Topology.Enabled)
+		}
+
+		k8sVersion, _ := k8sutil.GetVersion()
+		if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
+			// Validate CSI snapshot controller is enabled by default on k8s 1.17+
+			require.NotNil(t, cluster.Spec.CSI.InstallSnapshotController)
+			require.True(t, *cluster.Spec.CSI.InstallSnapshotController)
+
+			logrus.Info("Disable csi snapshot controller and validate")
+			updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+				cluster.Spec.CSI.InstallSnapshotController = testutil.BoolPtr(false)
+				return cluster
+			}
+			cluster = ci_utils.UpdateAndValidateCSI(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+			require.NotNil(t, cluster.Spec.CSI.InstallSnapshotController)
+			require.False(t, *cluster.Spec.CSI.InstallSnapshotController)
+
+			logrus.Info("Re-enable csi snapshot controller and validate")
+			updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+				cluster.Spec.CSI.InstallSnapshotController = testutil.BoolPtr(true)
+				return cluster
+			}
+			cluster = ci_utils.UpdateAndValidateCSI(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+			require.NotNil(t, cluster.Spec.CSI.InstallSnapshotController)
+			require.True(t, *cluster.Spec.CSI.InstallSnapshotController)
 		}
 
 		// Delete and validate StorageCluster deletion

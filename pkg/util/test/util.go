@@ -1112,7 +1112,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate CSI components and images
-	if validateCSI(pxImageList, cluster, timeout, interval); err != nil {
+	if ValidateCSI(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1631,7 +1631,8 @@ func validateStorkNamespaceEnvVar(namespace string, storkDeployment *appsv1.Depl
 	return nil
 }
 
-func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidateCSI validates CSI components and images
+func ValidateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	csi := cluster.Spec.CSI.Enabled
 	pxCsiDp := &appsv1.Deployment{}
 	pxCsiDp.Name = "px-csi-ext"
@@ -1677,6 +1678,11 @@ func validateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 
 		// Validate CSI topology specs
 		if err := validateCSITopologySpecs(cluster.Namespace, cluster.Spec.CSI.Topology, timeout, interval); err != nil {
+			return err
+		}
+
+		// Validate CSI snapshot controller
+		if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
 			return err
 		}
 	} else {
@@ -1883,6 +1889,47 @@ func validateCSITopologyFeatureGate(pod v1.Pod, topologyEnabled bool) error {
 				return fmt.Errorf("csi topology is enabled but cannot find the enabled feature gate in container args")
 			}
 		}
+	}
+	return nil
+}
+
+func validateCSISnapshotController(cluster *corev1.StorageCluster, pxImageList map[string]string, timeout, interval time.Duration) error {
+	deployment := &appsv1.Deployment{}
+	deployment.Namespace = cluster.Namespace
+	deployment.Name = "px-csi-ext"
+	t := func() (interface{}, bool, error) {
+		existingDeployment, err := appops.Instance().GetDeployment(deployment.Name, deployment.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get deployment %s/%s", deployment.Namespace, deployment.Name)
+		}
+		pods, err := appops.Instance().GetDeploymentPods(existingDeployment)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get pods of deployment %s/%s", deployment.Namespace, deployment.Name)
+		}
+		if cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController {
+			if image, ok := pxImageList["csiSnapshotController"]; ok {
+				if err := validateContainerImageInsidePods(cluster, image, "csi-snapshot-controller", &v1.PodList{Items: pods}); err != nil {
+					return nil, true, err
+				}
+			} else {
+				return nil, false, fmt.Errorf("failed to find image for csiSnapshotController")
+			}
+		} else {
+			for _, pod := range pods {
+				for _, c := range pod.Spec.Containers {
+					if c.Name == "csi-snapshot-controller" {
+						return nil, true, fmt.Errorf("found unexpected csi-snapshot-controller container in pod %s/%s", pod.Namespace, pod.Name)
+					}
+				}
+			}
+		}
+
+		return nil, false, nil
+	}
+
+	logrus.Info("validating csi snapshot controller")
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2943,7 +2990,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	/* TODO: We need to make this work for spawn
-	expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
+	   expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
 	*/
 
 	deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
@@ -2952,9 +2999,9 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	/* TODO: We need to make this work for spawn
-	if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
-		return err
-	}
+	   if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
+	      	return err
+	   }
 	*/
 
 	_, err = rbacops.Instance().GetRole("px-metrics-collector", cluster.Namespace)

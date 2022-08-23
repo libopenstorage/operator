@@ -277,6 +277,22 @@ func UpdateAndValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled
 	return latestLiveCluster
 }
 
+// UpdateAndValidateCSI update StorageCluster, validates CSI components only and return latest version of live StorageCluster
+func UpdateAndValidateCSI(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateCSI(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	require.NoError(t, err)
+
+	return latestLiveCluster
+}
+
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion
 func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testing.T) {
 	// Delete cluster
