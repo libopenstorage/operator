@@ -85,6 +85,10 @@ func setup() error {
 		"is-aks",
 		false,
 		"Is this AKS")
+	flag.BoolVar(&ci_utils.IsGke,
+		"is-gke",
+		false,
+		"Is this GKE")
 	flag.StringVar(&logLevel,
 		"log-level",
 		"",

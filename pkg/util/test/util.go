@@ -3298,7 +3298,7 @@ func ValidateStorageClusterFailedEvents(
 		return err
 	}
 
-	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan)
+	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan, "")
 }
 
 // ValidateStorageClusterInstallFailedWithEvents checks a StorageCluster installation failed with a logged event
@@ -3307,6 +3307,7 @@ func ValidateStorageClusterInstallFailedWithEvents(
 	timeout, interval time.Duration,
 	eventsFieldSelector string,
 	eventsNewerThan time.Time,
+	reason string,
 ) error {
 	// Validate StorageCluster started Initializing  (note: will be stuck in this phase...)
 	err := validateStorageClusterIsInitializing(clusterSpec, timeout, interval)
@@ -3314,14 +3315,15 @@ func ValidateStorageClusterInstallFailedWithEvents(
 		return err
 	}
 	logrus.Debug("Validating K8 event for NodeStartFailure")
-	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan)
+	return validateK8Events(clusterSpec, timeout, interval, eventsFieldSelector, eventsNewerThan, reason)
 }
 
 func validateK8Events(
 	clusterSpec *corev1.StorageCluster,
 	timeout, interval time.Duration,
 	eventsFieldSelector string,
-	eventsNewerThan time.Time) error {
+	eventsNewerThan time.Time,
+	reason string) error {
 	// List newer events -- ensure requested `eventsFieldSelector` is listed
 	t := func() (interface{}, bool, error) {
 		tmout := int64(timeout.Seconds() / 2)
@@ -3336,7 +3338,9 @@ func validateK8Events(
 		seen := make(map[string]bool)
 		v1Time := metav1.NewTime(eventsNewerThan)
 		for _, ev := range events.Items {
-			if ev.LastTimestamp.Before(&v1Time) {
+			// Checking for a specific failure reason from kubernetes
+			if ev.LastTimestamp.Before(&v1Time) ||
+				(len(reason) > 0 && ev.Reason != reason) {
 				continue
 			}
 			seen[ev.Source.Host] = true

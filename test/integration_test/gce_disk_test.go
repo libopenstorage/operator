@@ -18,51 +18,50 @@ import (
 )
 
 var (
-	disksEnc = []string{"type=Premium_LRS,size=100,diskEncryptionSetID=invalid"}
+	gceDisksInvalidKey = []string{"type=pd-standard,size=150,kms=invalid"}
 )
 
-var TestAzureDiskEncryptionCases = []types.TestCase{
+var TestGceDiskEncryptionCases = []types.TestCase{
 	{
-		TestName:        "InstallWithInvalidDiskEncryptionSetID",
-		TestrailCaseIDs: []string{"C82917"},
+		TestName:        "InstallWithInvalidGceKmsKey",
+		TestrailCaseIDs: []string{"C83461"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
-			cluster.Name = "px-cluster-azure-incorrect-enc"
+			cluster.Name = "px-cluster-gce-incorrect-enc"
 			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 			require.NoError(t, err)
 
 			cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
 				CloudStorageCommon: corev1.CloudStorageCommon{
-					DeviceSpecs: &disksEnc,
+					DeviceSpecs: &gceDisksInvalidKey,
 				},
 			}
 			return cluster
 		},
-		TestFunc: EncryptedDiskInstallFail,
+		TestFunc: EncryptedGceDiskInstallFail,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return !ci_utils.IsAks
-
+			return !ci_utils.IsGke
 		},
 	},
 	{
-		TestName:        "InstallWithDiskEncryptionSetID",
-		TestrailCaseIDs: []string{"C82915"},
+		TestName:        "InstallWithValidGceKmsKey",
+		TestrailCaseIDs: []string{"C83463,C83464"},
 		TestSpec: func(t *testing.T) interface{} {
 			cluster := &corev1.StorageCluster{}
-			cluster.Name = "px-cluster-azure-enc"
+			cluster.Name = "px-cluster-gce-enc"
 			err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 			require.NoError(t, err)
 
 			return cluster
 		},
-		TestFunc: EncryptedDiskInstallPass,
+		TestFunc: EncryptedGceDiskInstallPass,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return !ci_utils.IsAks
+			return !ci_utils.IsGke
 		},
 	},
 }
 
-func EncryptedDiskInstallFail(tc *types.TestCase) func(*testing.T) {
+func EncryptedGceDiskInstallFail(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -77,7 +76,7 @@ func EncryptedDiskInstallFail(tc *types.TestCase) func(*testing.T) {
 
 		// Validate cluster deployment
 		logrus.Infof("Validate StorageCluster %s has failed events", cluster.Name)
-		err = test.ValidateStorageClusterInstallFailedWithEvents(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, "reason=NodeStartFailure", installTime, "")
+		err = test.ValidateStorageClusterInstallFailedWithEvents(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, "", installTime, "NodeStartFailure")
 		require.NoError(t, err)
 
 		// Wipe PX and validate
@@ -86,7 +85,7 @@ func EncryptedDiskInstallFail(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
+func EncryptedGceDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
@@ -99,16 +98,16 @@ func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 			if cluster.Spec.CloudStorage.DeviceSpecs != nil {
 				deviceSpecs := *cluster.Spec.CloudStorage.DeviceSpecs
 				for _, s := range deviceSpecs {
-					if strings.Contains(s, "diskEncryptionSetID=") {
+					if strings.Contains(s, "kms=") {
 						encryptedDiskParam = true
-						logrus.Infof("Param diskEncryptionSetID is present in deviceSpec")
+						logrus.Infof("Param kms is present in deviceSpec")
 						break
 					}
 				}
 			}
 		}
 		if encryptedDiskParam == false {
-			logrus.Warn("Failed to validate the presence of diskEncryptionSetID in deviceSpec")
+			logrus.Warn("Failed to validate the presence of kms in deviceSpec")
 			return
 		}
 
@@ -122,8 +121,8 @@ func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func TestAzure(t *testing.T) {
-	for _, testCase := range TestAzureDiskEncryptionCases {
+func TestGce(t *testing.T) {
+	for _, testCase := range TestGceDiskEncryptionCases {
 		testCase.RunTest(t)
 	}
 }
