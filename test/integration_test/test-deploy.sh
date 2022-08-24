@@ -16,6 +16,7 @@ cloud_provider=""
 is_ocp=false
 is_eks=false
 is_aks=false
+is_gke=false
 portworx_device_specs=""
 portworx_kvdb_spec=""
 portworx_env_vars=""
@@ -92,6 +93,12 @@ case $i in
     --is-aks)
         echo "Flag for AKS: $2"
         is_aks=$2
+        shift
+        shift
+        ;;
+    --is-gke)
+        echo "Flag for GKE: $2"
+        is_gke=$2
         shift
         shift
         ;;
@@ -201,6 +208,14 @@ if [ "$is_aks" != "" ]; then
     sed -i 's|'IS_AKS'|'"$is_aks"'|g' $test_pod_spec
 else
     sed -i 's|'IS_AKS'|''|g' $test_pod_spec
+fi
+
+# Set GKE
+if [ "$is_gke" != "" ]; then
+    echo "This is GKE cluster: $is_gke"
+    sed -i 's|'IS_GKE'|'"$is_gke"'|g' $test_pod_spec
+else
+    sed -i 's|'IS_GKE'|''|g' $test_pod_spec
 fi
 
 # Set Portworx Spec Generator URL
