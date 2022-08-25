@@ -1523,6 +1523,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 							Args: []string{
 								"-c", clusterName,
 							},
+							Image: "portworx/px:2.11.0",
 						},
 						{
 							Name: pxutil.CSIRegistrarContainerName,
@@ -1704,6 +1705,7 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/px:2.11.0",
 			CSI: &corev1.CSISpec{
 				Enabled:                   true,
 				InstallSnapshotController: boolPtr(true),
@@ -4957,6 +4959,131 @@ func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
 	require.NoError(t, err)
+}
+
+func TestTelemetryMigrationWithPX2_12(t *testing.T) {
+	// PX pods don't crash when manually upgrade px to 2.12+ by changing the px image only
+	// Telemetry should be disabled in this case during migration
+	clusterName := "px-cluster"
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx",
+			Namespace: "portworx",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "portworx",
+							Args: []string{
+								"-c", clusterName,
+							},
+							Image: "portworx/px:2.12.0",
+						},
+						{
+							Name:  pxutil.TelemetryContainerName,
+							Image: "image/ccm-service:2.6.0",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(ds)
+	mockController := gomock.NewController(t)
+	driver := testutil.MockDriver(mockController)
+	ctrl := &storagecluster.Controller{
+		Driver: driver,
+	}
+	recorder := record.NewFakeRecorder(10)
+	ctrl.SetEventRecorder(recorder)
+	ctrl.SetKubernetesClient(k8sClient)
+	mockManifest := mock.NewMockManifest(mockController)
+	manifest.SetInstance(mockManifest)
+	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().AnyTimes()
+	driver.EXPECT().String().AnyTimes()
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.24.0",
+	}
+
+	migrator := New(ctrl)
+
+	go migrator.Start()
+	cluster := &corev1.StorageCluster{}
+	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		if err != nil {
+			return false, nil
+		}
+
+		return true, nil
+	})
+	require.NoError(t, err)
+
+	expectedCluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ds.Namespace,
+			Annotations: map[string]string{
+				constants.AnnotationMigrationApproved: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/px:2.12.0",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+			Stork: &corev1.StorkSpec{
+				Enabled: false,
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+			},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: false,
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: false,
+					},
+				},
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: false,
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "PX_SECRETS_NAMESPACE",
+						Value: "portworx",
+					},
+				},
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: constants.PhaseAwaitingApproval,
+		},
+	}
+	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
+	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
+	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+
+	// Stop the migration process by removing the daemonset
+	err = testutil.Delete(k8sClient, ds)
+	require.NoError(t, err)
+
+	close(recorder.Events)
+	var msg string
+	for e := range recorder.Events {
+		msg += e
+	}
+	require.Contains(t, msg, "PX 2.12+ DaemonSet migration with telemetry enabled is not supported, telemetry will be disabled during migration.")
 }
 
 func validateMigrationIsInProgress(
