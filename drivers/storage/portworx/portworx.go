@@ -749,6 +749,30 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
 		}
 	}
+	if pxutil.IsTLSEnabledOnCluster(&toUpdate.Spec) {
+		tlsSpec := toUpdate.Spec.Security.TLS
+		if tlsSpec.ServerCert == nil && tlsSpec.ServerKey == nil && tlsSpec.RootCA == nil {
+			tlsSpec.RootCA = &corev1.CertLocation{
+				SecretRef: &corev1.SecretRef{
+					SecretName: pxutil.DefaultCASecretName,
+					SecretKey:  pxutil.DefaultCASecretKey,
+				},
+			}
+			tlsSpec.ServerCert = &corev1.CertLocation{
+				SecretRef: &corev1.SecretRef{
+					SecretName: pxutil.DefaultServerCertSecretName,
+					SecretKey:  pxutil.DefaultServerCertSecretKey,
+				},
+			}
+			tlsSpec.ServerKey = &corev1.CertLocation{
+				SecretRef: &corev1.SecretRef{
+					SecretName: pxutil.DefaultServerKeySecretName,
+					SecretKey:  pxutil.DefaultServerKeySecretKey,
+				},
+			}
+			toUpdate.Spec.Security.TLS = tlsSpec
+		}
+	}
 
 	setSecuritySpecDefaults(toUpdate)
 }

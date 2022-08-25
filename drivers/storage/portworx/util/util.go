@@ -219,6 +219,15 @@ const (
 	// DefaultTLSServerKeyMountPath is the fixed location on the runc container where the server key will be mounted
 	DefaultTLSServerKeyMountPath = "/api-tls-certs/server-key/"
 
+	// DefaultServerCertSecretName secret name for server cert
+	DefaultServerCertSecretName = "px-api-server-cert"
+	// DefaultServerCertSecretKey key for above server cert secret
+	DefaultServerCertSecretKey = "server.crt"
+	// DefaultServerKeySecretName secret name for server key
+	DefaultServerKeySecretName = "px-api-server-key"
+	// DefaultServerKeySecretKey key for above server key sercret
+	DefaultServerKeySecretKey = "server.key"
+
 	// EnvKeyCASecretName env var for the name of the k8s secret containing the CA cert needed to connect to portworx when TLS is enabled
 	EnvKeyCASecretName = "PX_CA_CERT_SECRET"
 	// EnvKeyCASecretKey env var for the name of the key in the k8s secret which will retrieve the CA cert needed to connect to portworx when TLS is enabled
@@ -226,7 +235,7 @@ const (
 	// DefaultCASecretName is the default value for EnvKeyCASecretName
 	DefaultCASecretName = "px-api-root-ca"
 	// DefaultCASecretKey is the default value for EnvKeyCASecretKey
-	DefaultCASecretKey = "root-ca"
+	DefaultCASecretKey = "root-ca.crt"
 
 	// EnvKeyPortworxEnableTLS is a flag for enabling operator TLS with PX
 	EnvKeyPortworxEnableTLS  = "PX_ENABLE_TLS"
