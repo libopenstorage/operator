@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	apiscore "k8s.io/kubernetes/pkg/apis/core"
 
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -316,10 +317,14 @@ func validateStorageClusterFromDaemonSet(
 				cerr = fmt.Errorf("csi should have been enabled")
 			}
 		case "telemetry":
-			if cluster.Spec.Monitoring == nil ||
-				cluster.Spec.Monitoring.Telemetry == nil ||
-				!cluster.Spec.Monitoring.Telemetry.Enabled {
-				cerr = fmt.Errorf("telemetry should been enabled")
+			telemetryEnabled := cluster.Spec.Monitoring != nil &&
+				cluster.Spec.Monitoring.Telemetry != nil &&
+				cluster.Spec.Monitoring.Telemetry.Enabled
+			ccmGoSupported := pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionCCMGO)
+			if ccmGoSupported && telemetryEnabled {
+				cerr = fmt.Errorf("telemetry should have been disabled")
+			} else if !ccmGoSupported && !telemetryEnabled {
+				cerr = fmt.Errorf("telemetry should have been enabled")
 			}
 		}
 		if cerr != nil {

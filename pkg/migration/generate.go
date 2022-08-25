@@ -16,6 +16,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -935,6 +936,16 @@ func (h *Handler) addMonitoringSpec(cluster *corev1.StorageCluster, ds *appsv1.D
 		Enabled: telemetryImage != "",
 	}
 	cluster.Status.DesiredImages.Telemetry = telemetryImage
+
+	// Telemetry components are removed from PX DaemonSet 2.12+ so it's not a valid cluster setup to migrate.
+	// CCM upgrade to a newer version during migration is not supported, so we disable telemetry if end up here.
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionCCMGO) {
+		cluster.Spec.Monitoring.Telemetry.Enabled = false
+		cluster.Status.DesiredImages.Telemetry = ""
+		msg := "PX 2.12+ DaemonSet migration with telemetry enabled is not supported, telemetry will be disabled during migration. " +
+			"Re-enable it from StorageCluster spec once migration succeeded to use telemetry again."
+		k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.FailedComponentReason, msg)
+	}
 
 	// Check if metrics need to be exported
 	svcMonitorFound := true
