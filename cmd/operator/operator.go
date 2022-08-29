@@ -6,13 +6,17 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 	"time"
 
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
@@ -20,6 +24,7 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -42,6 +47,7 @@ const (
 	flagRateLimiterQPS           = "rate-limiter-qps"
 	flagRateLimiterBurst         = "rate-limiter-burst"
 	flagEnableProfiling          = "pprof"
+	flagDisableCacheFor          = "disable-cache-for"
 	defaultLockObjectName        = "openstorage-operator"
 	defaultResyncPeriod          = 30 * time.Second
 	defaultMetricsPort           = 8999
@@ -100,6 +106,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  flagEnableProfiling,
 			Usage: "Enable Portworx Operator profiling using pprof (default: false)",
+		},
+		cli.StringFlag{
+			Name:  flagDisableCacheFor,
+			Usage: "Comma separated object types to disable from cache to reduce memory usage, for example \"Pod,ConfigMap,Deployment,PersistentVolume\"",
 		},
 	}
 
@@ -247,11 +257,59 @@ func run(c *cli.Context) {
 	}
 }
 
+func getObjects(objectKinds string) []client.Object {
+	var objs []client.Object
+
+	arr := strings.Split(objectKinds, ",")
+	for _, str := range arr {
+		switch str {
+		case "ConfigMap":
+			objs = append(objs, &v1.ConfigMap{})
+		case "Secret":
+			objs = append(objs, &v1.Secret{})
+		case "Pod":
+			objs = append(objs, &v1.Pod{})
+		case "Event":
+			objs = append(objs, &v1.Event{})
+		case "Service":
+			objs = append(objs, &v1.Service{})
+		case "ServiceAccount":
+			objs = append(objs, &v1.ServiceAccount{})
+		case "PersistentVolume":
+			objs = append(objs, &v1.PersistentVolume{})
+		case "PersistentVolumeClaim":
+			objs = append(objs, &v1.PersistentVolumeClaim{})
+		case "Deployment":
+			objs = append(objs, &appsv1.Deployment{})
+		case "DaemonSet":
+			objs = append(objs, &appsv1.DaemonSet{})
+		case "StatefulSet":
+			objs = append(objs, &appsv1.StatefulSet{})
+		case "ClusterRole":
+			objs = append(objs, &rbacv1.ClusterRole{})
+		case "ClusterRoleBinding":
+			objs = append(objs, &rbacv1.ClusterRoleBinding{})
+		case "Role":
+			objs = append(objs, &rbacv1.Role{})
+		case "RoleBinding":
+			objs = append(objs, &rbacv1.RoleBinding{})
+		case "StorageClass":
+			objs = append(objs, &storagev1.StorageClass{})
+		default:
+			log.Warningf("Do not support disabling %s from cache.", str)
+		}
+	}
+
+	log.Infof("%d object kinds will be disabled from cache", len(objs))
+	return objs
+}
+
 func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error) {
 	syncPeriod := defaultResyncPeriod
 	managerOpts := manager.Options{
-		SyncPeriod:         &syncPeriod,
-		MetricsBindAddress: fmt.Sprintf("0.0.0.0:%d", c.Int(flagMetricsPort)),
+		SyncPeriod:            &syncPeriod,
+		MetricsBindAddress:    fmt.Sprintf("0.0.0.0:%d", c.Int(flagMetricsPort)),
+		ClientDisableCacheFor: getObjects(c.String(flagDisableCacheFor)),
 	}
 	if c.BoolT(flagLeaderElect) {
 		managerOpts.LeaderElection = true
