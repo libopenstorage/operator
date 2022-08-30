@@ -13936,6 +13936,37 @@ func TestCSISnapController(t *testing.T) {
 	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Restart operator with snapshot controller enabled, the container should not be deleted
+	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
+	csiPod := &v1.Pod{}
+	csiPod.ObjectMeta = expectedDeployment.Spec.Template.ObjectMeta
+	csiPod.Spec = expectedDeployment.Spec.Template.Spec
+	dummyPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-other-random-pod",
+			Namespace: "kube-system",
+		},
+	}
+	k8sClient = testutil.FakeK8sClient(csiPod, dummyPod)
+	reregisterComponents()
+
+	driver = portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	driver.SetDefaultsOnStorageCluster(cluster)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.CSI)
+	require.True(t, cluster.Spec.CSI.Enabled)
+	require.NotNil(t, cluster.Spec.CSI.InstallSnapshotController)
+	require.True(t, *cluster.Spec.CSI.InstallSnapshotController)
+	require.NotEmpty(t, cluster.Status.DesiredImages.CSISnapshotController)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 }
 
 func contains(slice []string, val string) bool {
