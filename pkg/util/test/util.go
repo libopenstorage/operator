@@ -1112,7 +1112,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate CSI components and images
-	if ValidateCSI(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateCSI(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1681,9 +1681,11 @@ func ValidateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 			return err
 		}
 
-		// Validate CSI snapshot controller
-		if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
-			return err
+		// Validate CSI snapshot controller on non-ocp env, since ocp deploys its own snapshot controller
+		if !isOpenshift(cluster) {
+			if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
+				return err
+			}
 		}
 	} else {
 		logrus.Debug("CSI is disabled in StorageCluster")
