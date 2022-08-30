@@ -36,9 +36,9 @@ const (
 	// DefaultValidateDeployRetryInterval is a default retry interval for deployment validation
 	DefaultValidateDeployRetryInterval = 20 * time.Second
 	// DefaultValidateUpgradeTimeout is a default timeout for upgrade validation
-	DefaultValidateUpgradeTimeout = 25 * time.Minute
+	DefaultValidateUpgradeTimeout = 30 * time.Minute
 	// DefaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
-	DefaultValidateUpgradeRetryInterval = 20 * time.Second
+	DefaultValidateUpgradeRetryInterval = 30 * time.Second
 	// DefaultValidateUpdateTimeout is a default timeout for update validation
 	DefaultValidateUpdateTimeout = 20 * time.Minute
 	// DefaultValidateUpdateRetryInterval is a default retry interval for update validation

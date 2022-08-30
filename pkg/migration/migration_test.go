@@ -4990,8 +4990,20 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 			},
 		},
 	}
+	telemetrySecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.TelemetryCertName,
+			Namespace: ds.Namespace,
+		},
+	}
+	telemetryConfig := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      component.TelemetryConfigMapName,
+			Namespace: ds.Namespace,
+		},
+	}
 
-	k8sClient := testutil.FakeK8sClient(ds)
+	k8sClient := testutil.FakeK8sClient(ds, telemetryConfig, telemetrySecret)
 	mockController := gomock.NewController(t)
 	driver := testutil.MockDriver(mockController)
 	ctrl := &storagecluster.Controller{
@@ -5074,9 +5086,20 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
 
-	// Stop the migration process by removing the daemonset
-	err = testutil.Delete(k8sClient, ds)
+	// Approve migration
+	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	err = testutil.Update(k8sClient, cluster)
 	require.NoError(t, err)
+
+	// Validate the migration has started
+	err = validateMigrationIsInProgress(k8sClient, cluster)
+	require.NoError(t, err)
+
+	// Validate telemetry v1 config map got deleted but secret got preserved
+	err = testutil.Get(k8sClient, telemetrySecret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, telemetryConfig, component.TelemetryConfigMapName, cluster.Namespace)
+	require.Error(t, err)
 
 	close(recorder.Events)
 	var msg string
@@ -5084,6 +5107,7 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 		msg += e
 	}
 	require.Contains(t, msg, "PX 2.12+ DaemonSet migration with telemetry enabled is not supported, telemetry will be disabled during migration.")
+	require.Contains(t, msg, "Migration completed successfully")
 }
 
 func validateMigrationIsInProgress(

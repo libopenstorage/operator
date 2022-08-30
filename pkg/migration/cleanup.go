@@ -3,7 +3,6 @@ package migration
 import (
 	"context"
 
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -13,6 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 )
 
 const (
@@ -256,6 +258,9 @@ func (h *Handler) deleteMonitoringComponent(cluster *corev1.StorageCluster) erro
 		return err
 	}
 	if err := h.deleteObject(prometheusOpAccountName, cluster.Namespace, &v1.ServiceAccount{}, cluster); err != nil {
+		return err
+	}
+	if err := h.deleteObject(component.TelemetryConfigMapName, cluster.Namespace, &v1.ConfigMap{}, cluster); err != nil {
 		return err
 	}
 	return nil
