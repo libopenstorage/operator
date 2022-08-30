@@ -56,11 +56,13 @@ const (
 	csiCRDSuffixVolumeSnapshot        = "volumesnapshot.yaml"
 	csiCRDSuffixVolumeSnapshotContent = "volumesnapshotcontent.yaml"
 	csiCRDSuffixVolumeSnapshotClass   = "volumesnapshotclass.yaml"
+
+	csiDeploymentAppLabel = "app"
 )
 
 var (
 	csiDeploymentTemplateLabels = map[string]string{
-		"app": "px-csi-driver",
+		csiDeploymentAppLabel: "px-csi-driver",
 	}
 )
 
@@ -530,6 +532,11 @@ func (c *csi) findPreinstalledCSISnapshotController() error {
 		return err
 	}
 	for _, pod := range podList.Items {
+		// Ignore csi pods deployed by operator
+		appLabel, ok := pod.Labels[csiDeploymentAppLabel]
+		if ok && appLabel == csiDeploymentTemplateLabels[csiDeploymentAppLabel] {
+			continue
+		}
 		for _, container := range pod.Spec.Containers {
 			if strings.Contains(container.Image, "/snapshot-controller:") {
 				c.csiSnapshotControllerPreInstalled = boolPtr(true)
