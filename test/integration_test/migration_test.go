@@ -25,6 +25,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
@@ -311,17 +312,32 @@ func updateComponentDeploymentImages(objects []runtime.Object) error {
 			} else if dep.Name == "stork" || dep.Name == "autopilot" {
 				dep.Spec.Template.Spec.Containers[0].Image = ci_utils.PxSpecImages[dep.Name]
 			} else if dep.Name == "px-csi-ext" {
-				for _, c := range dep.Spec.Template.Spec.Containers {
+				for i := 0; i < len(dep.Spec.Template.Spec.Containers); i++ {
+					c := &dep.Spec.Template.Spec.Containers[i]
 					if c.Name == "csi-external-provisioner" {
 						c.Image = ci_utils.PxSpecImages["csiProvisioner"]
+						if util.GetImageMajorVersion(c.Image) >= 2 {
+							c.Args = []string{
+								"--v=3",
+								"--csi-address=$(ADDRESS)",
+								"--leader-election=true",
+								"--default-fstype=ext4",
+								"--extra-create-metadata=true",
+							}
+						}
 					} else if c.Name == "csi-snapshotter" {
 						c.Image = ci_utils.PxSpecImages["csiSnapshotter"]
 					} else if c.Name == "csi-resizer" {
 						c.Image = ci_utils.PxSpecImages["csiResizer"]
+					} else if c.Name == "csi-snapshot-controller" {
+						c.Image = ci_utils.PxSpecImages["csiSnapshotController"]
+					} else if c.Name == "csi-attacher" {
+						c.Image = ci_utils.PxSpecImages["csiAttacher"]
 					}
 				}
 			} else if dep.Name == "px-metrics-collector" {
-				for _, c := range dep.Spec.Template.Spec.Containers {
+				for i := 0; i < len(dep.Spec.Template.Spec.Containers); i++ {
+					c := &dep.Spec.Template.Spec.Containers[i]
 					if c.Name == "collector" {
 						c.Image = ci_utils.PxSpecImages["metricsCollector"]
 					} else if c.Name == "envoy" {
