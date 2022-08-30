@@ -787,8 +787,10 @@ func ValidateUninstallStorageCluster(
 	}
 
 	// Verify telemetry secret is deleted on UninstallAndWipe
+	// Only do the validation when telemetry is enabled, since if it's disabled, there's a chance secret owner is not set yet
+	telemetryEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled
 	_, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
-	if !errors.IsNotFound(err) {
+	if !errors.IsNotFound(err) && telemetryEnabled {
 		return fmt.Errorf("telemetry secret pure-telemetry-certs was found when shouldn't have been")
 	}
 
