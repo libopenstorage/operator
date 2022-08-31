@@ -1,9 +1,13 @@
-# Note the portworx endpoint port for openshift is 17001, non-openshift is 9001
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: px-collector-config
+  name: px-telemetry-collector
   namespace: kube-test
+  ownerReferences:
+  - apiVersion: core.libopenstorage.org/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StorageCluster
 data:
   portworx.yaml: |-
     scrapeConfig:
@@ -14,6 +18,6 @@ data:
             name: portworx
           namespace: kube-test
           endpoint: metrics
-          port: 9001
+          port: 10001
     forwardConfig:
-      url: http://localhost:10000/metrics/1.0/pure1-metrics-pb
+      url: http://localhost:11000/metrics/1.0/pure1-metrics-pb

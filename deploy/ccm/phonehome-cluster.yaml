@@ -8,11 +8,6 @@ spec:
   selector:
     matchLabels:
       name: px-telemetry-phonehome
-  minReadySeconds: 0
-  updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 100%
   template:
     metadata:
       labels:

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-telemetry-metrics-collector
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: realtime-metrics-collector
+  template:
+    metadata:
+      labels:
+        role: realtime-metrics-collector
+    spec:
+      containers:
+      - env:
+        - name: CONFIG
+          value: config/portworx.yaml
+        image: purestorage/realtime-metrics:1.0.2
+        imagePullPolicy: Always
+        name: collector
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 200m
+            memory: 64Mi
+        securityContext:
+          runAsUser: 1111
+        volumeMounts:
+        - mountPath: /config
+          name: px-collector-config
+          readOnly: true
+      - args:
+        - envoy
+        - --config-path
+        - /config/envoy-config.yaml
+        image: purestorage/telemetry-envoy:1.0.0
+        imagePullPolicy: Always
+        name: envoy
+        securityContext:
+          runAsUser: 1111
+        volumeMounts:
+        - mountPath: /config
+          name: px-collector-proxy-config
+          readOnly: true
+        - mountPath: /appliance-cert
+          name: pure-telemetry-certs
+          readOnly: true
+        - mountPath: /etc/envoy/
+          name: tls-certificate
+          readOnly: true
+      initContainers:
+      - name: init-cont
+        image: purestorage/telemetry-envoy:1.0.0
+        env:
+        - name: K8S_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        args:
+        - "cert_checker"
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 1111
+      volumes:
+      - configMap:
+          name: px-telemetry-collector
+        name: px-collector-config
+      - configMap:
+          name: px-telemetry-collector-proxy
+        name: px-collector-proxy-config
+      - name: pure-telemetry-certs
+        secret:
+          secretName: pure-telemetry-certs
+      - configMap:
+          name: px-telemetry-tls-certificate
+        name: tls-certificate
