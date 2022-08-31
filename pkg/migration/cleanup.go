@@ -260,6 +260,7 @@ func (h *Handler) deleteMonitoringComponent(cluster *corev1.StorageCluster) erro
 	if err := h.deleteObject(prometheusOpAccountName, cluster.Namespace, &v1.ServiceAccount{}, cluster); err != nil {
 		return err
 	}
+	// If telemetry is disabled when approving migration, this configmap could lose owner, so let operator manage it
 	if err := h.deleteObject(component.TelemetryConfigMapName, cluster.Namespace, &v1.ConfigMap{}, cluster); err != nil {
 		return err
 	}

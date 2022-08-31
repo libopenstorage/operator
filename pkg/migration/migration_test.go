@@ -5099,7 +5099,7 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	err = testutil.Get(k8sClient, telemetrySecret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, telemetryConfig, component.TelemetryConfigMapName, cluster.Namespace)
-	require.Error(t, err)
+	require.True(t, errors.IsNotFound(err))
 
 	close(recorder.Events)
 	var msg string
