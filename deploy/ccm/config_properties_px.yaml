@@ -7,7 +7,7 @@ cert:
   keyAlgorithm: "RSA"
   noRelCertEnabled: true
   release:
-    staging: 
+    staging:
       private: "/opt/ccm/cert/rel_priv_staging.pem"
     production:
       private: "/opt/ccm/cert/rel_priv.pem"
@@ -20,9 +20,9 @@ standalone:
 envoy:
   protocol: "http"
   registrationHost: "localhost"
-  registrationPort: "12001"
+  registrationPort: "REGISTER_CLOUD_SUPPORT_PORT"
   renewalHost: "localhost"
-  renewalPort: "12002"
+  renewalPort: "REST_CLOUD_SUPPORT_PORT"
 cloud:
   auth:
     version: "1.0"

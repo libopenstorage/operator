@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: px-telemetry-register
+  namespace: kube-test
+  ownerReferences:
+  - apiVersion: core.libopenstorage.org/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StorageCluster
+data:
+  config_properties_px.yaml: |-
+    actKeyRequired: false
+    cert:
+      keySize: 2048
+      renewWindowInDays: 30
+      registrationEnabled: true
+      renewEnabled: true
+      keyAlgorithm: "RSA"
+      noRelCertEnabled: true
+      release:
+        staging:
+          private: "/opt/ccm/cert/rel_priv_staging.pem"
+        production:
+          private: "/opt/ccm/cert/rel_priv.pem"
+    subscription:
+      useApplianceId: true
+      accountType: "UNKNOWN"
+    standalone:
+      applianceIdPath: "/var/cache/appliance_id"
+      generateApplianceIdEnabled: false
+    envoy:
+      protocol: "http"
+      registrationHost: "localhost"
+      registrationPort: "13001"
+      renewalHost: "localhost"
+      renewalPort: "13002"
+    cloud:
+      auth:
+        version: "1.0"
+    productName: "portworx"
+    k8s:
+      certSecretName: "pure-telemetry-certs"
+      certSecretNamespace: kube-test
