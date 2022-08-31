@@ -67,9 +67,11 @@ const (
 	configFileNameTelemetryPhonehome            = "ccm.properties"
 	configFileNameTelemetryPhonehomeProxy       = "envoy-config-rest.yaml"
 	configFileNameTelemetryRestCustomProxy      = "envoy-config-rest-custom-proxy.yaml"
+	configFileNameTelemetryCollectorProxy       = "envoy-config-collector.yaml"
 	configFileNameTelemetryCollectorCustomProxy = "envoy-config-collector-custom-proxy.yaml"
 	configFileNameTelemetryTLSCertificate       = "tls_certificate_sds_secret.yaml"
 	deploymentFileNameTelemetryRegistration     = "registration-service.yaml"
+	deploymentFileNameTelemetryCollectorV2      = "metrics-collector-deployment.yaml"
 	daemonsetFileNameTelemetryPhonehome         = "phonehome-cluster.yaml"
 
 	configParameterApplianceID                           = "APPLIANCE_ID"
@@ -81,13 +83,16 @@ const (
 	configParameterCustomProxyAddress                    = "CUSTOM_PROXY_ADDRESS"
 	configParameterCustomProxyPort                       = "CUSTOM_PROXY_PORT"
 	configParameterPortworxPort                          = "PORTWORX_PORT"
-	configParameterCloudSupportPort                      = "CLOUD_SUPPORT_PORT"
+	configParameterRegisterCloudSupportPort              = "REGISTER_CLOUD_SUPPORT_PORT"
+	configParameterRestCloudSupportPort                  = "REST_CLOUD_SUPPORT_PORT"
 	configParameterCloudSupportTCPProxyPort              = "CLOUD_SUPPORT_TCP_PROXY_PORT"
 	configParameterCloudSupportEnvoyInternalRedirectPort = "CLOUD_SUPPORT_ENVOY_INTERNAL_REDIRECT_PORT"
 	containerNameTelemetryRegistration                   = "registration"
 	containerNameLogUploader                             = "log-upload-service"
 	containerNameTelemetryProxy                          = "envoy"
+	containerNameTelemetryCollector                      = "collector"
 	portNameLogUploaderContainer                         = "loguploader"
+	portNameEnvoy                                        = "envoy"
 
 	productionArcusLocation         = "external"
 	productionArcusRestProxyURL     = "rest.cloud-support.purestorage.com"
@@ -416,7 +421,7 @@ func (t *telemetry) reconcileCCMGoTelemetryCollectorV2(
 		logrus.WithError(err).Errorf("failed to create cm %s", ConfigMapNameTelemetryCollectorProxyV2)
 		return err
 	}
-	if err := t.createCollectorDeployment(cluster, ownerRef); err != nil {
+	if err := t.createDeploymentTelemetryCollectorV2(cluster, ownerRef); err != nil {
 		logrus.WithError(err).Errorf("failed to create deployment %s/%s", cluster.Namespace, DeploymentNameTelemetryCollectorV2)
 		return err
 	}
@@ -560,8 +565,12 @@ func (t *telemetry) createCCMGoConfigMapRegister(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	registerCloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultRegisterPort)
+	restCloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	config, err := readConfigMapDataFromFile(configFileNameTelemetryRegister, map[string]string{
-		configParameterCertSecretNamespace: cluster.Namespace,
+		configParameterCertSecretNamespace:      cluster.Namespace,
+		configParameterRegisterCloudSupportPort: fmt.Sprint(registerCloudSupportPort),
+		configParameterRestCloudSupportPort:     fmt.Sprint(restCloudSupportPort),
 	})
 	if err != nil {
 		return err
@@ -589,11 +598,11 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 	configFileName := configFileNameTelemetryRegisterProxy
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultRegisterPort)
 	replaceMap := map[string]string{
-		configParameterApplianceID:      cluster.Status.ClusterUID,
-		configParameterComponentSN:      cluster.Name,
-		configParameterProductVersion:   pxutil.GetPortworxVersion(cluster).String(),
-		configParameterRegisterProxyURL: getArcusRegisterProxyURL(cluster),
-		configParameterCloudSupportPort: fmt.Sprint(cloudSupportPort),
+		configParameterApplianceID:              cluster.Status.ClusterUID,
+		configParameterComponentSN:              cluster.Name,
+		configParameterProductVersion:           pxutil.GetPortworxVersion(cluster).String(),
+		configParameterRegisterProxyURL:         getArcusRegisterProxyURL(cluster),
+		configParameterRegisterCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	}
 
 	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
@@ -638,10 +647,10 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 	configFileName := configFileNameTelemetryPhonehomeProxy
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	replaceMap := map[string]string{
-		configParameterApplianceID:      cluster.Status.ClusterUID,
-		configParameterProductVersion:   pxutil.GetPortworxVersion(cluster).String(),
-		configParameterRestProxyURL:     getArcusRestProxyURL(cluster),
-		configParameterCloudSupportPort: fmt.Sprint(cloudSupportPort),
+		configParameterApplianceID:          cluster.Status.ClusterUID,
+		configParameterProductVersion:       pxutil.GetPortworxVersion(cluster).String(),
+		configParameterRestProxyURL:         getArcusRestProxyURL(cluster),
+		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	}
 
 	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
@@ -683,33 +692,29 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	configMap := getCollectorProxyConfigMapV1(cluster, ownerRef)
-	configMap.Name = ConfigMapNameTelemetryCollectorProxyV2
-	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
-	if proxy == "" || !t.usePxProxy {
-		// TODO: use offset in the configmap as well
-		return k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
-	}
-
-	address, port, err := pxutil.SplitPxProxyHostPort(proxy)
-	if err != nil {
-		logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
-		return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryCollectorV2, cluster.Namespace, *ownerRef)
-	}
-
 	// TODO: share same config template with phonehome, component-sn field is needed here
-	configFileName := configFileNameTelemetryCollectorCustomProxy
+	configFileName := configFileNameTelemetryCollectorProxy
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultCollectorPort)
 	replaceMap := map[string]string{
-		configParameterApplianceID:                           cluster.Status.ClusterUID,
-		configParameterComponentSN:                           "portworx-metrics-node",
-		configParameterProductVersion:                        pxutil.GetPortworxVersion(cluster).String(),
-		configParameterRestProxyURL:                          getArcusRestProxyURL(cluster),
-		configParameterCloudSupportPort:                      fmt.Sprint(cloudSupportPort),
-		configParameterCloudSupportTCPProxyPort:              fmt.Sprint(tcpProxyPort),
-		configParameterCloudSupportEnvoyInternalRedirectPort: fmt.Sprint(envoyRedirectPort),
-		configParameterCustomProxyAddress:                    address,
-		configParameterCustomProxyPort:                       port,
+		configParameterApplianceID:          cluster.Status.ClusterUID,
+		configParameterProductVersion:       pxutil.GetPortworxVersion(cluster).String(),
+		configParameterRestProxyURL:         getArcusRestProxyURL(cluster),
+		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
+		configParameterComponentSN:          "portworx-metrics-node",
+	}
+
+	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	if proxy != "" && t.usePxProxy {
+		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
+		if err != nil {
+			logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
+			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace, *ownerRef)
+		}
+		configFileName = configFileNameTelemetryCollectorCustomProxy
+		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
+		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
+		replaceMap[configParameterCustomProxyAddress] = address
+		replaceMap[configParameterCustomProxyPort] = port
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
@@ -717,8 +722,20 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 		return err
 	}
 
-	configMap.Data[CollectorProxyConfigFileName] = config
-	return k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
+	return k8sutil.CreateOrUpdateConfigMap(
+		t.k8sClient,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            ConfigMapNameTelemetryCollectorProxyV2,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string]string{
+				CollectorProxyConfigFileName: config,
+			},
+		},
+		ownerRef,
+	)
 }
 
 func (t *telemetry) createCCMGoConfigMapTLSCertificate(
@@ -750,7 +767,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehome(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	config, err := readConfigMapDataFromFile(configFileNameTelemetryPhonehome, map[string]string{
-		configParameterPortworxPort: fmt.Sprintf(`"%v"`, getCCMListeningPort(cluster)),
+		configParameterPortworxPort: fmt.Sprint(getCCMListeningPort(cluster)),
 	})
 	if err != nil {
 		return err
@@ -851,6 +868,14 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 			}
 		} else if container.Name == containerNameTelemetryProxy {
 			container.Image = proxyImage
+			for j := 0; j < len(container.Ports); j++ {
+				port := &container.Ports[j]
+				cloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
+				if port.Name == portNameEnvoy {
+					port.HostPort = int32(cloudSupportPort)
+					port.ContainerPort = int32(cloudSupportPort)
+				}
+			}
 		}
 	}
 	for i := 0; i < len(daemonset.Spec.Template.Spec.InitContainers); i++ {
@@ -883,6 +908,63 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	}
 
 	t.isDaemonSetTelemetryPhonehonmeCreated = true
+	return nil
+}
+
+func (t *telemetry) createDeploymentTelemetryCollectorV2(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+	deployment, err := k8sutil.GetDeploymentFromFile(deploymentFileNameTelemetryCollectorV2, pxutil.SpecsBaseDir())
+	if err != nil {
+		return err
+	}
+	collectorImage, err := getDesiredCollectorImage(cluster)
+	if err != nil {
+		return err
+	}
+	proxyImage, err := getDesiredProxyImage(cluster)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		if container.Name == containerNameTelemetryCollector {
+			container.Image = collectorImage
+		} else if container.Name == containerNameTelemetryProxy {
+			container.Image = proxyImage
+		}
+	}
+	for i := 0; i < len(deployment.Spec.Template.Spec.InitContainers); i++ {
+		container := &deployment.Spec.Template.Spec.InitContainers[i]
+		if container.Name == "init-cont" {
+			container.Image = proxyImage
+			break
+		}
+	}
+	deployment.Name = DeploymentNameTelemetryCollectorV2
+	deployment.Namespace = cluster.Namespace
+	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
+
+	existingDeployment := &appsv1.Deployment{}
+	if err := k8sutil.GetDeployment(t.k8sClient, deployment.Name, deployment.Namespace, existingDeployment); err != nil {
+		return err
+	}
+
+	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
+	if !t.isCollectorDeploymentCreated || !equal {
+		logrus.WithFields(logrus.Fields{
+			"isCreated": t.isCollectorDeploymentCreated,
+			"equal":     equal,
+		}).Infof("will create/update the deployment %s/%s", deployment.Namespace, deployment.Name)
+		if err := k8sutil.CreateOrUpdateDeployment(t.k8sClient, deployment, ownerRef); err != nil {
+			return err
+		}
+	}
+
+	t.isCollectorDeploymentCreated = true
 	return nil
 }
 

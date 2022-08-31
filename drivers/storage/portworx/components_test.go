@@ -12555,13 +12555,14 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	startPort := uint32(10001)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/oci-monitor:2.12.1",
+			Image: "portworx/oci-monitor:2.12.0",
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
@@ -12570,6 +12571,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
 				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
+			StartPort: &startPort,
 		},
 		Status: corev1.StorageClusterStatus{
 			ClusterUID: "test-clusteruid",
@@ -12625,24 +12627,35 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Equal(t, cluster.Name, roleBinding.OwnerReferences[0].Name)
 
 	// Validate config maps
-	// TODO: validate config map content
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoRegisterConfigMap.yaml")
 	configMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryTLSCertificate, cluster.Namespace)
@@ -12650,43 +12663,66 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
 	// Validate deployments
-	// TODO: validate deployment specs
+	expectedDeployment := testutil.GetExpectedDeployment(t, "ccmGoRegisterDeployment.yaml")
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "ccmGoPhonehomeDaemonSet.yaml")
 	daemonset := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Name, daemonset.Name)
+	require.Equal(t, expectedDaemonSet.Namespace, daemonset.Namespace)
+	require.Equal(t, expectedDaemonSet.Spec, daemonset.Spec)
 
+	expectedDeployment = testutil.GetExpectedDeployment(t, "ccmGoCollectorDeployment.yaml")
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	secret := v1.Secret{}
 	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
@@ -12987,6 +13023,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// Validate component proxy config map content
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap.yaml")
 	configMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
@@ -13093,6 +13130,23 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	// When using invalid proxy format configmaps will be deleted
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPProxy,
+			Value: "http://hostnameonly",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestTelemetrySecretDeletion(t *testing.T) {

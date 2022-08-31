@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    name: px-telemetry-phonehome
+  name: px-telemetry-phonehome
+  namespace: kube-test
+spec:
+  selector:
+    matchLabels:
+      name: px-telemetry-phonehome
+  template:
+    metadata:
+      labels:
+        name: px-telemetry-phonehome
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
+      containers:
+      - env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        image: docker.io/purestorage/log-upload:1.2.3
+        imagePullPolicy: Always
+        name: log-upload-service
+        ports:
+        - containerPort: 10090
+          hostPort: 10090
+          name: loguploader
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/pwx
+          name: etcpwx
+        - mountPath: /var/cache
+          name: varcache
+        - mountPath: /var/log
+          name: journalmount2
+          readOnly: true
+        - mountPath: /var/cores
+          name: varcores
+        - mountPath: /config
+          name: ccm-config
+          readOnly: true
+      - args:
+        - envoy
+        - --config-path
+        - /config/envoy-config-rest.yaml
+        image: docker.io/purestorage/envoy:1.2.3
+        imagePullPolicy: Always
+        name: envoy
+        ports:
+        - containerPort: 13002
+          hostPort: 13002
+          name: envoy
+          protocol: TCP
+        securityContext:
+          runAsUser: 1111
+        volumeMounts:
+        - mountPath: /config
+          name: proxy-config
+          readOnly: true
+        - mountPath: /etc/envoy/
+          name: tls-certificate
+          readOnly: true
+        - mountPath: /appliance-cert
+          name: pure-telemetry-certs
+          readOnly: true
+      initContainers:
+      - args:
+        - cert_checker
+        env:
+        - name: K8S_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: docker.io/purestorage/envoy:1.2.3
+        imagePullPolicy: Always
+        name: init-cont
+        securityContext:
+          runAsUser: 1111
+      serviceAccountName: px-telemetry
+      volumes:
+      - hostPath:
+          path: /etc/pwx
+        name: etcpwx
+      - hostPath:
+          path: /var/cache
+        name: varcache
+      - hostPath:
+          path: /var/cores
+        name: varcores
+      - hostPath:
+          path: /var/log
+        name: journalmount2
+      - configMap:
+          items:
+          - key: ccm.properties
+            path: ccm.properties
+          - key: location
+            path: location
+          name: px-telemetry-phonehome
+        name: ccm-config
+      - configMap:
+          name: px-telemetry-phonehome-proxy
+        name: proxy-config
+      - configMap:
+          name: px-telemetry-tls-certificate
+        name: tls-certificate
+      - name: pure-telemetry-certs
+        secret:
+          secretName: pure-telemetry-certs
