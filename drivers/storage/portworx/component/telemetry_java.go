@@ -410,47 +410,6 @@ func (t *telemetry) getCollectorDeployment(
 			},
 		},
 	}
-	// Update V2 metrics collector deployment
-	// TODO: have a separate spec for collector V2
-	if t.isCCMGoSupported {
-		deployment.Name = DeploymentNameTelemetryCollectorV2
-		deployment.Spec.Template.Spec.InitContainers = []v1.Container{{
-			Name:  "init-cont",
-			Image: collectorProxyImage,
-			Env: []v1.EnvVar{{
-				Name:  "K8S_NAMESPACE",
-				Value: cluster.Namespace,
-			}},
-			Args: []string{"cert_checker"},
-			SecurityContext: &v1.SecurityContext{
-				RunAsUser: &runAsUser,
-			},
-		}}
-		deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
-		for i := 0; i < len(deployment.Spec.Template.Spec.Volumes); i++ {
-			volume := &deployment.Spec.Template.Spec.Volumes[i]
-			if volume.Name == CollectorConfigMapName {
-				volume.ConfigMap.Name = ConfigMapNameTelemetryCollectorV2
-			} else if volume.Name == CollectorProxyConfigMapName {
-				volume.ConfigMap.Name = ConfigMapNameTelemetryCollectorProxyV2
-			}
-		}
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, v1.Volume{
-			Name: "tls-certificate",
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: ConfigMapNameTelemetryTLSCertificate,
-					},
-				},
-			},
-		})
-		deployment.Spec.Template.Spec.Containers[1].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[1].VolumeMounts, v1.VolumeMount{
-			Name:      "tls-certificate",
-			ReadOnly:  true,
-			MountPath: "/etc/envoy/",
-		})
-	}
 
 	deployment.Namespace = cluster.Namespace
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
@@ -515,11 +474,11 @@ func (t *telemetry) createCollectorProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	configMap := getCollectorProxyConfigMapV1(cluster, ownerRef)
+	configMap := t.getCollectorProxyConfigMap(cluster, ownerRef)
 	return k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
 }
 
-func getCollectorProxyConfigMapV1(
+func (t *telemetry) getCollectorProxyConfigMap(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) *v1.ConfigMap {
@@ -626,10 +585,17 @@ func (t *telemetry) createCollectorConfigMap(
 	}
 
 	port := pxutil.StartPort(cluster)
+	cloudSupportPort := defaultCollectorPort
+	configMapName := CollectorConfigMapName
+
+	// Update collector V2 configmap for CCM Go, port shifting is not supported in V1
+	if t.isCCMGoSupported {
+		configMapName = ConfigMapNameTelemetryCollectorV2
+		cloudSupportPort, _, _ = getCCMCloudSupportPorts(cluster, defaultCollectorPort)
+	}
 
 	config := fmt.Sprintf(
-		`
-scrapeConfig:
+		`scrapeConfig:
   interval: 10
   k8sConfig:
     pods:
@@ -638,18 +604,14 @@ scrapeConfig:
       endpoint: metrics
       port: %d
 forwardConfig:
-  url: http://localhost:10000/metrics/1.0/pure1-metrics-pb`,
+  url: http://localhost:%d/metrics/1.0/pure1-metrics-pb`,
 		selectorStr,
 		cluster.Namespace,
-		port)
+		port,
+		cloudSupportPort)
 
 	data := map[string]string{
 		CollectorConfigFileName: config,
-	}
-
-	configMapName := CollectorConfigMapName
-	if t.isCCMGoSupported {
-		configMapName = ConfigMapNameTelemetryCollectorV2
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(

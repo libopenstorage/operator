@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-telemetry-registration
+  namespace: kube-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: px-telemetry-registration
+  template:
+    metadata:
+      labels:
+        role: px-telemetry-registration
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
+      containers:
+      - env:
+        - name: CONFIG
+          value: config/config_properties_px.yaml
+        image: docker.io/portworx/px-telemetry:4.3.2
+        imagePullPolicy: Always
+        name: registration
+        volumeMounts:
+        - mountPath: /config
+          name: registration-config
+          readOnly: true
+      - args:
+        - envoy
+        - --config-path
+        - /config/envoy-config-register.yaml
+        image: docker.io/purestorage/envoy:1.2.3
+        imagePullPolicy: Always
+        name: envoy
+        securityContext:
+          runAsUser: 1111
+        volumeMounts:
+        - mountPath: /config
+          name: proxy-config
+          readOnly: true
+      hostNetwork: true
+      serviceAccountName: px-telemetry
+      volumes:
+      - configMap:
+          name: px-telemetry-register
+        name: registration-config
+      - configMap:
+          name: px-telemetry-register-proxy
+        name: proxy-config
