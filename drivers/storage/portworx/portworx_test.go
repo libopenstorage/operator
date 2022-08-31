@@ -7680,15 +7680,19 @@ func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion 
 }
 
 func (m *fakeManifest) GetVersions(
-	_ *corev1.StorageCluster,
+	cluster *corev1.StorageCluster,
 	force bool,
 ) *manifest.Version {
 	compVersion := compVersion()
 	if force {
 		compVersion = newCompVersion()
 	}
+	pxVersion := "2.10.0"
+	if cluster.Spec.Image != "" {
+		pxVersion = pxutil.GetImageTag(cluster.Spec.Image)
+	}
 	version := &manifest.Version{
-		PortworxVersion: "2.10.0",
+		PortworxVersion: pxVersion,
 		Components: manifest.Release{
 			Stork:                      "openstorage/stork:" + compVersion,
 			Autopilot:                  "portworx/autopilot:" + compVersion,

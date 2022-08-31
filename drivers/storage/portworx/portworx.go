@@ -189,114 +189,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Spec.Version = release.PortworxVersion
 		}
 
-		toUpdate.Status.Version = toUpdate.Spec.Version
-
-		if autoUpdateStork(toUpdate) &&
-			(toUpdate.Status.DesiredImages.Stork == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
-		}
-
-		if autoUpdateAutopilot(toUpdate) &&
-			(toUpdate.Status.DesiredImages.Autopilot == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.Autopilot = release.Components.Autopilot
-		}
-
-		if autoUpdateLighthouse(toUpdate) &&
-			(toUpdate.Status.DesiredImages.UserInterface == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
-		}
-
-		if autoUpdateTelemetry(toUpdate) &&
-			(toUpdate.Status.DesiredImages.Telemetry == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
-		}
-
-		if autoUpdateTelemetryProxy(toUpdate) &&
-			(toUpdate.Status.DesiredImages.TelemetryProxy == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.TelemetryProxy = release.Components.TelemetryProxy
-		}
-
-		if autoUpdateMetricsCollector(toUpdate) &&
-			(toUpdate.Status.DesiredImages.MetricsCollector == "" ||
-				(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
-					toUpdate.Status.DesiredImages.MetricsCollectorProxy == "") ||
-				(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
-					toUpdate.Status.DesiredImages.TelemetryProxy == "") ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
-			if !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) {
-				toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
-			} else {
-				toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
-			}
-		}
-
-		if autoUpdateLogUploader(toUpdate) &&
-			(toUpdate.Status.DesiredImages.LogUploader == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.LogUploader = release.Components.LogUploader
-		}
-
-		if autoUpdatePxRepo(toUpdate) &&
-			(toUpdate.Status.DesiredImages.PxRepo == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate)) {
-			toUpdate.Status.DesiredImages.PxRepo = release.Components.PxRepo
-		}
-
-		if pxutil.IsCSIEnabled(toUpdate) {
-			if toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
-				pxVersionChanged ||
-				autoUpdateComponents(toUpdate) {
-				toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
-				toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
-				toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
-				toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
-				toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
-				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
-				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
-			}
-			if autoUpdateCSISnapshotController(toUpdate) &&
-				(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
-					pxVersionChanged ||
-					autoUpdateComponents(toUpdate)) {
-				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
-			}
-		}
-
-		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
-			prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
-			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
-				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
-				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
-				toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
-				toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
-				toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
-			}
-			if toUpdate.Spec.Monitoring.Prometheus.AlertManager != nil &&
-				toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
-				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
-				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
-			}
-		}
-
-		// Reset the component update strategy if it is 'Once', so that we don't
-		// upgrade components again during next reconcile loop
-		if toUpdate.Spec.AutoUpdateComponents != nil &&
-			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate {
-			toUpdate.Spec.AutoUpdateComponents = nil
+		// The version from manifest does not match desired version, this may be caused by wrong configMap version.
+		if release.PortworxVersion != "" && release.PortworxVersion != toUpdate.Spec.Version {
+			msg := fmt.Sprintf("Version in StorageCluster %s does not match version manifest %s, please edit StorageCluster or px-versions configMap.", toUpdate.Spec.Version, release.PortworxVersion)
+			p.warningEvent(toUpdate, util.FailedComponentReason, msg)
+		} else {
+			p.updateDesiredImages(toUpdate, pxVersionChanged, release)
 		}
 	}
 
@@ -363,6 +261,118 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+}
+
+func (p *portworx) updateDesiredImages(toUpdate *corev1.StorageCluster, pxVersionChanged bool, release *manifest.Version) {
+	toUpdate.Status.Version = toUpdate.Spec.Version
+
+	if autoUpdateStork(toUpdate) &&
+		(toUpdate.Status.DesiredImages.Stork == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.Stork = release.Components.Stork
+	}
+
+	if autoUpdateAutopilot(toUpdate) &&
+		(toUpdate.Status.DesiredImages.Autopilot == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.Autopilot = release.Components.Autopilot
+	}
+
+	if autoUpdateLighthouse(toUpdate) &&
+		(toUpdate.Status.DesiredImages.UserInterface == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.UserInterface = release.Components.Lighthouse
+	}
+
+	if autoUpdateTelemetry(toUpdate) &&
+		(toUpdate.Status.DesiredImages.Telemetry == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.Telemetry = release.Components.Telemetry
+	}
+
+	if autoUpdateTelemetryProxy(toUpdate) &&
+		(toUpdate.Status.DesiredImages.TelemetryProxy == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.TelemetryProxy = release.Components.TelemetryProxy
+	}
+
+	if autoUpdateMetricsCollector(toUpdate) &&
+		(toUpdate.Status.DesiredImages.MetricsCollector == "" ||
+			(!pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+				toUpdate.Status.DesiredImages.MetricsCollectorProxy == "") ||
+			(pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) &&
+				toUpdate.Status.DesiredImages.TelemetryProxy == "") ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.MetricsCollector = release.Components.MetricsCollector
+		if !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(toUpdate)) {
+			toUpdate.Status.DesiredImages.MetricsCollectorProxy = release.Components.MetricsCollectorProxy
+		} else {
+			toUpdate.Status.DesiredImages.MetricsCollectorProxy = ""
+		}
+	}
+
+	if autoUpdateLogUploader(toUpdate) &&
+		(toUpdate.Status.DesiredImages.LogUploader == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.LogUploader = release.Components.LogUploader
+	}
+
+	if autoUpdatePxRepo(toUpdate) &&
+		(toUpdate.Status.DesiredImages.PxRepo == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate)) {
+		toUpdate.Status.DesiredImages.PxRepo = release.Components.PxRepo
+	}
+
+	if pxutil.IsCSIEnabled(toUpdate) {
+		if toUpdate.Status.DesiredImages.CSIProvisioner == "" ||
+			pxVersionChanged ||
+			autoUpdateComponents(toUpdate) {
+			toUpdate.Status.DesiredImages.CSIProvisioner = release.Components.CSIProvisioner
+			toUpdate.Status.DesiredImages.CSINodeDriverRegistrar = release.Components.CSINodeDriverRegistrar
+			toUpdate.Status.DesiredImages.CSIDriverRegistrar = release.Components.CSIDriverRegistrar
+			toUpdate.Status.DesiredImages.CSIAttacher = release.Components.CSIAttacher
+			toUpdate.Status.DesiredImages.CSIResizer = release.Components.CSIResizer
+			toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
+			toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
+		}
+		if autoUpdateCSISnapshotController(toUpdate) &&
+			(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
+				pxVersionChanged ||
+				autoUpdateComponents(toUpdate)) {
+			toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
+		}
+	}
+
+	if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
+		prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
+		if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
+			(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
+			toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
+			toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
+			toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
+			toUpdate.Status.DesiredImages.PrometheusConfigReloader = release.Components.PrometheusConfigReloader
+		}
+		if toUpdate.Spec.Monitoring.Prometheus.AlertManager != nil &&
+			toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
+			(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
+			toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
+		}
+	}
+
+	// Reset the component update strategy if it is 'Once', so that we don't
+	// upgrade components again during next reconcile loop
+	if toUpdate.Spec.AutoUpdateComponents != nil &&
+		*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate {
+		toUpdate.Spec.AutoUpdateComponents = nil
+	}
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
