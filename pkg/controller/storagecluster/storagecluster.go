@@ -21,6 +21,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	storageapi "github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"reflect"
 	"sort"
@@ -78,6 +80,8 @@ const (
 	deprecatedCRDBasePath               = "/crds/deprecated"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
+	nodeTypeLabelKey                    = "portworx.io/node-type"
+	storagelessLabelValue               = "storageless"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -1120,6 +1124,45 @@ func (c *Controller) CreatePodTemplate(
 	}
 	return newTemplate, nil
 }
+func (c *Controller) getCurrentMaxStorageNodesPerZone(
+	cluster *corev1.StorageCluster,
+	nodeList *v1.NodeList,
+	cloudProvider cloudprovider.Ops,
+) (uint32, error) {
+	storageNodeMap := make(map[string]*storageapi.StorageNode)
+
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			logrus.Errorf("Couldn't get storage node list %v", err)
+			return 0, err
+		}
+		for _, storageNode := range storageNodeList {
+			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
+				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+			}
+		}
+		zoneMap := make(map[string]uint32)
+		for _, node := range nodeList.Items {
+			if _, ok := storageNodeMap[node.Name]; ok {
+				zone, err := cloudProvider.GetZone(&node)
+				if err != nil {
+					return 0, err
+				}
+				count := zoneMap[zone]
+				zoneMap[zone] = count + 1
+			}
+		}
+		maxValue := uint32(0)
+		for _, value := range zoneMap {
+			if value > maxValue {
+				maxValue = value
+			}
+		}
+		return maxValue, nil
+	}
+	return 0, fmt.Errorf("storage disabled")
+}
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
 // intention of having at least 3 nodes in the cluster.
@@ -1137,6 +1180,13 @@ func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
 		// In a cluster with 3 or more zones, let's have one node in each zone.
 		return 1
 	}
+}
+
+func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool {
+	pxEnabled := storagePodsEnabled(toUpdate)
+	newVersion := pxutil.GetImageTag(strings.TrimSpace(toUpdate.Spec.Image))
+	return pxEnabled &&
+		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
 }
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
@@ -1227,14 +1277,33 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
-	if toUpdate.Status.Phase == "" &&
-		toUpdate.Spec.CloudStorage != nil &&
+	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
+	if toUpdate.Spec.CloudStorage != nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
 		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
 		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
-		// Let's do this only when it's a fresh install of px
-		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = new(uint32)
-		*toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
+		maxStorageNodesPerZone := uint32(0)
+		err = nil
+		if toUpdate.Status.Phase == "" {
+			// Let's do this only when it's a fresh install of px
+			maxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
+		} else {
+			// Upgrade scenario
+			if c.isPxImageBeingUpdated(toUpdate) {
+				// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
+				maxStorageNodesPerZone, err = c.getCurrentMaxStorageNodesPerZone(cluster, nodeList, cloudProvider)
+			}
+		}
+		if maxStorageNodesPerZone != 0 {
+			if err == nil {
+				toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
+				logrus.Infof("setting max_storage_nodes_per_zone=%v", maxStorageNodesPerZone)
+			} else {
+				logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
+			}
+		}
 	}
+
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
 	// Update the cluster only if anything has changed
