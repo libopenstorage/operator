@@ -1223,9 +1223,12 @@ func ValidateInternalKvdbDisabled(cluster *corev1.StorageCluster, timeout, inter
 func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
 	logrus.Info("Validate PVC Controller components")
 
-	pvcControllerDp := &appsv1.Deployment{}
-	pvcControllerDp.Name = "portworx-pvc-controller"
-	pvcControllerDp.Namespace = cluster.Namespace
+	pvcControllerDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-pvc-controller",
+			Namespace: cluster.Namespace,
+		},
+	}
 
 	// Check if PVC Controller is enabled or disabled
 	if isPVCControllerEnabled(cluster) {
@@ -1328,24 +1331,32 @@ func ValidatePvcControllerDisabled(pvcControllerDp *appsv1.Deployment, timeout, 
 // ValidateStork validates Stork components and images
 func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components")
+
+	storkDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork",
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	storkSchedulerDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork-scheduler",
+			Namespace: cluster.Namespace,
+		},
+	}
+
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		logrus.Debug("Stork is enabled in StorageCluster")
-		return ValidateStorkEnabled(pxImageList, cluster, k8sVersion, timeout, interval)
+		return ValidateStorkEnabled(pxImageList, cluster, storkDp, storkSchedulerDp, k8sVersion, timeout, interval)
 	}
 	logrus.Debug("Stork is disabled in StorageCluster")
-	return ValidateStorkDisabled(cluster, timeout, interval)
+	return ValidateStorkDisabled(cluster, storkDp, storkSchedulerDp, timeout, interval)
 }
 
 // ValidateStorkEnabled validates that all Stork components are enabled/created
-func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, k8sVersion string, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components are enabled")
-	storkDp := &appsv1.Deployment{}
-	storkDp.Name = "stork"
-	storkDp.Namespace = cluster.Namespace
-
-	storkSchedulerDp := &appsv1.Deployment{}
-	storkSchedulerDp.Name = "stork-scheduler"
-	storkSchedulerDp.Namespace = cluster.Namespace
 
 	t := func() (interface{}, bool, error) {
 		if err := validateDeployment(storkDp, timeout, interval); err != nil {
@@ -1430,16 +1441,8 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 }
 
 // ValidateStorkDisabled validates that all Stork components are disabled/deleted
-func ValidateStorkDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateStorkDisabled(cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components are disabled")
-
-	storkDp := &appsv1.Deployment{}
-	storkDp.Name = "stork"
-	storkDp.Namespace = cluster.Namespace
-
-	storkSchedulerDp := &appsv1.Deployment{}
-	storkSchedulerDp.Name = "stork-scheduler"
-	storkSchedulerDp.Namespace = cluster.Namespace
 
 	t := func() (interface{}, bool, error) {
 		// Validate stork deployment is terminated or doesn't exist
@@ -1466,22 +1469,25 @@ func ValidateStorkDisabled(cluster *corev1.StorageCluster, timeout, interval tim
 // ValidateAutopilot validates Autopilot components and images
 func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Autopilot components")
+
+	autopilotDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "autopilot",
+			Namespace: cluster.Namespace,
+		},
+	}
+
 	if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled {
 		logrus.Debug("Autopilot is Enabled in StorageCluster")
-		return ValidateAutopilotEnabled(pxImageList, cluster, timeout, interval)
+		return ValidateAutopilotEnabled(pxImageList, cluster, autopilotDp, timeout, interval)
 	}
 	logrus.Debug("Autopilot is Disabled in StorageCluster")
-	return ValidateAutopilotDisabled(cluster, timeout, interval)
+	return ValidateAutopilotDisabled(cluster, autopilotDp, timeout, interval)
 }
 
 // ValidateAutopilotEnabled validates that all Autopilot components are enabled/created
-func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, autopilotDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Autopilot components are enabled")
-
-	autopilotDp := &appsv1.Deployment{}
-	autopilotDp.Name = "autopilot"
-	autopilotDp.Namespace = cluster.Namespace
-	autopilotConfigMapName := "autopilot-config"
 
 	t := func() (interface{}, bool, error) {
 		// Validate autopilot deployment and pods
@@ -1521,9 +1527,9 @@ func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.Sto
 		}
 
 		// Validate Autopilot ConfigMap
-		_, err = coreops.Instance().GetConfigMap(autopilotConfigMapName, autopilotDp.Namespace)
+		_, err = coreops.Instance().GetConfigMap("autopilot-config", autopilotDp.Namespace)
 		if errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ConfigMap %s, Err: %v", autopilotConfigMapName, err)
+			return nil, true, fmt.Errorf("failed to validate autopilot-config, Err: %v", err)
 		}
 
 		// Validate Autopilot ServiceAccount
@@ -1542,13 +1548,8 @@ func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.Sto
 }
 
 // ValidateAutopilotDisabled validates that all Autopilot components are disabled/deleted
-func ValidateAutopilotDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateAutopilotDisabled(cluster *corev1.StorageCluster, autopilotDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Autopilot components are disabled")
-
-	autopilotDp := &appsv1.Deployment{}
-	autopilotDp.Name = "autopilot"
-	autopilotDp.Namespace = cluster.Namespace
-	autopilotConfigMapName := "autopilot-config"
 
 	t := func() (interface{}, bool, error) {
 		// Validate autopilot deployment is terminated or doesn't exist
@@ -1569,9 +1570,9 @@ func ValidateAutopilotDisabled(cluster *corev1.StorageCluster, timeout, interval
 		}
 
 		// Validate Autopilot ConfigMap doesn't exist
-		_, err = coreops.Instance().GetConfigMap(autopilotConfigMapName, autopilotDp.Namespace)
+		_, err = coreops.Instance().GetConfigMap("autopilot-config", autopilotDp.Namespace)
 		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ConfigMap %s, is found when shouldn't be", autopilotConfigMapName)
+			return nil, true, fmt.Errorf("failed to validate autopilot-config, is found when shouldn't be")
 		}
 
 		// Validate Autopilot ServiceAccount doesn't exist
@@ -1593,27 +1594,34 @@ func ValidateAutopilotDisabled(cluster *corev1.StorageCluster, timeout, interval
 func ValidatePortworxProxy(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Portworx Proxy components")
 
+	proxyDs := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-pvc-controlle",
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	pxService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-service",
+			Namespace: "kube-system",
+		},
+	}
+
 	if isPortworxProxyEnabled(cluster) {
 		logrus.Debug("Portworx proxy is enabled in StorageCluster")
-		ValidatePortworxProxyDisabled(cluster, timeout, interval)
+		ValidatePortworxProxyDisabled(cluster, proxyDs, pxService, timeout, interval)
 	} else {
 		logrus.Debug("Portworx proxy is disabled in StorageCluster")
-		return ValidatePortworxProxyDisabled(cluster, timeout, interval)
+		return ValidatePortworxProxyDisabled(cluster, proxyDs, pxService, timeout, interval)
 	}
 
 	return nil
 }
 
 // ValidatePortworxProxyEnabled validates that all Portworx Proxy components are enabled/created
-func ValidatePortworxProxyEnabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidatePortworxProxyEnabled(cluster *corev1.StorageCluster, proxyDs *appsv1.DaemonSet, pxService *v1.Service, timeout, interval time.Duration) error {
 	logrus.Info("Validate Portworx Proxy components are enabled")
-	proxyDs := &appsv1.DaemonSet{}
-	proxyDs.Name = "portworx-proxy"
-	proxyDs.Namespace = "kube-system"
-
-	pxService := &v1.Service{}
-	pxService.Name = "portworx-service"
-	pxService.Namespace = "kube-system"
 
 	t := func() (interface{}, bool, error) {
 		// Validate Portworx proxy DaemonSet
@@ -1652,15 +1660,8 @@ func ValidatePortworxProxyEnabled(cluster *corev1.StorageCluster, timeout, inter
 }
 
 // ValidatePortworxProxyDisabled validates that all Portworx Proxy components are disabled/deleted
-func ValidatePortworxProxyDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidatePortworxProxyDisabled(cluster *corev1.StorageCluster, proxyDs *appsv1.DaemonSet, pxService *v1.Service, timeout, interval time.Duration) error {
 	logrus.Info("Validate Portworx Proxy components are disabled")
-	proxyDs := &appsv1.DaemonSet{}
-	proxyDs.Name = "portworx-proxy"
-	proxyDs.Namespace = "kube-system"
-
-	pxService := &v1.Service{}
-	pxService.Name = "portworx-service"
-	pxService.Namespace = "kube-system"
 
 	t := func() (interface{}, bool, error) {
 		// Validate Portworx proxy DaemonSet is terminated or doesn't exist
@@ -1813,20 +1814,25 @@ func validateStorkNamespaceEnvVar(namespace string, storkDeployment *appsv1.Depl
 // ValidateCSI validates CSI components and images
 func ValidateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate CSI components")
+
+	pxCsiDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-csi-ext",
+			Namespace: cluster.Namespace,
+		},
+	}
+
 	if cluster.Spec.CSI.Enabled {
 		logrus.Debug("CSI is enabled in StorageCluster")
-		return ValidateCsiEnabled(pxImageList, cluster, timeout, interval)
+		return ValidateCsiEnabled(pxImageList, cluster, pxCsiDp, timeout, interval)
 	}
 	logrus.Debug("CSI is disabled in StorageCluster")
-	return ValidateCsiDisabled(cluster, timeout, interval)
+	return ValidateCsiDisabled(cluster, pxCsiDp, timeout, interval)
 }
 
 // ValidateCsiEnabled validates that all CSI components are enabled/created
-func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate CSI components are enabled")
-	pxCsiDp := &appsv1.Deployment{}
-	pxCsiDp.Name = "px-csi-ext"
-	pxCsiDp.Namespace = cluster.Namespace
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is enabled in StorageCluster")
@@ -1887,11 +1893,8 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 }
 
 // ValidateCsiDisabled validates that all CSI components are disabled/deleted
-func ValidateCsiDisabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate CSI components are disabled")
-	pxCsiDp := &appsv1.Deployment{}
-	pxCsiDp.Name = "px-csi-ext"
-	pxCsiDp.Namespace = cluster.Namespace
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is disabled in StorageCluster")
@@ -2307,23 +2310,28 @@ func validateImageTag(tag, namespace string, listOptions map[string]string) erro
 
 // ValidateSecurity validates all PX Security components
 func ValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, timeout, interval time.Duration) error {
+	logrus.Info("Validate PX Security components")
+
+	storkDp := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stork",
+			Namespace: cluster.Namespace,
+		},
+	}
+
 	if cluster.Spec.Security != nil &&
 		cluster.Spec.Security.Enabled {
 		logrus.Infof("PX Security is enabled in StorageCluster")
-		return ValidateSecurityEnabled(cluster, timeout, interval)
+		return ValidateSecurityEnabled(cluster, storkDp, timeout, interval)
 	}
 
 	logrus.Infof("PX Security is disabled in StorageCluster")
-	return ValidateSecurityDisabled(cluster, previouslyEnabled, timeout, interval)
+	return ValidateSecurityDisabled(cluster, storkDp, previouslyEnabled, timeout, interval)
 }
 
 // ValidateSecurityEnabled validates PX Security components are enabled/running as expected
-func ValidateSecurityEnabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	logrus.Info("Validate Security components are enabled")
-
-	storkDp := &appsv1.Deployment{}
-	storkDp.Name = "stork"
-	storkDp.Namespace = cluster.Namespace
+func ValidateSecurityEnabled(cluster *corev1.StorageCluster, storkDp *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Info("Validate PX Security components are enabled")
 
 	t := func() (interface{}, bool, error) {
 		// Validate Stork ENV vars, if Stork is enabled
@@ -2366,12 +2374,8 @@ func ValidateSecurityEnabled(cluster *corev1.StorageCluster, timeout, interval t
 }
 
 // ValidateSecurityDisabled validates PX Security components are disabled/uninstalled as expected
-func ValidateSecurityDisabled(cluster *corev1.StorageCluster, previouslyEnabled bool, timeout, interval time.Duration) error {
-	logrus.Info("Validate Security components are not disabled")
-
-	storkDp := &appsv1.Deployment{}
-	storkDp.Name = "stork"
-	storkDp.Namespace = cluster.Namespace
+func ValidateSecurityDisabled(cluster *corev1.StorageCluster, storkDp *appsv1.Deployment, previouslyEnabled bool, timeout, interval time.Duration) error {
+	logrus.Info("Validate PX Security components are not disabled")
 
 	t := func() (interface{}, bool, error) {
 		// Validate Stork ENV vars, if Stork is enabled
@@ -3205,6 +3209,7 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 // ValidateTelemetryV1Enabled validates telemetry component is running as expected
 func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
+
 	// Wait for the deployment to become online
 	dep := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
