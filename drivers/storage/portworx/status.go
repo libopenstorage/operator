@@ -89,6 +89,37 @@ func (p *portworx) UpdateStorageClusterStatus(
 	return p.updateStorageNodes(cluster)
 }
 
+func (p *portworx) getKvdbMap(
+	cluster *corev1.StorageCluster,
+) map[string]*kvdb_api.BootstrapEntry {
+	// If cluster is running internal kvdb, get current bootstrap nodes
+	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
+	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
+		clusterID := pxutil.GetClusterID(cluster)
+		strippedClusterName := strings.ToLower(pxutil.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
+		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
+
+		cm := &v1.ConfigMap{}
+		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+			Name:      cmName,
+			Namespace: bootstrapCloudDriveNamespace,
+		}, cm)
+		if err != nil {
+			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+		}
+
+		// Get the bootstrap entries
+		entriesBlob, ok := cm.Data[pxEntriesKey]
+		if ok {
+			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
+			if err != nil {
+				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+			}
+		}
+	}
+	return kvdbNodeMap
+}
+
 func (p *portworx) updateStorageNodes(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -106,31 +137,7 @@ func (p *portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	// If cluster is running internal kvdb, get current bootstrap nodes
-	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
-	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
-		clusterID := pxutil.GetClusterID(cluster)
-		strippedClusterName := strings.ToLower(pxutil.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
-		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
-
-		cm := &v1.ConfigMap{}
-		err = p.k8sClient.Get(context.TODO(), types.NamespacedName{
-			Name:      cmName,
-			Namespace: bootstrapCloudDriveNamespace,
-		}, cm)
-		if err != nil {
-			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-		}
-
-		// Get the bootstrap entries
-		entriesBlob, ok := cm.Data[pxEntriesKey]
-		if ok {
-			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
-			if err != nil {
-				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-			}
-		}
-	}
+	kvdbNodeMap := p.getKvdbMap(cluster)
 
 	// Find all k8s nodes where Portworx is actually running
 	currentPxNodes := make(map[string]bool)
