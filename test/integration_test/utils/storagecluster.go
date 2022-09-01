@@ -103,9 +103,13 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 			KvdbDeviceSpec: &PxKvdbSpec,
 		}
 		cloudProvider := &CloudProvider
+		// TODO Hardcoding maxStorageNodesPerZone to 5 as a workaround
+		// until we have better way to do this
+		maxStorageNodesPerZone := uint32(5)
 		cloudStorage := &corev1.CloudStorageSpec{
-			Provider:           cloudProvider,
-			CloudStorageCommon: cloudCommon,
+			Provider:               cloudProvider,
+			CloudStorageCommon:     cloudCommon,
+			MaxStorageNodesPerZone: &maxStorageNodesPerZone,
 		}
 
 		cluster.Spec.CloudStorage = cloudStorage
