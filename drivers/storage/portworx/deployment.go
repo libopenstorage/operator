@@ -1164,6 +1164,14 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
 	}
+	volumeInfoList = append(volumeInfoList,
+		volumeInfo{
+			name:      "kube-api-access-1",
+			hostPath:  "/var/run/secrets/kubernetes.io/serviceaccount",
+			mountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+			readOnly:  true,
+		},
+	)
 	return t.mountsFromVolInfo(volumeInfoList)
 }
 
@@ -1307,6 +1315,39 @@ func (t *template) getVolumes() []v1.Volume {
 		})
 	}
 
+	var mode int32 = 420
+	var expiration int64 = 601
+	volumes = append(volumes,
+		v1.Volume{
+			Name: "kube-api-access-1",
+			VolumeSource: v1.VolumeSource{
+				Projected: &v1.ProjectedVolumeSource{
+					DefaultMode: &mode,
+					Sources: []v1.VolumeProjection{
+						v1.VolumeProjection{
+							ServiceAccountToken: &v1.ServiceAccountTokenProjection{
+								ExpirationSeconds: &expiration,
+								Path:              "token",
+							},
+						},
+						v1.VolumeProjection{
+							ConfigMap: &v1.ConfigMapProjection{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: "kube-root-ca.crt",
+								},
+								Items: []v1.KeyToPath{
+									v1.KeyToPath{
+										Key:  "ca.crt",
+										Path: "ca.crt",
+									},
+								},
+							},
+						},
+					}, // TODO downwardAPI namespace to fully mimic defaults
+				},
+			},
+		},
+	)
 	return volumes
 }
 
