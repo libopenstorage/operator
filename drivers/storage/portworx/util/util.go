@@ -588,7 +588,6 @@ func SplitPxProxyHostPort(proxy string) (string, string, error) {
 	proxy = strings.TrimPrefix(proxy, "https://")
 	address, port, err := net.SplitHostPort(proxy)
 	if err != nil {
-		logrus.Info(err)
 		return "", "", err
 	} else if address == "" || port == "" {
 		return "", "", fmt.Errorf("failed to split px proxy address %s", proxy)
