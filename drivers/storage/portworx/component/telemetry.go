@@ -766,8 +766,10 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	cloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	config, err := readConfigMapDataFromFile(configFileNameTelemetryPhonehome, map[string]string{
-		configParameterPortworxPort: fmt.Sprint(getCCMListeningPort(cluster)),
+		configParameterPortworxPort:         fmt.Sprint(getCCMListeningPort(cluster)),
+		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	})
 	if err != nil {
 		return err
