@@ -1596,8 +1596,8 @@ func ValidatePortworxProxy(cluster *corev1.StorageCluster, timeout, interval tim
 
 	proxyDs := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "portworx-pvc-controlle",
-			Namespace: cluster.Namespace,
+			Name:      "portworx-proxy",
+			Namespace: "kube-system",
 		},
 	}
 
@@ -1610,13 +1610,11 @@ func ValidatePortworxProxy(cluster *corev1.StorageCluster, timeout, interval tim
 
 	if isPortworxProxyEnabled(cluster) {
 		logrus.Debug("Portworx proxy is enabled in StorageCluster")
-		ValidatePortworxProxyDisabled(cluster, proxyDs, pxService, timeout, interval)
-	} else {
-		logrus.Debug("Portworx proxy is disabled in StorageCluster")
-		return ValidatePortworxProxyDisabled(cluster, proxyDs, pxService, timeout, interval)
+		return ValidatePortworxProxyEnabled(cluster, proxyDs, pxService, timeout, interval)
 	}
 
-	return nil
+	logrus.Debug("Portworx proxy is disabled in StorageCluster")
+	return ValidatePortworxProxyDisabled(cluster, proxyDs, pxService, timeout, interval)
 }
 
 // ValidatePortworxProxyEnabled validates that all Portworx Proxy components are enabled/created
