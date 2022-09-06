@@ -35,7 +35,7 @@ import (
 const (
 	operatorRestartTimeout       = 5 * time.Minute
 	operatorRestartRetryInterval = 10 * time.Second
-	clusterCreationTimeout       = 2 * time.Minute
+	clusterCreationTimeout       = 5 * time.Minute
 	clusterCreationRetryInterval = 5 * time.Second
 	labelKeyPXEnabled            = "px/enabled"
 )
@@ -151,7 +151,7 @@ func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
 }
 
 func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runtime.Object) {
-	err := ci_utils.AddPortworxImageToDaemonSet(ds)
+	err := ci_utils.UpdatePortworxDaemonSetImages(ds)
 	require.NoError(t, err)
 
 	err = updateComponentDeploymentImages(objects)
