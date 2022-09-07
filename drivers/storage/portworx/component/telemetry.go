@@ -464,13 +464,29 @@ func (t *telemetry) setTelemetryCertOwnerRef(
 		return err
 	}
 
-	for _, o := range secret.OwnerReferences {
-		if o.UID == ownerRef.UID {
-			return nil
-		}
+	// Only delete the secret when delete strategy is UninstallAndWipe
+	deleteCert := cluster.Spec.DeleteStrategy != nil &&
+		cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType
+
+	referenceMap := make(map[types.UID]*metav1.OwnerReference)
+	for _, ref := range secret.OwnerReferences {
+		referenceMap[ref.UID] = &ref
 	}
 
-	secret.OwnerReferences = append(secret.OwnerReferences, *ownerRef)
+	_, ownerSet := referenceMap[ownerRef.UID]
+	if deleteCert && !ownerSet {
+		referenceMap[ownerRef.UID] = ownerRef
+	} else if !deleteCert && ownerSet {
+		delete(referenceMap, ownerRef.UID)
+	} else {
+		return nil
+	}
+
+	var references []metav1.OwnerReference
+	for _, v := range referenceMap {
+		references = append(references, *v)
+	}
+	secret.OwnerReferences = references
 
 	return t.k8sClient.Update(context.TODO(), secret)
 }
