@@ -12235,6 +12235,9 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 					Enabled: true,
 				},
 			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
 		},
 
 		Status: corev1.StorageClusterStatus{
@@ -12563,6 +12566,9 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
 				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -13087,6 +13093,75 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Len(t, configMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+}
+
+func TestTelemetrySecretDeletion(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.8.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	// This cert is created by ccm container outside of operator, let's simulate it.
+	k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+
+	// TestCase: Don't set secret owner reference when delete strategy is not set
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	secret := v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, secret.OwnerReferences)
+
+	// TestCase: Set secret owner reference when delete strategy is UninstallAndWipe
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+		Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	secret = v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, secret.OwnerReferences, *ownerRef)
+
+	// TestCase: Update delete strategy and secret owner reference should be removed
+	cluster.Spec.DeleteStrategy.Type = corev1.UninstallStorageClusterStrategyType
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	secret = v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, secret.OwnerReferences)
 }
 
 func TestPortworxAPIServiceCustomLabels(t *testing.T) {
