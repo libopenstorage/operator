@@ -190,7 +190,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 
 		// The version from manifest does not match desired version, this may be caused by wrong configMap version.
-		if release.PortworxVersion != "" && release.PortworxVersion != toUpdate.Spec.Version {
+		if release.PortworxVersion != "" && toUpdate.Spec.Version != "" && release.PortworxVersion != toUpdate.Spec.Version {
 			msg := fmt.Sprintf("Version in StorageCluster %s does not match version manifest %s, please edit StorageCluster or px-versions configMap.", toUpdate.Spec.Version, release.PortworxVersion)
 			p.warningEvent(toUpdate, util.FailedComponentReason, msg)
 		} else {

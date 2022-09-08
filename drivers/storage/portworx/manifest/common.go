@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v2"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -68,4 +70,18 @@ func parseVersionManifest(content []byte) (*Version, error) {
 		return nil, ErrReleaseNotFound
 	}
 	return manifest, nil
+}
+
+// ParseVersionConfigMap parses version configmap
+func ParseVersionConfigMap(cm *v1.ConfigMap) (*Version, error) {
+	data, exists := cm.Data[VersionConfigMapKey]
+	if !exists {
+		// If the exact key does not exist, just take the first one
+		// as only one key is expected
+		for _, value := range cm.Data {
+			data = value
+			break
+		}
+	}
+	return parseVersionManifest([]byte(data))
 }
