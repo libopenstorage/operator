@@ -1,5 +1,8 @@
 kind: StorageCluster
 apiVersion: core.libopenstorage.org/v1
+metadata:
+  annotations:
+    portworx.io/pvc-controller: "true"
 spec:
   kvdb:
     internal: true

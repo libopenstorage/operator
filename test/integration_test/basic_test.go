@@ -116,12 +116,6 @@ var testStorageClusterBasicCases = []types.TestCase{
 			cluster, ok := objects[0].(*corev1.StorageCluster)
 			require.True(t, ok)
 			cluster.Name = "upgrade-stc-with-all-components-test"
-			alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret.yaml")
-			require.NoError(t, err)
-
-			logrus.Infof("Creating alert manager secret")
-			err = ci_utils.CreateObjects(alertManagerSecret)
-			require.NoError(t, err)
 			return cluster
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
@@ -346,6 +340,22 @@ func BasicUpgradeStorageCluster(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
+		// Create AlertManager secret, if AlertManager is enabled
+		if cluster.Spec.Monitoring != nil {
+			if cluster.Spec.Monitoring.Prometheus != nil {
+				if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
+					if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+						alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret.yaml")
+						require.NoError(t, err)
+
+						logrus.Infof("Creating alert manager secret")
+						err = ci_utils.CreateObjects(alertManagerSecret)
+						require.NoError(t, err)
+					}
+				}
+			}
+		}
+
 		var lastHopURL string
 		for i, hopURL := range ci_utils.PxUpgradeHopsURLList {
 			// Get versions from URL
@@ -378,12 +388,6 @@ func BasicUpgradeStorageCluster(tc *types.TestCase) func(*testing.T) {
 				require.NoError(t, err)
 			}
 			lastHopURL = hopURL
-		}
-
-		// Delete AlertManager secret, if found
-		err := coreops.Instance().DeleteSecret("alertmanager-portworx", cluster.Namespace)
-		if err != nil && !errors.IsNotFound(err) {
-			require.NoError(t, err)
 		}
 
 		// Delete and validate the deletion
