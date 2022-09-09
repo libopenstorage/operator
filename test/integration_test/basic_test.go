@@ -93,12 +93,40 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestrailCaseIDs: []string{"C50241"},
 		TestSpec: func(t *testing.T) interface{} {
 			return &corev1.StorageCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-storagecluster-test"},
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-stc-test"},
 			}
 		},
 		ShouldSkip: func(tc *types.TestCase) bool {
 			if len(ci_utils.PxUpgradeHopsURLList) == 0 {
 				logrus.Info("--px-upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageCluster test")
+				return true
+			}
+			k8sVersion, _ := k8sutil.GetVersion()
+			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
+			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
+		},
+		TestFunc: BasicUpgradeStorageCluster,
+	},
+	{
+		TestName:        "BasicUpgradeStorageClusterWithAllComponents",
+		TestrailCaseIDs: []string{"C50241"},
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "upgrade-stc-with-all-components-test"
+			alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret.yaml")
+			require.NoError(t, err)
+
+			logrus.Infof("Creating alert manager secret")
+			err = ci_utils.CreateObjects(alertManagerSecret)
+			require.NoError(t, err)
+			return cluster
+		},
+		ShouldSkip: func(tc *types.TestCase) bool {
+			if len(ci_utils.PxUpgradeHopsURLList) == 0 {
+				logrus.Info("--px-upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageClusterWithAllComponents test")
 				return true
 			}
 			k8sVersion, _ := k8sutil.GetVersion()
@@ -350,6 +378,12 @@ func BasicUpgradeStorageCluster(tc *types.TestCase) func(*testing.T) {
 				require.NoError(t, err)
 			}
 			lastHopURL = hopURL
+		}
+
+		// Delete AlertManager secret, if found
+		err := coreops.Instance().DeleteSecret("alertmanager-portworx", cluster.Namespace)
+		if err != nil && !errors.IsNotFound(err) {
+			require.NoError(t, err)
 		}
 
 		// Delete and validate the deletion

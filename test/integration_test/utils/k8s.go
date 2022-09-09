@@ -330,6 +330,7 @@ func decodeSpec(specContents []byte) (runtime.Object, error) {
 		scheme := runtime.NewScheme()
 		apiextensionsv1.AddToScheme(scheme)
 		monitoringv1.AddToScheme(scheme)
+		corev1.AddToScheme(scheme)
 		codecs := serializer.NewCodecFactory(scheme)
 		obj, _, err = codecs.UniversalDeserializer().Decode([]byte(specContents), nil, nil)
 		if err != nil {
