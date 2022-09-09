@@ -240,11 +240,20 @@ components:
 	findEvent := strings.Contains(reflect.ValueOf(<-recorder.Events).String(), "does not match version manifest")
 	require.True(t, findEvent)
 	require.Equal(t, cluster.Status.Version, "")
+	require.Equal(t, cluster.Status.DesiredImages.Stork, "")
 
 	// Image version matches configmap version
 	cluster.Spec.Image = "test/image:3.2.1"
 	driver.SetDefaultsOnStorageCluster(cluster)
 	require.Equal(t, cluster.Status.Version, "3.2.1")
+	require.Equal(t, cluster.Status.DesiredImages.Stork, "stork/image:3.2.1")
+
+	// Image version does not match configmap version, stork image should not be changed.
+	cluster.Spec.Image = "test/image:3.2.9"
+	cluster.Spec.Stork.Image = ""
+	driver.SetDefaultsOnStorageCluster(cluster)
+	require.Equal(t, cluster.Status.Version, "3.2.1")
+	require.Equal(t, cluster.Status.DesiredImages.Stork, "stork/image:3.2.1")
 }
 
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
