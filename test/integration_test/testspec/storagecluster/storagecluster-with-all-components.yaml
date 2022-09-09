@@ -1,0 +1,22 @@
+kind: StorageCluster
+apiVersion: core.libopenstorage.org/v1
+metadata:
+  annotations:
+    portworx.io/pvc-controller: "true"
+spec:
+  kvdb:
+    internal: true
+  stork:
+    enabled: true
+  autopilot:
+    enabled: true
+  monitoring:
+    telemetry:
+      enabled: true
+    prometheus:
+      enabled: true
+      exportMetrics: true
+      alertManager:
+        enabled: true
+  csi:
+    enabled: true

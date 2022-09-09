@@ -796,6 +796,12 @@ func ValidateUninstallStorageCluster(
 		}
 	}
 
+	// Delete AlertManager secret, if found
+	err := coreops.Instance().DeleteSecret("alertmanager-portworx", cluster.Namespace)
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete alertmanager-portworx secret, err: %v", err)
+	}
+
 	return nil
 }
 
