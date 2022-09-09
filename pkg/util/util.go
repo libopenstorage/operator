@@ -33,6 +33,8 @@ const (
 	FailedComponentReason = "FailedComponent"
 	// UpdatePausedReason is added to an event when operator pauses update of the storage cluster.
 	UpdatePausedReason = "UpdatePaused"
+	// UpdateFailedReason is added to an event when update fails.
+	UpdateFailedReason = "UpdateFailed"
 	// ClusterOnlineReason is added to an event when a cluster comes online
 	ClusterOnlineReason = "ClusterOnline"
 	// MigrationPendingReason is added to an event when the migration is in pending state.

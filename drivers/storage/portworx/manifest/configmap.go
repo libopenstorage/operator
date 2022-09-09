@@ -43,14 +43,5 @@ func newConfigMapManifest(
 }
 
 func (m *configMap) Get() (*Version, error) {
-	data, exists := m.cm.Data[VersionConfigMapKey]
-	if !exists {
-		// If the exact key does not exist, just take the first one
-		// as only one key is expected
-		for _, value := range m.cm.Data {
-			data = value
-			break
-		}
-	}
-	return parseVersionManifest([]byte(data))
+	return ParseVersionConfigMap(m.cm)
 }
