@@ -10,9 +10,9 @@ before_install:
 script:
   - |
     echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USER}" --password-stdin
-    if [ "${TRAVIS_BRANCH}" == "px-rel-1.9.1" ]; then
-      export DOCKER_HUB_OPERATOR_TAG=1.9.1-dev
-      export DOCKER_HUB_OPERATOR_TEST_TAG=1.9.1-dev
+    if [ "${TRAVIS_BRANCH}" == "px-rel-1.10.0" ]; then
+      export DOCKER_HUB_OPERATOR_TAG=1.10.0-dev
+      export DOCKER_HUB_OPERATOR_TEST_TAG=1.10.0-dev
     else
       export DOCKER_HUB_OPERATOR_TAG=`git rev-parse --short HEAD`
       export DOCKER_HUB_OPERATOR_TEST_TAG=`git rev-parse --short HEAD`
@@ -21,7 +21,7 @@ script:
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
       make deploy;
       make integration-test-deploy;
-      if [ "${TRAVIS_BRANCH}" == "px-rel-1.9.1" ]; then
+      if [ "${TRAVIS_BRANCH}" == "px-rel-1.10.0" ]; then
         make bundle catalog
       fi
     fi
