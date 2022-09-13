@@ -1956,7 +1956,7 @@ func ValidateTelemetryInstalled(pxImageList map[string]string, cluster *corev1.S
 	if err != nil {
 		return err
 	}
-	if equal, err := util.DeepEqualDeployment(expectedDeployment, deployment); !equal {
+	if equal, err := util.DeepEqualPodTemplate(&expectedDeployment.Spec.Template, &deployment.Spec.Template); !equal {
 		return err
 	}
 
