@@ -413,9 +413,45 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 		if _, err = operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
 			return err
 		}
+
+		defaultCheckReferenceTimeout := 30 * time.Second
+		defaultCheckReferenceInterval := 1 * time.Second
+		if err = checkTelemetrySecretGotOwnerReference(cluster, defaultCheckReferenceTimeout, defaultCheckReferenceInterval); err != nil {
+			return err
+		}
 	}
 
 	return operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+}
+
+func checkTelemetrySecretGotOwnerReference(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		secret, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, false, nil
+			}
+			return nil, true, fmt.Errorf("failed to get secret pure-telemetry-certs")
+		}
+		logrus.Debugf("Found secret %s", secret.Name)
+
+		if len(secret.OwnerReferences) != 0 {
+			ownerRef := metav1.NewControllerRef(cluster, corev1.SchemeGroupVersion.WithKind("StorageCluster"))
+			for _, reference := range secret.OwnerReferences {
+				if reference.UID == ownerRef.UID {
+					logrus.Debugf("Found ownerReference for StorageCluster %s in secret %s", ownerRef.Name, secret.Name)
+					return nil, false, nil
+				}
+			}
+		}
+		return nil, true, fmt.Errorf("waiting for ownerReference to be set to StorageCluster %s in secret %s", cluster.Name, secret.Name)
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // FindAndCopyVsphereSecretToCustomNamespace attempt to find and copy PX vSphere secret to a given namespace
