@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -203,65 +202,11 @@ func TestGetStorkEnvMap(t *testing.T) {
 	require.Equal(t, "true", envVars[pxutil.EnvKeyPortworxEnableTLS].Value)
 }
 
-func TestSetDefaultsOnStorageClusterWithVersionConfigMap(t *testing.T) {
-	namespace := "kube-test"
-	versionsConfigMap := &v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      manifest.DefaultConfigMapName,
-			Namespace: namespace,
-		},
-		Data: map[string]string{
-			manifest.VersionConfigMapKey: `
-version: 3.2.1
-components:
-  stork: stork/image:3.2.1
-`,
-		},
-	}
-
-	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	driver := portworx{}
-	recorder := record.NewFakeRecorder(100)
-	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
-	require.NoError(t, err)
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: namespace,
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "test/image:2.10.0",
-		},
-	}
-
-	// Image version does not match configmap version
-	driver.SetDefaultsOnStorageCluster(cluster)
-	findEvent := strings.Contains(reflect.ValueOf(<-recorder.Events).String(), "does not match version manifest")
-	require.True(t, findEvent)
-	require.Equal(t, cluster.Status.Version, "")
-	require.Equal(t, cluster.Status.DesiredImages.Stork, "")
-
-	// Image version matches configmap version
-	cluster.Spec.Image = "test/image:3.2.1"
-	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, cluster.Status.Version, "3.2.1")
-	require.Equal(t, cluster.Status.DesiredImages.Stork, "stork/image:3.2.1")
-
-	// Image version does not match configmap version, stork image should not be changed.
-	cluster.Spec.Image = "test/image:3.2.9"
-	cluster.Spec.Stork.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
-	require.Equal(t, cluster.Status.Version, "3.2.1")
-	require.Equal(t, cluster.Status.DesiredImages.Stork, "stork/image:3.2.1")
-}
-
 func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
-	recorder := record.NewFakeRecorder(100)
-	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -7728,42 +7673,22 @@ func manifestSetup() {
 
 type fakeManifest struct {
 	k8sVersion *version.Version
-	client     client.Client
 }
 
-func (m *fakeManifest) Init(client client.Client, _ record.EventRecorder, k8sVersion *version.Version) {
+func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion *version.Version) {
 	m.k8sVersion = k8sVersion
-	m.client = client
 }
 
 func (m *fakeManifest) GetVersions(
-	cluster *corev1.StorageCluster,
+	_ *corev1.StorageCluster,
 	force bool,
 ) *manifest.Version {
 	compVersion := compVersion()
 	if force {
 		compVersion = newCompVersion()
 	}
-
-	if m.client != nil {
-		cm := &v1.ConfigMap{}
-		if err := testutil.Get(m.client, cm, manifest.DefaultConfigMapName, cluster.Namespace); err == nil {
-			v, err := manifest.ParseVersionConfigMap(cm)
-			if err != nil {
-				logrus.WithError(err).Error("failed to parse version configmap")
-				return nil
-			}
-
-			return v
-		}
-	}
-
-	pxVersion := pxutil.GetImageTag(cluster.Spec.Image)
-	if pxVersion == "" {
-		pxVersion = "2.10.0"
-	}
 	version := &manifest.Version{
-		PortworxVersion: pxVersion,
+		PortworxVersion: "2.10.0",
 		Components: manifest.Release{
 			Stork:                      "openstorage/stork:" + compVersion,
 			Autopilot:                  "portworx/autopilot:" + compVersion,
