@@ -366,6 +366,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
+	if err := p.validateCleanup(cluster); err != nil {
+		return err
+	}
+
 	if err := p.validateEssentials(); err != nil {
 		return err
 	}
@@ -387,6 +391,25 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			}
+		}
+	}
+	return nil
+}
+
+// If px was uninstalled and reinstalled, validate if cleanup was done properly.
+func (p portworx) validateCleanup(cluster *corev1.StorageCluster) error {
+	cmList := &v1.ConfigMapList{}
+	// list across all namespaces.
+	if err := p.k8sClient.List(context.TODO(), cmList, &client.ListOptions{}); err != nil {
+		return err
+	}
+
+	etcdConfigMapName := pxutil.GetInternalEtcdConfigMapName(cluster)
+	cloudDriveConfigMapName := pxutil.GetCloudDriveConfigMapName(cluster)
+	for _, cm := range cmList.Items {
+		if (strings.HasPrefix(cm.Name, pxutil.InternalEtcdConfigMapPrefix) && cm.Name != etcdConfigMapName) ||
+			(strings.HasPrefix(cm.Name, pxutil.CloudDriveConfigMapPrefix) && cm.Name != cloudDriveConfigMapName) {
+			return fmt.Errorf("unexpected configmap %s/%s found, due to a previous Portworx cluster installation. Please ensure that previous Portworx cluster is completely uninstalled with UninstallAndWipe delete strategy before re-installing with a new name", cm.Namespace, cm.Name)
 		}
 	}
 	return nil
