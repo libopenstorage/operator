@@ -110,8 +110,8 @@ func (p *portworx) updateStorageNodes(
 	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
 	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
 		clusterID := pxutil.GetClusterID(cluster)
-		strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(clusterID, ""))
-		cmName := fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName)
+		strippedClusterName := strings.ToLower(pxutil.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
+		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
 
 		cm := &v1.ConfigMap{}
 		err = p.k8sClient.Get(context.TODO(), types.NamespacedName{

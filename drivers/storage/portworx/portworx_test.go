@@ -6017,6 +6017,92 @@ func testDeleteEssentialSecret(t *testing.T, wipe bool) {
 	}
 }
 
+func TestReinstall(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallStorageClusterStrategyType,
+			},
+		},
+	}
+
+	wiperDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxNodeWiperDaemonSetName,
+			Namespace: cluster.Namespace,
+			UID:       types.UID("wiper-ds-uid"),
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 1,
+		},
+	}
+	wiperPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: wiperDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{{Ready: true}},
+		},
+	}
+	etcdConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+	cloudDriveConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
+			Namespace: bootstrapCloudDriveNamespace,
+		},
+	}
+
+	component.DeregisterAllComponents()
+	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+
+	configMaps := &v1.ConfigMapList{}
+	err := testutil.List(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Len(t, configMaps.Items, 2)
+
+	// Uninstall without wipe
+	condition, err := driver.DeleteStorage(cluster)
+	require.NoError(t, err)
+
+	// Check condition
+	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
+	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
+	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+
+	// Check config maps are retained
+	configMaps = &v1.ConfigMapList{}
+	err = testutil.List(k8sClient, configMaps)
+	require.NoError(t, err)
+	require.Len(t, configMaps.Items, 2)
+
+	// Reinstall with different name should be blocked.
+	origName := cluster.Name
+	cluster.Name = origName + "aaa"
+	err = driver.PreInstall(cluster)
+	require.NotNil(t, err)
+
+	// Reinstall with same name should work.
+	cluster.Name = origName
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+}
+
 func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing.T) {
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6054,13 +6140,13 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	}
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalEtcdConfigMapPrefix + "pxcluster",
+			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cloudDriveConfigMapPrefix + "pxcluster",
+			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
@@ -6137,13 +6223,13 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 	}
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalEtcdConfigMapPrefix + strippedClusterName,
+			Name:      pxutil.InternalEtcdConfigMapPrefix + strippedClusterName,
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cloudDriveConfigMapPrefix + strippedClusterName,
+			Name:      pxutil.CloudDriveConfigMapPrefix + strippedClusterName,
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
@@ -6154,9 +6240,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
-	driver := portworx{
-		k8sClient: k8sClient,
-	}
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	recorder := record.NewFakeRecorder(1)
+	driver := portworx{}
+	driver.Init(k8sClient, runtime.NewScheme(), recorder)
 
 	configMaps := &v1.ConfigMapList{}
 	err := testutil.List(k8sClient, configMaps)

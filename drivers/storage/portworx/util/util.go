@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -202,6 +203,11 @@ const (
 	pxAnnotationPrefix   = "portworx.io"
 	labelKeyName         = "name"
 	defaultSDKPort       = 9020
+
+	// InternalEtcdConfigMapPrefix is prefix of the internal kvdb configmap.
+	InternalEtcdConfigMapPrefix = "px-bootstrap-"
+	// CloudDriveConfigMapPrefix is prefix of the cloud drive configmap.
+	CloudDriveConfigMapPrefix = "px-cloud-drive-"
 )
 
 var (
@@ -211,7 +217,31 @@ var (
 
 	// MinimumSupportedK8sVersion minimum k8s version PX supports
 	MinimumSupportedK8sVersion, _ = version.NewVersion("v1.12.0")
+
+	// MinimumPxVersionCCM minimum PX version to install ccm
+	MinimumPxVersionCCM, _ = version.NewVersion("2.8")
+	// MinimumPxVersionCCMGO minimum PX version to install ccm-go
+	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
+	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
+	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
+
+	// ConfigMapNameRegex regex of configMap.
+	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
 )
+
+func getStrippedClusterName(cluster *corev1.StorageCluster) string {
+	return strings.ToLower(ConfigMapNameRegex.ReplaceAllString(GetClusterID(cluster), ""))
+}
+
+// GetInternalEtcdConfigMapName gets name of internal etcd configMap.
+func GetInternalEtcdConfigMapName(cluster *corev1.StorageCluster) string {
+	return fmt.Sprintf("%s%s", InternalEtcdConfigMapPrefix, getStrippedClusterName(cluster))
+}
+
+// GetCloudDriveConfigMapName gets name of cloud drive configMap.
+func GetCloudDriveConfigMapName(cluster *corev1.StorageCluster) string {
+	return fmt.Sprintf("%s%s", CloudDriveConfigMapPrefix, getStrippedClusterName(cluster))
+}
 
 // IsPortworxEnabled returns true if portworx is not explicitly disabled using the annotation
 func IsPortworxEnabled(cluster *corev1.StorageCluster) bool {
