@@ -407,8 +407,6 @@ gopkg.in/square/go-jose.v2/json
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 gopkg.in/yaml.v3
-# honnef.co/go/tools v0.2.1
-## explicit
 # k8s.io/api v0.21.4 => k8s.io/api v0.21.4
 ## explicit
 k8s.io/api/admission/v1

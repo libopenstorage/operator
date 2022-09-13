@@ -409,7 +409,7 @@ func (p portworx) validateCleanup(cluster *corev1.StorageCluster) error {
 	for _, cm := range cmList.Items {
 		if (strings.HasPrefix(cm.Name, pxutil.InternalEtcdConfigMapPrefix) && cm.Name != etcdConfigMapName) ||
 			(strings.HasPrefix(cm.Name, pxutil.CloudDriveConfigMapPrefix) && cm.Name != cloudDriveConfigMapName) {
-			return fmt.Errorf("ConfigMap %s is unexpected, expected configMap names are %s and %s, please make sure Portworx is uninstalled with UninstallAndWipe delete strategy before reinstalling with a new name", cm.Name, etcdConfigMapName, cloudDriveConfigMapName)
+			return fmt.Errorf("unexpected configmap %s/%s found, due to a previous Portworx cluster installation. Please ensure that previous Portworx cluster is completely uninstalled with UninstallAndWipe delete strategy before re-installing with a new name", cm.Namespace, cm.Name)
 		}
 	}
 	return nil
