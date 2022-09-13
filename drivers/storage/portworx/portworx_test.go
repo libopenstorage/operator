@@ -6368,13 +6368,13 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	}
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalEtcdConfigMapPrefix + "pxcluster",
+			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cloudDriveConfigMapPrefix + "pxcluster",
+			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
@@ -6451,13 +6451,13 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 	}
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalEtcdConfigMapPrefix + strippedClusterName,
+			Name:      pxutil.InternalEtcdConfigMapPrefix + strippedClusterName,
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cloudDriveConfigMapPrefix + strippedClusterName,
+			Name:      pxutil.CloudDriveConfigMapPrefix + strippedClusterName,
 			Namespace: bootstrapCloudDriveNamespace,
 		},
 	}

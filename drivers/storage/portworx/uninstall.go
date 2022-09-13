@@ -4,17 +4,9 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/consul"
 	e2 "github.com/portworx/kvdb/etcd/v2"
@@ -28,12 +20,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 var (
-	configMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
-	getKVDBVersion     = kvdb.Version
-	newKVDB            = kvdb.New
+	getKVDBVersion = kvdb.Version
+	newKVDB        = kvdb.New
 )
 
 const (
@@ -66,8 +65,6 @@ const (
 	pxNodeWiperClusterRoleBindingName = "px-node-wiper"
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
 	pxKvdbPrefix                      = "pwx/"
-	internalEtcdConfigMapPrefix       = "px-bootstrap-"
-	cloudDriveConfigMapPrefix         = "px-cloud-drive-"
 	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
 	bootstrapCloudDriveNamespace      = "kube-system"
 )
@@ -135,12 +132,9 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		return err
 	}
 
-	clusterID := pxutil.GetClusterID(u.cluster)
-	strippedClusterName := strings.ToLower(configMapNameRegex.ReplaceAllString(clusterID, ""))
-
 	configMaps := []string{
-		fmt.Sprintf("%s%s", internalEtcdConfigMapPrefix, strippedClusterName),
-		fmt.Sprintf("%s%s", cloudDriveConfigMapPrefix, strippedClusterName),
+		pxutil.GetInternalEtcdConfigMapName(u.cluster),
+		pxutil.GetCloudDriveConfigMapName(u.cluster),
 		pureStorageCloudDriveConfigMap,
 	}
 	for _, cm := range configMaps {
@@ -165,7 +159,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		return err
 	}
 
-	return kv.DeleteTree(clusterID)
+	return kv.DeleteTree(pxutil.GetClusterID(u.cluster))
 }
 
 func (u *uninstallPortworx) RunNodeWiper(
