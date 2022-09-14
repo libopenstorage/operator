@@ -104,10 +104,6 @@ const (
 
 	pxAnnotationPrefix = "portworx.io"
 
-	masterLabelKey           = "node-role.kubernetes.io/master"
-	controlplaneLabelKey     = "node-role.kubernetes.io/controlplane"
-	controlDashPlaneLabelKey = "node-role.kubernetes.io/control-plane"
-
 	defaultTelemetrySecretValidationTimeout  = 30 * time.Second
 	defaultTelemetrySecretValidationInterval = time.Second
 )
@@ -1104,7 +1100,7 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	for _, node := range nodeList.Items {
-		if isNodeMaster(node) && !IsK3sCluster() {
+		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() {
 			continue
 		}
 
@@ -1114,17 +1110,6 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 	}
 
 	return nodeNameListWithPxPods, nil
-}
-
-func isNodeMaster(node v1.Node) bool {
-	// for newer k8s these fields exist but they are empty
-	_, hasMasterLabel := node.Labels[masterLabelKey]
-	_, hasControlPlaneLabel := node.Labels[controlplaneLabelKey]
-	_, hasControlDashPlaneLabel := node.Labels[controlDashPlaneLabelKey]
-	if hasMasterLabel || hasControlPlaneLabel || hasControlDashPlaneLabel {
-		return true
-	}
-	return false
 }
 
 // GetFullVersion returns the full kubernetes server version
