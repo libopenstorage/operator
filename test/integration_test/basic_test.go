@@ -45,18 +45,16 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicInstall,
 	},
 	{
-		TestName:        "InstallInCustomNamespaceWithShiftedPort",
+		TestName:        "InstallInCustomNamespaceWithShiftedPortAndAllComponents",
 		TestrailCaseIDs: []string{"C52411", "C52430", "C53572"},
 		TestSpec: func(t *testing.T) interface{} {
-			cluster := &corev1.StorageCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "custom-ns-shifted-port",
-					Namespace: "custom-namespace",
-				},
-				Spec: corev1.StorageClusterSpec{
-					StartPort: func(val uint32) *uint32 { return &val }(17001),
-				},
-			}
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "custom-ns-shifted-port-all-components"
+			cluster.Namespace = "custom-namespace"
+			cluster.Spec.StartPort = func(val uint32) *uint32 { return &val }(17001)
 			return cluster
 		},
 		TestFunc: BasicInstallInCustomNamespace,
@@ -291,6 +289,22 @@ func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
 					logrus.Warnf("Namespace %s already exists", cluster.Namespace)
 				} else {
 					require.NoError(t, err)
+				}
+			}
+		}
+
+		// Create AlertManager secret, if AlertManager is enabled
+		if cluster.Spec.Monitoring != nil {
+			if cluster.Spec.Monitoring.Prometheus != nil {
+				if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
+					if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
+						alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret-custom-namespace.yaml")
+						require.NoError(t, err)
+
+						logrus.Infof("Creating alert manager secret in custom-namespace namespace")
+						err = ci_utils.CreateObjects(alertManagerSecret)
+						require.NoError(t, err)
+					}
 				}
 			}
 		}
