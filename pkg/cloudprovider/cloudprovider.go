@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	failureDomainZoneKey   = "failure-domain.beta.kubernetes.io/zone"
-	failureDomainRegionKey = "failure-domain.beta.kubernetes.io/region"
+	failureDomainZoneKey   = v1.LabelTopologyZone
+	failureDomainRegionKey = v1.LabelTopologyRegion
 )
 
 var (
