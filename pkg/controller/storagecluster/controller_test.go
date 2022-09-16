@@ -1004,23 +1004,13 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
 	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
-	for zones := 1; zones < 4; zones++ {
-		cluster.Spec.Image = "oci-monitor:" + origVersion
-		cluster.Spec.Version = origVersion
-		cluster.Status.Version = "2.10.1"
-		cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
-		k8sClient, _ = getK8sClientWithNodesZones(t, totalNodes, uint32(zones), cluster)
+	// storage only
+	testStoragelessNodesUpgrade(t, 24, 0)
+	testStoragelessNodesUpgrade(t, 12, 0, 0)
+	testStoragelessNodesUpgrade(t, 8, 0, 0, 0)
+	testStoragelessNodesUpgrade(t, 6, 0, 0, 0, 0)
 
-		controller = Controller{
-			client: k8sClient,
-			Driver: driver,
-		}
-
-		err = controller.setStorageClusterDefaults(cluster)
-		require.NoError(t, err)
-		require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-		require.Equal(t, totalNodes/uint32(zones), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-	}
+	// storageless
 	testStoragelessNodesUpgrade(t, 14, 10)
 	testStoragelessNodesUpgrade(t, 23, 1)
 	testStoragelessNodesUpgrade(t, 7, 5, 5)
