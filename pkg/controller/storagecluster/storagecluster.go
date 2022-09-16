@@ -1185,10 +1185,8 @@ func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
 }
 
 func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool {
-	logrus.Infof("MYD %v", *toUpdate)
 	pxEnabled := storagePodsEnabled(toUpdate)
 	newVersion := pxutil.GetImageTag(strings.TrimSpace(toUpdate.Spec.Image))
-	logrus.Infof("MYD new:%v pxEnabled:%v", newVersion, pxEnabled)
 	return pxEnabled &&
 		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
 }
