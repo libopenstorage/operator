@@ -1011,6 +1011,7 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
 	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
+	cluster.Annotations = map[string]string{}
 	cluster.Annotations[constants.AnnotationDisableStorage] = strconv.FormatBool(true)
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
