@@ -1055,7 +1055,7 @@ func testStoragelessNodesUpgrade(t *testing.T, expectedValue uint32, storageless
 	}
 	driver := testutil.MockDriver(mockCtrl)
 
-	total_nodes := uint32(24)
+	totalNodes := uint32(24)
 	zones := uint32(len(storageless))
 	origVersion := "2.10.0"
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
@@ -1063,7 +1063,7 @@ func testStoragelessNodesUpgrade(t *testing.T, expectedValue uint32, storageless
 	cluster.Spec.Version = origVersion
 	cluster.Status.Version = "2.10.1"
 	cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
-	k8sClient, expected := getK8sClientWithNodesZones(t, total_nodes, zones, cluster, storageless...)
+	k8sClient, expected := getK8sClientWithNodesZones(t, totalNodes, zones, cluster, storageless...)
 
 	controller := Controller{
 		client: k8sClient,
