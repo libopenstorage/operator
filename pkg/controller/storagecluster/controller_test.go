@@ -979,10 +979,10 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 			Phase: string(corev1.NodeInitStatus),
 		},
 	}
-	total_nodes := uint32(12)
+	totalNodes := uint32(12)
 	driver := testutil.MockDriver(mockCtrl)
 	/* 1 zone */
-	k8sClient, expected := getK8sClientWithNodesZones(t, total_nodes, 1, cluster)
+	k8sClient, expected := getK8sClientWithNodesZones(t, totalNodes, 1, cluster)
 
 	controller := Controller{
 		client: k8sClient,
@@ -1009,7 +1009,7 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 		cluster.Spec.Version = origVersion
 		cluster.Status.Version = "2.10.1"
 		cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
-		k8sClient, _ = getK8sClientWithNodesZones(t, total_nodes, uint32(zones), cluster)
+		k8sClient, _ = getK8sClientWithNodesZones(t, totalNodes, uint32(zones), cluster)
 
 		controller = Controller{
 			client: k8sClient,
@@ -1019,7 +1019,7 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 		err = controller.setStorageClusterDefaults(cluster)
 		require.NoError(t, err)
 		require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-		require.Equal(t, total_nodes/uint32(zones), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+		require.Equal(t, totalNodes/uint32(zones), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 	}
 	testStoragelessNodesUpgrade(t, 14, 10)
 	testStoragelessNodesUpgrade(t, 23, 1)
