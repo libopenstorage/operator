@@ -34,6 +34,8 @@ spec:
             name: proxy-config
           args:
           - "envoy"
+          - "--base-id"
+          - "1"
           - "--config-path"
           - "/config/envoy-config-register.yaml"
       volumes:

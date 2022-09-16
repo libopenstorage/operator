@@ -13,6 +13,7 @@ spec:
       labels:
         name: px-telemetry-phonehome
     spec:
+      hostNetwork: true
       containers:
         - name: log-upload-service
           image: purestorage/log-upload:1.0.0
@@ -34,11 +35,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-          ports:
-            - name: loguploader
-              containerPort: 9090
-              hostPort: 9090
-              protocol: TCP
           imagePullPolicy: Always
         - name: envoy
           image: purestorage/telemetry-envoy:1.0.0
@@ -56,13 +52,10 @@ spec:
             name: pure-telemetry-certs
           args:
           - "envoy"
+          - "--base-id"
+          - "2"
           - "--config-path"
           - "/config/envoy-config-rest.yaml"
-          ports:
-            - name: envoy
-              containerPort: 12002
-              hostPort: 12002
-              protocol: TCP
       initContainers:
         - name: init-cont
           image: purestorage/telemetry-envoy:1.0.0
