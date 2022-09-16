@@ -861,23 +861,8 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 		container := &daemonset.Spec.Template.Spec.Containers[i]
 		if container.Name == containerNameLogUploader {
 			container.Image = logUploaderImage
-			for j := 0; j < len(container.Ports); j++ {
-				port := &container.Ports[j]
-				if port.Name == portNameLogUploaderContainer {
-					port.HostPort = int32(getCCMListeningPort(cluster))
-					port.ContainerPort = int32(getCCMListeningPort(cluster))
-				}
-			}
 		} else if container.Name == containerNameTelemetryProxy {
 			container.Image = proxyImage
-			for j := 0; j < len(container.Ports); j++ {
-				port := &container.Ports[j]
-				cloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
-				if port.Name == portNameEnvoy {
-					port.HostPort = int32(cloudSupportPort)
-					port.ContainerPort = int32(cloudSupportPort)
-				}
-			}
 		}
 	}
 	for i := 0; i < len(daemonset.Spec.Template.Spec.InitContainers); i++ {
