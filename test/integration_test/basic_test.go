@@ -298,11 +298,15 @@ func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
 			if cluster.Spec.Monitoring.Prometheus != nil {
 				if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
 					if cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled {
-						alertManagerSecret, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret-custom-namespace.yaml")
+						objects, err := ci_utils.ParseSpecs("monitoring/alertmanager-secret.yaml")
 						require.NoError(t, err)
 
-						logrus.Infof("Creating alert manager secret in custom-namespace namespace")
-						err = ci_utils.CreateObjects(alertManagerSecret)
+						secret, ok := objects[0].(*v1.Secret)
+						require.True(t, ok)
+
+						secret.Namespace = cluster.Namespace
+						logrus.Infof("Creating alertManager secret in %s namespace", secret.Namespace)
+						_, err = coreops.Instance().CreateSecret(secret)
 						require.NoError(t, err)
 					}
 				}
