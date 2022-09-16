@@ -80,8 +80,6 @@ const (
 	deprecatedCRDBasePath               = "/crds/deprecated"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
-	nodeTypeLabelKey                    = "portworx.io/node-type"
-	storagelessLabelValue               = "storageless"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -1292,15 +1290,14 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			if c.isPxImageBeingUpdated(toUpdate) {
 				// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
 				maxStorageNodesPerZone, err = c.getCurrentMaxStorageNodesPerZone(cluster, nodeList, cloudProvider)
+				if err != nil {
+					logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
+				}
 			}
 		}
-		if maxStorageNodesPerZone != 0 {
-			if err == nil {
-				toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
-				logrus.Infof("setting max_storage_nodes_per_zone=%v", maxStorageNodesPerZone)
-			} else {
-				logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
-			}
+		if err == nil && maxStorageNodesPerZone != 0 {
+			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
+			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
 		}
 	}
 
