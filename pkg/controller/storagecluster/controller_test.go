@@ -1007,10 +1007,15 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, errors.NewBadRequest("error")).AnyTimes()
 
 	err = controller.setStorageClusterDefaults(cluster)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
 	cluster.Annotations[constants.AnnotationDisableStorage] = strconv.FormatBool(true)
 	err = controller.setStorageClusterDefaults(cluster)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 	// storage only
 	testStoragelessNodesUpgrade(t, 24, 0)
