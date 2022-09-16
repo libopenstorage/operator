@@ -935,7 +935,7 @@ func getK8sClientWithNodesZones(
 	if len(storagelessCount) != 0 {
 		require.Equal(t, uint32(len(storagelessCount)), totalZones)
 	} else {
-		storagelessCount = make([]uint32, totalZones, totalZones)
+		storagelessCount = make([]uint32, totalZones)
 	}
 	expected := []*storageapi.StorageNode{}
 	k8sClient := testutil.FakeK8sClient(cluster)
