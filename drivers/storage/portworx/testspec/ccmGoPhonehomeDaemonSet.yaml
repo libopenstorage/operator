@@ -43,6 +43,8 @@ spec:
         image: docker.io/purestorage/log-upload:1.2.3
         imagePullPolicy: Always
         name: log-upload-service
+        securityContext:
+          privileged: true
         ports:
         - containerPort: 10090
           hostPort: 10090
