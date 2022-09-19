@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -117,13 +117,13 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	// non-prod clusters and there is no point in blocking the evictions.
 	if storageNodesCount > 2 {
 		minAvailable := intstr.FromInt(storageNodesCount - 1)
-		pdb := &policyv1beta1.PodDisruptionBudget{
+		pdb := &policyv1.PodDisruptionBudget{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            StoragePodDisruptionBudgetName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
-			Spec: policyv1beta1.PodDisruptionBudgetSpec{
+			Spec: policyv1.PodDisruptionBudgetSpec{
 				MinAvailable: &minAvailable,
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -149,13 +149,13 @@ func (c *disruptionBudget) createKVDBPodDisruptionBudget(
 
 	clusterSize := kvdbClusterSize(cluster)
 	minAvailable := intstr.FromInt(clusterSize - 1)
-	pdb := &policyv1beta1.PodDisruptionBudget{
+	pdb := &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            KVDBPodDisruptionBudgetName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
-		Spec: policyv1beta1.PodDisruptionBudgetSpec{
+		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable: &minAvailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{

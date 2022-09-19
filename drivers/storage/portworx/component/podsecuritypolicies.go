@@ -8,6 +8,8 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +24,8 @@ const (
 )
 
 type podsecuritypolicies struct {
-	k8sClient client.Client
+	k8sClient  client.Client
+	k8sVersion *version.Version
 }
 
 func (p *podsecuritypolicies) Name() string {
@@ -35,6 +38,7 @@ func (p *podsecuritypolicies) Priority() int32 {
 
 func (p *podsecuritypolicies) Initialize(k8sClient client.Client, k8sVersion version.Version, scheme *runtime.Scheme, recorder record.EventRecorder) {
 	p.k8sClient = k8sClient
+	p.k8sVersion = &k8sVersion
 }
 
 func (p *podsecuritypolicies) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -42,7 +46,7 @@ func (p *podsecuritypolicies) IsPausedForMigration(cluster *corev1.StorageCluste
 }
 
 func (p *podsecuritypolicies) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.PodSecurityPolicyEnabled(cluster)
+	return pxutil.PodSecurityPolicyEnabled(cluster) && p.k8sVersion.LessThan(k8sutil.K8sVer1_25)
 }
 
 func (p *podsecuritypolicies) Reconcile(cluster *corev1.StorageCluster) error {

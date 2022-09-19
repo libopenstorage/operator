@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -1783,12 +1783,12 @@ func TestDeletePrometheusRule(t *testing.T) {
 func TestPodDisruptionBudgetChangeSpec(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	minAvailable := intstr.FromInt(1)
-	expectedPDB := &policyv1beta1.PodDisruptionBudget{
+	expectedPDB := &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test-ns",
 		},
-		Spec: policyv1beta1.PodDisruptionBudgetSpec{
+		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable: &minAvailable,
 		},
 	}
@@ -1796,7 +1796,7 @@ func TestPodDisruptionBudgetChangeSpec(t *testing.T) {
 	err := CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
 	require.NoError(t, err)
 
-	actualPDB := &policyv1beta1.PodDisruptionBudget{}
+	actualPDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, 1, actualPDB.Spec.MinAvailable.IntValue())
@@ -1808,7 +1808,7 @@ func TestPodDisruptionBudgetChangeSpec(t *testing.T) {
 	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
 	require.NoError(t, err)
 
-	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	actualPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
 	require.NoError(t, err)
 	require.Equal(t, 2, actualPDB.Spec.MinAvailable.IntValue())
@@ -1818,7 +1818,7 @@ func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 
 	firstOwner := metav1.OwnerReference{UID: "first-owner"}
-	expectedPDB := &policyv1beta1.PodDisruptionBudget{
+	expectedPDB := &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test",
 			Namespace:       "test-ns",
@@ -1829,7 +1829,7 @@ func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
 	err := CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, nil)
 	require.NoError(t, err)
 
-	actualPDB := &policyv1beta1.PodDisruptionBudget{}
+	actualPDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPDB.OwnerReferences)
@@ -1838,7 +1838,7 @@ func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
 	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, &firstOwner)
 	require.NoError(t, err)
 
-	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	actualPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{firstOwner}, actualPDB.OwnerReferences)
@@ -1850,7 +1850,7 @@ func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
 	err = CreateOrUpdatePodDisruptionBudget(k8sClient, expectedPDB, &secondOwner)
 	require.NoError(t, err)
 
-	actualPDB = &policyv1beta1.PodDisruptionBudget{}
+	actualPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, actualPDB, "test", "test-ns")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []metav1.OwnerReference{secondOwner, firstOwner}, actualPDB.OwnerReferences)
@@ -1859,10 +1859,10 @@ func TestPodDisruptionBudgetWithOwnerReferences(t *testing.T) {
 func TestDeletePodDisruptionBudget(t *testing.T) {
 	name := "test"
 	namespace := "test-ns"
-	expected := &policyv1beta1.PodDisruptionBudget{
+	expected := &policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodDisruptionBudget",
-			APIVersion: "policy/v1beta1",
+			APIVersion: "policy/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -1875,7 +1875,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	err := DeletePodDisruptionBudget(k8sClient, "not-present-pdb", namespace)
 	require.NoError(t, err)
 
-	pdb := &policyv1beta1.PodDisruptionBudget{}
+	pdb := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, pdb)
@@ -1885,7 +1885,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	err = DeletePodDisruptionBudget(k8sClient, name, namespace, metav1.OwnerReference{UID: "foo"})
 	require.NoError(t, err)
 
-	pdb = &policyv1beta1.PodDisruptionBudget{}
+	pdb = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, pdb)
@@ -1894,7 +1894,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	err = DeletePodDisruptionBudget(k8sClient, name, namespace)
 	require.NoError(t, err)
 
-	pdb = &policyv1beta1.PodDisruptionBudget{}
+	pdb = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 
@@ -1908,7 +1908,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	err = DeletePodDisruptionBudget(k8sClient, name, namespace)
 	require.NoError(t, err)
 
-	pdb = &policyv1beta1.PodDisruptionBudget{}
+	pdb = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.NoError(t, err)
 	require.Equal(t, expected, pdb)
@@ -1918,7 +1918,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	err = DeletePodDisruptionBudget(k8sClient, name, namespace, metav1.OwnerReference{UID: "beta"})
 	require.NoError(t, err)
 
-	pdb = &policyv1beta1.PodDisruptionBudget{}
+	pdb = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.NoError(t, err)
 	require.Len(t, pdb.OwnerReferences, 2)
@@ -1933,7 +1933,7 @@ func TestDeletePodDisruptionBudget(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	pdb = &policyv1beta1.PodDisruptionBudget{}
+	pdb = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, pdb, name, namespace)
 	require.True(t, errors.IsNotFound(err))
 }

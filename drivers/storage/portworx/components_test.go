@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -11314,7 +11315,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList := &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11325,7 +11326,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11347,7 +11348,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	storagePDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
@@ -11363,7 +11364,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -11386,7 +11387,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -11506,7 +11507,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	storagePDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
@@ -11568,7 +11569,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList := &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11584,7 +11585,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11598,7 +11599,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11612,7 +11613,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11626,7 +11627,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 1)
@@ -11704,7 +11705,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList := &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11715,7 +11716,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11726,7 +11727,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 2)
@@ -11793,7 +11794,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup %v. failed to get endpoint", v1.EventTypeWarning,
 			util.FailedComponentReason, component.DisruptionBudgetComponentName))
 
-	pdbList := &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList := &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11814,7 +11815,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup %v. failed to get portworx apps secret",
 			v1.EventTypeWarning, util.FailedComponentReason, component.DisruptionBudgetComponentName))
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11833,7 +11834,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 		fmt.Sprintf("%v %v Failed to setup %v. failed to enumerate nodes",
 			v1.EventTypeWarning, util.FailedComponentReason, component.DisruptionBudgetComponentName))
 
-	pdbList = &policyv1beta1.PodDisruptionBudgetList{}
+	pdbList = &policyv1.PodDisruptionBudgetList{}
 	err = testutil.List(k8sClient, pdbList)
 	require.NoError(t, err)
 	require.Empty(t, pdbList.Items)
@@ -11908,11 +11909,11 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB := &policyv1beta1.PodDisruptionBudget{}
+	storagePDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	kvdbPDB := &policyv1beta1.PodDisruptionBudget{}
+	kvdbPDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -11922,11 +11923,11 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	kvdbPDB = &policyv1beta1.PodDisruptionBudget{}
+	kvdbPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -11935,11 +11936,11 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	storagePDB = &policyv1beta1.PodDisruptionBudget{}
+	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	kvdbPDB = &policyv1beta1.PodDisruptionBudget{}
+	kvdbPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
