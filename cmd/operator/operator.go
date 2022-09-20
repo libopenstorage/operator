@@ -260,6 +260,10 @@ func run(c *cli.Context) {
 func getObjects(objectKinds string) []client.Object {
 	var objs []client.Object
 
+	if objectKinds == "" {
+		return objs
+	}
+
 	arr := strings.Split(objectKinds, ",")
 	for _, str := range arr {
 		switch str {
