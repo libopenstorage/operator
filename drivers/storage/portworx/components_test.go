@@ -13649,6 +13649,95 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 }
 
+func TestSetTelemetryDefaults(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.7.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "purestorage/ccm-go:1.2.3",
+				},
+			},
+		},
+	}
+
+	// TestCase: telemetry should be disabled if PX is lower than 2.8
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+
+	// TestCase: telemetry should not be enabled by default if CCM Go is not supported
+	cluster.Spec.Image = "portworx/oci-monitor:2.11.0"
+	cluster.Spec.Monitoring = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Monitoring)
+
+	// TestCase: telemetry should not be enabled by default if cluster UUID is not ready
+	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Monitoring)
+
+	// TestCase: telemetry should not be enabled by default if proxy is configured
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "test-proxy",
+	}}
+	cluster.Status.ClusterUID = "test-uuid"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Monitoring)
+
+	// TestCase: telemetry should not be enabled by default if it's disabled
+	cluster.Spec.Env = nil
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: false,
+		},
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should not be enabled by default if prod register endpoint is unreachable
+	setupEtcHosts(t, "1.2.3.4", "register.cloud-support.purestorage.com")
+	cluster.Spec.Monitoring = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Monitoring)
+	restoreEtcHosts(t)
+
+	// TestCase: telemetry should be enabled by default if staging register endpoint is reachable
+	cluster.Spec.Env = nil
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationTelemetryArcusLocation: "internal",
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+}
+
 func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
