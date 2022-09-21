@@ -877,9 +877,8 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		return err
 	}
 
-	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
-		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
-		toUpdate.Spec.Monitoring.Telemetry.Image = ""
+	if err := setTelemetryDefaults(toUpdate, t.pxVersion); err != nil {
+		return err
 	}
 
 	setSecuritySpecDefaults(toUpdate)
@@ -1285,6 +1284,46 @@ func setTLSDefaults(
 			*listOp.list = newEnv
 		}
 	}
+}
+
+func setTelemetryDefaults(
+	toUpdate *corev1.StorageCluster,
+	pxVersion *version.Version,
+) error {
+	// Disable telemetry if it's not supported but enabled explicitly
+	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
+		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
+		toUpdate.Spec.Monitoring.Telemetry.Image = ""
+		toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
+		return nil
+	}
+
+	// Only enable telemetry by default under conditions:
+	// 1. CCM Go is supported
+	// 2. Portworx initialized (cluster UUID ready)
+	// 3. telemetry is not specified explicitly
+	// 4. no air-gapped or custom proxy
+	if !pxutil.IsCCMGoSupported(pxVersion) ||
+		toUpdate.Status.ClusterUID == "" ||
+		(toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Telemetry != nil) ||
+		pxutil.GetPxProxyEnvVarValue(toUpdate) != "" {
+		return nil
+	}
+	canAccess, err := component.CanAccessArcusRegisterEndpoint(toUpdate)
+	if err != nil || !canAccess {
+		return err
+	}
+
+	if toUpdate.Spec.Monitoring == nil {
+		toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
+	}
+	if toUpdate.Spec.Monitoring.Telemetry == nil {
+		toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+			Enabled: true,
+		}
+	}
+	logrus.Infof("telemetry is enabled by default")
+	return nil
 }
 
 func removeDeprecatedFields(

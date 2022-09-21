@@ -3,6 +3,9 @@ package component
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -998,6 +1001,44 @@ func getArcusRegisterProxyURL(cluster *corev1.StorageCluster) string {
 		return stagingArcusRegisterProxyURL
 	}
 	return productionArcusRegisterProxyURL
+}
+
+// CanAccessArcusRegisterEndpoint checks if telemetry registration endpoint is reachable
+func CanAccessArcusRegisterEndpoint(cluster *corev1.StorageCluster) (bool, error) {
+	endpoint := getArcusRegisterProxyURL(cluster)
+	logrus.Debugf("checking whether telemetry registration endpoint %s is accessible on cluster %s",
+		endpoint, cluster.Name)
+
+	url, err := url.Parse(fmt.Sprintf("https://%s:443/auth/1.0/ping", endpoint))
+	if err != nil {
+		return false, err
+	}
+
+	request := &http.Request{
+		Method: "GET",
+		URL:    url,
+		Header: map[string][]string{
+			"product-name": {"portworx"},
+			"appliance-id": {cluster.Status.ClusterUID},
+			"component-sn": {cluster.Name},
+		},
+	}
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		logrus.WithError(err).Warnf("failed to access telemetry registration endpoint %s", endpoint)
+		return false, nil
+	} else if response.StatusCode != 200 {
+		defer response.Body.Close()
+		body, _ := io.ReadAll(response.Body)
+		logrus.WithFields(logrus.Fields{
+			"code": response.StatusCode,
+			"body": string(body),
+		}).Warnf("failed to access telemetry registration endpoint %s", endpoint)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // GetDesiredTelemetryImage returns desired telemetry container image
