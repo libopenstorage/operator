@@ -19,7 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -60,6 +60,8 @@ var (
 	K8sVer1_22, _ = version.NewVersion("1.22")
 	// K8sVer1_24 k8s 1.24
 	K8sVer1_24, _ = version.NewVersion("1.24")
+	// K8sVer1_25 k8s 1.25
+	K8sVer1_25, _ = version.NewVersion("1.25")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -1559,10 +1561,10 @@ func DeleteAlertManager(
 // CreateOrUpdatePodDisruptionBudget creates a PodDisruptionBudget object if not present, else updates it
 func CreateOrUpdatePodDisruptionBudget(
 	k8sClient client.Client,
-	pdb *policyv1beta1.PodDisruptionBudget,
+	pdb *policyv1.PodDisruptionBudget,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	existingPDB := &policyv1beta1.PodDisruptionBudget{}
+	existingPDB := &policyv1.PodDisruptionBudget{}
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
@@ -1604,7 +1606,7 @@ func DeletePodDisruptionBudget(
 		Name:      name,
 		Namespace: namespace,
 	}
-	pdb := &policyv1beta1.PodDisruptionBudget{}
+	pdb := &policyv1.PodDisruptionBudget{}
 	err := k8sClient.Get(context.TODO(), resource, pdb)
 	if errors.IsNotFound(err) {
 		return nil
