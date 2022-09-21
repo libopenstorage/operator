@@ -12097,7 +12097,8 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 }
 
 func TestRemovePodSecurityPolicies(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
@@ -12150,6 +12151,32 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 	require.NoError(t, err)
 
 	policies := &policyv1beta1.PodSecurityPolicyList{}
+	err = testutil.List(k8sClient, policies)
+	require.NoError(t, err)
+	require.Empty(t, len(policies.Items))
+
+	// Re-enable PSP
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationPodSecurityPolicy: "true",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	for _, expectedPolicy := range expectedPSPs {
+		policy := &policyv1beta1.PodSecurityPolicy{}
+		err = testutil.Get(k8sClient, policy, expectedPolicy.Name, "")
+		require.NoError(t, err)
+	}
+
+	// Upgrade to k8s 1.25 PSP will be removed
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.20.0",
+	}
+	cluster.Annotations = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	policies = &policyv1beta1.PodSecurityPolicyList{}
 	err = testutil.List(k8sClient, policies)
 	require.NoError(t, err)
 	require.Empty(t, len(policies.Items))
