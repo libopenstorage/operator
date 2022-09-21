@@ -251,6 +251,8 @@ var (
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
+	// MaximumPxVersion max PX version when cannot get valid PX version from the storage cluster
+	MaximumPxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -502,7 +504,7 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	}
 
 	if pxVersion == nil {
-		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
+		pxVersion = MaximumPxVersion
 	}
 	return pxVersion
 }

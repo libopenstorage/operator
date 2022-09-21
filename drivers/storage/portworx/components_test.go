@@ -12258,11 +12258,6 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.9.1",
-			Monitoring: &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-				},
-			},
 			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
 				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
@@ -12277,6 +12272,18 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
+	// Telemetry should not be enabled by default
+	require.Nil(t, cluster.Spec.Monitoring)
+
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
@@ -12591,11 +12598,6 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.12.0",
-			Monitoring: &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-				},
-			},
 			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
 				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
@@ -12621,6 +12623,11 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	err := driver.PreInstall(cluster)
 	require.NoError(t, err)
+
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)

@@ -696,10 +696,7 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		}
 	}
 
-	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
-		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
-		toUpdate.Spec.Monitoring.Telemetry.Image = ""
-	}
+	setTelemetryDefaults(toUpdate, t.pxVersion)
 
 	setNodeSpecDefaults(toUpdate)
 
@@ -937,6 +934,33 @@ func setDefaultAutopilotProviders(
 					"url": component.AutopilotDefaultProviderEndpoint,
 				},
 			},
+		}
+	}
+}
+
+func setTelemetryDefaults(
+	toUpdate *corev1.StorageCluster,
+	pxVersion *version.Version,
+) {
+	if pxVersion.Equal(pxutil.MaximumPxVersion) {
+		return
+	}
+
+	// Disable telemetry if it's not supported but enabled explicitly
+	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
+		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
+		toUpdate.Spec.Monitoring.Telemetry.Image = ""
+		toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
+	} else if pxVersion.GreaterThanOrEqual(pxutil.MinimumPxVersionCCMGO) &&
+		(toUpdate.Spec.Monitoring == nil || toUpdate.Spec.Monitoring.Telemetry == nil) {
+		// Enable CCM Go by default on px 2.12+
+		if toUpdate.Spec.Monitoring == nil {
+			toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
+		}
+		if toUpdate.Spec.Monitoring.Telemetry == nil {
+			toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
+				Enabled: true,
+			}
 		}
 	}
 }
