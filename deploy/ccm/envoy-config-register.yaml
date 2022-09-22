@@ -70,3 +70,10 @@ static_resources:
           tls_certificates:
           - certificate_chain:
             private_key:
+          validation_context:
+            trusted_ca:
+              filename: /etc/ssl/certs/ca-certificates.crt
+            match_typed_subject_alt_names:
+            - san_type: DNS
+              matcher:
+                exact: REGISTER_PROXY_URL

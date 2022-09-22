@@ -132,6 +132,13 @@ data:
               tls_certificates:
               - certificate_chain:
                 private_key:
+              validation_context:
+                trusted_ca:
+                  filename: /etc/ssl/certs/ca-certificates.crt
+                match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher:
+                    exact: register.cloud-support.purestorage.com
       - name: cluster_register_cloud_support_tcp_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
@@ -153,6 +160,13 @@ data:
               tls_certificates:
               - certificate_chain:
                 private_key:
+              validation_context:
+                trusted_ca:
+                  filename: /etc/ssl/certs/ca-certificates.crt
+                match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher:
+                    exact: register.cloud-support.purestorage.com
       - name: cluster_customer_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
