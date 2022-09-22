@@ -133,6 +133,13 @@ data:
                 name: tls_sds
                 sds_config:
                   path: /etc/envoy/tls_certificate_sds_secret.yaml
+              validation_context:
+                trusted_ca:
+                  filename: /etc/ssl/certs/ca-certificates.crt
+                match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher:
+                    exact: rest.cloud-support.purestorage.com
       - name: cluster_cloud_support_tcp_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
@@ -155,6 +162,13 @@ data:
                 name: tls_sds
                 sds_config:
                   path: /etc/envoy/tls_certificate_sds_secret.yaml
+              validation_context:
+                trusted_ca:
+                  filename: /etc/ssl/certs/ca-certificates.crt
+                match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher:
+                    exact: rest.cloud-support.purestorage.com
       - name: cluster_customer_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
