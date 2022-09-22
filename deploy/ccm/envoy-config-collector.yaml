@@ -74,3 +74,10 @@ static_resources:
             name: tls_sds
             sds_config:
               path: /etc/envoy/tls_certificate_sds_secret.yaml
+          validation_context:
+            trusted_ca:
+              filename: /etc/ssl/certs/ca-certificates.crt
+            match_typed_subject_alt_names:
+            - san_type: DNS
+              matcher:
+                exact: REST_PROXY_URL
