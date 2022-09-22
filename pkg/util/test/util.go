@@ -107,6 +107,9 @@ const (
 	defaultTelemetrySecretValidationTimeout  = 30 * time.Second
 	defaultTelemetrySecretValidationInterval = time.Second
 
+	defaultTelemetryInPxctlValidationTimeout  = 5 * time.Minute
+	defaultTelemetryInPxctlValidationInterval = 30 * time.Second
+
 	defaultRunCmdInPxPodTimeout       = 30 * time.Second
 	defaultRunCmdInPxPodRetryInterval = 5 * time.Second
 )
@@ -2640,44 +2643,44 @@ func ValidateTelemetryV1Disabled(cluster *corev1.StorageCluster, timeout, interv
 	t := func() (interface{}, bool, error) {
 		_, err := appops.Instance().GetDeployment("px-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = rbacops.Instance().GetRole("px-metrics-collector", cluster.Name)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = rbacops.Instance().GetRoleBinding("px-metrics-collector", cluster.Name)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = coreops.Instance().GetConfigMap("px-telemetry-config", cluster.Namespace)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = coreops.Instance().GetConfigMap("px-collector-config", cluster.Namespace)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = coreops.Instance().GetConfigMap("px-collector-proxy-config", cluster.Namespace)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
 		_, err = coreops.Instance().GetServiceAccount("px-metrics-collector", cluster.Namespace)
 		if !errors.IsNotFound(err) {
-			return "", true, fmt.Errorf("wait for deletion, err %v", err)
+			return nil, true, fmt.Errorf("wait for deletion, err %v", err)
 		}
 
-		if validateTelemetryHealthyInPxctl(cluster.Namespace) {
-			return nil, true, fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status")
+		if err := validateTelemetryStatusInPxctl(false, cluster.Namespace); err != nil {
+			return nil, true, fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status, Err: %v", err)
 		}
 
-		return "", false, nil
+		return nil, false, nil
 	}
 
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
@@ -2724,32 +2727,8 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	return ValidateTelemetryV1Disabled(cluster, timeout, interval)
 }
 
-func runCmdInsidePxPod(cmd string, namespace string, ignoreErr bool) (string, error) {
-	var pxPod *v1.Pod
-	listOptions := map[string]string{"name": "portworx"}
-
+func runCmdInsidePxPod(pxPod *v1.Pod, cmd string, namespace string, ignoreErr bool) (string, error) {
 	t := func() (interface{}, bool, error) {
-		// Get Portworx pods
-		pods, err := coreops.Instance().GetPods(namespace, listOptions)
-		if err != nil {
-			return nil, false, err
-		}
-
-		// Find a Ready PX pod
-		for _, pod := range pods.Items {
-			if !coreops.Instance().IsPodReady(pod) {
-				logrus.Warnf("pod %s in %s is not in Ready state, checking next available PX pod..", pod.Name, pod.Namespace)
-				continue
-			}
-			pxPod = &pod
-			logrus.Debugf("Found available PX pod to execute command on [%s]", pxPod.Name)
-			break
-		}
-
-		if pxPod == nil {
-			return nil, true, fmt.Errorf("didn't find any available Running PX pods to execute command on")
-		}
-
 		// Execute command in PX pod
 		cmds := []string{"nsenter", "--mount=/host_proc/1/ns/mnt", "/bin/bash", "-c", cmd}
 		logrus.Debugf("Running command on pod %s %s", pxPod.Name, cmds)
@@ -3015,8 +2994,8 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 			return nil, true, err
 		}
 
-		if !validateTelemetryHealthyInPxctl(cluster.Namespace) {
-			return nil, true, fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status")
+		if err := validateTelemetryStatusInPxctl(true, cluster.Namespace); err != nil {
+			return nil, true, fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
 		}
 
 		// Verify telemetry roles
@@ -3083,24 +3062,55 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	return nil
 }
 
-func validateTelemetryHealthyInPxctl(namespace string) bool {
+func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, namespace string) error {
+	listOptions := map[string]string{"name": "portworx"}
 	cmd := "pxctl status | grep Telemetry:"
-	ignoreErr := false
 
-	output, err := runCmdInsidePxPod(cmd, namespace, ignoreErr)
-	if err == nil {
-		if strings.Contains(output, "Healthy") {
-			logrus.Infof("Telemetry status in pxctl [%v]", strings.TrimSpace(output))
-			return true
+	logrus.Infof("Validate Telemetry pxctl status on each PX node")
+	t := func() (interface{}, bool, error) {
+		// Get Portworx pods
+		pxPods, err := coreops.Instance().GetPods(namespace, listOptions)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get PX pods, Err: %v", err)
 		}
 
-		// If Telemetry is not Healthy, we are assuming any other status is Disabled and/or Unhealthy
-		logrus.Warnf("Telemetry status in pxctl [%v]", strings.TrimSpace(output))
-		return false
+		podsWithTelemetryStatusOk := 0
+		for _, pxPod := range pxPods.Items {
+			// Validate PX pod is ready to run command on
+			if !coreops.Instance().IsPodReady(pxPod) {
+				return nil, true, fmt.Errorf("[%s] PX pod is not in Ready state", pxPod.Name)
+			}
+			logrus.Debugf("PX pod is ready to execute command on [%s]", pxPod.Name)
+
+			output, err := runCmdInsidePxPod(&pxPod, cmd, namespace, false)
+			if err != nil {
+				return nil, true, fmt.Errorf("got error while trying to get Telemetry status from pxctl, Err: %v", err)
+			}
+
+			if strings.Contains(output, "Healthy") && telemetryShouldBeEnabled == true {
+				logrus.Infof("[%s] Telemetry status in pxctl [%v]", pxPod.Name, strings.TrimSpace(output))
+				podsWithTelemetryStatusOk++
+			} else if strings.Contains(output, "Disabled") && telemetryShouldBeEnabled == false {
+				logrus.Infof("[%s] Telemetry status in pxctl [%v]", pxPod.Name, strings.TrimSpace(output))
+				podsWithTelemetryStatusOk++
+			} else {
+				return nil, true, fmt.Errorf("[%s] Telemetry is Enabled=%v, but pxctl status returned [%s]", pxPod.Name, telemetryShouldBeEnabled, output)
+			}
+		}
+
+		if podsWithTelemetryStatusOk != len(pxPods.Items) {
+			return nil, true, fmt.Errorf("failed to validate correct Telemetry status on all PX pods, only got %d/%d", podsWithTelemetryStatusOk, len(pxPods.Items))
+		}
+		logrus.Debugf("Validated Telemetry pxct status on all PX node %d/%d,", podsWithTelemetryStatusOk, len(pxPods.Items))
+		return nil, false, nil
 	}
 
-	logrus.Warnf("Got error while trying to get Telemetry status from pxctl, assuming Telemetry is not Healthy, err: %v", err)
-	return false
+	_, err := task.DoRetryWithTimeout(t, defaultTelemetryInPxctlValidationTimeout, defaultTelemetryInPxctlValidationInterval)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func validatePxTelemetryPhonehomeV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -3255,8 +3265,8 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 			return nil, true, fmt.Errorf("found px-telemetry-phonehome daemonset, waiting for deletion")
 		}
 
-		if validateTelemetryHealthyInPxctl(cluster.Namespace) {
-			return nil, true, fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status")
+		if err := validateTelemetryStatusInPxctl(false, cluster.Namespace); err != nil {
+			return nil, true, fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status, Err: %v", err)
 		}
 
 		// Verify telemetry roles
@@ -3428,8 +3438,8 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 				imageName)
 		}
 
-		if !validateTelemetryHealthyInPxctl(cluster.Namespace) {
-			return nil, true, fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status")
+		if err := validateTelemetryStatusInPxctl(true, cluster.Namespace); err != nil {
+			return nil, true, fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
 		}
 		return nil, false, nil
 	}
