@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,7 +48,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -329,7 +329,7 @@ func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextCon
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
+	json, err := os.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
 	apiextensionsv1beta1.AddToScheme(s)
@@ -1113,7 +1113,8 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 			continue
 		}
 
-		if pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(dummyPod, &node) {
+		matches, err := affinityhelper.GetRequiredNodeAffinity(dummyPod).Match(&node)
+		if err == nil && matches {
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
@@ -3677,7 +3678,7 @@ func GetImagesFromVersionURL(url, k8sVersion string) (map[string]string, error) 
 		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxVersionURL, err)
 	}
 
-	htmlData, err := ioutil.ReadAll(resp.Body)
+	htmlData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
 	}

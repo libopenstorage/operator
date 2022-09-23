@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -45,7 +45,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -100,7 +100,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 	// Add this to ensure configmap takes precedence over remote endpoint
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -176,7 +176,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -214,7 +214,7 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 			"2.5.0": {},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -261,7 +261,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -289,7 +289,7 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		// Return empty response without any versions
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte{})),
+			Body: io.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	}
 
@@ -500,7 +500,7 @@ func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -555,7 +555,7 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -637,7 +637,7 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -698,7 +698,7 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 

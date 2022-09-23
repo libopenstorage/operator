@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
@@ -133,7 +132,7 @@ func ParseObjectFromFile(
 	scheme *runtime.Scheme,
 	obj runtime.Object,
 ) error {
-	objBytes, err := ioutil.ReadFile(filepath)
+	objBytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return err
 	}

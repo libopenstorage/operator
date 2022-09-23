@@ -459,7 +459,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 								FailureThreshold:    8,
 								TimeoutSeconds:      15,
 								InitialDelaySeconds: 15,
-								Handler: v1.Handler{
+								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Host:   "127.0.0.1",
 										Path:   "/healthz",

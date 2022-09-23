@@ -20,11 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -102,12 +99,10 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.NoError(t, err)
 
 	// Stork ConfigMap
-	expectedPolicy := schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	expectedPolicy := SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
@@ -117,7 +112,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 			},
 		},
 	}
-	var actualPolicy schedulerv1.Policy
+	var actualPolicy SchedulerPolicy
 	storkConfigMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
@@ -126,13 +121,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.Len(t, storkConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
 
-	decoderChangeVersion, _ := version.NewVersion(policyDecoderChangeVersion)
-	if k8sVersion.LessThan(decoderChangeVersion) {
-		err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
-	} else {
-		err = runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), []byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
-	}
-
+	err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
 	require.NoError(t, err)
 
 	// Surprisingly the decoded object does not have kind and API version, both fields are empty. The encoded string
@@ -2290,12 +2279,10 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 		AnyTimes()
 
 	// TestCase: Deploy default policy when stork is deployed
-	defaultPolicy := &schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	defaultPolicy := &SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
@@ -2318,7 +2305,7 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	require.Equal(t, string(defaultPolicyBytes), storkConfigMap.Data["policy.cfg"])
 
 	// TestCase: Reconcile to original policy if changed by the user
-	modifiedPolicy := defaultPolicy.DeepCopy()
+	modifiedPolicy := *defaultPolicy
 	modifiedPolicy.Extenders[0].PrioritizeVerb = ""
 	modifiedPolicy.Extenders[0].Weight = 10
 	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)
