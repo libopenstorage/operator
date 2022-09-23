@@ -238,7 +238,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 							},
 							ReadinessProbe: &v1.Probe{
 								InitialDelaySeconds: 30,
-								Handler: v1.Handler{
+								ProbeHandler: v1.ProbeHandler{
 									Exec: &v1.ExecAction{
 										Command: []string{"cat", "/tmp/px-node-wipe-done"},
 									},

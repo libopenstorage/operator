@@ -21,9 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"reflect"
 	"sort"
 	"strconv"
@@ -32,6 +29,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	storageapi "github.com/libopenstorage/openstorage/api"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -56,7 +54,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -811,8 +811,8 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
-				err := c.podControl.CreatePodsOnNode(
-					nodeName,
+				err := c.podControl.CreatePods(
+					context.TODO(),
 					cluster.Namespace,
 					podTemplates[idx],
 					cluster,
@@ -870,6 +870,7 @@ func (c *Controller) syncNodes(
 		go func(idx int) {
 			defer deleteWait.Done()
 			err := c.podControl.DeletePod(
+				context.TODO(),
 				cluster.Namespace,
 				podsToDelete[idx],
 				cluster,
@@ -1062,10 +1063,10 @@ func (c *Controller) podsShouldBeOnNode(
 
 // nodeShouldRunStoragePod checks a set of preconditions against a (node, storagecluster) and
 // returns a summary. Returned booleans are:
-// * shouldRun:
+//   - shouldRun:
 //     Returns true when a pod should run on the node if a storage pod is not already
 //     running on that node.
-// * shouldContinueRunning:
+//   - shouldContinueRunning:
 //     Returns true when the pod should continue running on a node if a storage pod is
 //     already running on that node.
 func (c *Controller) nodeShouldRunStoragePod(
@@ -1372,7 +1373,7 @@ func (c *Controller) getStoragePods(
 
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing Pods
-	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
+	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func(ctx context.Context) (metav1.Object, error) {
 		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
@@ -1395,7 +1396,7 @@ func (c *Controller) getStoragePods(
 		controllerKind,
 		undeletedCluster,
 	)
-	return cm.ClaimPods(allPods)
+	return cm.ClaimPods(context.TODO(), allPods)
 }
 
 func (c *Controller) createStorageNode(

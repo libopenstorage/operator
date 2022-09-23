@@ -5,6 +5,7 @@ metadata:
   namespace: kube-test
 spec:
   sessionAffinity: None
+  internalTrafficPolicy: Cluster
   type: ClusterIP
   selector:
     name: stork

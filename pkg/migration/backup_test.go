@@ -45,7 +45,6 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 			SelfLink:        "portworx/portworx",
 			Finalizers:      []string{"finalizer"},
 			OwnerReferences: []metav1.OwnerReference{{Name: "owner"}},
-			ClusterName:     "cluster-name",
 			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "manager"}},
 		},
 		Spec: appsv1.DaemonSetSpec{
@@ -201,7 +200,6 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 				require.NotContains(t, cm.Data["backup"], "selfLink")
 				require.NotContains(t, cm.Data["backup"], "finalizers")
 				require.NotContains(t, cm.Data["backup"], "ownerReferences")
-				require.NotContains(t, cm.Data["backup"], "clusterName")
 				require.NotContains(t, cm.Data["backup"], "managedFields")
 				require.NotContains(t, cm.Data["backup"], "clusterIP: 1.2.3.4")
 				require.NotContains(t, cm.Data["backup"], "clusterIPs")
@@ -223,7 +221,6 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 			require.NotContains(t, cm.Data["backup"], "selfLink")
 			require.NotContains(t, cm.Data["backup"], "finalizers")
 			require.NotContains(t, cm.Data["backup"], "ownerReferences")
-			require.NotContains(t, cm.Data["backup"], "clusterName")
 			require.NotContains(t, cm.Data["backup"], "managedFields")
 			require.NotContains(t, cm.Data["backup"], "clusterIP: 1.2.3.4")
 			require.NotContains(t, cm.Data["backup"], "clusterIPs")

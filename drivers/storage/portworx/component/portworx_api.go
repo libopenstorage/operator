@@ -245,7 +245,7 @@ func getPortworxAPIDaemonSetSpec(
 							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
 							ReadinessProbe: &v1.Probe{
 								PeriodSeconds: int32(10),
-								Handler: v1.Handler{
+								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Host: "127.0.0.1",
 										Path: "/status",

@@ -2,7 +2,6 @@ package portworx
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -3815,7 +3814,7 @@ func TestPodSpecWithClusterIDOverwritten(t *testing.T) {
 }
 
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
-	json, err := ioutil.ReadFile(fileName)
+	json, err := os.ReadFile(fileName)
 	assert.NoError(t, err)
 
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
@@ -3828,7 +3827,7 @@ func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec 
 }
 
 func getExpectedPodSpec(t *testing.T, podSpecFileName string) *v1.PodSpec {
-	json, err := ioutil.ReadFile(podSpecFileName)
+	json, err := os.ReadFile(podSpecFileName)
 	assert.NoError(t, err)
 
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)

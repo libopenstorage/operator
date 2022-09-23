@@ -3,7 +3,7 @@ package manifest
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -11,7 +11,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/stretchr/testify/require"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestRemoteManifestWithProxy(t *testing.T) {
@@ -52,7 +52,7 @@ func TestRemoteManifestWithMatchingVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -80,7 +80,7 @@ func TestRemoteManifestWithoutMatchingVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1.1
 components:
   stork: stork/image:3.2.1.1
@@ -109,7 +109,7 @@ func TestRemoteManifestWithoutVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, expectedManifestURL, url)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -158,7 +158,7 @@ func TestRemoteManifestWithCustomURL(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		require.Equal(t, customURL, url)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -192,7 +192,7 @@ func TestRemoteManifestWithInvalidResponse(t *testing.T) {
 	k8sVersion, _ := version.NewSemver("1.15.0")
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`invalid_yaml`))),
+			Body: io.NopCloser(bytes.NewReader([]byte(`invalid_yaml`))),
 		}, nil
 	}
 
@@ -212,7 +212,7 @@ func TestRemoteManifestWithEmptyResponse(t *testing.T) {
 	k8sVersion, _ := version.NewSemver("1.15.0")
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte{})),
+			Body: io.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	}
 
@@ -248,7 +248,7 @@ func TestRemoteManifestWithFailedRequest(t *testing.T) {
 	// TestCase: Failed to read the response body
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(&failedReader{}),
+			Body: io.NopCloser(&failedReader{}),
 		}, nil
 	}
 
