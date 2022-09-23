@@ -491,9 +491,7 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Validate Telemetry is not enabled by default")
 		if cluster.Spec.Monitoring != nil {
 			if cluster.Spec.Monitoring.Telemetry != nil {
-				if cluster.Spec.Monitoring.Telemetry.Enabled {
-					require.False(t, cluster.Spec.Security.Enabled, "failed to validate default Telemetry status: expected: false, actual: %v", cluster.Spec.Monitoring.Telemetry.Enabled)
-				}
+				require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled, "failed to validate default Telemetry status: expected: false, actual: %v", cluster.Spec.Monitoring.Telemetry.Enabled)
 			}
 		}
 
