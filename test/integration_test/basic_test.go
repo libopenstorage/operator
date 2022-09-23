@@ -1012,9 +1012,7 @@ func BasicSecurityRegression(tc *types.TestCase) func(*testing.T) {
 		// Validate Security is not enabled by default
 		logrus.Info("Validate Security is not enabled by default")
 		if cluster.Spec.Security != nil {
-			if cluster.Spec.Security.Enabled {
-				require.False(t, cluster.Spec.Security.Enabled, "failed to validate Security is enabled: expected: false, actual: %v", cluster.Spec.Security.Enabled)
-			}
+			require.False(t, cluster.Spec.Security.Enabled, "failed to validate Security is enabled: expected: false, actual: %v", cluster.Spec.Security.Enabled)
 		}
 
 		// Enable Security and validate
