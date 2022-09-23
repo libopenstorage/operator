@@ -2684,7 +2684,7 @@ func ValidateTelemetryV1Disabled(cluster *corev1.StorageCluster, timeout, interv
 	}
 
 	// Validate Telemetry is Disabled in pxctl status
-	if err := validateTelemetryStatusInPxctl(false, cluster.Namespace); err != nil {
+	if err := validateTelemetryStatusInPxctl(false, cluster); err != nil {
 		return fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status, Err: %v", err)
 	}
 
@@ -3056,7 +3056,7 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	// Validate Telemetry is Healthy in pxctl status
-	if err := validateTelemetryStatusInPxctl(true, cluster.Namespace); err != nil {
+	if err := validateTelemetryStatusInPxctl(true, cluster); err != nil {
 		return fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
 	}
 
@@ -3064,14 +3064,22 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	return nil
 }
 
-func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, namespace string) error {
+func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
 	cmd := "pxctl status | grep Telemetry:"
 
 	logrus.Infof("Validate Telemetry pxctl status on all PX nodes")
 	t := func() (interface{}, bool, error) {
+		if cluster.Spec.Security != nil && cluster.Spec.Security.Enabled {
+			token, err := getSecurityAdminToken(cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s %s", token, cmd)
+		}
+
 		// Get Portworx pods
-		pxPods, err := coreops.Instance().GetPods(namespace, listOptions)
+		pxPods, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get PX pods, Err: %v", err)
 		}
@@ -3082,7 +3090,7 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, namespace str
 				return nil, true, fmt.Errorf("[%s] PX pod is not in Ready state", pxPod.Name)
 			}
 
-			output, err := runCmdInsidePxPod(&pxPod, cmd, namespace, false)
+			output, err := runCmdInsidePxPod(&pxPod, cmd, cluster.Namespace, false)
 			if err != nil {
 				return nil, true, fmt.Errorf("got error while trying to get Telemetry status from pxctl, Err: %v", err)
 			}
@@ -3105,6 +3113,18 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, namespace str
 		return err
 	}
 	return nil
+}
+
+func getSecurityAdminToken(namespace string) (string, error) {
+	logrus.Debug("PX Security is enabled, getting token from px-admin-token secret")
+
+	secret, err := coreops.Instance().GetSecret("px-admin-token", namespace)
+	if err != nil {
+		return "", fmt.Errorf("failed to get px-admin-token secret, Err: %v", err)
+	}
+	token := string(secret.Data["auth-token"])
+
+	return token, nil
 }
 
 func validatePxTelemetryPhonehomeV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
@@ -3333,7 +3353,7 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 	}
 
 	// Validate Telemetry is Disabled in pxctl status
-	if err := validateTelemetryStatusInPxctl(false, cluster.Namespace); err != nil {
+	if err := validateTelemetryStatusInPxctl(false, cluster); err != nil {
 		return fmt.Errorf("failed to validate that Telemetry is Disabled in pxctl status, Err: %v", err)
 	}
 
@@ -3441,7 +3461,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	// Validate Telemetry is Healthy in pxctl status
-	if err := validateTelemetryStatusInPxctl(true, cluster.Namespace); err != nil {
+	if err := validateTelemetryStatusInPxctl(true, cluster); err != nil {
 		return fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
 	}
 
