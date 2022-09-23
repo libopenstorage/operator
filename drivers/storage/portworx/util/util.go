@@ -1048,11 +1048,11 @@ func IsMetricsCollectorSupported(pxVersion *version.Version) bool {
 
 // ApplyStorageClusterSettingsToPodSpec applies settings from StorageCluster to pod spec of any component
 // Which includes:
-//   custom image registry for images
-//   ImagePullPolicy
-//   ImagePullSecret
-//   affinity
-//   toleration
+//   - custom image registry for images
+//   - ImagePullPolicy
+//   - ImagePullSecret
+//   - affinity
+//   - toleration
 func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpec *v1.PodSpec) {
 	var containers []*v1.Container
 	for i := 0; i < len(podSpec.Containers); i++ {

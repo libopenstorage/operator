@@ -22,12 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
-	schedulerapiv1 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
 )
 
 const (
@@ -77,6 +73,26 @@ var (
 		"name":      storkSchedDeploymentName,
 	}
 )
+
+// SchedulerPolicy is a policy config for kubernetes scheduler. As the policy object
+// is deprecated in k8s, we are adding it here locally until we migrate to the new
+// KubeSchedulerConfiguration object
+type SchedulerPolicy struct {
+	Kind       string              `json:"kind"`
+	APIVersion string              `json:"apiVersion"`
+	Extenders  []SchedulerExtender `json:"extenders"`
+}
+
+// SchedulerExtender is the configuration to communicate with the external extender
+type SchedulerExtender struct {
+	URLPrefix        string          `json:"urlPrefix,omitempty"`
+	FilterVerb       string          `json:"filterVerb,omitempty"`
+	PrioritizeVerb   string          `json:"prioritizeVerb,omitempty"`
+	Weight           int64           `json:"weight,omitempty"`
+	EnableHTTPS      bool            `json:"enableHttps,omitempty"`
+	NodeCacheCapable bool            `json:"nodeCacheCapable,omitempty"`
+	HTTPTimeout      metav1.Duration `json:"httpTimeout,omitempty"`
+}
 
 func (c *Controller) syncStork(
 	cluster *corev1.StorageCluster,
@@ -198,12 +214,10 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	policy := schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	policy := SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix: fmt.Sprintf(
 					"http://%s.%s:%d",
@@ -219,34 +233,10 @@ func (c *Controller) createStorkConfigMap(
 		},
 	}
 
-	var policyConfig []byte
-
-	changeVersion, err := version.NewVersion(policyDecoderChangeVersion)
+	policyConfig, err := json.Marshal(policy)
 	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", policyDecoderChangeVersion)
+		logrus.WithError(err).Errorf("Could not encode policy object")
 		return err
-	}
-
-	useOldEncoder := c.kubernetesVersion.LessThan(changeVersion)
-	logrus.Debugf("Kubernetes version is %v, use legacy encoder %t", *c.kubernetesVersion, useOldEncoder)
-
-	if useOldEncoder {
-		policyConfig, err = json.Marshal(policy)
-		if err != nil {
-			logrus.WithError(err).Errorf("Could not encode policy object")
-			return err
-		}
-	} else {
-		info, ok := runtime.SerializerInfoForMediaType(scheme.Codecs.SupportedMediaTypes(), runtime.ContentTypeJSON)
-		if !ok {
-			return fmt.Errorf("could not find json serializer")
-		}
-		encoder := scheme.Codecs.EncoderForVersion(info.Serializer, schedulerapiv1.SchemeGroupVersion)
-		policyConfig, err = runtime.Encode(encoder, &policy)
-		if err != nil {
-			logrus.WithError(err).Errorf("Could not encode policy object")
-			return err
-		}
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
@@ -924,7 +914,7 @@ func getStorkSchedDeploymentSpec(
 							Command:         command,
 							LivenessProbe: &v1.Probe{
 								InitialDelaySeconds: 15,
-								Handler: v1.Handler{
+								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Path: "/healthz",
 										Port: intstr.FromInt(10251),
@@ -932,7 +922,7 @@ func getStorkSchedDeploymentSpec(
 								},
 							},
 							ReadinessProbe: &v1.Probe{
-								Handler: v1.Handler{
+								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Path: "/healthz",
 										Port: intstr.FromInt(10251),

@@ -2451,7 +2451,17 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 							{
 								Key:      metav1.ObjectNameField,
 								Operator: v1.NodeSelectorOpNotIn,
-								Values:   []string{"k8s-node-1", "k8s-node-2"},
+								Values:   []string{"k8s-node-1"},
+							},
+							{
+								Key:      metav1.ObjectNameField,
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"k8s-node-2"},
+							},
+							{
+								Key:      metav1.ObjectNameField,
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"k8s-node-3"},
 							},
 						},
 					},

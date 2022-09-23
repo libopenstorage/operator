@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	schedulehelper "k8s.io/component-helpers/scheduling/corev1"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -687,7 +687,11 @@ func sortedPortworxNodes(cluster *corev1.StorageCluster, nodes []*v1.Node) []*v1
 }
 
 func fitsNode(pod *v1.Pod, node *v1.Node) bool {
-	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
+	fitsNodeAffinity, err := affinityhelper.GetRequiredNodeAffinity(pod).Match(node)
+	if err != nil {
+		logrus.Warnf("Failed to check if the pod fits the node %s. %v", node.Name, err)
+		return false
+	}
 	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(node.Spec.Taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
 	})

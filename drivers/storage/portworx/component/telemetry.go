@@ -3,7 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 
@@ -1091,7 +1091,7 @@ func readConfigMapDataFromFile(
 	replace map[string]string,
 ) (string, error) {
 	filepath := path.Join(pxutil.SpecsBaseDir(), filename)
-	fileBytes, err := ioutil.ReadFile(filepath)
+	fileBytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return "", err
 	}

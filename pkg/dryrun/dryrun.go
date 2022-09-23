@@ -425,7 +425,6 @@ func (d *DryRun) cleanupObject(obj client.Object) error {
 	obj.SetCreationTimestamp(metav1.Time{})
 	obj.SetFinalizers(nil)
 	obj.SetOwnerReferences(nil)
-	obj.SetClusterName("")
 	obj.SetManagedFields(nil)
 
 	return nil
