@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -158,7 +159,15 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 	k8sVersion, _ := version.NewVersion(K8sVersion)
 	portworx.SetPortworxDefaults(cluster, k8sVersion)
 	// Deploy cluster
-	cluster, err := CreateStorageCluster(cluster)
+	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.True(t, err == nil || errors.IsNotFound(err))
+	if err == nil {
+		logrus.Infof("Update StorageCluster %s", cluster.Name)
+		cluster.ResourceVersion = existingCluster.ResourceVersion
+		cluster, err = operator.Instance().UpdateStorageCluster(cluster)
+	} else {
+		cluster, err = CreateStorageCluster(cluster)
+	}
 	require.NoError(t, err)
 
 	// Validate cluster deployment
@@ -176,12 +185,12 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
 
-	cluster, err := operator.Instance().UpdateStorageCluster(cluster)
+	newCluster, err := operator.Instance().UpdateStorageCluster(cluster)
 	if err != nil {
 		return nil, err
 	}
 
-	return cluster, nil
+	return newCluster, nil
 }
 
 // UpdateAndValidateStorageCluster update, validate and return new StorageCluster

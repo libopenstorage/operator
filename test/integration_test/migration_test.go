@@ -34,7 +34,7 @@ import (
 
 const (
 	operatorRestartTimeout       = 5 * time.Minute
-	operatorRestartRetryInterval = 10 * time.Second
+	operatorRestartRetryInterval = 5 * time.Second
 	clusterCreationTimeout       = 5 * time.Minute
 	clusterCreationRetryInterval = 5 * time.Second
 	labelKeyPXEnabled            = "px/enabled"
