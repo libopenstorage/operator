@@ -158,17 +158,18 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 	// Populate default values to empty fields first
 	k8sVersion, _ := version.NewVersion(K8sVersion)
 	portworx.SetPortworxDefaults(cluster, k8sVersion)
+
 	// Deploy cluster
 	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.True(t, err == nil || errors.IsNotFound(err))
-	if err == nil {
-		logrus.Infof("Update StorageCluster %s", cluster.Name)
-		cluster.ResourceVersion = existingCluster.ResourceVersion
-		cluster, err = operator.Instance().UpdateStorageCluster(cluster)
-	} else {
+	if errors.IsNotFound(err) {
 		cluster, err = CreateStorageCluster(cluster)
+		require.NoError(t, err)
+	} else {
+		cluster = existingCluster
+		// Existing cluster from previous install
+		return cluster
 	}
-	require.NoError(t, err)
 
 	// Validate cluster deployment
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)

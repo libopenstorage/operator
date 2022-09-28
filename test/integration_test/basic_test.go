@@ -472,8 +472,7 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate Telemetry is not enabled by default
 		logrus.Info("Validate Telemetry is not enabled by default")
@@ -522,8 +521,7 @@ func BasicCsiRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate CSI is enabled by default
 		require.Equal(t, cluster.Spec.CSI.Enabled, true)
@@ -608,9 +606,7 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		var err error
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate Stork is enabled by default
 		require.True(t, cluster.Spec.Stork.Enabled, "failed to validate Stork is enabled by default, it should be enabled, but it is set to %v", cluster.Spec.Stork.Enabled)
@@ -699,9 +695,7 @@ func BasicAutopilotRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		var err error
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate Autopilot block is nil
 		require.Nil(t, cluster.Spec.Autopilot, "failed to validate Autopilot block, it should be nil by default, but it seems there is something set in there %+v", cluster.Spec.Autopilot)
@@ -756,9 +750,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		var err error
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller"], "failed to validate portworx.io/pvc-controller annotation, it shouldn't exist by default, but it is and has value of %s", cluster.Annotations["portworx.io/pvc-controller"])
 
@@ -864,8 +856,7 @@ func BasicAlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate AlertManager is not enabled by default
 		logrus.Info("Validate ALertManager is not enabled by default")
@@ -949,8 +940,7 @@ func BasicSecurityRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate Security is not enabled by default
 		logrus.Info("Validate Security is not enabled by default")
@@ -996,8 +986,7 @@ func BasicKvdbRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.Nil(t, err)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Delete all KVDB pods and validate the get re-created
 		logrus.Info("Delete portworx KVDB pods and validate they get re-deployed")
