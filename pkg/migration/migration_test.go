@@ -512,7 +512,7 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 	)
 
 	if manifestConfigMapExists {
-		k8sClient.Create(
+		err := k8sClient.Create(
 			context.TODO(),
 			&v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -521,6 +521,7 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 				},
 			},
 		)
+		require.NoError(t, err)
 	}
 
 	mockController := gomock.NewController(t)

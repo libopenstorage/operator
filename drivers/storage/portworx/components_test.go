@@ -111,7 +111,8 @@ func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -151,7 +152,7 @@ func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
 	legacyImage := "portworx/oci-monitor:2.8.0"
 	cluster.Spec.Image = legacyImage
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx Service with legacy px (pre 2.9) should not expose 9023 TSL secured port
@@ -198,7 +199,8 @@ func TestBasicComponentsInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -236,7 +238,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx ServiceAccount
@@ -387,7 +389,8 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -404,7 +407,7 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 
 	// Disabled first
 	cluster.Spec.PxRepo.Enabled = false
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	service := &v1.Service{}
@@ -451,7 +454,8 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -463,7 +467,7 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx RBAC objects should not be created
@@ -510,7 +514,8 @@ func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -527,7 +532,7 @@ func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx KVDB Services should not be created when internal KVDB is disabled
@@ -541,7 +546,8 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	secretsNamespace := "secrets-namespace"
 	cluster := &corev1.StorageCluster{
@@ -564,7 +570,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx secrets namespace
@@ -616,7 +622,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -625,7 +632,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	ds := &appsv1.DaemonSet{}
@@ -633,7 +640,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	require.NoError(t, err)
 
 	// Case: Delete the daemon set and ensure it gets recreated
-	k8sClient.Delete(context.TODO(), ds)
+	err = k8sClient.Delete(context.TODO(), ds)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -645,7 +653,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	// Case: Change the image of daemon set, it should be recreated
 	// it is already deployed
 	ds.Spec.Template.Spec.Containers[0].Image = "new/image"
-	k8sClient.Update(context.TODO(), ds)
+	err = k8sClient.Update(context.TODO(), ds)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -674,7 +683,8 @@ func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -687,7 +697,7 @@ func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxProxySA := &v1.ServiceAccount{}
@@ -713,7 +723,8 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -722,7 +733,7 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxProxySA := &v1.ServiceAccount{}
@@ -747,7 +758,8 @@ func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -764,7 +776,7 @@ func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
 	}
 
 	// TestCase: Portworx proxy disabled explicitly
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxProxySA := &v1.ServiceAccount{}
@@ -833,7 +845,8 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -852,7 +865,7 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Default portworx ServiceAccount should not be created
@@ -913,7 +926,8 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	k8sClient.Create(context.TODO(), customSA)
+	err = k8sClient.Create(context.TODO(), customSA)
+	require.NoError(t, err)
 	cluster.Annotations = map[string]string{
 		constants.AnnotationDisableStorage: "true",
 	}
@@ -935,7 +949,8 @@ func TestDisablePortworx(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -948,7 +963,7 @@ func TestDisablePortworx(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -1064,7 +1079,8 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1079,7 +1095,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storageClassList := &storagev1.StorageClassList{}
@@ -1253,7 +1269,8 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1268,7 +1285,7 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	}
 
 	// Stork is disabled
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storageClassList := &storagev1.StorageClassList{}
@@ -1312,7 +1329,8 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1324,7 +1342,7 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storageClassList := &storagev1.StorageClassList{}
@@ -1349,7 +1367,8 @@ func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1361,7 +1380,7 @@ func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storageClassList := &storagev1.StorageClassList{}
@@ -1397,7 +1416,8 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1417,7 +1437,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxService := &v1.Service{}
@@ -1499,7 +1519,8 @@ func TestPVCControllerInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1511,7 +1532,7 @@ func TestPVCControllerInstall(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1529,7 +1550,8 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1548,7 +1570,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	verifyPVCControllerInstall(t, cluster, k8sClient)
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
@@ -1565,7 +1587,8 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1585,7 +1608,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	verifyPVCControllerInstall(t, cluster, k8sClient)
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
@@ -1620,7 +1643,8 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1632,7 +1656,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -1657,7 +1681,8 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1669,7 +1694,7 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// PVC controller should not get installed if running in kube-system
@@ -1696,7 +1721,8 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1705,7 +1731,7 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -1754,7 +1780,8 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1767,7 +1794,7 @@ func TestPVCControllerInstallForOpenshift(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1779,7 +1806,8 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1791,7 +1819,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1812,7 +1840,8 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1824,7 +1853,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1845,7 +1874,8 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1857,7 +1887,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1878,7 +1908,8 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1890,7 +1921,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	verifyPVCControllerInstall(t, cluster, k8sClient)
@@ -1920,7 +1951,8 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1937,7 +1969,7 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -1962,7 +1994,8 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1979,7 +2012,7 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -2089,7 +2122,8 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2101,7 +2135,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Default PVC controller CPU
@@ -2129,7 +2163,8 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2143,7 +2178,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	}
 
 	// Should not return error but raise an event instead
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -2156,7 +2191,8 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2168,7 +2204,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Default PVC controller ports
@@ -2229,7 +2265,8 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2241,7 +2278,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
@@ -2277,7 +2314,8 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2289,7 +2327,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
@@ -2306,6 +2344,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	}
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -2397,7 +2436,8 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2409,7 +2449,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
@@ -2438,7 +2478,8 @@ func TestLighthouseInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2456,7 +2497,7 @@ func TestLighthouseInstall(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -2544,7 +2585,8 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2562,7 +2604,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -2579,7 +2621,8 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2597,7 +2640,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -2614,7 +2657,8 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2632,7 +2676,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -2649,7 +2693,8 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2670,7 +2715,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	lhService := &v1.Service{}
@@ -2715,7 +2760,8 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2730,7 +2776,7 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	}
 
 	// Should not return an error, instead should raise an event
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -2753,7 +2799,8 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2772,7 +2819,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
@@ -2798,7 +2845,8 @@ func TestLighthouseImageChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2813,7 +2861,7 @@ func TestLighthouseImageChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
@@ -2839,7 +2887,8 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2854,7 +2903,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
@@ -2885,7 +2934,8 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2900,7 +2950,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	lhDeployment := &appsv1.Deployment{}
@@ -2931,7 +2981,8 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2946,7 +2997,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Lighthouse image should remain unchanged but sidecar container images
@@ -2969,7 +3020,8 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2994,7 +3046,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Lighthouse image should remain unchanged but sidecar container images
@@ -3017,7 +3069,8 @@ func TestAutopilotInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3068,7 +3121,7 @@ func TestAutopilotInstall(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Autopilot ConfigMap
@@ -3126,7 +3179,8 @@ func TestAutopilotWithoutImage(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3141,7 +3195,7 @@ func TestAutopilotWithoutImage(t *testing.T) {
 	}
 
 	// Should not return an error, instead should raise an event
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -3166,7 +3220,8 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(0)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3191,7 +3246,7 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
@@ -3217,7 +3272,8 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3252,7 +3308,7 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 
 	// test
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	// validate
 	require.NoError(t, err)
@@ -3424,7 +3480,8 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3443,7 +3500,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
@@ -3469,7 +3526,8 @@ func TestAutopilotImageChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3484,7 +3542,7 @@ func TestAutopilotImageChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
@@ -3510,7 +3568,8 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3528,7 +3587,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Check custom new arg is present
@@ -3565,7 +3624,8 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3580,7 +3640,7 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Use default config args if nothing specified in the cluster spec
@@ -3617,7 +3677,8 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3638,7 +3699,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Check env vars are passed to deployment
@@ -3683,7 +3744,8 @@ func TestAutopilotCPUChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3698,7 +3760,7 @@ func TestAutopilotCPUChange(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Default Autopilot CPU
@@ -3729,7 +3791,8 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3747,7 +3810,7 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -3765,7 +3828,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	volumeSpecs := []corev1.VolumeSpec{
 		{
@@ -3792,11 +3856,13 @@ func TestAutopilotVolumesChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Case: Volumes should be applied to the deployment
 	volumes, volumeMounts := expectedVolumesAndMounts(volumeSpecs)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
@@ -3813,7 +3879,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	volumeSpecs[0].MountPropagation = &propagation
 	volumeSpecs[0].HostPath.Type = &pathType
 	cluster.Spec.Autopilot.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = driver.PreInstall(cluster)
@@ -3837,7 +3904,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 		},
 	})
 	cluster.Spec.Autopilot.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = driver.PreInstall(cluster)
@@ -3853,7 +3921,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	// Case: Removed volumes should be removed from the deployment
 	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
 	cluster.Spec.Autopilot.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = driver.PreInstall(cluster)
@@ -3868,7 +3937,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 
 	// Case: If volumes are empty, should be removed from the deployment
 	cluster.Spec.Autopilot.Volumes = []corev1.VolumeSpec{}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3881,7 +3951,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 
 	// Case: Volumes should be added back if not present in deployment
 	cluster.Spec.Autopilot.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = driver.PreInstall(cluster)
@@ -3896,7 +3967,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 
 	// Case: If volumes is nil, deployment should not have volumes
 	cluster.Spec.Autopilot.Volumes = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4160,10 +4232,11 @@ func TestTLSSpecValidation(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	// Should not return error and raise no event
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 0)
 
@@ -4177,7 +4250,8 @@ func TestTLSSpecValidation(t *testing.T) {
 	reregisterComponents()
 	recorder = record.NewFakeRecorder(10)
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	// Should not return error and raise no event
 	err = driver.PreInstall(cluster)
@@ -4278,10 +4352,11 @@ func validateThatWarningEventIsRaisedOnPreinstall(t *testing.T, cluster *corev1.
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	// Should return error. This error will eventually bubble up into an event
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), errStr))
 }
@@ -4539,13 +4614,15 @@ func TestGuestAccessSecurity(t *testing.T) {
 			},
 		},
 	})
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 
 	component.DeregisterAllComponents()
 	component.RegisterAuthComponent()
 
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(10)
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4659,12 +4736,18 @@ func TestGuestAccessSecurity(t *testing.T) {
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
 		Role: &inspectedRole,
 	}
+	mockRoleServer.EXPECT().
+		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
+			Name: component.AuthSystemGuestRoleName,
+		}).
+		Return(inspectedRoleResp, nil).
+		Times(0)
 	cluster.Spec.Image = "px/image:2.5.0"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	cluster.Spec.Image = "px/image:2.6.0"
 
 	// Invalid guest access type, should be updated again
+	cluster.Spec.Image = "px/image:2.6.0"
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestAccessType("invalid"))
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4685,7 +4768,8 @@ func TestDisableSecurity(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4701,7 +4785,7 @@ func TestDisableSecurity(t *testing.T) {
 	setSecuritySpecDefaults(cluster)
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sharedSecret := &v1.Secret{}
@@ -4741,7 +4825,8 @@ func TestCSIInstallDisable(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4781,7 +4866,7 @@ func TestCSIInstallDisable(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
@@ -4798,7 +4883,8 @@ func TestCSIInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4835,7 +4921,7 @@ func TestCSIInstall(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// CSI ServiceAccount
@@ -4930,11 +5016,13 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4971,7 +5059,7 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.13.yaml")
@@ -5047,7 +5135,8 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5101,7 +5190,7 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
@@ -5144,7 +5233,8 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5160,7 +5250,7 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Enable snapshot controller
@@ -5194,7 +5284,8 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5210,7 +5301,7 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	csiDriver := &storagev1.CSIDriver{}
@@ -5264,7 +5355,8 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5280,7 +5372,7 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
@@ -5312,11 +5404,13 @@ func TestCSIInstallWithPKS(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5356,7 +5450,7 @@ func TestCSIInstallWithPKS(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentWithPKS.yaml")
@@ -5382,7 +5476,8 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5400,11 +5495,11 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 
 	expectedCRD := testutil.GetExpectedCRD(t, "csiNodeInfoCrd.yaml")
 	go func() {
-		err := testutil.ActivateV1beta1CRDWhenCreated(extensionsClient, expectedCRD.Name)
+		err = testutil.ActivateV1beta1CRDWhenCreated(extensionsClient, expectedCRD.Name)
 		require.NoError(t, err)
 	}()
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	actualCRD, err := extensionsClient.ApiextensionsV1beta1().
@@ -5490,7 +5585,8 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	// Install with Portworx version 2.2+ and deprecated CSI driver name
 	// We should use add the resizer sidecar and use the old driver name.
@@ -5517,7 +5613,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	cluster.Spec.Placement = nil
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentWithResizerAndOldDriver_1.0.yaml")
@@ -5551,11 +5647,13 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5601,7 +5699,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Should not deploy resizer and snapshotter as they are alpha in k8s 1.14
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentAlphaDisabledK8s_1_14.yaml")
@@ -5655,7 +5753,8 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// Case: Should deploy all sidecars even in k8s 1.14, as alpha features are not disabled
-	k8sClient.Delete(context.TODO(), deployment)
+	err = k8sClient.Delete(context.TODO(), deployment)
+	require.NoError(t, err)
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
@@ -5710,7 +5809,8 @@ func TestCSIInstallWithTopology(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5729,7 +5829,7 @@ func TestCSIInstallWithTopology(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_with_topology.yaml")
@@ -5780,7 +5880,8 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5795,7 +5896,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.14.yaml")
@@ -5815,11 +5916,13 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5835,7 +5938,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	deployment := &appsv1.Deployment{}
@@ -5924,11 +6027,13 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -5944,7 +6049,7 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
@@ -5991,11 +6096,13 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6011,7 +6118,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	statefulSet := &appsv1.StatefulSet{}
@@ -6097,11 +6204,13 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	imagePullSecret := "pull-secret"
 	cluster := &corev1.StorageCluster{
@@ -6118,9 +6227,11 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Case: Image pull secret should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	csiStatefulSet := &appsv1.StatefulSet{}
@@ -6131,7 +6242,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 
 	// Case: Updated image pull secet should be applied to the deployment
 	imagePullSecret = "new-secret"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6144,7 +6256,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 
 	// Case: If empty, remove image pull secret from the deployment
 	imagePullSecret = ""
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6156,7 +6269,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 
 	// Case: If nil, remove image pull secret from the deployment
 	cluster.Spec.ImagePullSecret = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6169,7 +6283,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 	// Case: Image pull secret should be added back if not present in deployment
 	imagePullSecret = "pull-secret"
 	cluster.Spec.ImagePullSecret = &imagePullSecret
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6189,11 +6304,13 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	tolerations := []v1.Toleration{
 		{
@@ -6219,9 +6336,11 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Case: Tolerations should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	csiStatefulSet := &appsv1.StatefulSet{}
@@ -6232,7 +6351,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 	// Case: Updated tolerations should be applied to the deployment
 	tolerations[0].Value = "baz"
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6249,7 +6369,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 		Effect:   v1.TaintEffectNoExecute,
 	})
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6262,7 +6383,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6274,7 +6396,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6286,7 +6409,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6298,7 +6422,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6317,11 +6442,13 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	nodeAffinity := &v1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -6354,9 +6481,11 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	// Case: Node affinity should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	csiStatefulSet := &appsv1.StatefulSet{}
@@ -6370,7 +6499,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 		MatchExpressions[0].
 		Key = "px/disabled"
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6382,7 +6512,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 
 	// Case: If node affinity is removed, it should be removed from the deployment
 	cluster.Spec.Placement.NodeAffinity = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6394,7 +6525,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 
 	// Case: Node affinity should be added back if not present in deployment
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6406,7 +6538,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 
 	// Case: If placement is nil, node affinity should be removed from the deployment
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6432,7 +6565,8 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6480,7 +6614,7 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 		"quay.io/prometheus-operator/prometheus-operator:v0.50.0",
 		cluster.Status.DesiredImages.PrometheusOperator)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -6490,8 +6624,9 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Prometheus operator ClusterRole should be updated as well
@@ -6564,7 +6699,8 @@ func TestPrometheusInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6585,7 +6721,7 @@ func TestPrometheusInstall(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 	cluster.Spec.Placement = nil
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -6595,8 +6731,9 @@ func TestPrometheusInstall(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Prometheus operator ServiceAccount
@@ -6733,7 +6870,8 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6775,7 +6913,7 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -6835,11 +6973,13 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -6873,7 +7013,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -6883,8 +7023,9 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -6991,7 +7132,8 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	customRegistry := "test-registry:1111"
@@ -7036,7 +7178,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -7046,9 +7188,10 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// Case: Custom registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -7570,11 +7713,13 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	customRegistry := "test-registry:1111"
 	cluster := &corev1.StorageCluster{
@@ -7596,7 +7741,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pvcDeployment := &appsv1.Deployment{}
@@ -7712,11 +7857,13 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	customRegistry := "test-registry:1111"
 	cluster := &corev1.StorageCluster{
@@ -7738,7 +7885,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pvcDeployment := &appsv1.Deployment{}
@@ -7857,7 +8004,8 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	customRepo := "test-registry:1111/test-repo"
@@ -7902,7 +8050,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -7912,9 +8060,10 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// Case: Custom repo-registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -8543,11 +8692,13 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1.StorageCluster{
@@ -8569,7 +8720,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom repo-registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pvcDeployment := &appsv1.Deployment{}
@@ -8713,11 +8864,13 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	customRepo := "test-registry:1111/test-repo"
 	cluster := &corev1.StorageCluster{
@@ -8747,7 +8900,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Case: Custom repo-registry should be added to the images
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pvcDeployment := &appsv1.Deployment{}
@@ -8959,7 +9112,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	imagePullSecret := "pull-secret"
@@ -9006,8 +9160,10 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -9017,9 +9173,10 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// Case: Image pull secret should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -9090,7 +9247,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 
 	// Case: Updated image pull secet should be applied to the deployment
 	imagePullSecret = "new-secret"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9163,7 +9321,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 
 	// Case: If empty, remove image pull secret from the deployment
 	imagePullSecret = ""
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9225,7 +9384,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 
 	// Case: If nil, remove image pull secret from the deployment
 	cluster.Spec.ImagePullSecret = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9288,7 +9448,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	// Case: Image pull secret should be added back if not present in deployment
 	imagePullSecret = "pull-secret"
 	cluster.Spec.ImagePullSecret = &imagePullSecret
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9371,7 +9532,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	tolerations := []v1.Toleration{
@@ -9428,8 +9590,10 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -9439,9 +9603,10 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// Case: Tolerations should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -9497,7 +9662,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	// Case: Updated tolerations should be applied to the deployment
 	tolerations[0].Value = "baz"
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9564,7 +9730,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 		Effect:   v1.TaintEffectNoExecute,
 	})
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9627,7 +9794,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9689,7 +9857,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9751,7 +9920,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9813,7 +9983,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9885,7 +10056,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	nodeAffinity := &v1.NodeAffinity{
@@ -9949,8 +10121,10 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -9960,9 +10134,10 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// Case: Node affinity should be applied to the deployment
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pxAPIDaemonSet := &appsv1.DaemonSet{}
@@ -10026,7 +10201,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 		MatchExpressions[0].
 		Key = "px/disabled"
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -10088,7 +10264,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 
 	// Case: If node affinity is removed, it should be removed from the deployment
 	cluster.Spec.Placement.NodeAffinity = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -10150,7 +10327,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 
 	// Case: Node affinity should be added back if not present in deployment
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -10207,7 +10385,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 
 	// Case: If placement is nil, node affinity should be removed from the deployment
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -10274,7 +10453,8 @@ func TestRemovePVCController(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10286,7 +10466,7 @@ func TestRemovePVCController(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -10334,7 +10514,8 @@ func TestDisablePVCController(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10346,7 +10527,7 @@ func TestDisablePVCController(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -10393,7 +10574,8 @@ func TestRemoveLighthouse(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10408,7 +10590,7 @@ func TestRemoveLighthouse(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -10463,7 +10645,8 @@ func TestDisableLighthouse(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10478,7 +10661,7 @@ func TestDisableLighthouse(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -10532,7 +10715,8 @@ func TestRemoveAutopilot(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10547,7 +10731,7 @@ func TestRemoveAutopilot(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	cm := &v1.ConfigMap{}
@@ -10600,7 +10784,8 @@ func TestDisableAutopilot(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10615,7 +10800,7 @@ func TestDisableAutopilot(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
 
@@ -10674,7 +10859,8 @@ func TestDisableCSI_0_3(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10689,7 +10875,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -10772,7 +10958,8 @@ func TestDisableCSI_1_0(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -10788,7 +10975,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -10879,7 +11066,8 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
@@ -10907,7 +11095,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// ServiceMonitor for Prometheus
@@ -10977,7 +11165,8 @@ func TestDisableMonitoring(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
@@ -11002,7 +11191,7 @@ func TestDisableMonitoring(t *testing.T) {
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sm := &monitoringv1.ServiceMonitor{}
@@ -11044,7 +11233,8 @@ func TestRemovePrometheus(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -11061,7 +11251,7 @@ func TestRemovePrometheus(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -11146,7 +11336,8 @@ func TestDisablePrometheus(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -11163,7 +11354,7 @@ func TestDisablePrometheus(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	sa := &v1.ServiceAccount{}
@@ -11254,7 +11445,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
@@ -11305,14 +11497,15 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	// TestCase: Do not create KVDB PDB if not using internal KVDB
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		Internal: false,
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pdbList := &policyv1.PodDisruptionBudgetList{}
@@ -11404,7 +11597,8 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
@@ -11503,8 +11697,9 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	err := driver.PreInstall(cluster)
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storagePDB := &policyv1.PodDisruptionBudget{}
@@ -11523,7 +11718,8 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
@@ -11563,10 +11759,11 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	// TestCase: Create KVDB PDB without any misc args
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pdbList := &policyv1.PodDisruptionBudgetList{}
@@ -11646,7 +11843,8 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
@@ -11699,10 +11897,11 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	// TestCase: Do not create PDBs if the cluster status is empty
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	pdbList := &policyv1.PodDisruptionBudgetList{}
@@ -11743,7 +11942,8 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	cluster := &corev1.StorageCluster{
@@ -11783,11 +11983,12 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	driver := portworx{}
 	k8sClient := testutil.FakeK8sClient(pxService)
 	recorder := record.NewFakeRecorder(1)
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	// TestCase: Error creating grpc connection
 	// (due to missing endpoint)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -11802,7 +12003,8 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	// TestCase: Error setting up context when using px-security
 	// (system secret not present)
 	pxService.Spec.ClusterIP = sdkServerIP
-	k8sClient.Update(context.TODO(), pxService)
+	err = k8sClient.Update(context.TODO(), pxService)
+	require.NoError(t, err)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
@@ -11850,7 +12052,8 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node: mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
@@ -11904,9 +12107,10 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	storagePDB := &policyv1.PodDisruptionBudget{}
@@ -11958,11 +12162,12 @@ func TestSCC(t *testing.T) {
 	}
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// Install with no SCC
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
@@ -12014,10 +12219,11 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	}
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// check that podsecuritpolicies have been created
@@ -12126,7 +12332,8 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 	}
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// check that podsecuritpolicies have been created
@@ -12135,7 +12342,7 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	for _, expectedPolicy := range expectedPSPs {
@@ -12211,7 +12418,8 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 	}
 
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// check that podsecuritpolicies have been created
@@ -12220,7 +12428,7 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 		testutil.GetExpectedPSP(t, "restrictedPSP.yaml"),
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	for _, expectedPolicy := range expectedPSPs {
@@ -12246,7 +12454,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12275,7 +12484,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
@@ -12295,7 +12504,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -12305,6 +12514,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// without location
 	delete(cluster.Annotations, "portworx.io/arcus-location")
@@ -12447,7 +12657,8 @@ func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12473,7 +12684,7 @@ func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	configMap := &v1.ConfigMap{}
@@ -12506,7 +12717,8 @@ func TestTelemetryCCMProxy(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12527,7 +12739,7 @@ func TestTelemetryCCMProxy(t *testing.T) {
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	ccmProxyConfigMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, ccmProxyConfigMap, component.TelemetryCCMProxyConfigMapName, cluster.Namespace)
@@ -12582,7 +12794,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12607,7 +12820,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -12617,9 +12830,10 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
@@ -12827,7 +13041,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	// Deploy px with CCM Java enabled and telemetry image specified
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12848,7 +13063,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		},
 	}
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -12858,9 +13073,10 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
@@ -13023,7 +13239,8 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -13048,7 +13265,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	// TestCase: no px proxy specified
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Validate component proxy config map content
@@ -13182,7 +13399,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -13199,7 +13417,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -13209,10 +13427,11 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	// TestCase: Don't set secret owner reference when delete strategy is not set
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	secret := v1.Secret{}
@@ -13251,7 +13470,8 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -13265,7 +13485,7 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	}
 
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Validate Portworx API Service without custom labels
@@ -13352,7 +13572,8 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient(fakeNode)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13369,7 +13590,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// CSI deployment topology constraints
@@ -13419,7 +13640,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13436,7 +13658,7 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 		},
 	}
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// CSI deployment topology constraints
@@ -13457,7 +13679,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -13494,8 +13717,10 @@ func TestServiceCustomAnnotations(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Portworx Service
@@ -13560,7 +13785,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 			fmt.Sprintf("%s/%s", k8sutil.Service, component.PxAPIServiceName):     pxAPIServiceAnnotations,
 		},
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13597,7 +13823,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 			fmt.Sprintf("%s/%s", k8sutil.Service, pxutil.PortworxKVDBServiceName): pxKVDBServiceAnnotations,
 		},
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13631,7 +13858,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	startPort := uint32(10001)
 
 	cluster := &corev1.StorageCluster{
@@ -13647,7 +13875,10 @@ func TestServiceTypeAnnotation(t *testing.T) {
 		},
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
-	err := driver.PreInstall(cluster)
+	err = k8sClient.Create(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// Test default service types
@@ -13682,7 +13913,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationServiceType: string(expectedServiceType),
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// Portworx Service
@@ -13715,7 +13947,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationServiceType: "portworx-service:LoadBalancer;portworx-api:NodePort;",
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// Portworx Service
@@ -13748,7 +13981,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationServiceType: "portworx-service:NodePort;portworx-kvdb-service:LoadBalancer",
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// Portworx Service
@@ -13782,7 +14016,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationServiceType: string(expectedServiceType),
 	}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// Portworx Service
@@ -13813,7 +14048,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 
 	// Test remove service type annotation
 	cluster.Annotations = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	// Portworx Service
@@ -13856,7 +14092,8 @@ func TestCSISnapController(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13872,7 +14109,7 @@ func TestCSISnapController(t *testing.T) {
 	}
 	driver.SetDefaultsOnStorageCluster(cluster)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.CSI.InstallSnapshotController)
 	require.Empty(t, cluster.Status.DesiredImages.CSISnapshotController)
@@ -13890,7 +14127,8 @@ func TestCSISnapController(t *testing.T) {
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13922,7 +14160,8 @@ func TestCSISnapController(t *testing.T) {
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13955,7 +14194,8 @@ func TestCSISnapController(t *testing.T) {
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -14002,7 +14242,8 @@ func TestCSISnapController(t *testing.T) {
 	}
 	k8sClient = testutil.FakeK8sClient(snapshotControllerPod)
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -14046,7 +14287,8 @@ func TestCSISnapController(t *testing.T) {
 	}
 	k8sClient = testutil.FakeK8sClient(snapshotControllerPod)
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -14077,7 +14319,8 @@ func TestCSISnapController(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	driver.SetDefaultsOnStorageCluster(cluster)
 	err = driver.PreInstall(cluster)
@@ -14109,7 +14352,8 @@ func TestCSISnapController(t *testing.T) {
 	reregisterComponents()
 
 	driver = portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 	driver.SetDefaultsOnStorageCluster(cluster)
 
 	err = driver.PreInstall(cluster)

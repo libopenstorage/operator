@@ -193,7 +193,7 @@ func (a *auth) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVarKey
 
 	// check for pre-existing secret
 	secret := &v1.Secret{}
-	a.k8sClient.Get(context.TODO(), types.NamespacedName{
+	err = a.k8sClient.Get(context.TODO(), types.NamespacedName{
 		Namespace: cluster.Namespace,
 		Name:      secretName,
 	}, secret)
