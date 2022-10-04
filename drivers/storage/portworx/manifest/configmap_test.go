@@ -7,7 +7,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -78,7 +78,8 @@ version: 4.2.1
 components:
   stork: stork/image:4.2.1
 `
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m, err = newConfigMapManifest(k8sClient, cluster)
 	require.NoError(t, err)
@@ -128,7 +129,8 @@ func TestConfigMapManifestWithEmptyData(t *testing.T) {
 	versionsConfigMap.Data = map[string]string{
 		VersionConfigMapKey: "",
 	}
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m, err = newConfigMapManifest(k8sClient, cluster)
 	require.NoError(t, err)

@@ -116,11 +116,12 @@ func TestSetupContextWithToken(t *testing.T) {
 			coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 			reregisterComponents()
 			driver := portworx{}
-			driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+			err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+			require.NoError(t, err)
 			setSecuritySpecDefaults(cluster)
 			cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
-			err := driver.PreInstall(cluster)
+			err = driver.PreInstall(cluster)
 			assert.NoError(t, err)
 
 			// set env vars
@@ -200,7 +201,8 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 		Cluster: mockClusterServer,
 		Node:    mockNodeServer,
 	})
-	mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
 	defer mockSdk.Stop()
 
 	cluster := &corev1.StorageCluster{
@@ -424,7 +426,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 			NodeName: "k8s-node",
 		},
 	}
-	err := k8sClient.Create(context.TODO(), pxPod)
+	err = k8sClient.Create(context.TODO(), pxPod)
 	require.NoError(t, err)
 
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{

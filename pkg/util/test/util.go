@@ -20,7 +20,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
-
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -136,10 +135,18 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	cluster_v1alpha1.AddToScheme(s)
-	ocp_configv1.AddToScheme(s)
+	if err := corev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := monitoringv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := cluster_v1alpha1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := ocp_configv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }
 
@@ -332,10 +339,14 @@ func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := os.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
-	apiextensionsv1beta1.AddToScheme(s)
-	apiextensionsv1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	ocp_secv1.Install(s)
+	err = apiextensionsv1beta1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = apiextensionsv1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = monitoringv1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = ocp_secv1.Install(s)
+	assert.NoError(t, err)
 	codecs := serializer.NewCodecFactory(s)
 	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)
@@ -368,9 +379,12 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 				Type:   apiextensionsv1.Established,
 				Status: apiextensionsv1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1().
+			_, err = fakeClient.ApiextensionsV1().
 				CustomResourceDefinitions().
 				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		} else if !errors.IsNotFound(err) {
 			return false, err
@@ -391,9 +405,12 @@ func ActivateV1beta1CRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName 
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().
+			_, err = fakeClient.ApiextensionsV1beta1().
 				CustomResourceDefinitions().
 				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		} else if !errors.IsNotFound(err) {
 			return false, err

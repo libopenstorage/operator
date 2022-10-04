@@ -145,7 +145,8 @@ func TestRegisterCRD(t *testing.T) {
 	require.Equal(t, []string{corev1.StorageNodeShortName}, snCRD.Spec.Names.ShortNames)
 
 	snCRD.ResourceVersion = "1000"
-	fakeExtClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
+	_, err = fakeExtClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
+	require.NoError(t, err)
 
 	go func() {
 		err := keepCRDActivated(fakeExtClient, storageNodeCRDName)
@@ -238,7 +239,8 @@ func TestRegisterDeprecatedCRD(t *testing.T) {
 	require.NotEmpty(t, snCRD.Spec.Validation.OpenAPIV3Schema.Properties)
 
 	snCRD.ResourceVersion = "1000"
-	fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
+	_, err = fakeExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Update(context.TODO(), snCRD, metav1.UpdateOptions{})
+	require.NoError(t, err)
 
 	go func() {
 		err := keepV1beta1CRDActivated(fakeExtClient, storageNodeCRDName)
@@ -331,10 +333,12 @@ func TestReconcile(t *testing.T) {
 
 	// reconcile storage node
 	podNode1 := createStoragePod(cluster, "pod-node1", testStorageNode, nil, clusterRef)
-	k8sClient.Create(context.TODO(), podNode1)
+	err := k8sClient.Create(context.TODO(), podNode1)
+	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "pod-node2", testStoragelessNode, nil, clusterRef)
-	k8sClient.Create(context.TODO(), podNode2)
+	err = k8sClient.Create(context.TODO(), podNode2)
+	require.NoError(t, err)
 
 	controller := Controller{
 		client:      k8sClient,
@@ -349,7 +353,7 @@ func TestReconcile(t *testing.T) {
 			Namespace: testNS,
 		},
 	}
-	_, err := controller.Reconcile(context.TODO(), request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	checkStoragePod := &v1.Pod{}
@@ -468,10 +472,12 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	driver.EXPECT().String().Return("ut-driver").AnyTimes()
 
 	podNode1 := createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
-	k8sClient.Create(context.TODO(), podNode1)
+	err := k8sClient.Create(context.TODO(), podNode1)
+	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "pod-node2", storageLessNode.Name, nil, clusterRef)
-	k8sClient.Create(context.TODO(), podNode2)
+	err = k8sClient.Create(context.TODO(), podNode2)
+	require.NoError(t, err)
 
 	// TestCase: Reconcile storage node to verify annotation is not added
 	storageNodeRequest := reconcile.Request{
@@ -480,7 +486,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	_, err := controller.Reconcile(context.TODO(), storageNodeRequest)
+	_, err = controller.Reconcile(context.TODO(), storageNodeRequest)
 	require.NoError(t, err)
 
 	checkStoragePod := &v1.Pod{}
@@ -508,7 +514,8 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 
 	// TestCase: Annotation value should be overwritten if not set to true
 	checkStorageLessPod.Annotations[constants.AnnotationPodSafeToEvict] = "false"
-	k8sClient.Update(context.TODO(), checkStorageLessPod)
+	err = k8sClient.Update(context.TODO(), checkStorageLessPod)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), storageLessNodeRequest)
 	require.NoError(t, err)
@@ -522,14 +529,16 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 
 	// TestCase: Annotation should not be added for storageless kvdb nodes
 	checkStorageLessPod.Annotations = nil
-	k8sClient.Update(context.TODO(), checkStorageLessPod)
+	err = k8sClient.Update(context.TODO(), checkStorageLessPod)
+	require.NoError(t, err)
 	storageLessNode.Status.Conditions = append(
 		storageLessNode.Status.Conditions,
 		corev1.NodeCondition{
 			Type: corev1.NodeKVDBCondition,
 		},
 	)
-	k8sClient.Update(context.TODO(), storageLessNode)
+	err = k8sClient.Update(context.TODO(), storageLessNode)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), storageLessNodeRequest)
 	require.NoError(t, err)
@@ -753,7 +762,9 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	// TestCase: Do not create kvdb pod if associated machine is being deleted
 	now := metav1.Now()
 	machine.DeletionTimestamp = &now
-	k8sClient.Update(context.TODO(), machine)
+	machine.Finalizers = []string{"do-not-delete-yet"}
+	err := k8sClient.Update(context.TODO(), machine)
+	require.NoError(t, err)
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -761,7 +772,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	_, err := controller.Reconcile(context.TODO(), request)
+	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 
 	podList := &v1.PodList{}
@@ -771,7 +782,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 
 	// TestCase: Create kvdb pod if associated machine is not being deleted
 	machine.DeletionTimestamp = nil
-	k8sClient.Update(context.TODO(), machine)
+	err = k8sClient.Update(context.TODO(), machine)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
@@ -784,7 +796,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 
 	// TestCase: Create kvdb pod if associated machine is not found
 	k8sNode.Annotations[constants.AnnotationClusterAPIMachine] = "not-present"
-	k8sClient.Update(context.TODO(), k8sNode)
+	err = k8sClient.Update(context.TODO(), k8sNode)
+	require.NoError(t, err)
 	err = coreops.Instance().DeletePod(podList.Items[0].Name, podList.Items[0].Namespace, false)
 	require.NoError(t, err)
 
@@ -806,7 +819,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 			TimeAdded: &timeAdded,
 		},
 	}
-	k8sClient.Update(context.TODO(), k8sNode)
+	err = k8sClient.Update(context.TODO(), k8sNode)
+	require.NoError(t, err)
 	err = coreops.Instance().DeletePod(podList.Items[0].Name, podList.Items[0].Namespace, false)
 	require.NoError(t, err)
 
@@ -826,7 +840,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 			Add(-constants.DefaultCordonedRestartDelay).
 			Add(-time.Second),
 	)
-	k8sClient.Update(context.TODO(), k8sNode)
+	err = k8sClient.Update(context.TODO(), k8sNode)
+	require.NoError(t, err)
 
 	_, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
@@ -935,7 +950,10 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 				Type:   apiextensionsv1.Established,
 				Status: apiextensionsv1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			_, err = fakeClient.ApiextensionsV1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		}
 		return false, nil
@@ -955,7 +973,10 @@ func keepV1beta1CRDActivated(fakeClient *fakeextclient.Clientset, crdName string
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			_, err = fakeClient.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		}
 		return false, nil
