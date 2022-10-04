@@ -899,7 +899,8 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -1312,7 +1313,8 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -3074,7 +3076,8 @@ func TestStorageNodeConfig(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -3386,7 +3389,7 @@ func TestSecuritySetEnv(t *testing.T) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for desired image stork >= 2.5 and px 2.6+, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3404,7 +3407,7 @@ func TestSecuritySetEnv(t *testing.T) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3421,7 +3424,7 @@ func TestSecuritySetEnv(t *testing.T) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3438,7 +3441,7 @@ func TestSecuritySetEnv(t *testing.T) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3455,8 +3458,7 @@ func TestSecuritySetEnv(t *testing.T) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
-
+	assert.True(t, appsSecretSet)
 }
 
 func TestIKSEnvVariables(t *testing.T) {

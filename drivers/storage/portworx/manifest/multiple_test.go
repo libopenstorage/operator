@@ -170,7 +170,12 @@ func TestReadingLocalManifestFile(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
+
+	defer func() {
+		os.RemoveAll(manifestDir)
+	}()
 
 	r, err := newDeprecatedManifest("2.1.5").Get()
 	require.NoError(t, err)
@@ -185,7 +190,8 @@ func TestRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -245,7 +251,8 @@ func TestInvalidRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -370,7 +377,8 @@ func TestCustomURLToDownloadManifest(t *testing.T) {
 		return nil, fmt.Errorf("http error")
 	}
 
-	newDeprecatedManifest("2.0.0").Get()
+	_, err := newDeprecatedManifest("2.0.0").Get()
+	require.Error(t, err)
 
 	// Use default url if no env variable set
 	os.Unsetenv(envKeyReleaseManifestURL)
@@ -379,7 +387,8 @@ func TestCustomURLToDownloadManifest(t *testing.T) {
 		return nil, fmt.Errorf("http error")
 	}
 
-	newDeprecatedManifest("2.0.0").Get()
+	_, err = newDeprecatedManifest("2.0.0").Get()
+	require.Error(t, err)
 }
 
 func maskLoadManifest(manifest string) {

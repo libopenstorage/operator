@@ -1985,7 +1985,8 @@ func TestCSIDriverChangeSpec(t *testing.T) {
 	// Remove owner reference if already present
 	driver = actualDriver.DeepCopy()
 	driver.OwnerReferences = []metav1.OwnerReference{{UID: "uid"}}
-	k8sClient.Update(context.TODO(), driver)
+	err = k8sClient.Update(context.TODO(), driver)
+	require.NoError(t, err)
 
 	err = CreateOrUpdateCSIDriver(k8sClient, expectedDriver)
 	require.NoError(t, err)
@@ -2043,7 +2044,8 @@ func TestCSIDriverChangeSpecBeta(t *testing.T) {
 	// Remove owner reference if already present
 	driver = actualDriver.DeepCopy()
 	driver.OwnerReferences = []metav1.OwnerReference{{UID: "uid"}}
-	k8sClient.Update(context.TODO(), driver)
+	err = k8sClient.Update(context.TODO(), driver)
+	require.NoError(t, err)
 
 	err = CreateOrUpdateCSIDriverBeta(k8sClient, expectedDriver)
 	require.NoError(t, err)

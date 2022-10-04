@@ -68,7 +68,7 @@ func New(ctrl *storagecluster.Controller) *Handler {
 func (h *Handler) Start() {
 	var pxDaemonSet *appsv1.DaemonSet
 
-	wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
+	pollErr := wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
 		var err error
 		pxDaemonSet, err = h.getPortworxDaemonSet(pxDaemonSet)
 		if errors.IsNotFound(err) {
@@ -119,6 +119,10 @@ func (h *Handler) Start() {
 		)
 		return true, nil
 	})
+
+	if pollErr != nil {
+		logrus.Errorf("Failed while polling for the migration. %v", pollErr)
+	}
 }
 
 func (h *Handler) createStorageClusterIfAbsent(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
@@ -190,7 +194,7 @@ func (h *Handler) processMigration(
 	}
 
 	updatedCluster := &corev1.StorageCluster{}
-	if h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
 		return err
 	}
 	// Notify operator to start installing the new components

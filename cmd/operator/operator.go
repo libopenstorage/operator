@@ -136,7 +136,10 @@ func run(c *cli.Context) {
 	if pprofEnabled {
 		go func() {
 			log.Infof("pprof profiling is enabled, creating profiling server at port %v", defaultPprofPort)
-			http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", defaultPprofPort), nil)
+			err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", defaultPprofPort), nil)
+			if err != nil {
+				log.Errorf("Error setting up profiling server. %v", err)
+			}
 		}()
 	}
 
