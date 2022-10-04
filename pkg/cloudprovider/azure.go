@@ -6,16 +6,16 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/libopenstorage/cloudops"
 )
 
-const (
-	azureName = "azure"
-)
-
-type azure struct{}
+type azure struct {
+	defaultProvider
+}
 
 func (a *azure) Name() string {
-	return azureName
+	return cloudops.Azure
 }
 
 func (a *azure) GetZone(node *v1.Node) (string, error) {

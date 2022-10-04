@@ -11,21 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/mock"
-	"github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	ocp_configv1 "github.com/openshift/api/config/v1"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,6 +38,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/libopenstorage/cloudops"
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func TestInit(t *testing.T) {
@@ -3287,6 +3290,9 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	require.NoError(t, err)
 	k8sNode3.Spec.ProviderID = "testcloud://test-instance-id"
 	err = k8sClient.Update(context.TODO(), k8sNode3)
+	require.NoError(t, err)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(k8sNode1, k8sNode2, k8sNode3)))
+	err = preflight.InitPreflightChecker()
 	require.NoError(t, err)
 
 	expectedDriverInfo.CloudProvider = "testcloud"
@@ -9094,7 +9100,69 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result)
 	}
+}
 
+func TestEKSPreflightCheck(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	preflightOps := mock.NewMockCheckerOps(mockCtrl)
+	preflight.SetInstance(preflightOps)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+				pxutil.AnnotationIsEKS:          "true",
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client: k8sClient,
+	}
+
+	// TestCase: eks cloud permission check failed
+	errMsg := "eks cloud permission check failed"
+	preflightOps.EXPECT().ProviderName().Return(string(cloudops.AWS)).AnyTimes()
+	preflightOps.EXPECT().K8sDistributionName().Return("eks").AnyTimes()
+	preflightOps.EXPECT().CheckCloudDrivePermission(cluster).Return(fmt.Errorf(errMsg))
+
+	err := controller.runPreflightCheck(cluster)
+	require.Error(t, err)
+	require.Contains(t, errMsg, err.Error())
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	expectedStatus := string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
+	require.Equal(t, expectedStatus, cluster.Status.Phase)
+
+	// TestCase: without the permission fixed, preflight check should return error directly
+	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
+	err = controller.runPreflightCheck(cluster)
+	require.Error(t, err)
+	require.Contains(t, errMsg, err.Error())
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatus, cluster.Status.Phase)
+
+	// TestCase: fix the permission then rerun preflight
+	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+	preflightOps.EXPECT().CheckCloudDrivePermission(cluster).Return(nil)
+	err = controller.runPreflightCheck(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	expectedStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
+	require.Equal(t, expectedStatus, cluster.Status.Phase)
 }
 
 func replaceOldPod(
