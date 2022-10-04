@@ -97,15 +97,6 @@ vendor:
 # Tools download  (if missing)
 # - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
 
-$(GOPATH)/bin/golint:
-	go get -u golang.org/x/lint/golint
-
-$(GOPATH)/bin/errcheck:
-	GO111MODULE=off go get -u github.com/kisielk/errcheck
-
-$(GOPATH)/bin/staticcheck:
-	GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.2.1
-
 $(GOPATH)/bin/revive:
 	GO111MODULE=off go get -u github.com/mgechev/revive
 
@@ -126,18 +117,20 @@ lint:
 
 vet:
 	# go vet check ...
-	@go vet $(PKGS)
+	@go vet ./...
 
 check-fmt:
 	# gofmt check ...
 	@bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
-errcheck: $(GOPATH)/bin/errcheck
+errcheck:
 	# errcheck check ...
+	@GO111MODULE=off go get -u github.com/kisielk/errcheck
 	@errcheck -verbose -blank $(PKGS)
 
-staticcheck: $(GOPATH)/bin/staticcheck
+staticcheck:
 	# staticcheck check ...
+	@GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
 	@staticcheck $(PKGS)
 
 revive: $(GOPATH)/bin/revive

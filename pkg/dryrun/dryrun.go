@@ -416,7 +416,7 @@ func (d *DryRun) simulateK8sNode() error {
 	return nil
 }
 
-func (d *DryRun) cleanupObject(obj client.Object) error {
+func (d *DryRun) cleanupObject(obj client.Object) {
 	obj.SetGenerateName("")
 	obj.SetUID("")
 	obj.SetResourceVersion("")
@@ -427,8 +427,6 @@ func (d *DryRun) cleanupObject(obj client.Object) error {
 	obj.SetOwnerReferences(nil)
 	obj.SetClusterName("")
 	obj.SetManagedFields(nil)
-
-	return nil
 }
 
 func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migration.Handler) error {
@@ -465,7 +463,6 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 			}
 		} else if kind == "Deployment" && name == "prometheus-operator" {
 			logrus.Info("Prometheus deployment will change from prometheus-operator to px-prometheus-operator after migration")
-			name = "px-prometheus-operator"
 			// Not compare deployment as it's expected to be different with helm install.
 			// 1. Container name will change from prometheus-operator to px-prometheus-operator
 			// 2. args is different: before-migration [--kubelet-service=kube-system/kubelet --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1], after-migration [-namespaces=kube-system --kubelet-service=kube-system/kubelet --prometheus-config-reloader=quay.io/coreos/prometheus-config-reloader:v0.36.0 --config-reloader-image=quay.io/coreos/configmap-reload:v0.0.1]
@@ -709,7 +706,7 @@ func (d *DryRun) getAllObjects() ([]client.Object, error) {
 	return objs, nil
 }
 
-func appendObjectList(k8sClient client.Client, namespace string, list client.ObjectList, objs *[]client.Object) error {
+func appendObjectList(k8sClient client.Client, namespace string, list client.ObjectList, objs *[]client.Object) {
 	err := k8sClient.List(
 		context.TODO(),
 		list,
@@ -718,7 +715,7 @@ func appendObjectList(k8sClient client.Client, namespace string, list client.Obj
 		})
 	if err != nil {
 		logrus.WithError(err).Errorf("failed to list objects %v", list.GetObjectKind())
-		return err
+		return
 	}
 
 	if l, ok := list.(*v1.ServiceList); ok {
@@ -819,8 +816,6 @@ func appendObjectList(k8sClient client.Client, namespace string, list client.Obj
 	} else {
 		msg := fmt.Sprintf("Unknown object kind %s", list.GetObjectKind())
 		logrus.Error(msg)
-		return fmt.Errorf(msg)
+		return
 	}
-
-	return nil
 }
