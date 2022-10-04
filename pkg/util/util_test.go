@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -425,8 +426,14 @@ func TestGetTopologySpreadConstraints(t *testing.T) {
 
 func fakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	cluster_v1alpha1.AddToScheme(s)
+	if err := corev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := monitoringv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := cluster_v1alpha1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }

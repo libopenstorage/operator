@@ -158,7 +158,9 @@ func (p *pxrepo) createPxRepoDeployment(
 			util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !p.isDeploymentCreated || modified {
-		k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef)
+		if err := k8sutil.CreateOrUpdateDeployment(p.k8sClient, deployment, ownerRef); err != nil {
+			return err
+		}
 	}
 
 	p.isDeploymentCreated = true

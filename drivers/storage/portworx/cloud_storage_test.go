@@ -105,7 +105,8 @@ func TestGetStorageNodeConfigValidConfigMap(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -205,7 +206,8 @@ func TestGetStorageNodeConfigDifferentInstancesPerZone(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 	_, yamlData := generateValidYamlData(t)
 
 	k8sClient := testutil.FakeK8sClient(
@@ -306,8 +308,8 @@ func TestGetStorageNodeConfigMultipleDriveCounts(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
-
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 	_, yamlData := generateValidYamlData(t)
 
 	k8sClient := testutil.FakeK8sClient(
@@ -424,7 +426,8 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -491,7 +494,7 @@ func TestGetStorageNodeConfigSpecCountMismatch(t *testing.T) {
 			},
 		}, nil)
 
-	_, err := p.GetStorageNodeConfig(inputSpecs, inputInstancesPerZone)
+	_, err = p.GetStorageNodeConfig(inputSpecs, inputInstancesPerZone)
 	require.Error(t, err, "Expected an error on GetStorageNodeConfig")
 	require.Contains(t, err.Error(), "got an incorrect storage distribution", "Expected a different error")
 }
@@ -611,7 +614,7 @@ func generateValidYamlData(t *testing.T) (cloudops.StorageDecisionMatrix, []byte
 	return inputMatrix, yamlBytes
 }
 
-func setupMockStorageManager(mockCtrl *gomock.Controller) {
+func setupMockStorageManager(mockCtrl *gomock.Controller) error {
 	mockStorageManager = mock.NewMockStorageManager(mockCtrl)
 
 	initFn := func(matrix cloudops.StorageDecisionMatrix) (cloudops.StorageManager, error) {
@@ -621,9 +624,12 @@ func setupMockStorageManager(mockCtrl *gomock.Controller) {
 	_, err := cloudops.NewStorageManager(cloudops.StorageDecisionMatrix{}, cloudops.ProviderType("mock"))
 	if err != nil {
 		// mock is not registered
-		cloudops.RegisterStorageManager(
+		if err := cloudops.RegisterStorageManager(
 			testProviderType,
 			initFn,
-		)
+		); err != nil {
+			return err
+		}
 	}
+	return nil
 }

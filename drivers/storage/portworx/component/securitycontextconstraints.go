@@ -45,8 +45,12 @@ func (s *scc) Priority() int32 {
 
 func (s *scc) Initialize(k8sClient client.Client, k8sVersion version.Version, scheme *runtime.Scheme, recorder record.EventRecorder) {
 	s.k8sClient = k8sClient
-	ocp_secv1.Install(s.k8sClient.Scheme())
-	apiextensionsv1.AddToScheme(s.k8sClient.Scheme())
+	if err := ocp_secv1.Install(s.k8sClient.Scheme()); err != nil {
+		logrus.Errorf("Failed to add openshift objects to the scheme. %v", err)
+	}
+	if err := apiextensionsv1.AddToScheme(s.k8sClient.Scheme()); err != nil {
+		logrus.Errorf("Failed to add api-extensions-v1 objects to the scheme. %v", err)
+	}
 }
 
 func (s *scc) IsPausedForMigration(cluster *opcorev1.StorageCluster) bool {

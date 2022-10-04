@@ -142,7 +142,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -197,7 +198,8 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -394,7 +396,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
@@ -418,7 +421,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, k8sVersion)
 	rel = m.GetVersions(cluster, true)
@@ -430,7 +434,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, nil)
 	rel = m.GetVersions(cluster, true)
@@ -465,7 +470,8 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
@@ -533,7 +539,8 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -620,7 +627,8 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	expected.Components.Stork = "image/stork:2.5.1"
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
@@ -676,7 +684,8 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -772,7 +781,8 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
@@ -787,7 +797,8 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
