@@ -3,16 +3,18 @@ module github.com/libopenstorage/operator
 go 1.15
 
 require (
+	github.com/aws/aws-sdk-go v1.40.39
 	github.com/dgrijalva/jwt-go v3.2.1-0.20180719211823-0b96aaa70776+incompatible
 	github.com/go-logr/logr v1.1.0
 	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-version v1.2.1
-	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
+	github.com/libopenstorage/cloudops v0.0.0-20221007052249-5334d418c8a2
 	github.com/libopenstorage/openstorage v8.0.1-0.20211105030910-665c2f474186+incompatible
 	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
-	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
+	github.com/pborman/uuid v1.2.0
+	github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20220725231657-5a6a43c6a5b3
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
