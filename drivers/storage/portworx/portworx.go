@@ -7,15 +7,6 @@ import (
 	"strings"
 
 	version "github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudstorage"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -25,6 +16,17 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -153,6 +155,20 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) {
+	if toUpdate.Annotations == nil {
+		toUpdate.Annotations = make(map[string]string)
+	}
+	// Initialize the preflight check annotation
+	if preflight.RequiresCheck() {
+		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+		}
+	}
+
+	if preflight.IsEKS() {
+		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
+	}
+
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
 	}

@@ -5,6 +5,9 @@ import (
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/libopenstorage/cloudops"
+	"github.com/libopenstorage/operator/pkg/preflight"
 )
 
 const (
@@ -26,18 +29,6 @@ type Ops interface {
 	GetZone(*v1.Node) (string, error)
 }
 
-// New returns a new implementation of the cloud provider
-func New(name string) Ops {
-	providerRegistryLock.Lock()
-	defer providerRegistryLock.Unlock()
-
-	ops, ok := providerRegistry[name]
-	if !ok {
-		return &defaultProvider{name}
-	}
-	return ops
-}
-
 type defaultProvider struct {
 	name string
 }
@@ -53,10 +44,30 @@ func (d *defaultProvider) GetZone(node *v1.Node) (string, error) {
 	return node.Labels[failureDomainZoneKey], nil
 }
 
+// Get returns the cloud provider
+func Get() Ops {
+	return New(preflight.Instance().ProviderName())
+}
+
+// New returns a new implementation of the cloud provider
+func New(name string) Ops {
+	providerRegistryLock.Lock()
+	defer providerRegistryLock.Unlock()
+
+	ops, ok := providerRegistry[name]
+	if !ok {
+		return &defaultProvider{
+			name: name,
+		}
+	}
+	return ops
+}
+
 func init() {
 	providerRegistryLock.Lock()
 	defer providerRegistryLock.Unlock()
 
 	providerRegistry = make(map[string]Ops)
-	providerRegistry[azureName] = &azure{}
+	providerRegistry[cloudops.Azure] = &azure{}
+	providerRegistry[string(cloudops.AWS)] = &aws{}
 }
