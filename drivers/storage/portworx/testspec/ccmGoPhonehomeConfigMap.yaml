@@ -12,7 +12,7 @@ data:
   ccm.properties: |-
     {
       "product_name": "portworx",
-      "port": "10090",
+      "port": "10021",
       "node_name_key": "K8S_NODE_NAME",
       "envoy_port": "13002",
       "logupload": {
