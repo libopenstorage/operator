@@ -46,8 +46,8 @@ spec:
         securityContext:
           privileged: true
         ports:
-        - containerPort: 10021
-          hostPort: 10021
+        - containerPort: 9024
+          hostPort: 9024
           name: loguploader
           protocol: TCP
         volumeMounts:
@@ -71,8 +71,8 @@ spec:
         imagePullPolicy: Always
         name: envoy
         ports:
-        - containerPort: 13002
-          hostPort: 13002
+        - containerPort: 12002
+          hostPort: 12002
           name: envoy
           protocol: TCP
         securityContext:
