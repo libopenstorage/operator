@@ -1179,9 +1179,15 @@ func initRuntimeOptions(cluster *corev1.StorageCluster) {
 func getStorageClusterNameFromClusterID(clusterID string) string {
 	// Must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character
 	// If the cluster ID is a valid k8s object name, just set it as the storage cluster name
+	// Additionally, check whether the clusterID is longer than 63 chars, which will fail to construct controller revision
 	validNameRegex := regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
-	if validNameRegex.MatchString(clusterID) {
+	if validNameRegex.MatchString(clusterID) && len(clusterID) <= 63 {
 		return clusterID
+	}
+
+	// Truncate the cluster ID if it's longer than 63 chars
+	if len(clusterID) > 63 {
+		clusterID = clusterID[0:63]
 	}
 
 	// If the cluster ID is invalid as a k8s object name, replace '_' with '-' then remove all invalid characters

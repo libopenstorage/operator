@@ -12599,7 +12599,6 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
 				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
-			StartPort: &startPort,
 		},
 		Status: corev1.StorageClusterStatus{
 			ClusterUID: "test-clusteruid",
@@ -12618,8 +12617,25 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 		&client.CreateOptions{},
 	)
 
+	// Validate default ccm listening port
 	driver.SetDefaultsOnStorageCluster(cluster)
 	err := driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "ccmGoPhonehomeDaemonSetDefaultPort.yaml")
+	daemonset := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, daemonset.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Name, daemonset.Name)
+	require.Equal(t, expectedDaemonSet.Namespace, daemonset.Namespace)
+	require.Equal(t, expectedDaemonSet.Spec, daemonset.Spec)
+
+	// Shift start port
+	cluster.Spec.StartPort = &startPort
+	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
 	require.NotEmpty(t, cluster.Status.DesiredImages.MetricsCollector)
@@ -12732,11 +12748,11 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
-	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "ccmGoPhonehomeDaemonSet.yaml")
-	daemonset := &appsv1.DaemonSet{}
+	expectedDaemonSet = testutil.GetExpectedDaemonSet(t, "ccmGoPhonehomeDaemonSet.yaml")
+	daemonset = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.OwnerReferences, 1)
+	require.Len(t, daemonset.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Name, daemonset.Name)
 	require.Equal(t, expectedDaemonSet.Namespace, daemonset.Namespace)
