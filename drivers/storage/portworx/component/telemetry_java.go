@@ -142,6 +142,10 @@ func (t *telemetry) deployMetricsCollectorV1(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if t.reconcileMetricsCollector == nil || !*t.reconcileMetricsCollector {
+		return nil
+	}
+
 	if err := t.createCollectorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
