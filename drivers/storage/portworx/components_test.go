@@ -1543,7 +1543,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment_k8s_1.24.yaml")
 	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
-	expectedContainer.Command = expectedContainer.Command[0:4]
+	expectedContainer.Command = expectedContainer.Command[0:6]
 	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.24.0"
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS

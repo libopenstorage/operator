@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 
@@ -246,6 +247,11 @@ func (c *pvcController) createClusterRole() error {
 					ResourceNames: []string{constants.PrivilegedPSPName},
 					Verbs:         []string{"use"},
 				},
+				{
+					APIGroups: []string{"coordination.k8s.io"},
+					Resources: []string{"leases"},
+					Verbs:     []string{"*"},
+				},
 			},
 		},
 	)
@@ -311,6 +317,9 @@ func (c *pvcController) createDeployment(
 		} else {
 			command = append(command, "--leader-elect-resource-lock=configmaps")
 		}
+	} else {
+		command = append(command, "--leader-elect-resource-name=portworx-pvc-controller")
+		command = append(command, fmt.Sprintf("--leader-elect-resource-namespace=%s", cluster.Namespace))
 	}
 
 	if c.k8sVersion.LessThan(k8sutil.K8sVer1_22) {
