@@ -116,6 +116,7 @@ type telemetry struct {
 	isDeploymentRegistrationServiceCreated bool
 	isDaemonSetTelemetryPhonehonmeCreated  bool
 	usePxProxy                             bool
+	reconcileMetricsCollector              *bool
 }
 
 func (t *telemetry) Name() string {
@@ -155,6 +156,9 @@ func RegisterTelemetryComponent() {
 func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
+		return err
+	}
+	if err := t.shouldReconcileMetricsCollector(cluster); err != nil {
 		return err
 	}
 	t.isCCMGoSupported = pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
@@ -404,10 +408,43 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	return nil
 }
 
+// PWX-27401 only reconcile metrics collector if it's already running, revert once collector memory issue got resolved
+func (t *telemetry) shouldReconcileMetricsCollector(
+	cluster *corev1.StorageCluster,
+) error {
+	if t.reconcileMetricsCollector != nil {
+		return nil
+	}
+	// Check if collector V1 or V2 deployment exists
+	existingDeployment := &appsv1.Deployment{}
+	for _, deploymentName := range []string{CollectorDeploymentName, DeploymentNameTelemetryCollectorV2} {
+		err := t.k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      deploymentName,
+				Namespace: cluster.Namespace,
+			},
+			existingDeployment,
+		)
+		if err == nil {
+			t.reconcileMetricsCollector = boolPtr(true)
+			return nil
+		} else if !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	t.reconcileMetricsCollector = boolPtr(false)
+	return nil
+}
+
 func (t *telemetry) reconcileCCMGoTelemetryCollectorV2(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if t.reconcileMetricsCollector == nil || !*t.reconcileMetricsCollector {
+		return nil
+	}
+
 	// Delete metrics collector V1 if exists
 	if err := t.deleteMetricsCollectorV1(cluster.Namespace, ownerRef); err != nil {
 		return err
