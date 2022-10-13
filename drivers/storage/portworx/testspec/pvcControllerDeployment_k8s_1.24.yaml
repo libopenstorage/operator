@@ -32,6 +32,8 @@ spec:
         - --leader-elect=true
         - --controllers=persistentvolume-binder,persistentvolume-expander
         - --use-service-account-credentials=true
+        - --leader-elect-resource-name=portworx-pvc-controller
+        - --leader-elect-resource-namespace=kube-system
         - --address=0.0.0.0
         image: gcr.io/google_containers/kube-controller-manager-amd64:v0.0.0
         imagePullPolicy: Always
