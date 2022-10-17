@@ -3442,17 +3442,18 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	logrus.Info("Validate Telemetry components are enabled")
 
 	// Wait for the deployment to become online
-	dep := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-metrics-collector",
-			Namespace: cluster.Namespace,
-		},
-	}
+	// TODO: Skipped because PWX-27401, revert later
+	// dep := appsv1.Deployment{
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      "px-metrics-collector",
+	// 		Namespace: cluster.Namespace,
+	// 	},
+	// }
 
 	t := func() (interface{}, bool, error) {
-		if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
-			return nil, true, err
-		}
+		// if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
+		// 	return nil, true, err
+		// }
 
 		/* TODO: We need to make this work for spawn
 		expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
