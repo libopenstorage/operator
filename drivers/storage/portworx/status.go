@@ -217,7 +217,7 @@ func (p *portworx) updateRemainingStorageNodes(
 		pxNodeExists := currentPxNodes[storageNode.Name]
 		pxPodExists := currentPxPodNodes[storageNode.Name]
 		if !pxNodeExists && !pxPodExists {
-			logrus.Debugf("Deleting orphan StorageNode %v/%v",
+			logrus.Infof("Deleting orphan StorageNode %v/%v",
 				storageNode.Namespace, storageNode.Name)
 
 			err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
@@ -238,7 +238,7 @@ func (p *portworx) updateRemainingStorageNodes(
 			if storageNode.Status.Phase != newPhase {
 				storageNodeCopy := storageNode.DeepCopy()
 				storageNodeCopy.Status.Phase = newPhase
-				logrus.Debugf("Updating StorageNode %v/%v status",
+				logrus.Infof("Updating StorageNode %v/%v status",
 					storageNode.Namespace, storageNode.Name)
 				err = p.k8sClient.Status().Update(context.TODO(), storageNodeCopy)
 				if err != nil && !errors.IsNotFound(err) {
@@ -287,7 +287,7 @@ func (p *portworx) createOrUpdateStorageNode(
 
 	var err error
 	if errors.IsNotFound(getErr) {
-		logrus.Debugf("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
+		logrus.Infof("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
 		err = p.k8sClient.Create(context.TODO(), storageNode)
 	} else if !reflect.DeepEqual(originalStorageNode, storageNode) {
 		logrus.Debugf("Updating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)

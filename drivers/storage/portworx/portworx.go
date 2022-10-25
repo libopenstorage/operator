@@ -569,7 +569,7 @@ func (p *portworx) DeleteStorage(
 		}
 		// all the nodes are wiped
 		if removeData {
-			logrus.Debugf("Deleting portworx metadata")
+			logrus.Infof("Deleting portworx metadata")
 			if err := u.WipeMetadata(); err != nil {
 				logrus.Errorf("Failed to delete portworx metadata: %v", err)
 				return &corev1.ClusterCondition{

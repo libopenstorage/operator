@@ -142,7 +142,7 @@ func (c *portworxProxy) createServiceAccount() error {
 	)
 	if err == nil && len(existingSA.OwnerReferences) > 0 {
 		existingSA.OwnerReferences = nil
-		logrus.Debugf("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
+		logrus.Infof("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
 		if err := c.k8sClient.Update(context.TODO(), existingSA); err != nil {
 			return err
 		}
@@ -197,7 +197,7 @@ func (c *portworxProxy) createPortworxService(
 	)
 	if err == nil && len(existingSvc.OwnerReferences) > 0 {
 		existingSvc.OwnerReferences = nil
-		logrus.Debugf("Updating %s/%s Service", service.Namespace, service.Name)
+		logrus.Infof("Updating %s/%s Service", service.Namespace, service.Name)
 		if err := c.k8sClient.Update(context.TODO(), existingSvc); err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func (c *portworxProxy) createDaemonSet(
 		// be removed eventually when existing customers are upgraded.
 		if !errors.IsNotFound(getErr) && len(existingDaemonSet.OwnerReferences) > 0 {
 			existingDaemonSet.OwnerReferences = nil
-			logrus.Debugf("Updating %s/%s DaemonSet", daemonSet.Namespace, daemonSet.Name)
+			logrus.Infof("Updating %s/%s DaemonSet", daemonSet.Namespace, daemonSet.Name)
 			if err := c.k8sClient.Update(context.TODO(), existingDaemonSet); err != nil {
 				return err
 			}
