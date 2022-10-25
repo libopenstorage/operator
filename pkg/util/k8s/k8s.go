@@ -174,7 +174,7 @@ func CreateOrUpdateServiceAccount(
 		existingSA,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s ServiceAccount", sa.Namespace, sa.Name)
+		logrus.Infof("Creating %s/%s ServiceAccount", sa.Namespace, sa.Name)
 		return k8sClient.Create(context.TODO(), sa)
 	} else if err != nil {
 		return err
@@ -187,7 +187,7 @@ func CreateOrUpdateServiceAccount(
 	}
 
 	if len(sa.OwnerReferences) > len(existingSA.OwnerReferences) {
-		logrus.Debugf("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
+		logrus.Infof("Updating %s/%s ServiceAccount", sa.Namespace, sa.Name)
 		return k8sClient.Update(context.TODO(), sa)
 	}
 	return nil
@@ -218,17 +218,17 @@ func DeleteServiceAccount(
 	// even if the object has no owner
 	if (len(serviceAccount.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(serviceAccount.OwnerReferences) > 0 && len(serviceAccount.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete ServiceAccount %s/%s as it is not owned",
+		logrus.Infof("Cannot delete ServiceAccount %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s ServiceAccount", namespace, name)
+		logrus.Infof("Deleting %s/%s ServiceAccount", namespace, name)
 		return k8sClient.Delete(context.TODO(), serviceAccount)
 	}
 	serviceAccount.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s ServiceAccount", namespace, name)
+	logrus.Infof("Disowning %s/%s ServiceAccount", namespace, name)
 	return k8sClient.Update(context.TODO(), serviceAccount)
 }
 
@@ -249,7 +249,7 @@ func CreateOrUpdateRole(
 		existingRole,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s Role", role.Namespace, role.Name)
+		logrus.Infof("Creating %s/%s Role", role.Namespace, role.Name)
 		return k8sClient.Create(context.TODO(), role)
 	} else if err != nil {
 		return err
@@ -264,7 +264,7 @@ func CreateOrUpdateRole(
 	}
 
 	if modified || len(role.OwnerReferences) > len(existingRole.OwnerReferences) {
-		logrus.Debugf("Updating %s/%s Role", role.Namespace, role.Name)
+		logrus.Infof("Updating %s/%s Role", role.Namespace, role.Name)
 		return k8sClient.Update(context.TODO(), role)
 	}
 	return nil
@@ -295,17 +295,17 @@ func DeleteRole(
 	// even if the object has no owner
 	if (len(role.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(role.OwnerReferences) > 0 && len(role.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete Role %s/%s as it is not owned",
+		logrus.Infof("Cannot delete Role %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s Role", namespace, name)
+		logrus.Infof("Deleting %s/%s Role", namespace, name)
 		return k8sClient.Delete(context.TODO(), role)
 	}
 	role.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s Role", namespace, name)
+	logrus.Infof("Disowning %s/%s Role", namespace, name)
 	return k8sClient.Update(context.TODO(), role)
 }
 
@@ -326,7 +326,7 @@ func CreateOrUpdateRoleBinding(
 		existingRB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s RoleBinding", rb.Namespace, rb.Name)
+		logrus.Infof("Creating %s/%s RoleBinding", rb.Namespace, rb.Name)
 		return k8sClient.Create(context.TODO(), rb)
 	} else if err != nil {
 		return err
@@ -343,7 +343,7 @@ func CreateOrUpdateRoleBinding(
 
 	if modified || len(rb.OwnerReferences) > len(existingRB.OwnerReferences) {
 		rb.ResourceVersion = existingRB.ResourceVersion
-		logrus.Debugf("Updating %s/%s RoleBinding", rb.Namespace, rb.Name)
+		logrus.Infof("Updating %s/%s RoleBinding", rb.Namespace, rb.Name)
 		return k8sClient.Update(context.TODO(), rb)
 	}
 	return nil
@@ -374,17 +374,17 @@ func DeleteRoleBinding(
 	// even if the object has no owner
 	if (len(roleBinding.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(roleBinding.OwnerReferences) > 0 && len(roleBinding.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete RoleBinding %s/%s as it is not owned",
+		logrus.Infof("Cannot delete RoleBinding %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s RoleBinding", namespace, name)
+		logrus.Infof("Deleting %s/%s RoleBinding", namespace, name)
 		return k8sClient.Delete(context.TODO(), roleBinding)
 	}
 	roleBinding.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s RoleBinding", namespace, name)
+	logrus.Infof("Disowning %s/%s RoleBinding", namespace, name)
 	return k8sClient.Update(context.TODO(), roleBinding)
 }
 
@@ -401,7 +401,7 @@ func CreateOrUpdateClusterRole(
 		existingCR,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s ClusterRole", cr.Name)
+		logrus.Infof("Creating %s ClusterRole", cr.Name)
 		return k8sClient.Create(context.TODO(), cr)
 	} else if err != nil {
 		return err
@@ -412,7 +412,7 @@ func CreateOrUpdateClusterRole(
 		len(existingCR.OwnerReferences) > 0 {
 		existingCR.Rules = cr.DeepCopy().Rules
 		existingCR.OwnerReferences = nil
-		logrus.Debugf("Updating %s ClusterRole", existingCR.Name)
+		logrus.Infof("Updating %s ClusterRole", existingCR.Name)
 		return k8sClient.Update(context.TODO(), existingCR)
 	}
 	return nil
@@ -436,11 +436,11 @@ func DeleteClusterRole(
 
 	// Do not delete the object if it has an owner
 	if len(clusterRole.OwnerReferences) > 0 {
-		logrus.Debugf("Cannot delete ClusterRole %s as it is owned", name)
+		logrus.Infof("Cannot delete ClusterRole %s as it is owned", name)
 		return nil
 	}
 
-	logrus.Debugf("Deleting %s ClusterRole", name)
+	logrus.Infof("Deleting %s ClusterRole", name)
 	return k8sClient.Delete(context.TODO(), clusterRole)
 }
 
@@ -457,7 +457,7 @@ func CreateOrUpdateClusterRoleBinding(
 		existingCRB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s ClusterRoleBinding", crb.Name)
+		logrus.Infof("Creating %s ClusterRoleBinding", crb.Name)
 		return k8sClient.Create(context.TODO(), crb)
 	} else if err != nil {
 		return err
@@ -472,7 +472,7 @@ func CreateOrUpdateClusterRoleBinding(
 		existingCRB.Subjects = copy.Subjects
 		existingCRB.RoleRef = copy.RoleRef
 		existingCRB.OwnerReferences = nil
-		logrus.Debugf("Updating %s ClusterRoleBinding", existingCRB.Name)
+		logrus.Infof("Updating %s ClusterRoleBinding", existingCRB.Name)
 		return k8sClient.Update(context.TODO(), existingCRB)
 	}
 	return nil
@@ -497,11 +497,11 @@ func DeleteClusterRoleBinding(
 
 	// Do not delete the object if it has an owner
 	if len(crb.OwnerReferences) > 0 {
-		logrus.Debugf("Cannot delete ClusterRoleBinding %s as it is owned", name)
+		logrus.Infof("Cannot delete ClusterRoleBinding %s as it is owned", name)
 		return nil
 	}
 
-	logrus.Debugf("Deleting %s ClusterRoleBinding", name)
+	logrus.Infof("Deleting %s ClusterRoleBinding", name)
 	return k8sClient.Delete(context.TODO(), crb)
 }
 
@@ -522,7 +522,7 @@ func CreateOrUpdateConfigMap(
 		existingConfigMap,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %v ConfigMap", configMap.Name)
+		logrus.Infof("Creating %v ConfigMap", configMap.Name)
 		return k8sClient.Create(context.TODO(), configMap)
 	} else if err != nil {
 		return err
@@ -543,7 +543,7 @@ func CreateOrUpdateConfigMap(
 	}
 
 	if modified || len(configMap.OwnerReferences) > len(existingConfigMap.OwnerReferences) {
-		logrus.Debugf("Updating %v ConfigMap", configMap.Name)
+		logrus.Infof("Updating %v ConfigMap", configMap.Name)
 		return k8sClient.Update(context.TODO(), configMap)
 	}
 	return nil
@@ -574,17 +574,17 @@ func DeleteConfigMap(
 	// even if the object has no owner
 	if (len(configMap.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(configMap.OwnerReferences) > 0 && len(configMap.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete ConfigMap %s/%s as it is not owned",
+		logrus.Infof("Cannot delete ConfigMap %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s ConfigMap", namespace, name)
+		logrus.Infof("Deleting %s/%s ConfigMap", namespace, name)
 		return k8sClient.Delete(context.TODO(), configMap)
 	}
 	configMap.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s ConfigMap", namespace, name)
+	logrus.Infof("Disowning %s/%s ConfigMap", namespace, name)
 	return k8sClient.Update(context.TODO(), configMap)
 }
 
@@ -601,11 +601,11 @@ func CreateStorageClass(
 		existingSC,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s StorageClass", sc.Name)
+		logrus.Infof("Creating %s StorageClass", sc.Name)
 		return k8sClient.Create(context.TODO(), sc)
 	} else if err == nil && len(existingSC.OwnerReferences) > 0 {
 		// Cluster scoped objects should not have owner references
-		logrus.Debugf("Updating %s StorageClass", sc.Name)
+		logrus.Infof("Updating %s StorageClass", sc.Name)
 		existingSC.OwnerReferences = nil
 		return k8sClient.Update(context.TODO(), existingSC)
 	}
@@ -630,11 +630,11 @@ func DeleteStorageClass(
 
 	// Do not delete the object if it has an owner
 	if len(storageClass.OwnerReferences) > 0 {
-		logrus.Debugf("Cannot delete StorageClass %s as it is owned", name)
+		logrus.Infof("Cannot delete StorageClass %s as it is owned", name)
 		return nil
 	}
 
-	logrus.Debugf("Deleting %s StorageClass", name)
+	logrus.Infof("Deleting %s StorageClass", name)
 	return k8sClient.Delete(context.TODO(), storageClass)
 }
 
@@ -651,7 +651,7 @@ func CreateOrUpdateCSIDriver(
 		existingDriver,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s CSIDriver", driver.Name)
+		logrus.Infof("Creating %s CSIDriver", driver.Name)
 		return k8sClient.Create(context.TODO(), driver)
 	} else if err != nil {
 		return err
@@ -668,10 +668,10 @@ func CreateOrUpdateCSIDriver(
 		existingDriver.Spec = *driver.Spec.DeepCopy()
 		existingDriver.OwnerReferences = nil
 
-		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
+		logrus.Infof("Updating %s CSIDriver", existingDriver.Name)
 		err := k8sClient.Update(context.TODO(), existingDriver, &client.UpdateOptions{})
 		if err != nil {
-			logrus.Debugf("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
+			logrus.Infof("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
 			err = k8sClient.Delete(context.TODO(), existingDriver)
 			if err != nil {
 				return err
@@ -697,7 +697,7 @@ func CreateOrUpdateCSIDriverBeta(
 		existingDriver,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s CSIDriver", driver.Name)
+		logrus.Infof("Creating %s CSIDriver", driver.Name)
 		return k8sClient.Create(context.TODO(), driver)
 	} else if err != nil {
 		return err
@@ -709,10 +709,10 @@ func CreateOrUpdateCSIDriverBeta(
 		existingDriver.Spec = *driver.Spec.DeepCopy()
 		existingDriver.OwnerReferences = nil
 
-		logrus.Debugf("Updating %s CSIDriver", existingDriver.Name)
+		logrus.Infof("Updating %s CSIDriver", existingDriver.Name)
 		err := k8sClient.Update(context.TODO(), existingDriver, &client.UpdateOptions{})
 		if err != nil {
-			logrus.Debugf("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
+			logrus.Infof("Update failed: %s, re-creating %s CSIDriver", err.Error(), existingDriver.Name)
 			err = k8sClient.Delete(context.TODO(), existingDriver)
 			if err != nil {
 				return err
@@ -744,11 +744,11 @@ func DeleteCSIDriver(
 
 	// Do not delete the object if it has an owner
 	if len(csiDriver.OwnerReferences) > 0 {
-		logrus.Debugf("Cannot delete CSIDriver %s as it is owned", name)
+		logrus.Infof("Cannot delete CSIDriver %s as it is owned", name)
 		return nil
 	}
 
-	logrus.Debugf("Deleting %s CSIDriver", name)
+	logrus.Infof("Deleting %s CSIDriver", name)
 	return k8sClient.Delete(context.TODO(), csiDriver)
 }
 
@@ -771,11 +771,11 @@ func DeleteCSIDriverBeta(
 
 	// Do not delete the object if it has an owner
 	if len(csiDriver.OwnerReferences) > 0 {
-		logrus.Debugf("Cannot delete CSIDriver %s as it is owned", name)
+		logrus.Infof("Cannot delete CSIDriver %s as it is owned", name)
 		return nil
 	}
 
-	logrus.Debugf("Deleting %s CSIDriver", name)
+	logrus.Infof("Deleting %s CSIDriver", name)
 	return k8sClient.Delete(context.TODO(), csiDriver)
 }
 
@@ -795,7 +795,7 @@ func CreateOrUpdateService(
 		existingService,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s Service", service.Namespace, service.Name)
+		logrus.Infof("Creating %s/%s Service", service.Namespace, service.Name)
 		return k8sClient.Create(context.TODO(), service)
 	} else if err != nil {
 		return err
@@ -870,7 +870,7 @@ func CreateOrUpdateService(
 		existingService.Spec.Type = service.Spec.Type
 		existingService.Spec.Ports = servicePorts
 		existingService.Annotations = service.Annotations
-		logrus.Debugf("Updating %s/%s Service", service.Namespace, service.Name)
+		logrus.Infof("Updating %s/%s Service", service.Namespace, service.Name)
 		return k8sClient.Update(context.TODO(), existingService)
 	}
 	return nil
@@ -901,17 +901,17 @@ func DeleteService(
 	// even if the object has no owner
 	if (len(service.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(service.OwnerReferences) > 0 && len(service.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete Service %s/%s as it is not owned",
+		logrus.Infof("Cannot delete Service %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s Service", namespace, name)
+		logrus.Infof("Deleting %s/%s Service", namespace, name)
 		return k8sClient.Delete(context.TODO(), service)
 	}
 	service.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s Service", namespace, name)
+	logrus.Infof("Disowning %s/%s Service", namespace, name)
 	return k8sClient.Update(context.TODO(), service)
 }
 
@@ -955,7 +955,7 @@ func CreateOrUpdateDeployment(
 		existingDeployment,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s Deployment", deployment.Name)
+		logrus.Infof("Creating %s Deployment", deployment.Name)
 		return k8sClient.Create(context.TODO(), deployment)
 	} else if err != nil {
 		return err
@@ -996,17 +996,17 @@ func DeleteDeployment(
 	// even if the object has no owner
 	if (len(deployment.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(deployment.OwnerReferences) > 0 && len(deployment.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete Deployment %s/%s as it is not owned",
+		logrus.Infof("Cannot delete Deployment %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s Deployment", namespace, name)
+		logrus.Infof("Deleting %s/%s Deployment", namespace, name)
 		return k8sClient.Delete(context.TODO(), deployment)
 	}
 	deployment.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s Deployment", namespace, name)
+	logrus.Infof("Disowning %s/%s Deployment", namespace, name)
 	return k8sClient.Update(context.TODO(), deployment)
 }
 
@@ -1026,7 +1026,7 @@ func CreateOrUpdateStatefulSet(
 		existingSS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s StatefulSet", ss.Name)
+		logrus.Infof("Creating %s StatefulSet", ss.Name)
 		return k8sClient.Create(context.TODO(), ss)
 	} else if err != nil {
 		return err
@@ -1067,17 +1067,17 @@ func DeleteStatefulSet(
 	// even if the object has no owner
 	if (len(statefulSet.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(statefulSet.OwnerReferences) > 0 && len(statefulSet.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete StatefulSet %s/%s as it is not owned",
+		logrus.Infof("Cannot delete StatefulSet %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s StatefulSet", namespace, name)
+		logrus.Infof("Deleting %s/%s StatefulSet", namespace, name)
 		return k8sClient.Delete(context.TODO(), statefulSet)
 	}
 	statefulSet.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s StatefulSet", namespace, name)
+	logrus.Infof("Disowning %s/%s StatefulSet", namespace, name)
 	return k8sClient.Update(context.TODO(), statefulSet)
 }
 
@@ -1121,7 +1121,7 @@ func CreateOrUpdateDaemonSet(
 		existingDS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s DaemonSet", ds.Namespace, ds.Name)
+		logrus.Infof("Creating %s/%s DaemonSet", ds.Namespace, ds.Name)
 		return k8sClient.Create(context.TODO(), ds)
 	} else if err != nil {
 		return err
@@ -1175,17 +1175,17 @@ func DeleteDaemonSet(
 	// even if the object has no owner
 	if (len(ds.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(ds.OwnerReferences) > 0 && len(ds.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete DaemonSet %s/%s as it is not owned",
+		logrus.Infof("Cannot delete DaemonSet %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s DaemonSet", namespace, name)
+		logrus.Infof("Deleting %s/%s DaemonSet", namespace, name)
 		return k8sClient.Delete(context.TODO(), ds)
 	}
 	ds.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s DaemonSet", namespace, name)
+	logrus.Infof("Disowning %s/%s DaemonSet", namespace, name)
 	return k8sClient.Update(context.TODO(), ds)
 }
 
@@ -1227,7 +1227,7 @@ func CreateOrUpdateStorageNode(
 		existingNode,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating StorageNode %s/%s", node.Namespace, node.Name)
+		logrus.Infof("Creating StorageNode %s/%s", node.Namespace, node.Name)
 		return k8sClient.Create(context.TODO(), node)
 	} else if err != nil {
 		return err
@@ -1247,7 +1247,7 @@ func CreateOrUpdateStorageNode(
 		// but we need the original to update the status
 		nodeStatus := node.DeepCopy()
 		node.ResourceVersion = existingNode.ResourceVersion
-		logrus.Debugf("Updating StorageNode %s/%s", node.Namespace, node.Name)
+		logrus.Infof("Updating StorageNode %s/%s", node.Namespace, node.Name)
 		if err := k8sClient.Update(context.TODO(), node); err != nil {
 			return err
 		}
@@ -1273,7 +1273,7 @@ func CreateOrUpdateServiceMonitor(
 		existingMonitor,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
+		logrus.Infof("Creating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
 		return k8sClient.Create(context.TODO(), monitor)
 	} else if err != nil {
 		return err
@@ -1289,7 +1289,7 @@ func CreateOrUpdateServiceMonitor(
 
 	if modified || len(monitor.OwnerReferences) > len(existingMonitor.OwnerReferences) {
 		monitor.ResourceVersion = existingMonitor.ResourceVersion
-		logrus.Debugf("Updating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
+		logrus.Infof("Updating ServiceMonitor %s/%s", monitor.Namespace, monitor.Name)
 		return k8sClient.Update(context.TODO(), monitor)
 	}
 	return nil
@@ -1319,16 +1319,16 @@ func DeleteServiceMonitor(
 	// even if the object has no owner
 	if (len(monitor.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(monitor.OwnerReferences) > 0 && len(monitor.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete ServiceMonitor %s/%s as it is not owned", namespace, name)
+		logrus.Infof("Cannot delete ServiceMonitor %s/%s as it is not owned", namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s ServiceMonitor", namespace, name)
+		logrus.Infof("Deleting %s/%s ServiceMonitor", namespace, name)
 		return k8sClient.Delete(context.TODO(), monitor)
 	}
 	monitor.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s ServiceMonitor", namespace, name)
+	logrus.Infof("Disowning %s/%s ServiceMonitor", namespace, name)
 	return k8sClient.Update(context.TODO(), monitor)
 }
 
@@ -1348,7 +1348,7 @@ func CreateOrUpdatePrometheusRule(
 		existingRule,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating PrometheusRule %s/%s", rule.Namespace, rule.Name)
+		logrus.Infof("Creating PrometheusRule %s/%s", rule.Namespace, rule.Name)
 		return k8sClient.Create(context.TODO(), rule)
 	} else if err != nil {
 		return err
@@ -1364,7 +1364,7 @@ func CreateOrUpdatePrometheusRule(
 
 	if modified || len(rule.OwnerReferences) > len(existingRule.OwnerReferences) {
 		rule.ResourceVersion = existingRule.ResourceVersion
-		logrus.Debugf("Updating PrometheusRule %s/%s", rule.Namespace, rule.Name)
+		logrus.Infof("Updating PrometheusRule %s/%s", rule.Namespace, rule.Name)
 		return k8sClient.Update(context.TODO(), rule)
 	}
 	return nil
@@ -1395,16 +1395,16 @@ func DeletePrometheusRule(
 	// even if the object has no owner
 	if (len(rule.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(rule.OwnerReferences) > 0 && len(rule.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete PrometheusRule %s/%s as it is not owned", namespace, name)
+		logrus.Infof("Cannot delete PrometheusRule %s/%s as it is not owned", namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s PrometheusRule", namespace, name)
+		logrus.Infof("Deleting %s/%s PrometheusRule", namespace, name)
 		return k8sClient.Delete(context.TODO(), rule)
 	}
 	rule.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s PrometheusRule", namespace, name)
+	logrus.Infof("Disowning %s/%s PrometheusRule", namespace, name)
 	return k8sClient.Update(context.TODO(), rule)
 }
 
@@ -1424,7 +1424,7 @@ func CreateOrUpdatePrometheus(
 		existingPrometheus,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating Prometheus %s/%s", prometheus.Namespace, prometheus.Name)
+		logrus.Infof("Creating Prometheus %s/%s", prometheus.Namespace, prometheus.Name)
 		return k8sClient.Create(context.TODO(), prometheus)
 	} else if err != nil {
 		return err
@@ -1440,7 +1440,7 @@ func CreateOrUpdatePrometheus(
 
 	if modified || len(prometheus.OwnerReferences) > len(existingPrometheus.OwnerReferences) {
 		prometheus.ResourceVersion = existingPrometheus.ResourceVersion
-		logrus.Debugf("Updating Prometheus %s/%s", prometheus.Namespace, prometheus.Name)
+		logrus.Infof("Updating Prometheus %s/%s", prometheus.Namespace, prometheus.Name)
 		return k8sClient.Update(context.TODO(), prometheus)
 	}
 	return nil
@@ -1470,16 +1470,16 @@ func DeletePrometheus(
 	// even if the object has no owner
 	if (len(prometheus.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(prometheus.OwnerReferences) > 0 && len(prometheus.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete Prometheus %s/%s as it is not owned", namespace, name)
+		logrus.Infof("Cannot delete Prometheus %s/%s as it is not owned", namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s Prometheus", namespace, name)
+		logrus.Infof("Deleting %s/%s Prometheus", namespace, name)
 		return k8sClient.Delete(context.TODO(), prometheus)
 	}
 	prometheus.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s Prometheus", namespace, name)
+	logrus.Infof("Disowning %s/%s Prometheus", namespace, name)
 	return k8sClient.Update(context.TODO(), prometheus)
 }
 
@@ -1499,7 +1499,7 @@ func CreateOrUpdateAlertManager(
 		existingAlertManager,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
+		logrus.Infof("Creating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
 		return k8sClient.Create(context.TODO(), alertManager)
 	} else if err != nil {
 		return err
@@ -1515,7 +1515,7 @@ func CreateOrUpdateAlertManager(
 
 	if modified || len(alertManager.OwnerReferences) > len(existingAlertManager.OwnerReferences) {
 		alertManager.ResourceVersion = existingAlertManager.ResourceVersion
-		logrus.Debugf("Updating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
+		logrus.Infof("Updating AlertManager %s/%s", alertManager.Namespace, alertManager.Name)
 		return k8sClient.Update(context.TODO(), alertManager)
 	}
 	return nil
@@ -1545,16 +1545,16 @@ func DeleteAlertManager(
 	// even if the object has no owner
 	if (len(alertManager.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(alertManager.OwnerReferences) > 0 && len(alertManager.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete AlertManager %s/%s as it is not owned", namespace, name)
+		logrus.Infof("Cannot delete AlertManager %s/%s as it is not owned", namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s AlertManager", namespace, name)
+		logrus.Infof("Deleting %s/%s AlertManager", namespace, name)
 		return k8sClient.Delete(context.TODO(), alertManager)
 	}
 	alertManager.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s AlertManager", namespace, name)
+	logrus.Infof("Disowning %s/%s AlertManager", namespace, name)
 	return k8sClient.Update(context.TODO(), alertManager)
 }
 
@@ -1574,7 +1574,7 @@ func CreateOrUpdatePodDisruptionBudget(
 		existingPDB,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
+		logrus.Infof("Creating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
 		return k8sClient.Create(context.TODO(), pdb)
 	} else if err != nil {
 		return err
@@ -1590,7 +1590,7 @@ func CreateOrUpdatePodDisruptionBudget(
 
 	if modified || len(pdb.OwnerReferences) > len(existingPDB.OwnerReferences) {
 		pdb.ResourceVersion = existingPDB.ResourceVersion
-		logrus.Debugf("Updating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
+		logrus.Infof("Updating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
 		return k8sClient.Update(context.TODO(), pdb)
 	}
 	return nil
@@ -1620,16 +1620,16 @@ func DeletePodDisruptionBudget(
 	// even if the object has no owner
 	if (len(pdb.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(pdb.OwnerReferences) > 0 && len(pdb.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete PodDisruptionBudget %s/%s as it is not owned", namespace, name)
+		logrus.Infof("Cannot delete PodDisruptionBudget %s/%s as it is not owned", namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s PodDisruptionBudget", namespace, name)
+		logrus.Infof("Deleting %s/%s PodDisruptionBudget", namespace, name)
 		return k8sClient.Delete(context.TODO(), pdb)
 	}
 	pdb.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s PodDisruptionBudget", namespace, name)
+	logrus.Infof("Disowning %s/%s PodDisruptionBudget", namespace, name)
 	return k8sClient.Update(context.TODO(), pdb)
 }
 
@@ -1755,7 +1755,7 @@ func CreateOrUpdateSecret(
 		existingSecret,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s Secret", secret.Namespace, secret.Name)
+		logrus.Infof("Creating %s/%s Secret", secret.Namespace, secret.Name)
 		return k8sClient.Create(context.TODO(), secret)
 	} else if err != nil {
 		return err
@@ -1770,7 +1770,7 @@ func CreateOrUpdateSecret(
 	}
 
 	if modified || len(secret.OwnerReferences) > len(existingSecret.OwnerReferences) {
-		logrus.Debugf("Updating %s/%s Secret", secret.Namespace, secret.Name)
+		logrus.Infof("Updating %s/%s Secret", secret.Namespace, secret.Name)
 		return k8sClient.Update(context.TODO(), secret)
 	}
 	return nil
@@ -1792,7 +1792,7 @@ func CreateOrAppendToSecret(
 		existingSecret,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Debugf("Creating %s/%s Secret", secret.Namespace, secret.Name)
+		logrus.Infof("Creating %s/%s Secret", secret.Namespace, secret.Name)
 		return k8sClient.Create(context.TODO(), secret)
 	} else if err != nil {
 		return err
@@ -1815,7 +1815,7 @@ func CreateOrAppendToSecret(
 	}
 
 	if modified || len(secret.OwnerReferences) > len(existingSecret.OwnerReferences) {
-		logrus.Debugf("Updating %s/%s Secret", secret.Namespace, secret.Name)
+		logrus.Infof("Updating %s/%s Secret", secret.Namespace, secret.Name)
 		return k8sClient.Update(context.TODO(), secret)
 	}
 	return nil
@@ -1846,17 +1846,17 @@ func DeleteSecret(
 	// even if the object has no owner
 	if (len(secret.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(secret.OwnerReferences) > 0 && len(secret.OwnerReferences) == len(newOwners)) {
-		logrus.Debugf("Cannot delete secret %s/%s as it is not owned, secret ownerRef: %v, desired ownerRef: %v",
+		logrus.Infof("Cannot delete secret %s/%s as it is not owned, secret ownerRef: %v, desired ownerRef: %v",
 			namespace, name, secret.OwnerReferences, owners)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Debugf("Deleting %s/%s Secret", namespace, name)
+		logrus.Infof("Deleting %s/%s Secret", namespace, name)
 		return k8sClient.Delete(context.TODO(), secret)
 	}
 	secret.OwnerReferences = newOwners
-	logrus.Debugf("Disowning %s/%s Secret", namespace, name)
+	logrus.Infof("Disowning %s/%s Secret", namespace, name)
 	return k8sClient.Update(context.TODO(), secret)
 }
 

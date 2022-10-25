@@ -74,7 +74,7 @@ func (c *portworxCRD) MarkDeleted() {
 }
 
 func (c *portworxCRD) createVolumePlacementStrategyCRD() error {
-	logrus.Debugf("Creating VolumePlacementStrategy CRD")
+	logrus.Info("Creating VolumePlacementStrategy CRD")
 
 	k8sVer1_16, err := version.NewVersion("1.16")
 	if err != nil {

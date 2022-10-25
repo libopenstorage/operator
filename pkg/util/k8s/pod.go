@@ -179,7 +179,7 @@ func CheckPredicatesForStoragePod(
 ) (bool, bool, error) {
 	pod, err := newSimulationPod(cluster, node.Name, selectorLabels)
 	if err != nil {
-		logrus.Debugf("Failed to create a pod spec for node %v: %v", node.Name, err)
+		logrus.Infof("Failed to create a pod spec for node %v: %v", node.Name, err)
 		return false, false, err
 	}
 

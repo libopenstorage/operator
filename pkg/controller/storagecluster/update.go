@@ -72,18 +72,18 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
-		logrus.Debugf("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
+		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
 	logrus.Debugf("Marking old pods for deletion")
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
-			logrus.Debugf("Number of unavailable StorageCluster pods: %d, is equal "+
+			logrus.Infof("Number of unavailable StorageCluster pods: %d, is equal "+
 				"to or exceeds allowed maximum: %d", numUnavailable, maxUnavailable)
 			break
 		}
-		logrus.Debugf("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
+		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 		numUnavailable++
 	}
