@@ -232,7 +232,7 @@ func (c *portworxBasic) createRole(
 	)
 	if err == nil && len(existingRole.OwnerReferences) > 0 {
 		existingRole.OwnerReferences = nil
-		logrus.Debugf("Removing ownership from %s/%s Role", role.Namespace, role.Name)
+		logrus.Infof("Removing ownership from %s/%s Role", role.Namespace, role.Name)
 		if err := c.k8sClient.Update(context.TODO(), existingRole); err != nil {
 			return err
 		}
@@ -286,7 +286,7 @@ func (c *portworxBasic) createRoleBinding(
 	)
 	if err == nil && len(existingRoleBinding.OwnerReferences) > 0 {
 		existingRoleBinding.OwnerReferences = nil
-		logrus.Debugf("Removing ownership from %s/%s RoleBinding", roleBinding.Namespace, roleBinding.Name)
+		logrus.Infof("Removing ownership from %s/%s RoleBinding", roleBinding.Namespace, roleBinding.Name)
 		if err := c.k8sClient.Update(context.TODO(), existingRoleBinding); err != nil {
 			return err
 		}

@@ -787,8 +787,13 @@ func (c *Controller) syncNodes(
 	errCh := make(chan error, createDiff+deleteDiff)
 	createWait := sync.WaitGroup{}
 
-	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
+	msg := fmt.Sprintf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
+	if createDiff > 0 {
+		logrus.Infof(msg)
+	} else {
+		logrus.Debugf(msg)
+	}
 
 	// Batch the pod creates. Batch sizes start at slowStartInitialBatchSize
 	// and double with each successful iteration in a kind of "slow start".
@@ -844,15 +849,21 @@ func (c *Controller) syncNodes(
 		createWait.Wait()
 		skippedPods := createDiff - batchSize
 		if errorCount < len(errCh) && skippedPods > 0 {
-			logrus.Debugf("Slow-start failure. Skipping creation of %d pods", skippedPods)
+			logrus.Infof("Slow-start failure. Skipping creation of %d pods", skippedPods)
 			// The skipped pods will be retried later. The next controller resync will
 			// retry the slow start process.
 			break
 		}
 	}
 
-	logrus.Debugf("Pods to delete for storage cluster %s: %+v, deleting %d",
+	msg = fmt.Sprintf("Pods to delete for storage cluster %s: %+v, deleting %d",
 		cluster.Name, podsToDelete, deleteDiff)
+	if deleteDiff > 0 {
+		logrus.Infof(msg)
+	} else {
+		logrus.Debugf(msg)
+	}
+
 	deleteWait := sync.WaitGroup{}
 	deleteWait.Add(deleteDiff)
 	for i := 0; i < deleteDiff; i++ {
