@@ -417,6 +417,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(versionClient))
 	err = preflight.InitPreflightChecker()
 	require.NoError(t, err)
+	cluster.Spec = corev1.StorageClusterSpec{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	_, ok = cluster.Annotations[pxutil.AnnotationIsEKS]
@@ -424,6 +425,12 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.True(t, ok)
 	require.Equal(t, "true", check)
+
+	// Check cloud storage spec
+	expectedCloudStorage := "type=gp3,size=150"
+	require.NotNil(t, cluster.Spec.CloudStorage.DeviceSpecs)
+	require.Contains(t, *cluster.Spec.CloudStorage.DeviceSpecs, expectedCloudStorage)
+	require.True(t, cluster.Spec.Kvdb.Internal)
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
