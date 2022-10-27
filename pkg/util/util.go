@@ -59,6 +59,7 @@ var (
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
+		"registry.k8s.io":             true,
 	}
 
 	// podTopologySpreadConstraintKeys is a list of topology keys considered for pod spread constraints
