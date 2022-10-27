@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -153,7 +155,175 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 	return pxutil.SelectorLabels()
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) {
+func (p *portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upgradingPortworx bool) error {
+	// Set max node per zone
+	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
+	if toUpdate.Spec.CloudStorage != nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
+		maxStorageNodesPerZone := uint32(0)
+		var err error
+
+		nodeList := &v1.NodeList{}
+		err = p.k8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		if pxutil.IsFreshInstall(toUpdate) {
+			// Let's do this only when it's a fresh install of px
+			maxStorageNodesPerZone, err = p.getDefaultMaxStorageNodesPerZone(nodeList, toUpdate, p.recorder)
+			if err != nil {
+				logrus.Errorf("could not set defult value for max_storage_nodes_per_zone (first install): %v", err)
+			}
+		} else if upgradingPortworx {
+			// Upgrade scenario
+			// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
+			maxStorageNodesPerZone, err = p.getCurrentMaxStorageNodesPerZone(toUpdate, nodeList, cloudprovider.Get())
+			if err != nil {
+				logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
+			}
+		}
+		if err == nil && maxStorageNodesPerZone != 0 {
+			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
+			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
+		}
+	}
+
+	return nil
+}
+
+func getDefaultStorageNodesDisaggregatedMode(
+	k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+	recorder record.EventRecorder,
+) (uint64, bool, error) {
+	// Check if ENABLE_ASG_STORAGE_PARTITIONING is set to false. If not, we can look at the 'portworx.io/node-type' label
+	for _, envVar := range cluster.Spec.Env {
+		if envVar.Name == util.StoragePartitioningEnvKey {
+			if envVar.Value == "false" {
+				return 0, false, nil
+			}
+			break
+		}
+	}
+
+	// This will return a zone map of storage nodes in each zones
+	nodeTypeZoneMap, err := cloudprovider.GetZoneMap(k8sClient, util.NodeTypeKey, util.StorageNodeValue)
+	if err != nil {
+		return 0, false, err
+	}
+	totalNodes := uint64(0)
+	// We'll find the zone with least number of labels
+	minValue := uint64(math.MaxUint64)
+	prevKey := ""
+	prevValue := uint64(math.MaxUint64)
+	for key, value := range nodeTypeZoneMap {
+		totalNodes += value
+		if value < minValue {
+			minValue = value
+		}
+		if prevValue != math.MaxUint64 && prevValue != value {
+			k8sutil.InfoEvent(
+				recorder, cluster, util.UnevenStorageNodesReason,
+				fmt.Sprintf("Uneven number of storage nodes labelled across zones."+
+					" %v has %v, %v has %v", prevKey, prevValue, key, value),
+			)
+		}
+		prevKey = key
+		prevValue = value
+	}
+	if totalNodes == 0 {
+		// no node is labelled with portworx.io/node-type
+		nodeTypeZoneMap, err = cloudprovider.GetZoneMap(k8sClient, util.NodeTypeKey, util.StoragelessNodeValue)
+		if err == nil {
+			for _, value := range nodeTypeZoneMap {
+				totalNodes += value
+			}
+			if totalNodes > 0 {
+				k8sutil.InfoEvent(
+					recorder, cluster, util.AllStoragelessNodesReason,
+					fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
+				)
+				return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
+			}
+		}
+		return 0, false, err
+	}
+	return minValue, true, nil
+}
+
+// getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
+// intention of having at least 3 nodes in the cluster.
+func (p *portworx) getDefaultMaxStorageNodesPerZone(
+	nodeList *v1.NodeList,
+	cluster *corev1.StorageCluster,
+	recorder record.EventRecorder,
+) (uint32, error) {
+	if len(nodeList.Items) == 0 {
+		return 0, nil
+	}
+
+	// Check if storage nodes are explicitly set using labels
+	storageNodes, disaggregatedMode, err := getDefaultStorageNodesDisaggregatedMode(p.k8sClient, cluster, recorder)
+	if err != nil {
+		return 0, err
+	}
+	if disaggregatedMode {
+		return uint32(storageNodes), nil
+	}
+
+	zoneMap, err := cloudprovider.GetZoneMap(p.k8sClient, "", "")
+	if err != nil {
+		return 0, err
+	}
+	numZones := len(zoneMap)
+	storageNodes = uint64(len(nodeList.Items) / numZones)
+	return uint32(storageNodes), nil
+}
+
+func (p *portworx) getCurrentMaxStorageNodesPerZone(
+	cluster *corev1.StorageCluster,
+	nodeList *v1.NodeList,
+	cloudProvider cloudprovider.Ops,
+) (uint32, error) {
+	storageNodeMap := make(map[string]*storageapi.StorageNode)
+
+	if pxutil.IsPortworxEnabled(cluster) {
+		storageNodeList, err := p.GetStorageNodes(cluster)
+		if err != nil {
+			logrus.Errorf("Couldn't get storage node list: %v", err)
+			return 0, err
+		}
+		for _, storageNode := range storageNodeList {
+			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
+				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+			}
+		}
+		zoneMap := make(map[string]uint32)
+		for _, node := range nodeList.Items {
+			if _, ok := storageNodeMap[node.Name]; ok {
+				zone, err := cloudProvider.GetZone(&node)
+				if err != nil {
+					return 0, err
+				}
+				count := zoneMap[zone]
+				zoneMap[zone] = count + 1
+			}
+		}
+		maxValue := uint32(0)
+		for _, value := range zoneMap {
+			if value > maxValue {
+				maxValue = value
+			}
+		}
+		return maxValue, nil
+	}
+	return 0, fmt.Errorf("storage disabled")
+}
+
+func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
@@ -189,6 +359,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	toUpdate.Spec.Version = pxutil.GetImageTag(toUpdate.Spec.Image)
 	pxVersionChanged := pxEnabled &&
 		(toUpdate.Spec.Version == "" || toUpdate.Spec.Version != toUpdate.Status.Version)
+
+	if err := p.setMaxStorageNodePerZone(toUpdate, pxVersionChanged); err != nil {
+		return err
+	}
 
 	if pxVersionChanged || autoUpdateComponents(toUpdate) || p.hasComponentChanged(toUpdate) {
 		// Force latest versions only if the component update strategy is Once
@@ -378,6 +552,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+	return nil
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/libopenstorage/operator/pkg/util"
 	"os"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +38,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/preflight"
@@ -620,7 +623,9 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	driver := portworx{}
+	driver := portworx{
+		k8sClient: testutil.FakeK8sClient(),
+	}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1684,7 +1689,7 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 
 func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	driver := portworx{}
+	driver := portworx{k8sClient: testutil.FakeK8sClient()}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -7953,6 +7958,433 @@ func TestGetStorageNodesWithConnectionErrors(t *testing.T) {
 	nodes, err = driver.GetStorageNodes(cluster)
 	require.Error(t, err)
 	require.Empty(t, nodes)
+}
+
+func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.NodeInitStatus),
+		},
+	}
+	totalNodes := uint32(12)
+
+	/* 1 zone */
+	k8sClient, _ := getK8sClientWithNodesZones(t, totalNodes, 1, cluster)
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	origVersion := "2.10.0"
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.Image = "oci-monitor:" + origVersion
+	cluster.Spec.Version = origVersion
+	cluster.Status.Version = origVersion
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	cluster.Annotations = map[string]string{}
+	cluster.Annotations[constants.AnnotationDisableStorage] = strconv.FormatBool(true)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+
+	// storage only
+	testStoragelessNodesUpgrade(t, 24, 0)
+	testStoragelessNodesUpgrade(t, 12, 0, 0)
+	testStoragelessNodesUpgrade(t, 8, 0, 0, 0)
+	testStoragelessNodesUpgrade(t, 6, 0, 0, 0, 0)
+
+	// storageless
+	testStoragelessNodesUpgrade(t, 14, 10)
+	testStoragelessNodesUpgrade(t, 23, 1)
+	testStoragelessNodesUpgrade(t, 7, 5, 5)
+	testStoragelessNodesUpgrade(t, 7, 5, 10)
+	testStoragelessNodesUpgrade(t, 12, 5, 0)
+	testStoragelessNodesUpgrade(t, 3, 5, 7, 5)
+	testStoragelessNodesUpgrade(t, 3, 5, 5, 5)
+	testStoragelessNodesUpgrade(t, 3, 5, 8, 8)
+	testStoragelessNodesUpgrade(t, 1, 7, 8, 8)
+	testStoragelessNodesUpgrade(t, 8, 7, 0, 8)
+	testStoragelessNodesUpgrade(t, 8, 1, 0, 0)
+	testStoragelessNodesUpgrade(t, 0, 8, 8, 8)
+	testStoragelessNodesUpgrade(t, 0, 6, 6, 6, 6)
+	testStoragelessNodesUpgrade(t, 1, 6, 5, 6, 6)
+	testStoragelessNodesUpgrade(t, 5, 1, 1, 1, 1)
+	testStoragelessNodesUpgrade(t, 6, 1, 1, 1, 0)
+	testStoragelessNodesUpgrade(t, 6, 1, 0, 0, 0)
+}
+
+func testStoragelessNodesUpgrade(t *testing.T, expectedValue uint32, storageless ...uint32) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.NodeInitStatus),
+		},
+	}
+
+	totalNodes := uint32(24)
+	zones := uint32(len(storageless))
+	origVersion := "2.10.0"
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.Image = "oci-monitor:" + origVersion
+	cluster.Spec.Version = origVersion
+	cluster.Status.Version = "2.10.1"
+	cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
+	k8sClient, expected := getK8sClientWithNodesZones(t, totalNodes, zones, cluster, storageless...)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(&api.SdkNodeEnumerateWithFiltersResponse{Nodes: expected}, nil).
+		AnyTimes()
+
+	err = k8sClient.Create(context.TODO(), &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	if expectedValue == 0 {
+		require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	} else {
+		require.Equal(t, expectedValue, *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	}
+}
+
+func TestStorageClusterDefaultsMaxStorageNodesPerZoneDisaggregatedMode(t *testing.T) {
+	// 24 node cluster will be created in each step
+	testStoragelessNodesDisaggregatedMode(t, 24, 0)
+	testStoragelessNodesDisaggregatedMode(t, 12, 0, 0)
+	testStoragelessNodesDisaggregatedMode(t, 8, 0, 0, 0)
+	testStoragelessNodesDisaggregatedMode(t, 6, 0, 0, 0, 0)
+
+	testStoragelessNodesDisaggregatedMode(t, 14, 10)
+	testStoragelessNodesDisaggregatedMode(t, 23, 1)
+	testStoragelessNodesDisaggregatedMode(t, 7, 5, 5)
+	testStoragelessNodesDisaggregatedMode(t, 2, 5, 10)
+	testStoragelessNodesDisaggregatedMode(t, 7, 5, 0)
+	testStoragelessNodesDisaggregatedMode(t, 1, 5, 7, 5)
+	testStoragelessNodesDisaggregatedMode(t, 3, 5, 5, 5)
+	testStoragelessNodesDisaggregatedMode(t, 0, 5, 8, 8)
+	testStoragelessNodesDisaggregatedMode(t, 0, 7, 8, 8)
+	testStoragelessNodesDisaggregatedMode(t, 0, 7, 0, 8)
+	testStoragelessNodesDisaggregatedMode(t, 7, 1, 0, 0)
+	testStoragelessNodesDisaggregatedMode(t, 0, 8, 8, 8)
+	testStoragelessNodesDisaggregatedMode(t, 0, 6, 6, 6, 6)
+	testStoragelessNodesDisaggregatedMode(t, 0, 6, 5, 6, 6)
+	testStoragelessNodesDisaggregatedMode(t, 5, 1, 1, 1, 1)
+	testStoragelessNodesDisaggregatedMode(t, 5, 1, 1, 1, 0)
+	testStoragelessNodesDisaggregatedMode(t, 5, 1, 0, 0, 0)
+}
+
+func testStoragelessNodesDisaggregatedMode(t *testing.T, expectedValue uint32, storageless ...uint32) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	totalNodes := uint32(24)
+	zones := uint32(len(storageless))
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
+	k8sClient := getK8sClientWithNodesDisaggregated(t, totalNodes, zones, cluster, storageless...)
+	recorder := record.NewFakeRecorder(10)
+
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.CloudStorage)
+	if expectedValue == 0 {
+		require.Nil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	} else {
+		require.Equal(t, expectedValue, *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	}
+}
+
+func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
+	testClusterDefaultsMaxStorageNodesPerZoneCase1(t)
+	// 1 zone
+	testClusterDefaultsMaxStorageNodesPerZone(t, 6, 6, 1)
+	// 2 zones
+	testClusterDefaultsMaxStorageNodesPerZone(t, 4, 8, 2)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 4, 9, 2)
+	// 3 zones
+	testClusterDefaultsMaxStorageNodesPerZone(t, 3, 9, 3)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 3, 10, 3)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 3, 11, 3)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 33, 100, 3)
+	// 4 zones
+	testClusterDefaultsMaxStorageNodesPerZone(t, 2, 8, 4)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 100, 4)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 101, 4)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 102, 4)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 103, 4)
+	testClusterDefaultsMaxStorageNodesPerZone(t, 26, 104, 4)
+	testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t)
+}
+
+func testClusterDefaultsMaxStorageNodesPerZoneCase1(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	/* 1 zone */
+	var err error
+	k8sClient, _ := getK8sClientWithNodesZones(t, 6, 1, cluster)
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, "", cluster.Status.Phase)
+
+}
+
+func testClusterDefaultsMaxStorageNodesPerZone(t *testing.T, expectedValue uint32, totalNodes uint32, zones uint32) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	k8sClient, _ := getK8sClientWithNodesZones(t, totalNodes, zones, cluster)
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	require.NoError(t, err)
+
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.CloudStorage)
+	require.NotNil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, expectedValue, *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+}
+
+func testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	/* Value specified */
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		MaxStorageNodesPerZone: new(uint32),
+	}
+	*cluster.Spec.CloudStorage.MaxStorageNodesPerZone = 7
+	k8sClient, _ := getK8sClientWithNodesZones(t, 30, 3, cluster)
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
+	require.Equal(t, uint32(7), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+}
+
+func getK8sClientWithNodesZones(
+	t *testing.T,
+	nodeCount uint32,
+	totalZones uint32,
+	cluster *corev1.StorageCluster,
+	storagelessCount ...uint32,
+) (client.Client, []*api.StorageNode) {
+	if len(storagelessCount) != 0 {
+		require.Equal(t, uint32(len(storagelessCount)), totalZones)
+	} else {
+		storagelessCount = make([]uint32, totalZones)
+	}
+	expected := []*api.StorageNode{}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	zoneCount := uint32(0)
+	for node := uint32(0); node < nodeCount; node++ {
+		nodename := "k8s-node-" + strconv.Itoa(int(node))
+		k8sNode := createK8sNode(nodename, 10)
+		zoneCount = zoneCount % totalZones
+		k8sNode.Labels[v1.LabelTopologyZone] = "Zone-" + strconv.Itoa(int(zoneCount))
+		err := k8sClient.Create(context.TODO(), k8sNode)
+		require.NoError(t, err)
+
+		pool := []*api.StoragePool{
+			{},
+			{},
+		}
+		if storagelessCount[zoneCount] > 0 {
+			pool = []*api.StoragePool{}
+			storagelessCount[zoneCount]--
+		}
+
+		node := api.StorageNode{
+			SchedulerNodeName: nodename,
+			Pools:             pool,
+		}
+		expected = append(expected, &node)
+		zoneCount++
+	}
+	return k8sClient, expected
+}
+
+func getK8sClientWithNodesDisaggregated(
+	t *testing.T,
+	nodeCount uint32,
+	totalZones uint32,
+	cluster *corev1.StorageCluster,
+	storagelessCount ...uint32,
+) client.Client {
+	if len(storagelessCount) != 0 {
+		require.Equal(t, uint32(len(storagelessCount)), totalZones)
+	} else {
+		storagelessCount = make([]uint32, totalZones)
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	zoneCount := uint32(0)
+	for node := uint32(0); node < nodeCount; node++ {
+		nodename := "k8s-node-" + strconv.Itoa(int(node))
+		k8sNode := createK8sNode(nodename, 10)
+		zoneCount = zoneCount % totalZones
+		k8sNode.Labels[v1.LabelTopologyZone] = "Zone-" + strconv.Itoa(int(zoneCount))
+		if storagelessCount[zoneCount] > 0 {
+			storagelessCount[zoneCount]--
+			k8sNode.Labels[util.NodeTypeKey] = util.StoragelessNodeValue
+		} else {
+			k8sNode.Labels[util.NodeTypeKey] = util.StorageNodeValue
+		}
+		err := k8sClient.Create(context.TODO(), k8sNode)
+		require.NoError(t, err)
+		zoneCount++
+	}
+	return k8sClient
+}
+
+func createK8sNode(nodeName string, allowedPods int) *v1.Node {
+	return &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   nodeName,
+			Labels: make(map[string]string),
+		},
+		Status: v1.NodeStatus{
+			Allocatable: map[v1.ResourceName]resource.Quantity{
+				v1.ResourcePods: resource.MustParse(strconv.Itoa(allowedPods)),
+			},
+		},
+	}
 }
 
 func manifestSetup() {
