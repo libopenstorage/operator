@@ -148,7 +148,8 @@ func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	legacyImage := "portworx/oci-monitor:2.8.0"
 	cluster.Spec.Image = legacyImage
 
@@ -236,7 +237,8 @@ func TestBasicComponentsInstall(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3119,7 +3121,8 @@ func TestAutopilotInstall(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -3307,7 +3310,8 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	}
 
 	// test
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 
 	// validate
@@ -3855,7 +3859,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -4018,7 +4023,8 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NoError(t, err)
 
 	// Initial run
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4396,7 +4402,8 @@ func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageC
 	require.NoError(t, err)
 
 	// Initial run
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// token should be refreshed if the issuer changes
 	err = driver.PreInstall(cluster) // regenerate token with long lifetime
@@ -4544,7 +4551,8 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4888,7 +4896,8 @@ func TestCSIInstallDisable(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -4943,7 +4952,8 @@ func TestCSIInstall(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5081,7 +5091,8 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5212,7 +5223,8 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5272,7 +5284,8 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5323,7 +5336,8 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5394,7 +5408,8 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5472,7 +5487,8 @@ func TestCSIInstallWithPKS(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5515,7 +5531,8 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	expectedCRD := testutil.GetExpectedCRD(t, "csiNodeInfoCrd.yaml")
 	go func() {
@@ -5634,7 +5651,8 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
 
 	err = driver.PreInstall(cluster)
@@ -5720,7 +5738,8 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case: Should not deploy resizer and snapshotter as they are alpha in k8s 1.14
 	err = driver.PreInstall(cluster)
@@ -5851,7 +5870,8 @@ func TestCSIInstallWithTopology(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5918,7 +5938,8 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -5960,7 +5981,8 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6071,7 +6093,8 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6140,7 +6163,8 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -6250,7 +6274,8 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 			ImagePullSecret: &imagePullSecret,
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -6359,7 +6384,8 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -6504,7 +6530,8 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -6632,7 +6659,8 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 	}()
 
 	// TestCase: k8s 1.22 should upgrade Prometheus operator image
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
 	require.Equal(t,
 		"quay.io/prometheus-operator/prometheus-operator:v0.50.0",
@@ -6742,7 +6770,8 @@ func TestPrometheusInstall(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
 
 	err = k8sClient.Create(
@@ -6935,7 +6964,8 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 			ClusterUID: "cluster-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),
@@ -7035,7 +7065,8 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),
@@ -7200,7 +7231,8 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 		},
 		Status: corev1.StorageClusterStatus{ClusterUID: "test-uid"},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),
@@ -7775,7 +7807,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case: Custom registry should be added to the images
 	err = driver.PreInstall(cluster)
@@ -7919,7 +7952,8 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case: Custom registry should be added to the images
 	err = driver.PreInstall(cluster)
@@ -8085,7 +8119,8 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),
@@ -8767,7 +8802,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case: Custom repo-registry should be added to the images
 	err = driver.PreInstall(cluster)
@@ -8947,7 +8983,8 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// PWX-27401 reconcile collector to validate specs
 	err = k8sClient.Create(
@@ -9222,7 +9259,8 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -9665,7 +9703,8 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -10209,7 +10248,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -10975,7 +11015,8 @@ func TestDisableCSI_0_3(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11075,7 +11116,8 @@ func TestDisableCSI_1_0(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11351,7 +11393,8 @@ func TestRemovePrometheus(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11454,7 +11497,8 @@ func TestDisablePrometheus(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12288,7 +12332,8 @@ func TestSCC(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Install with no SCC
 	err = driver.PreInstall(cluster)
@@ -12345,7 +12390,8 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12458,7 +12504,8 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// check that podsecuritpolicies have been created
 	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
@@ -12544,7 +12591,8 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// check that podsecuritpolicies have been created
 	expectedPSPs := []*policyv1beta1.PodSecurityPolicy{
@@ -12619,7 +12667,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12734,7 +12783,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12778,7 +12828,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	cluster.Status = corev1.StorageClusterStatus{
 		ClusterUID: "test-clusteruid",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12819,7 +12870,8 @@ func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12874,7 +12926,8 @@ func TestTelemetryCCMProxy(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -12982,7 +13035,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.NoError(t, err)
 
 	// Validate default ccm listening port
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -12998,7 +13052,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 
 	// Shift start port
 	cluster.Spec.StartPort = &startPort
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Status.DesiredImages.Telemetry)
@@ -13139,7 +13194,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 
 	// Now disable telemetry
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -13191,7 +13247,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	cluster.Status = corev1.StorageClusterStatus{
 		ClusterUID: "test-clusteruid",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -13254,7 +13311,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
@@ -13331,7 +13389,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 
 	// TestCase: upgrade PX version, ccm should force upgrade if image is specified and reset the image
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
@@ -13454,7 +13513,8 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// TestCase: no px proxy specified
 	err = driver.PreInstall(cluster)
@@ -13627,7 +13687,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	// TestCase: enabling telemetry doesn't create metrics collector
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13673,7 +13734,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	driver = portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13696,7 +13758,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 
 	// TestCase: upgrade to ccm go, new collector should be reconciled
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13728,7 +13791,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 
 	// TestCase: disable telemetry, restart operator and re-enable telemetry, collector v2 should not be created
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13737,7 +13801,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster.Spec.Monitoring.Telemetry.Enabled = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13785,7 +13850,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	// TestCase: Don't set secret owner reference when delete strategy is not set
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13799,7 +13865,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
 		Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13810,7 +13877,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 
 	// TestCase: Update delete strategy and secret owner reference should be removed
 	cluster.Spec.DeleteStrategy.Type = corev1.UninstallStorageClusterStrategyType
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -13839,7 +13907,8 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -14071,7 +14140,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -14229,7 +14299,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -14462,7 +14533,8 @@ func TestCSISnapController(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -14497,7 +14569,8 @@ func TestCSISnapController(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -14531,7 +14604,8 @@ func TestCSISnapController(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -14565,7 +14639,8 @@ func TestCSISnapController(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -14609,7 +14684,8 @@ func TestCSISnapController(t *testing.T) {
 			Image: "portworx/image:2.6.1",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotNil(t, cluster.Spec.CSI)
@@ -14654,7 +14730,8 @@ func TestCSISnapController(t *testing.T) {
 			Image: "portworx/image:2.6.1",
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotNil(t, cluster.Spec.CSI)
@@ -14677,7 +14754,8 @@ func TestCSISnapController(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.NotNil(t, cluster.Spec.CSI)
@@ -14709,7 +14787,8 @@ func TestCSISnapController(t *testing.T) {
 	driver = portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
