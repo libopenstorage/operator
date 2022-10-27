@@ -108,6 +108,9 @@ func TestImageURN(t *testing.T) {
 
 	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
+
+	out = getImageURN("", "customRegistry.io", "registry.k8s.io/pause:3.1")
+	require.Equal(t, "customRegistry.io/pause:3.1", out)
 }
 
 func TestImageURNPreserved(t *testing.T) {
