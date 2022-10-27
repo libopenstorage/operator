@@ -45,7 +45,8 @@ func TestAlertManagerInstall(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
 
 	err = driver.PreInstall(cluster)
@@ -121,7 +122,8 @@ func TestRemoveAlertManager(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),
@@ -182,7 +184,8 @@ func TestDisableAlertManager(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = k8sClient.Create(
 		context.TODO(),

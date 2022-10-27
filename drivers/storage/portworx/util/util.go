@@ -1172,3 +1172,26 @@ func CountStorageNodes(
 
 	return storageNodesCount, nil
 }
+
+// IsFreshInstall checks whether it's a fresh Portworx install
+func IsFreshInstall(cluster *corev1.StorageCluster) bool {
+	return cluster.Status.Phase == ""
+}
+
+// GetDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
+// intention of having at least 3 nodes in the cluster.
+func GetDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
+	numZones := len(zoneMap)
+	switch numZones {
+	case 0, 1:
+		// If there is a single Zone, have all 3 nodes in the same zone
+		return 3
+	case 2:
+		// If there are two zones, it'll be tricky since we'll always lose quorum when a zone
+		// goes down. Let's have 2 nodes in a zone so that we have a 4 node cluster.
+		return 2
+	default:
+		// In a cluster with 3 or more zones, let's have one node in each zone.
+		return 1
+	}
+}

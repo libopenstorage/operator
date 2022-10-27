@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -53,7 +52,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -1194,185 +1192,6 @@ func (c *Controller) CreatePodTemplate(
 	}
 	return newTemplate, nil
 }
-func (c *Controller) getCurrentMaxStorageNodesPerZone(
-	cluster *corev1.StorageCluster,
-	nodeList *v1.NodeList,
-	cloudProvider cloudprovider.Ops,
-) (uint32, error) {
-	storageNodeMap := make(map[string]*storageapi.StorageNode)
-
-	if storagePodsEnabled(cluster) {
-		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
-		if err != nil {
-			logrus.Errorf("Couldn't get storage node list %v", err)
-			return 0, err
-		}
-		for _, storageNode := range storageNodeList {
-			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
-				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
-			}
-		}
-		zoneMap := make(map[string]uint32)
-		for _, node := range nodeList.Items {
-			if _, ok := storageNodeMap[node.Name]; ok {
-				zone, err := cloudProvider.GetZone(&node)
-				if err != nil {
-					return 0, err
-				}
-				count := zoneMap[zone]
-				zoneMap[zone] = count + 1
-			}
-		}
-		maxValue := uint32(0)
-		for _, value := range zoneMap {
-			if value > maxValue {
-				maxValue = value
-			}
-		}
-		return maxValue, nil
-	}
-	return 0, fmt.Errorf("storage disabled")
-}
-
-func getDefaultStorageNodesDisaggregatedMode(
-	nodeList *v1.NodeList,
-	cluster *corev1.StorageCluster,
-	recorder record.EventRecorder,
-) (uint64, bool, error) {
-	// Check if ENABLE_ASG_STORAGE_PARTITIONING is set to false. If not, we can look at the 'portworx.io/node-type' label
-	for _, envVar := range cluster.Spec.Env {
-		if envVar.Name == util.StoragePartitioningEnvKey {
-			if envVar.Value == "false" {
-				return 0, false, nil
-			}
-			break
-		}
-	}
-
-	// This will return a zone map of storage nodes in each zones
-	nodeTypeZoneMap, err := getZoneMap(nodeList, util.NodeTypeKey, util.StorageNodeValue)
-	if err != nil {
-		return 0, false, err
-	}
-	totalNodes := uint64(0)
-	// We'll find the zone with least number of labels
-	minValue := uint64(math.MaxUint64)
-	prevKey := ""
-	prevValue := uint64(math.MaxUint64)
-	for key, value := range nodeTypeZoneMap {
-		totalNodes += value
-		if value < minValue {
-			minValue = value
-		}
-		if prevValue != math.MaxUint64 && prevValue != value {
-			k8s.InfoEvent(
-				recorder, cluster, util.UnevenStorageNodesReason,
-				fmt.Sprintf("Uneven number of storage nodes labelled across zones."+
-					" %v has %v, %v has %v", prevKey, prevValue, key, value),
-			)
-		}
-		prevKey = key
-		prevValue = value
-	}
-	if totalNodes == 0 {
-		// no node is labelled with portworx.io/node-type
-		nodeTypeZoneMap, err = getZoneMap(nodeList, util.NodeTypeKey, util.StoragelessNodeValue)
-		if err == nil {
-			for _, value := range nodeTypeZoneMap {
-				totalNodes += value
-			}
-			if totalNodes > 0 {
-				k8s.InfoEvent(
-					recorder, cluster, util.AllStoragelessNodesReason,
-					fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
-				)
-				return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
-			}
-		}
-		return 0, false, err
-	}
-	return minValue, true, nil
-}
-
-// getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
-// intention of having at least 3 nodes in the cluster.
-func getDefaultMaxStorageNodesPerZone(
-	nodeList *v1.NodeList,
-	cluster *corev1.StorageCluster,
-	recorder record.EventRecorder,
-) (uint32, error) {
-	if len(nodeList.Items) == 0 {
-		return 0, nil
-	}
-
-	// Check if storage nodes are explicitly set using labels
-	storageNodes, disaggregatedMode, err := getDefaultStorageNodesDisaggregatedMode(nodeList, cluster, recorder)
-	if err != nil {
-		return 0, err
-	}
-	if disaggregatedMode {
-		return uint32(storageNodes), nil
-	}
-
-	zoneMap, err := getZoneMap(nodeList, "", "")
-	if err != nil {
-		return 0, err
-	}
-	numZones := len(zoneMap)
-	storageNodes = uint64(len(nodeList.Items) / numZones)
-	return uint32(storageNodes), nil
-}
-
-func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool {
-	pxEnabled := storagePodsEnabled(toUpdate)
-	newVersion := pxutil.GetImageTag(strings.TrimSpace(toUpdate.Spec.Image))
-	return pxEnabled &&
-		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
-}
-
-func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue string) (map[string]uint64, error) {
-	cloudProviderName := getCloudProviderName(nodeList)
-	cloudProvider := cloudprovider.New(cloudProviderName)
-	zoneMap := map[string]uint64{}
-	for _, node := range nodeList.Items {
-		if zone, err := cloudProvider.GetZone(&node); err == nil {
-			if len(filterLabelKey) > 0 {
-				value, ok := node.Labels[filterLabelKey]
-				// If provided filterLabelKey is not found or the value does not match with
-				// the provided filterLabelValue, no need to count in the zoneMap
-				if !ok || value != filterLabelValue {
-					if _, ok := zoneMap[zone]; !ok {
-						zoneMap[zone] = 0
-					}
-					continue
-				}
-				// provided filterLabel's value and key matched, let's count them in the zoneMap
-			}
-			instancesCount := zoneMap[zone]
-			zoneMap[zone] = instancesCount + 1
-		} else {
-			logrus.Errorf("count not find zone information: %v", err)
-			return nil, err
-		}
-	}
-	return zoneMap, nil
-}
-
-func getCloudProviderName(nodeList *v1.NodeList) string {
-	var cloudProviderName string
-	for _, node := range nodeList.Items {
-		// Get the cloud provider
-		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
-		if len(node.Spec.ProviderID) != 0 {
-			tokens := strings.Split(node.Spec.ProviderID, "://")
-			if len(tokens) == 2 {
-				cloudProviderName = tokens[0]
-				break
-			} // else provider id is invalid
-		}
-	}
-	return cloudProviderName
-}
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
@@ -1425,15 +1244,8 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		toUpdate.Spec.CloudStorage.NodePoolLabel = key
 	}
 
-	nodeList := &v1.NodeList{}
-	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
-			toUpdate, err)
-	}
-
 	cloudProvider := cloudprovider.Get()
-	zoneMap, err := getZoneMap(nodeList, "", "")
+	zoneMap, err := cloudprovider.GetZoneMap(c.client, "", "")
 	if err != nil {
 		return err
 	}
@@ -1445,36 +1257,9 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
-	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
-	if toUpdate.Spec.CloudStorage != nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
-		maxStorageNodesPerZone := uint32(0)
-		err = nil
-		if toUpdate.Status.Phase == "" {
-			// Let's do this only when it's a fresh install of px
-			maxStorageNodesPerZone, err = getDefaultMaxStorageNodesPerZone(nodeList, toUpdate, c.recorder)
-			if err != nil {
-				logrus.Errorf("could not set defult value for max_storage_nodes_per_zone (first install): %v", err)
-			}
-		} else {
-			// Upgrade scenario
-			if c.isPxImageBeingUpdated(toUpdate) {
-				// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
-				maxStorageNodesPerZone, err = c.getCurrentMaxStorageNodesPerZone(cluster, nodeList, cloudProvider)
-				if err != nil {
-					logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
-				}
-			}
-		}
-		if err == nil && maxStorageNodesPerZone != 0 {
-			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
-			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
-		}
+	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
+		return err
 	}
-
-	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
