@@ -24,6 +24,7 @@ import (
 	storageapi "github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	storagenodescount "github.com/libopenstorage/operator/pkg/storage_nodes_count"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1177,20 +1178,14 @@ func (c *Controller) getCurrentMaxStorageNodesPerZone(
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
 // intention of having at least 3 nodes in the cluster.
-func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
-	numZones := len(zoneMap)
-	switch numZones {
-	case 0, 1:
-		// If there is a single Zone, have all 3 nodes in the same zone
-		return 3
-	case 2:
-		// If there are two zones, it'll be tricky since we'll always lose quorum when a zone
-		// goes down. Let's have 2 nodes in a zone so that we have a 4 node cluster.
-		return 2
-	default:
-		// In a cluster with 3 or more zones, let's have one node in each zone.
-		return 1
+func getDefaultMaxStorageNodesPerZone(nodeList *v1.NodeList) (uint32, error) {
+	zoneMap := getZoneMap(nodeList)
+	numZones := uint64(len(zoneMap))
+	storageNodes, err := storagenodescount.GetStorageNodesCount(uint64(len(nodeList.Items)), numZones)
+	if err != nil {
+		return 0, err
 	}
+	return uint32(storageNodes), nil
 }
 
 func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool {
@@ -1198,6 +1193,35 @@ func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool
 	newVersion := pxutil.GetImageTag(strings.TrimSpace(toUpdate.Spec.Image))
 	return pxEnabled &&
 		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
+}
+
+func getZoneMap(nodeList *v1.NodeList) map[string]uint64 {
+	cloudProviderName := getCloudProviderName(nodeList)
+	cloudProvider := cloudprovider.New(cloudProviderName)
+	zoneMap := map[string]uint64{}
+	for _, node := range nodeList.Items {
+		if zone, err := cloudProvider.GetZone(&node); err == nil {
+			instancesCount := zoneMap[zone]
+			zoneMap[zone] = instancesCount + 1
+		}
+	}
+	return zoneMap
+}
+
+func getCloudProviderName(nodeList *v1.NodeList) string {
+	var cloudProviderName string
+	for _, node := range nodeList.Items {
+		// Get the cloud provider
+		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
+		if len(node.Spec.ProviderID) != 0 {
+			tokens := strings.Split(node.Spec.ProviderID, "://")
+			if len(tokens) == 2 {
+				cloudProviderName = tokens[0]
+				break
+			} // else provider id is invalid
+		}
+	}
+	return cloudProviderName
 }
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
@@ -1257,29 +1281,10 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
 			toUpdate, err)
 	}
-	var cloudProviderName string
-	zoneMap := make(map[string]uint64)
 
-	for _, node := range nodeList.Items {
-		// Get the cloud provider
-		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
-		if len(node.Spec.ProviderID) != 0 {
-			tokens := strings.Split(node.Spec.ProviderID, "://")
-			if len(tokens) == 2 {
-				cloudProviderName = tokens[0]
-				break
-			} // else provider id is invalid
-		}
-	}
-
+	cloudProviderName := getCloudProviderName(nodeList)
 	cloudProvider := cloudprovider.New(cloudProviderName)
-
-	for _, node := range nodeList.Items {
-		if zone, err := cloudProvider.GetZone(&node); err == nil {
-			instancesCount := zoneMap[zone]
-			zoneMap[zone] = instancesCount + 1
-		}
-	}
+	zoneMap := getZoneMap(nodeList)
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
 		ZoneToInstancesMap: zoneMap,
@@ -1297,7 +1302,10 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		err = nil
 		if toUpdate.Status.Phase == "" {
 			// Let's do this only when it's a fresh install of px
-			maxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
+			maxStorageNodesPerZone, err = getDefaultMaxStorageNodesPerZone(nodeList)
+			if err != nil {
+				logrus.Errorf("could not set defult value for max_storage_nodes_per_zone (first install): %v", err)
+			}
 		} else {
 			// Upgrade scenario
 			if c.isPxImageBeingUpdated(toUpdate) {

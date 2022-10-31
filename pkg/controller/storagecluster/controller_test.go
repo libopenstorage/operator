@@ -1120,12 +1120,12 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-	require.Equal(t, uint32(3), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-	require.Equal(t, uint32(3), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 	/* 2 zones */
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
@@ -1133,7 +1133,7 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-	require.Equal(t, uint32(2), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, uint32(3), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 	/* 3 zones */
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
@@ -1141,7 +1141,7 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	err = controller.setStorageClusterDefaults(cluster)
 	require.NoError(t, err)
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-	require.Equal(t, uint32(1), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, uint32(2), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 	/* 4 zones */
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
