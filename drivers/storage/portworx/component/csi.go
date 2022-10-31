@@ -43,6 +43,8 @@ const (
 	CSIServiceName = "px-csi-service"
 	// CSIApplicationName name of the CSI application (deployment/statefulset)
 	CSIApplicationName = "px-csi-ext"
+	// CSIApplicationSchedulerName name of the CSI application pod scheduler
+	CSIApplicationSchedulerName = "stork"
 
 	csiProvisionerContainerName             = "csi-external-provisioner"
 	csiAttacherContainerName                = "csi-attacher"
@@ -650,6 +652,7 @@ func getCSIDeploymentSpec(
 							},
 						},
 					},
+					SchedulerName: CSIApplicationSchedulerName,
 					Volumes: []v1.Volume{
 						{
 							Name: "socket-dir",
