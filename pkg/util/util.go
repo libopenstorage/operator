@@ -41,6 +41,10 @@ const (
 	MigrationCompletedReason = "MigrationCompleted"
 	// MigrationFailed is added to an event when the migration fails.
 	MigrationFailedReason = "MigrationFailed"
+	// UnevenStorageNodesReason is added to an event when there are uneven number of storage nodes are labelled across zones
+	UnevenStorageNodesReason = "UnevenStorageNodes"
+	// AllStoragelessNodesReason is added to an event when all the nodes in the cluster is  labelled as storageless
+	AllStoragelessNodesReason = "AllStoragelessNodes"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
