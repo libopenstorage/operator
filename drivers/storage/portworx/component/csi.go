@@ -652,7 +652,6 @@ func getCSIDeploymentSpec(
 							},
 						},
 					},
-					SchedulerName: CSIApplicationSchedulerName,
 					Volumes: []v1.Volume{
 						{
 							Name: "socket-dir",
@@ -667,6 +666,10 @@ func getCSIDeploymentSpec(
 				},
 			},
 		},
+	}
+
+	if pxutil.IsStorkEnabled(cluster) {
+		deployment.Spec.Template.Spec.SchedulerName = CSIApplicationSchedulerName
 	}
 
 	if csiConfig.IncludeAttacher && attacherImage != "" {
