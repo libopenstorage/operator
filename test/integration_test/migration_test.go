@@ -235,8 +235,12 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 }
 
 func approveMigration(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
-	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
-	return operatorops.Instance().UpdateStorageCluster(cluster)
+	liveCluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	liveCluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	return operatorops.Instance().UpdateStorageCluster(liveCluster)
 }
 
 func validateStorageClusterIsCreatedForDaemonSet(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
