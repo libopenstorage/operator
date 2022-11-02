@@ -362,6 +362,29 @@ func TestHaveTopologySpreadConstraintsChanged(t *testing.T) {
 	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
 }
 
+func TestHasSchedulerStateChanged(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+			},
+		},
+	}
+	require.False(t, HasSchedulerStateChanged(cluster, "stork"))
+
+	cluster.Spec.Stork.Enabled = false
+	require.True(t, HasSchedulerStateChanged(cluster, "stork"))
+	require.False(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+
+	cluster.Spec.Stork.Enabled = true
+	require.True(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+	require.False(t, HasSchedulerStateChanged(cluster, "stork"))
+
+	cluster.Spec.Stork = nil
+	require.True(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+	require.True(t, HasSchedulerStateChanged(cluster, "stork"))
+}
+
 func TestGetTopologySpreadConstraints(t *testing.T) {
 	fakeNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{

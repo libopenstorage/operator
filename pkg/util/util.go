@@ -293,14 +293,13 @@ func HasSchedulerStateChanged(
 	previousSchedulerName string,
 ) bool {
 	if cluster.Spec.Stork == nil {
-		return false
+		return true
 	}
 	currentSchedulerName := v1.DefaultSchedulerName
 	if cluster.Spec.Stork.Enabled {
 		currentSchedulerName = StorkSchedulerName
 	}
 	return currentSchedulerName != previousSchedulerName
-
 }
 
 // ExtractVolumesAndMounts returns a list of Kubernetes volumes and volume mounts from the
