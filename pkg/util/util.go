@@ -49,6 +49,9 @@ const (
 
 	// DefaultImageRegistry is the default registry when no registry is provided
 	DefaultImageRegistry = "docker.io"
+
+	// StorkSchedulerName is the default scheduler for px-csi-ext pods
+	StorkSchedulerName = "stork"
 )
 
 var (
@@ -282,6 +285,22 @@ func HasNodeAffinityChanged(
 		return cluster.Spec.Placement.NodeAffinity != nil
 	}
 	return !reflect.DeepEqual(cluster.Spec.Placement.NodeAffinity, existingAffinity.NodeAffinity)
+}
+
+// HasSchedulerStateChanged checks if the stork has been enabled/disabled in the StorageCluster
+func HasSchedulerStateChanged(
+	cluster *corev1.StorageCluster,
+	previouSchedulerName string,
+) bool {
+	if cluster.Spec.Stork == nil {
+		return false
+	}
+	currentSchedulerName := v1.DefaultSchedulerName
+	if cluster.Spec.Stork.Enabled {
+		currentSchedulerName = StorkSchedulerName
+	}
+	return currentSchedulerName != previouSchedulerName
+
 }
 
 // ExtractVolumesAndMounts returns a list of Kubernetes volumes and volume mounts from the

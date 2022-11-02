@@ -43,8 +43,6 @@ const (
 	CSIServiceName = "px-csi-service"
 	// CSIApplicationName name of the CSI application (deployment/statefulset)
 	CSIApplicationName = "px-csi-ext"
-	// CSIApplicationSchedulerName name of the CSI application pod scheduler
-	CSIApplicationSchedulerName = "stork"
 
 	csiProvisionerContainerName             = "csi-external-provisioner"
 	csiAttacherContainerName                = "csi-attacher"
@@ -511,11 +509,11 @@ func (c *csi) createDeployment(
 		healthMonitorControllerImage != existingHealthMonitorControllerContainerName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+		util.HasSchedulerStateChanged(cluster, existingDeployment.Spec.Template.Spec.SchedulerName) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
 		hasCSITopologyChanged(cluster, existingDeployment)
-
 	if !c.isCreated || modified {
 		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
 			snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage, updatedTopologySpreadConstraints)
@@ -669,7 +667,7 @@ func getCSIDeploymentSpec(
 	}
 
 	if pxutil.IsStorkEnabled(cluster) {
-		deployment.Spec.Template.Spec.SchedulerName = CSIApplicationSchedulerName
+		deployment.Spec.Template.Spec.SchedulerName = util.StorkSchedulerName
 	}
 
 	if csiConfig.IncludeAttacher && attacherImage != "" {
