@@ -290,7 +290,7 @@ func HasNodeAffinityChanged(
 // HasSchedulerStateChanged checks if the stork has been enabled/disabled in the StorageCluster
 func HasSchedulerStateChanged(
 	cluster *corev1.StorageCluster,
-	previouSchedulerName string,
+	previousSchedulerName string,
 ) bool {
 	if cluster.Spec.Stork == nil {
 		return false
@@ -299,7 +299,7 @@ func HasSchedulerStateChanged(
 	if cluster.Spec.Stork.Enabled {
 		currentSchedulerName = StorkSchedulerName
 	}
-	return currentSchedulerName != previouSchedulerName
+	return currentSchedulerName != previousSchedulerName
 
 }
 
