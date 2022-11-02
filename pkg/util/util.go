@@ -293,7 +293,7 @@ func HasSchedulerStateChanged(
 	previousSchedulerName string,
 ) bool {
 	if cluster.Spec.Stork == nil {
-		return true
+		return v1.DefaultSchedulerName != previousSchedulerName
 	}
 	currentSchedulerName := v1.DefaultSchedulerName
 	if cluster.Spec.Stork.Enabled {

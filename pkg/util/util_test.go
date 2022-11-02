@@ -381,7 +381,7 @@ func TestHasSchedulerStateChanged(t *testing.T) {
 	require.False(t, HasSchedulerStateChanged(cluster, "stork"))
 
 	cluster.Spec.Stork = nil
-	require.True(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+	require.False(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
 	require.True(t, HasSchedulerStateChanged(cluster, "stork"))
 }
 
