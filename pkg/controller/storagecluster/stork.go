@@ -85,13 +85,13 @@ type SchedulerPolicy struct {
 
 // SchedulerExtender is the configuration to communicate with the external extender
 type SchedulerExtender struct {
-	URLPrefix        string          `json:"urlPrefix,omitempty"`
-	FilterVerb       string          `json:"filterVerb,omitempty"`
-	PrioritizeVerb   string          `json:"prioritizeVerb,omitempty"`
-	Weight           int64           `json:"weight,omitempty"`
-	EnableHTTPS      bool            `json:"enableHttps,omitempty"`
-	NodeCacheCapable bool            `json:"nodeCacheCapable,omitempty"`
-	HTTPTimeout      metav1.Duration `json:"httpTimeout,omitempty"`
+	URLPrefix        string `json:"urlPrefix,omitempty"`
+	FilterVerb       string `json:"filterVerb,omitempty"`
+	PrioritizeVerb   string `json:"prioritizeVerb,omitempty"`
+	Weight           int64  `json:"weight,omitempty"`
+	EnableHTTPS      bool   `json:"enableHttps,omitempty"`
+	NodeCacheCapable bool   `json:"nodeCacheCapable,omitempty"`
+	HTTPTimeout      int64  `json:"httpTimeout,omitempty"`
 }
 
 func (c *Controller) syncStork(
@@ -228,7 +228,7 @@ func (c *Controller) createStorkConfigMap(
 				Weight:           5,
 				EnableHTTPS:      false,
 				NodeCacheCapable: false,
-				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}

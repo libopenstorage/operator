@@ -108,7 +108,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}
@@ -2310,7 +2310,7 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}
