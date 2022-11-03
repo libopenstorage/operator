@@ -82,6 +82,7 @@ spec:
           args:
             - --v=3
             - --leader-election=true
+      schedulerName: stork
       volumes:
         - name: socket-dir
           hostPath:
