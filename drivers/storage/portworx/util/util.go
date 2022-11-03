@@ -400,6 +400,12 @@ func ImagePullPolicy(cluster *corev1.StorageCluster) v1.PullPolicy {
 	return imagePullPolicy
 }
 
+// IsStorkEnabled returns true is Stork scheduler is enabled in StorageCluster
+func IsStorkEnabled(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Stork != nil &&
+		cluster.Spec.Stork.Enabled
+}
+
 // StartPort returns the start from the cluster if present,
 // else return the default start port
 func StartPort(cluster *corev1.StorageCluster) int {
