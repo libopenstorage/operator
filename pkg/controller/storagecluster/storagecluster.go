@@ -24,7 +24,7 @@ import (
 	storageapi "github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
-	storagenodescount "github.com/libopenstorage/operator/pkg/storage_nodes_count"
+	"github.com/libopenstorage/operator/pkg/storagematrix"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1185,7 +1185,7 @@ func (c *Controller) getCurrentMaxStorageNodesPerZone(
 func getDefaultMaxStorageNodesPerZone(nodeList *v1.NodeList) (uint32, error) {
 	zoneMap := getZoneMap(nodeList)
 	numZones := uint64(len(zoneMap))
-	storageNodes, err := storagenodescount.GetStorageNodesCount(uint64(len(nodeList.Items)), numZones)
+	storageNodes, err := storagematrix.GetStorageNodesCount(uint64(len(nodeList.Items)), numZones)
 	if err != nil {
 		return 0, err
 	}

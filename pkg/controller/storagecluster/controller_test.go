@@ -1127,11 +1127,6 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
 	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
-	err = controller.setStorageClusterDefaults(cluster)
-	require.NoError(t, err)
-	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
-	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-
 	/* 2 zones */
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 	controller.client, _ = getK8sClientWithNodesZones(t, 8, 2, cluster)

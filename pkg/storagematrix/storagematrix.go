@@ -1,19 +1,16 @@
-package storagenodescount
+package storagematrix
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 )
 
 const (
-	// SncYamlPath is the name of the yaml that will contain the decision matrix for storage nodes
-	SncYamlPath = "storage_nodes_count.yaml"
-	// YamlFilePath is the path where unit tests will find in this directory
-	YamlFilePath = "generator/" + SncYamlPath
-	// TestFilePath is where the unit test in controller_test will find the yaml file
-	TestFilePath = "../../controller/storagecluster/" + SncYamlPath
+	storageMatrixYamlPath = "storageMatrix.yaml"
+	// GeneratorTestFilePath is the path where the yaml file will be generated
+	GeneratorTestFilePath = "../../pkg/controller/storagecluster/testspec/" + storageMatrixYamlPath
+	testFilePath          = "testspec/" + storageMatrixYamlPath
 )
 
 // MatrixRow defines an entry in the storage node count decision matrix.
@@ -51,10 +48,9 @@ type StorageNodesMatrixParser interface {
 func GetStorageNodesCount(totalNodes uint64, totalZones uint64) (uint64, error) {
 	var matrix *DecisionMatrix
 	var err error
-	for _, path := range []string{SncYamlPath, YamlFilePath} {
+	for _, path := range []string{GeneratorTestFilePath, testFilePath, storageMatrixYamlPath} {
 		matrix, err = NewStorageNodesMatrixParser().UnmarshalFromYaml(path)
 		if err == nil {
-			logrus.Infof("MYD: %v", path)
 			break
 		}
 	}
@@ -67,7 +63,6 @@ func GetStorageNodesCount(totalNodes uint64, totalZones uint64) (uint64, error) 
 			return storageNodes / totalZones, nil
 		}
 	}
-	logrus.Infof("MYD %v", matrix.Rows)
 	return 0, fmt.Errorf("totalNodes out of range")
 }
 

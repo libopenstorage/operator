@@ -1,4 +1,3 @@
-package component
 
 import (
 	"context"

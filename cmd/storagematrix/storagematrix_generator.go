@@ -2,24 +2,22 @@ package main
 
 import (
 	"fmt"
-	storagenodescount "github.com/libopenstorage/operator/pkg/storage_nodes_count"
+	"github.com/libopenstorage/operator/pkg/storagematrix"
 	"math"
 )
 
 const k8sMaxNodes = 5000
 
 func main() {
-	matrix := storagenodescount.DecisionMatrix{
+	matrix := storagematrix.DecisionMatrix{
 		Rows: getStorageNodeCountMatrixRows(),
 	}
 
-	for _, path := range []string{storagenodescount.SncYamlPath, storagenodescount.TestFilePath} {
-		if err := storagenodescount.NewStorageNodesMatrixParser().MarshalToYaml(&matrix, path); err != nil {
-			fmt.Println("Failed to generate storage nodes count decision matrix yaml: ", err)
-			return
-		}
-		fmt.Println("Generated storage nodes decision matrix yaml at ", path)
+	if err := storagematrix.NewStorageNodesMatrixParser().MarshalToYaml(&matrix, storagematrix.GeneratorTestFilePath); err != nil {
+		fmt.Println("Failed to generate storage nodes count decision matrix yaml: ", err)
+		return
 	}
+	fmt.Println("Generated storage nodes decision matrix yaml at ", storagematrix.GeneratorTestFilePath)
 }
 
 type thresh struct {
@@ -27,8 +25,8 @@ type thresh struct {
 	multiplier float64
 }
 
-func getStorageNodeCountMatrixRows() []storagenodescount.MatrixRow {
-	var rows []storagenodescount.MatrixRow
+func getStorageNodeCountMatrixRows() []storagematrix.MatrixRow {
+	var rows []storagematrix.MatrixRow
 	threshold := []thresh{
 		{
 			nodeCount:  6,
@@ -54,7 +52,7 @@ func getStorageNodeCountMatrixRows() []storagenodescount.MatrixRow {
 	}
 	storageCount := float64(0)
 	index := 0
-	row := storagenodescount.MatrixRow{
+	row := storagematrix.MatrixRow{
 		TotalNodesMin: 1,
 	}
 	for nodeCount := uint64(1); nodeCount <= k8sMaxNodes; nodeCount++ {
@@ -70,7 +68,7 @@ func getStorageNodeCountMatrixRows() []storagenodescount.MatrixRow {
 			row.StorageNodeCount = uint64(expected)
 			storageCount = expected
 			rows = append(rows, row)
-			row = storagenodescount.MatrixRow{
+			row = storagematrix.MatrixRow{
 				TotalNodesMin: nodeCount + 1,
 			}
 		}

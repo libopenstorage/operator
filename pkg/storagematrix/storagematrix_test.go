@@ -1,4 +1,4 @@
-package storagenodescount
+package storagematrix
 
 import (
 	"github.com/stretchr/testify/require"
