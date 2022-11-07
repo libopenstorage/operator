@@ -11,8 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/libopenstorage/cloudops"
+	"github.com/libopenstorage/cloudops/mock"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/mock"
 )
 
 func TestEKSCloudPermissionPassed(t *testing.T) {
@@ -39,12 +39,12 @@ func TestEKSCloudPermissionPassed(t *testing.T) {
 	volumeList[0] = volume
 
 	fakeAWSOps := mock.NewMockOps(mockCtrl)
-	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
+	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
 	errMsg := fmt.Sprintf("unable to map volume %s with block device mapping %s to an actual device path on the host", *volume.VolumeId, *volume.Attachments[0].State)
 	fakeAWSOps.EXPECT().Attach(gomock.Any(), gomock.Any()).Return("", errors.New(errMsg)).Times(1)
-	fakeAWSOps.EXPECT().Inspect(gomock.Any()).Return(volumeList, nil).Times(1)
-	fakeAWSOps.EXPECT().Detach(gomock.Any()).Return(nil).Times(1)
-	fakeAWSOps.EXPECT().Delete(gomock.Any()).Return(nil).Times(1)
+	fakeAWSOps.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(volumeList, nil).Times(1)
+	fakeAWSOps.EXPECT().Detach(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	fakeAWSOps.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	fakeAWSOps.EXPECT().Enumerate(nil, gomock.Any(), "").Return(map[string][]interface{}{}, nil).Times(1)
 
 	err := InitPreflightChecker()
@@ -71,7 +71,7 @@ func TestEKSCloudPermissionRetry(t *testing.T) {
 	volumeList[0] = volume1
 
 	fakeAWSOps := mock.NewMockOps(mockCtrl)
-	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
+	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
 	fakeAWSOps.EXPECT().Attach(gomock.Any(), gomock.Any()).Return("", fmt.Errorf("failed to attach volume"))
 
 	err := InitPreflightChecker()
@@ -91,15 +91,15 @@ func TestEKSCloudPermissionRetry(t *testing.T) {
 	}
 	volumeList[0] = volume2
 
-	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
+	fakeAWSOps.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(volumeList[0], nil)
 	errMsg := fmt.Sprintf("unable to map volume %s with block device mapping %s to an actual device path on the host", *volume2.VolumeId, *volume2.Attachments[0].State)
 	fakeAWSOps.EXPECT().Attach(gomock.Any(), gomock.Any()).Return("", errors.New(errMsg))
-	fakeAWSOps.EXPECT().Inspect(gomock.Any()).Return(volumeList, nil)
+	fakeAWSOps.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(volumeList, nil)
 	fakeAWSOps.EXPECT().Enumerate(nil, gomock.Any(), "").Return(map[string][]interface{}{
 		cloudops.SetIdentifierNone: {volume1},
 	}, nil).Times(1)
-	fakeAWSOps.EXPECT().Detach(gomock.Any()).Return(nil).Times(2)
-	fakeAWSOps.EXPECT().Delete(gomock.Any()).Return(nil).Times(2)
+	fakeAWSOps.EXPECT().Detach(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	fakeAWSOps.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	require.NoError(t, Instance().CheckCloudDrivePermission(cluster))
 }

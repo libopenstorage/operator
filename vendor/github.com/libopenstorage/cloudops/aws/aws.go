@@ -61,7 +61,7 @@ func NewClient() (cloudops.Ops, error) {
 	if err != nil {
 		if awsErr, ok := err.(awserr.Error); ok {
 			logrus.Infof("Code %v", awsErr.Code())
-			}
+		}
 	}
 	if err != nil {
 		runningOnEc2 = false
@@ -322,19 +322,21 @@ func (s *awsOps) InspectInstanceGroupForInstance(instanceID string) (*cloudops.I
 	return nil, &cloudops.ErrNoInstanceGroup{}
 }
 
-func (s *awsOps) ApplyTags(volumeID string, labels map[string]string) error {
+func (s *awsOps) ApplyTags(volumeID string, labels map[string]string, options map[string]string) error {
 	req := &ec2.CreateTagsInput{
 		Resources: []*string{&volumeID},
 		Tags:      s.tags(labels),
+		DryRun:    dryRun(options),
 	}
 	_, err := s.ec2.CreateTags(req)
 	return err
 }
 
-func (s *awsOps) RemoveTags(volumeID string, labels map[string]string) error {
+func (s *awsOps) RemoveTags(volumeID string, labels map[string]string, options map[string]string) error {
 	req := &ec2.DeleteTagsInput{
 		Resources: []*string{&volumeID},
 		Tags:      s.tags(labels),
+		DryRun:    dryRun(options),
 	}
 	_, err := s.ec2.DeleteTags(req)
 	return err
@@ -517,13 +519,13 @@ var RatelimitingExponentialBackoff = wait.Backoff{
 	Duration: 2 * time.Second, // the base duration
 	Factor:   2.0,             // Duration is multiplied by factor each iteration
 	Jitter:   1.0,             // The amount of jitter applied each iteration
-	Steps:    5,              // Exit with error after this many steps
+	Steps:    5,               // Exit with error after this many steps
 }
 
 func helperWithTimeoutAndBackoff(metadata *ec2metadata.EC2Metadata, p string) (string, error) {
 	var (
 		origErr error
-		result string
+		result  string
 	)
 	conditionFn := func() (bool, error) {
 		ctx, cancelFn := context.WithTimeout(context.Background(), contextTimeout)
@@ -543,7 +545,7 @@ func helperWithTimeoutAndBackoff(metadata *ec2metadata.EC2Metadata, p string) (s
 	expErr := wait.ExponentialBackoff(RatelimitingExponentialBackoff, conditionFn)
 	if expErr == wait.ErrWaitTimeout {
 		return "", cloudops.NewStorageError(cloudops.ErrExponentialTimeout, origErr.Error(), "")
-		}
+	}
 	return result, origErr
 }
 
@@ -573,7 +575,7 @@ func (s *awsOps) FreeDevices(
 			continue
 		}
 
-		devName, err := GetMetadataWithTimeoutAndBackoff(c, "block-device-mapping/" + device)
+		devName, err := GetMetadataWithTimeoutAndBackoff(c, "block-device-mapping/"+device)
 		if err != nil {
 			return nil, err
 		}
@@ -660,7 +662,7 @@ func (s *awsOps) FreeDevices(
 
 func (s *awsOps) rollbackCreate(id string, createErr error) error {
 	logrus.Warnf("Rollback create volume %v, Error %v", id, createErr)
-	err := s.Delete(id)
+	err := s.Delete(id, nil)
 	if err != nil {
 		logrus.Warnf("Rollback failed volume %v, Error %v", id, err)
 	}
@@ -668,7 +670,7 @@ func (s *awsOps) rollbackCreate(id string, createErr error) error {
 }
 
 func (s *awsOps) refreshVol(id *string) (*ec2.Volume, error) {
-	vols, err := s.Inspect([]*string{id})
+	vols, err := s.Inspect([]*string{id}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -707,8 +709,11 @@ func (s *awsOps) GetDeviceID(vol interface{}) (string, error) {
 	}
 }
 
-func (s *awsOps) Inspect(volumeIds []*string) ([]interface{}, error) {
-	req := &ec2.DescribeVolumesInput{VolumeIds: volumeIds}
+func (s *awsOps) Inspect(volumeIds []*string, options map[string]string) ([]interface{}, error) {
+	req := &ec2.DescribeVolumesInput{
+		VolumeIds: volumeIds,
+		DryRun:    dryRun(options),
+	}
 	resp, err := s.ec2.DescribeVolumes(req)
 	if err != nil {
 		return nil, err
@@ -739,6 +744,7 @@ func (s *awsOps) Enumerate(
 	volumeIds []*string,
 	labels map[string]string,
 	setIdentifier string,
+
 ) (map[string][]interface{}, error) {
 	sets := make(map[string][]interface{})
 
@@ -778,11 +784,16 @@ func (s *awsOps) Enumerate(
 func (s *awsOps) Create(
 	v interface{},
 	labels map[string]string,
+	options map[string]string,
 ) (interface{}, error) {
 	vol, ok := v.(*ec2.Volume)
 	if !ok {
 		return nil, cloudops.NewStorageError(cloudops.ErrVolInval,
 			"Invalid volume template given", "")
+	}
+	if vol.VolumeType == nil {
+		return nil, cloudops.NewStorageError(cloudops.ErrVolInval,
+			"Drive type not specified in the storage spec", "")
 	}
 
 	req := &ec2.CreateVolumeInput{
@@ -793,6 +804,7 @@ func (s *awsOps) Create(
 		VolumeType:       vol.VolumeType,
 		SnapshotId:       vol.SnapshotId,
 		Throughput:       vol.Throughput,
+		DryRun:           dryRun(options),
 	}
 
 	if len(s.outpostARN) > 0 {
@@ -842,11 +854,14 @@ func (s *awsOps) Create(
 }
 
 func (s *awsOps) DeleteFrom(id, _ string) error {
-	return s.Delete(id)
+	return s.Delete(id, nil)
 }
 
-func (s *awsOps) Delete(id string) error {
-	req := &ec2.DeleteVolumeInput{VolumeId: &id}
+func (s *awsOps) Delete(id string, options map[string]string) error {
+	req := &ec2.DeleteVolumeInput{
+		VolumeId: &id,
+		DryRun:   dryRun(options),
+	}
 	_, err := s.ec2.DeleteVolume(req)
 	return err
 }
@@ -875,6 +890,7 @@ func (s *awsOps) Attach(volumeID string, options map[string]string) (string, err
 			Device:     &device,
 			InstanceId: &s.instance,
 			VolumeId:   &volumeID,
+			DryRun:     dryRun(options),
 		}
 		if _, err := s.ec2.AttachVolume(req); err != nil {
 			if strings.Contains(err.Error(), "is already in use") {
@@ -900,20 +916,21 @@ func (s *awsOps) Attach(volumeID string, options map[string]string) (string, err
 	return "", fmt.Errorf("failed to attach any of the free devices. Attempted: %v", devices)
 }
 
-func (s *awsOps) Detach(volumeID string) error {
-	return s.detachInternal(volumeID, s.instance)
+func (s *awsOps) Detach(volumeID string, options map[string]string) error {
+	return s.detachInternal(volumeID, s.instance, options)
 }
 
 func (s *awsOps) DetachFrom(volumeID, instanceName string) error {
-	return s.detachInternal(volumeID, instanceName)
+	return s.detachInternal(volumeID, instanceName, nil)
 }
 
-func (s *awsOps) detachInternal(volumeID, instanceName string) error {
+func (s *awsOps) detachInternal(volumeID, instanceName string, options map[string]string) error {
 	force := false
 	req := &ec2.DetachVolumeInput{
 		InstanceId: &instanceName,
 		VolumeId:   &volumeID,
 		Force:      &force,
+		DryRun:     dryRun(options),
 	}
 	if _, err := s.ec2.DetachVolume(req); err != nil {
 		return err
@@ -928,6 +945,7 @@ func (s *awsOps) detachInternal(volumeID, instanceName string) error {
 func (s *awsOps) Expand(
 	volumeID string,
 	newSizeInGiB uint64,
+	options map[string]string,
 ) (uint64, error) {
 	vol, err := s.refreshVol(&volumeID)
 	if err != nil {
@@ -944,6 +962,7 @@ func (s *awsOps) Expand(
 	request := &ec2.ModifyVolumeInput{
 		VolumeId: vol.VolumeId,
 		Size:     &newSizeInGiBInt64,
+		DryRun:   dryRun(options),
 	}
 	output, err := s.ec2.ModifyVolume(request)
 	if err != nil {
@@ -991,16 +1010,19 @@ func (s *awsOps) Expand(
 func (s *awsOps) Snapshot(
 	volumeID string,
 	readonly bool,
+	options map[string]string,
 ) (interface{}, error) {
 	request := &ec2.CreateSnapshotInput{
 		VolumeId: &volumeID,
+		DryRun:   dryRun(options),
 	}
 	return s.ec2.CreateSnapshot(request)
 }
 
-func (s *awsOps) SnapshotDelete(snapID string) error {
+func (s *awsOps) SnapshotDelete(snapID string, options map[string]string) error {
 	request := &ec2.DeleteSnapshotInput{
 		SnapshotId: &snapID,
+		DryRun:     dryRun(options),
 	}
 
 	_, err := s.ec2.DeleteSnapshot(request)
@@ -1196,4 +1218,9 @@ func reverse(a []string) []string {
 	}
 
 	return reversed
+}
+
+func dryRun(options map[string]string) *bool {
+	_, ok := options[cloudops.DryRunOption]
+	return &ok
 }
