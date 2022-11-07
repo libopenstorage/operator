@@ -266,7 +266,6 @@ mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
 	mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
-	mockgen -destination=pkg/mock/cloudops.mock.go -package=mock github.com/libopenstorage/cloudops Ops
 	mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
 
 clean: clean-release-manifest clean-bundle
