@@ -1445,8 +1445,8 @@ github.com/libopenstorage/autopilot-api v0.6.1-0.20210128210103-5fbb67948648/go.
 github.com/libopenstorage/autopilot-api v1.3.0/go.mod h1:6JLrPbR3ZJQFbUY/+QJMl/aF00YdIrLf8/GWAplgvJs=
 github.com/libopenstorage/cloudops v0.0.0-20190815012442-6e0d676b6c3e/go.mod h1:quSDXGC3Fhc+pBwMRIi1Gk+kaSfBDZo5rRsftapTzGE=
 github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e/go.mod h1:5Qie78eVLLXqLkLCq1+0HyJzjpdRCHyeg9LWlU0WPfU=
-github.com/libopenstorage/cloudops v0.0.0-20221007052249-5334d418c8a2 h1:EUlzUdZJdAcc1fnMruDkxCcR550zuqRtQgg02J7RSus=
-github.com/libopenstorage/cloudops v0.0.0-20221007052249-5334d418c8a2/go.mod h1:LeTwp49IW2vRD4Vjs2nKGULiYYwi+ZH4kqd3EaRuoNw=
+github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1 h1:VLRJE8pQnlyzIiWV6NRAYTAClzQ5ySmqkP6yW4f9RnM=
+github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1/go.mod h1:FkADW9gyVQyD6igV0keQ3nW9k+V3W88yhJ4faZP97wI=
 github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible/go.mod h1:H0Gzy0h36rbJPxu3lKdrIPw1h0k0c4YFtTGGlBEBPc8=
 github.com/libopenstorage/gossip v0.0.0-20190507031959-c26073a01952/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=
 github.com/libopenstorage/gossip v0.0.0-20200808224301-d5287c7c8b24/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=

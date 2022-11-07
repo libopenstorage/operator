@@ -499,7 +499,7 @@ github.com/leonklingele/grouper/pkg/analyzer/globals
 github.com/leonklingele/grouper/pkg/analyzer/imports
 github.com/leonklingele/grouper/pkg/analyzer/types
 github.com/leonklingele/grouper/pkg/analyzer/vars
-# github.com/libopenstorage/cloudops v0.0.0-20221007052249-5334d418c8a2
+# github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 ## explicit; go 1.13
 github.com/libopenstorage/cloudops
 github.com/libopenstorage/cloudops/aws
