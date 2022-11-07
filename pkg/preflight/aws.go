@@ -17,8 +17,15 @@ import (
 const (
 	eksDistribution = "eks"
 	volumePrefix    = "px-preflight-"
-	labelClusterID  = "PX_PREFLIGHT_CLUSTER_ID"
+	labelClusterUID = "PX_PREFLIGHT_CLUSTER_UID"
 	labelVolumeName = "Name"
+
+	// dryRunErrMsg dry run error response if succeeded, otherwise will be UnauthorizedOperation
+	dryRunErrMsg = "DryRunOperation"
+)
+
+var (
+	dryRunOption = map[string]string{cloudops.DryRunOption: ""}
 )
 
 type aws struct {
@@ -64,90 +71,90 @@ func (a *aws) CheckCloudDrivePermission(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	// check the permission here by doing dummy drive operations
-	// TODO: use dry run options
 	logrus.Info("preflight starting eks cloud permission check")
 
-	// Create volume
-	volName := volumePrefix + cluster.Name + "-" + uuid.New()
-	labels := map[string]string{
-		labelVolumeName: volName,
-		labelClusterID:  cluster.Name,
-	}
-	v, err := a.ops.Create(a.getEC2VolumeTemplate(), labels)
+	// List volume on cluster UID first, Describe permission checked here first
+	result, err := a.ops.Enumerate(nil, map[string]string{labelClusterUID: string(cluster.UID)}, "")
 	if err != nil {
-		logrus.WithError(err).Errorf("preflight failed to create eks volume %s", volName)
+		logrus.Errorf("preflight failed to enumerate volumes: %v", err)
 		return err
 	}
+	volumes := result[cloudops.SetIdentifierNone]
 
-	// Attach volume
-	vol := v.(*ec2.Volume)
-	_, err = a.ops.Attach(*vol.VolumeId, nil)
-	if err != nil {
-		// Operator container doesn't have access to /dev/ directory on the host, so we expect an error here
-		// unable to map volume vol-03227127b9b7b442e with block device mapping /dev/xvdp to an actual device path on the host
-		errGetPath := fmt.Sprintf("unable to map volume %s with block device mapping", *vol.VolumeId)
-		errAlreadyAttached := fmt.Sprintf("%s is already attached to an instance", *vol.VolumeId)
-		if !strings.Contains(err.Error(), errGetPath) && !strings.Contains(err.Error(), errAlreadyAttached) {
-			logrus.WithError(err).Errorf("preflight failed to attach volume")
-			return err
-		}
-
-		// Try to get the volume attachment info
-		volumes, err := a.ops.Inspect([]*string{vol.VolumeId})
-		if err != nil || len(volumes) != 1 {
-			logrus.WithError(err).Errorf("preflight failed to inspect volume")
-			return err
-		}
-
-		// Inspect volume attachments
+	// Dry run requires an existing volume, so create one or get an old one, delete in the end
+	var vol *ec2.Volume
+	if len(volumes) > 0 {
+		// Reuse old volume for permission checks
+		logrus.Infof("preflight found %v volumes, using the first one for permission check", len(volumes))
 		vol = volumes[0].(*ec2.Volume)
-		if len(vol.Attachments) != 1 || *vol.Attachments[0].State != ec2.VolumeAttachmentStateAttached {
-			logrus.WithFields(logrus.Fields{
-				"attachments": vol.Attachments,
-			}).Errorf("preflight volume is not attached")
-			return fmt.Errorf("preflight volume is not attached")
+	} else {
+		// Create a new volume
+		volName := volumePrefix + cluster.Name + "-" + uuid.New()
+		labels := map[string]string{
+			labelVolumeName: volName,
+			labelClusterUID: string(cluster.UID),
 		}
-	}
-
-	// Detach
-	if err := a.ops.Detach(*vol.VolumeId); err != nil {
-		//  IncorrectState: Volume 'vol-0dd22e588c5dfee1e' is in the 'available' state.\n\tstatus code: 400, request id: e8a7f095-138f-4271-840b-c7ae08a89529
-		errAlreadyDetached := fmt.Sprintf("Volume '%s' is in the 'available' state", *vol.VolumeId)
-		if !strings.Contains(err.Error(), errAlreadyDetached) {
-			logrus.WithError(err).Errorf("preflight failed to detach volume")
+		v, err := a.ops.Create(a.getEC2VolumeTemplate(), labels, nil)
+		if err != nil {
+			logrus.WithError(err).Errorf("preflight failed to create eks volume %s", volName)
 			return err
 		}
+		volumes = append(volumes, v)
+		vol = v.(*ec2.Volume)
 	}
 
-	if err := a.ops.Delete(*vol.VolumeId); err != nil {
-		logrus.WithError(err).Errorf("preflight failed to delete volume")
-		return err
+	// Dry run the rest operations
+	// Attach volume
+	// without dry run since container doesn't have access to /dev/ directory on host, it will fail to return dev path
+	if _, err := a.ops.Attach(*vol.VolumeId, dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume attach dry run failed: %v", err)
 	}
 
-	// Do a cleanup when preflight passed, as it's guaranteed to have delete permission
-	a.cleanupPreflightVolumes(cluster.Name)
+	// Expand volume
+	if _, err := a.ops.Expand(*vol.VolumeId, uint64(2), dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume expansion dry run failed: %v", err)
+	}
+
+	// Apply and remove tags
+	tags := map[string]string{
+		"foo": "bar",
+	}
+	if err := a.ops.ApplyTags(*vol.VolumeId, tags, dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume tag dry run failed: %v", err)
+	}
+	if err := a.ops.RemoveTags(*vol.VolumeId, tags, dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume remove tag dry run failed: %v", err)
+	}
+
+	// Detach volume
+	if err := a.ops.Detach(*vol.VolumeId, dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume detach dry run failed: %v", err)
+	}
+
+	// Delete volume
+	// Check permission first then do the actual deletion in cleanup phase
+	if err := a.ops.Delete(*vol.VolumeId, dryRunOption); !dryRunSucceeded(err) {
+		return fmt.Errorf("preflight volume delete dry run failed: %v", err)
+	}
+
+	// Do a cleanup when preflight passed, as it's guaranteed to have permissions for volume deletion
+	// Will delete volumes created in previous attempts as well by cluster ID label
+	a.cleanupPreflightVolumes(volumes)
 	logrus.Infof("preflight check for eks cloud permission passed")
 	return nil
 }
 
-func (a *aws) cleanupPreflightVolumes(clusterName string) {
-	logrus.Infof("preflight cleaning up volumes created in permission check")
-	result, err := a.ops.Enumerate(nil, map[string]string{labelClusterID: clusterName}, "")
-	if err != nil {
-		logrus.Warnf("preflight failed to list volumes to clean up")
-		return
-	}
-
-	logrus.Infof("preflight found %v volumes to clean up", len(result[cloudops.SetIdentifierNone]))
-	for _, v := range result[cloudops.SetIdentifierNone] {
+func (a *aws) cleanupPreflightVolumes(volumes []interface{}) {
+	logrus.Infof("preflight cleaning up volumes created in permission check, %v volumes to delete", len(volumes))
+	for _, v := range volumes {
 		vol := *v.(*ec2.Volume).VolumeId
-		err := a.ops.Detach(vol)
-		if err == nil {
-			logrus.Infof("preflight volume %s detached", vol)
-		}
-		err = a.ops.Delete(vol)
-		if err == nil {
-			logrus.Infof("preflight volume %s deleted", vol)
+		err := a.ops.Delete(vol, nil)
+		if err != nil {
+			logrus.Warnf("preflight failed to delete volume %s: %v", vol, err)
 		}
 	}
+}
+
+func dryRunSucceeded(err error) bool {
+	return err != nil && strings.Contains(err.Error(), dryRunErrMsg)
 }
