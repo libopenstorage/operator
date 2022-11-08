@@ -1234,7 +1234,7 @@ func getDefaultStorageNodesDisaggregatedMode(
 		}
 		return 0, false, err
 	}
-	return 0, true, nil
+	return minValue, true, nil
 }
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
