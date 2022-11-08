@@ -56,6 +56,15 @@ const (
 
 	// StorkSchedulerName is the default scheduler for px-csi-ext pods
 	StorkSchedulerName = "stork"
+
+	// NodeTypeKey is the key of the label used to set node as storage or storageless
+	NodeTypeKey = "portworx.io/node-type"
+	// StorageNodeValue is the value for storage node
+	StorageNodeValue = "storage"
+	// StoragelessNodeValue is the value for storage node
+	StoragelessNodeValue = "storageless"
+	// StoragePartitioningEnvKey is the storage spec environment variable used to set storage/storageless node type
+	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
 )
 
 var (

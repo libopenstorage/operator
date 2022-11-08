@@ -1070,9 +1070,9 @@ func getK8sClientWithNodesDisaggregated(
 		k8sNode.Labels[v1.LabelTopologyZone] = "Zone-" + strconv.Itoa(int(zoneCount))
 		if storagelessCount[zoneCount] > 0 {
 			storagelessCount[zoneCount]--
-			k8sNode.Labels[NodeTypeKey] = StoragelessNodeValue
+			k8sNode.Labels[util.NodeTypeKey] = util.StoragelessNodeValue
 		} else {
-			k8sNode.Labels[NodeTypeKey] = StorageNodeValue
+			k8sNode.Labels[util.NodeTypeKey] = util.StorageNodeValue
 		}
 		err := k8sClient.Create(context.TODO(), k8sNode)
 		require.NoError(t, err)

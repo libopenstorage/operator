@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"math"
 	"reflect"
 	"sort"
@@ -82,14 +81,6 @@ const (
 	deprecatedCRDBasePath               = "/crds/deprecated"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
 	minSupportedK8sVersion              = "1.12.0"
-	// NodeTypeKey is the key of the label used to set node as storage or storageless
-	NodeTypeKey = "portworx.io/node-type"
-	// StorageNodeValue is the value for storage node
-	StorageNodeValue = "storage"
-	// StoragelessNodeValue is the value for storage node
-	StoragelessNodeValue = "storageless"
-	// StoragePartitioningEnvKey is the storage spec environment variable used to set storage/storageless node type
-	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -1193,7 +1184,7 @@ func getDefaultStorageNodesDisaggregatedMode(
 ) (uint64, bool, error) {
 	// Check if ENABLE_ASG_STORAGE_PARTITIONING is set to false. If not, we can look at the 'portworx.io/node-type' label
 	for _, envVar := range cluster.Spec.Env {
-		if envVar.Name == StoragePartitioningEnvKey {
+		if envVar.Name == util.StoragePartitioningEnvKey {
 			if envVar.Value == "false" {
 				return 0, false, nil
 			}
@@ -1202,21 +1193,21 @@ func getDefaultStorageNodesDisaggregatedMode(
 	}
 
 	// This will return a zone map of storage nodes in each zones
-	nodeTypeZoneMap := getZoneMap(nodeList, NodeTypeKey, StorageNodeValue)
-	if nodeTypeZoneMap == nil {
-		return 0, false, fmt.Errorf("count not find zone information")
+	nodeTypeZoneMap, err := getZoneMap(nodeList, util.NodeTypeKey, util.StorageNodeValue)
+	if err != nil {
+		return 0, false, err
 	}
 	totalNodes := uint64(0)
 	// We'll find the zone with least number of labels
 	minValue := uint64(math.MaxUint64)
 	prevKey := ""
-	prevValue := uint64(0)
+	prevValue := uint64(math.MaxUint64)
 	for key, value := range nodeTypeZoneMap {
 		totalNodes += value
 		if value < minValue {
 			minValue = value
 		}
-		if prevValue != uint64(0) && prevValue != value {
+		if prevValue != math.MaxUint64 && prevValue != value {
 			k8s.InfoEvent(
 				recorder, cluster, util.UnevenStorageNodesReason,
 				fmt.Sprintf("Uneven number of storage nodes labelled across zones."+
@@ -1228,20 +1219,22 @@ func getDefaultStorageNodesDisaggregatedMode(
 	}
 	if totalNodes == 0 {
 		// no node is labelled with portworx.io/node-type
-		nodeTypeZoneMap = getZoneMap(nodeList, NodeTypeKey, StoragelessNodeValue)
-		for _, value := range nodeTypeZoneMap {
-			totalNodes += value
+		nodeTypeZoneMap, err = getZoneMap(nodeList, util.NodeTypeKey, util.StoragelessNodeValue)
+		if err == nil {
+			for _, value := range nodeTypeZoneMap {
+				totalNodes += value
+			}
+			if totalNodes > 0 {
+				k8s.InfoEvent(
+					recorder, cluster, util.AllStoragelessNodesReason,
+					fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
+				)
+				return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
+			}
 		}
-		if totalNodes > 0 {
-			k8s.InfoEvent(
-				recorder, cluster, util.AllStoragelessNodesReason,
-				fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
-			)
-			return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
-		}
-		return minValue, false, nil
+		return 0, false, err
 	}
-	return minValue, true, nil
+	return 0, true, nil
 }
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
@@ -1264,9 +1257,9 @@ func getDefaultMaxStorageNodesPerZone(
 		return uint32(storageNodes), nil
 	}
 
-	zoneMap := getZoneMap(nodeList, "", "")
-	if zoneMap == nil {
-		return 0, fmt.Errorf("could not find zone information")
+	zoneMap, err := getZoneMap(nodeList, "", "")
+	if err != nil {
+		return 0, err
 	}
 	numZones := len(zoneMap)
 	storageNodes = uint64(len(nodeList.Items) / numZones)
@@ -1280,7 +1273,7 @@ func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool
 		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
 }
 
-func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue string) map[string]uint64 {
+func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue string) (map[string]uint64, error) {
 	cloudProviderName := getCloudProviderName(nodeList)
 	cloudProvider := cloudprovider.New(cloudProviderName)
 	zoneMap := map[string]uint64{}
@@ -1302,10 +1295,10 @@ func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue s
 			zoneMap[zone] = instancesCount + 1
 		} else {
 			logrus.Errorf("count not find zone information: %v", err)
-			return nil
+			return nil, err
 		}
 	}
-	return zoneMap
+	return zoneMap, nil
 }
 
 func getCloudProviderName(nodeList *v1.NodeList) string {
@@ -1384,9 +1377,9 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 	cloudProviderName := getCloudProviderName(nodeList)
 	cloudProvider := cloudprovider.New(cloudProviderName)
-	zoneMap := getZoneMap(nodeList, "", "")
-	if zoneMap == nil {
-		return fmt.Errorf("could not find zone information")
+	zoneMap, err := getZoneMap(nodeList, "", "")
+	if err != nil {
+		return err
 	}
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
