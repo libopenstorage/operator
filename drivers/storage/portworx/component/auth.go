@@ -4,15 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/openstorage/api"
-	osauth "github.com/libopenstorage/openstorage/pkg/auth"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -22,6 +18,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/openstorage/api"
+	osauth "github.com/libopenstorage/openstorage/pkg/auth"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -500,7 +502,9 @@ func (a *auth) closeSdkConn() {
 }
 
 func (a *auth) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
-	if cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit) {
+	if cluster.Status.Phase == "" ||
+		strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
+		cluster.Status.Phase == string(corev1.ClusterInit) {
 		return nil
 	}
 
