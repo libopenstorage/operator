@@ -41,6 +41,10 @@ const (
 	MigrationCompletedReason = "MigrationCompleted"
 	// MigrationFailed is added to an event when the migration fails.
 	MigrationFailedReason = "MigrationFailed"
+	// UnevenStorageNodesReason is added to an event when there are uneven number of storage nodes are labelled across zones
+	UnevenStorageNodesReason = "UnevenStorageNodes"
+	// AllStoragelessNodesReason is added to an event when all the nodes in the cluster is  labelled as storageless
+	AllStoragelessNodesReason = "AllStoragelessNodes"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
@@ -52,6 +56,15 @@ const (
 
 	// StorkSchedulerName is the default scheduler for px-csi-ext pods
 	StorkSchedulerName = "stork"
+
+	// NodeTypeKey is the key of the label used to set node as storage or storageless
+	NodeTypeKey = "portworx.io/node-type"
+	// StorageNodeValue is the value for storage node
+	StorageNodeValue = "storage"
+	// StoragelessNodeValue is the value for storage node
+	StoragelessNodeValue = "storageless"
+	// StoragePartitioningEnvKey is the storage spec environment variable used to set storage/storageless node type
+	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
 )
 
 var (
