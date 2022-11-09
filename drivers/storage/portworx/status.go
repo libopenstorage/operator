@@ -7,13 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/util"
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 const (
@@ -32,8 +33,11 @@ const (
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 ) error {
-	if cluster.Status.Phase == "" {
+	if cluster.Status.Phase == "" || strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) {
 		cluster.Status.ClusterName = cluster.Name
+		if cluster.Status.Phase == util.PreflightFailedStatus {
+			return nil
+		}
 		cluster.Status.Phase = string(corev1.ClusterInit)
 		return nil
 	}

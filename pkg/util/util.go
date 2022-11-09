@@ -39,13 +39,18 @@ const (
 	MigrationPendingReason = "MigrationPending"
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
-	// MigrationFailed is added to an event when the migration fails.
+	// MigrationFailedReason is added to an event when the migration fails.
 	MigrationFailedReason = "MigrationFailed"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
 	// MigrationDryRunFailedReason is added to an event when dry run fails.
 	MigrationDryRunFailedReason = "MigrationDryRunFailed"
+
+	// PreflightFailedStatus is set to storage cluster phase when preflight failed
+	PreflightFailedStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
+	// PreflightCompleteStatus is set to storage cluster phase when preflight passed
+	PreflightCompleteStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
 
 	// DefaultImageRegistry is the default registry when no registry is provided
 	DefaultImageRegistry = "docker.io"
