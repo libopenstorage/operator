@@ -9140,8 +9140,7 @@ func TestEKSPreflightCheck(t *testing.T) {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.True(t, ok)
 	require.Equal(t, "false", check)
-	expectedStatus := string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
-	require.Equal(t, expectedStatus, cluster.Status.Phase)
+	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
 
 	// TestCase: without the permission fixed, preflight check should return error directly
 	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
@@ -9151,7 +9150,7 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, expectedStatus, cluster.Status.Phase)
+	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
 
 	// TestCase: fix the permission then rerun preflight
 	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
@@ -9161,8 +9160,7 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	expectedStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
-	require.Equal(t, expectedStatus, cluster.Status.Phase)
+	require.Equal(t, util.PreflightCompleteStatus, cluster.Status.Phase)
 }
 
 func replaceOldPod(
