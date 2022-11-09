@@ -512,7 +512,7 @@ github.com/libopenstorage/cloudops/pkg/storagedistribution
 github.com/libopenstorage/cloudops/pkg/utils
 github.com/libopenstorage/cloudops/specs/decisionmatrix
 github.com/libopenstorage/cloudops/unsupported
-# github.com/libopenstorage/openstorage v9.4.47+incompatible => github.com/libopenstorage/openstorage v8.0.1-0.20211025171211-43eadb190637+incompatible
+# github.com/libopenstorage/openstorage v9.4.20+incompatible => github.com/libopenstorage/openstorage v8.0.1-0.20211025171211-43eadb190637+incompatible
 ## explicit
 github.com/libopenstorage/openstorage/api
 github.com/libopenstorage/openstorage/pkg/auth

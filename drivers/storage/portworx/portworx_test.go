@@ -38,6 +38,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/portworx/kvdb"
@@ -2051,6 +2052,34 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	// Status should be set to initializing if not set
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
 	require.Equal(t, "Initializing", cluster.Status.Phase)
+}
+
+func TestUpdateClusterStatusWithPreflight(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: util.PreflightFailedStatus,
+		},
+	}
+
+	err := driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	// Status should not change when preflight failed
+	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
+	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
+
+	// Status should change to initializing when preflight passed
+	cluster.Status.Phase = util.PreflightCompleteStatus
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
+	require.Equal(t, string(corev1.ClusterInit), cluster.Status.Phase)
 }
 
 func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {

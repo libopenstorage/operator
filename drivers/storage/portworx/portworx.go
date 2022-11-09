@@ -498,7 +498,9 @@ func (p *portworx) GetStorageNodes(
 	var err error
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
-		if (cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit)) &&
+		if (cluster.Status.Phase == "" ||
+			strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
+			cluster.Status.Phase == string(corev1.ClusterInit)) &&
 			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway

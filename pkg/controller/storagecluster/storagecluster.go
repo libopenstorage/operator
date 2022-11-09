@@ -413,9 +413,11 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	if !ok || check == "skip" {
 		return nil
 	} else if check == "false" {
-		if cluster.Status.Phase == string(corev1.ClusterConditionTypePreflight)+string(corev1.ClusterOperationFailed) {
+		if cluster.Status.Phase == util.PreflightFailedStatus {
+			// TODO: scan condition list to check preflight result, use Phase for now
 			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
 		}
+		// preflight passed, do nothing
 		return nil
 	}
 
@@ -435,10 +437,10 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	if err != nil {
 		logrus.Infof("storage cluster preflight check failed")
-		toUpdate.Status.Phase = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
+		toUpdate.Status.Phase = util.PreflightFailedStatus
 	} else {
 		logrus.Infof("storage cluster preflight check passed")
-		toUpdate.Status.Phase = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
+		toUpdate.Status.Phase = util.PreflightCompleteStatus
 	}
 
 	// Update the cluster only if anything has changed
@@ -585,6 +587,7 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
+	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 	if err := c.runPreflightCheck(cluster); err != nil {
 		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}

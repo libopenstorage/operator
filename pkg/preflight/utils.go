@@ -1,6 +1,8 @@
 package preflight
 
-import "github.com/libopenstorage/cloudops"
+import (
+	"github.com/libopenstorage/cloudops"
+)
 
 // IsEKS returns whether the cloud environment is running EKS
 func IsEKS() bool {
