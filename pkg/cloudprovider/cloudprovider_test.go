@@ -34,7 +34,7 @@ func TestDefaultGetZone(t *testing.T) {
 	zone, err := cp.GetZone(&v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "node1",
-			Labels: map[string]string{failureDomainZoneKey: "bar"},
+			Labels: map[string]string{v1.LabelTopologyZone: "bar"},
 		},
 	})
 	require.NoError(t, err, "Expected an error on nil Node object")
@@ -49,7 +49,7 @@ func TestDefaultGetZonePriority(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey:        "bar",
+				v1.LabelTopologyZone:        "bar",
 				"topology.portworx.io/zone": "pxzone1",
 				"px/zone":                   "pxzone2",
 				v1.LabelZoneFailureDomain:   "pxzone3"},
@@ -62,7 +62,7 @@ func TestDefaultGetZonePriority(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey:      "bar",
+				v1.LabelTopologyZone:      "bar",
 				"px/zone":                 "pxzone2",
 				v1.LabelZoneFailureDomain: "pxzone3"},
 		},
@@ -74,7 +74,7 @@ func TestDefaultGetZonePriority(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey:      "bar",
+				v1.LabelTopologyZone:      "bar",
 				v1.LabelZoneFailureDomain: "pxzone3"},
 		},
 	})
@@ -99,8 +99,8 @@ func TestAzureGetZoneAvailabilityZone(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey:   "region-0",
-				failureDomainRegionKey: "region",
+				v1.LabelTopologyZone:   "region-0",
+				v1.LabelTopologyRegion: "region",
 			},
 		},
 	})
@@ -116,8 +116,8 @@ func TestAzureGetZoneAvailabilitySet(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey:   "0",
-				failureDomainRegionKey: "region",
+				v1.LabelTopologyZone:   "0",
+				v1.LabelTopologyRegion: "region",
 			},
 		},
 	})
@@ -133,7 +133,7 @@ func TestAzureGetZoneNoRegion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				failureDomainZoneKey: "region-0",
+				v1.LabelTopologyZone: "region-0",
 			},
 		},
 	})
