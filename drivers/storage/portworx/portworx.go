@@ -85,7 +85,6 @@ func (p *portworx) Init(
 func (p *portworx) Validate() error {
 	return nil
 }
-
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
 		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)

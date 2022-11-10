@@ -41,6 +41,47 @@ func TestDefaultGetZone(t *testing.T) {
 	require.Equal(t, "bar", zone, "Unexpected zone returned")
 }
 
+func TestDefaultGetZonePriority(t *testing.T) {
+	cp := New("default")
+	require.NotNil(t, cp, "Unexpected error on New")
+
+	zone, err := cp.GetZone(&v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				failureDomainZoneKey:        "bar",
+				"topology.portworx.io/zone": "pxzone1",
+				"px/zone":                   "pxzone2",
+				v1.LabelZoneFailureDomain:   "pxzone3"},
+		},
+	})
+	require.NoError(t, err, "Expected an error on nil Node object")
+	require.Equal(t, "pxzone1", zone, "Unexpected zone returned")
+
+	zone, err = cp.GetZone(&v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				failureDomainZoneKey:      "bar",
+				"px/zone":                 "pxzone2",
+				v1.LabelZoneFailureDomain: "pxzone3"},
+		},
+	})
+	require.NoError(t, err, "Expected an error on nil Node object")
+	require.Equal(t, "pxzone2", zone, "Unexpected zone returned")
+
+	zone, err = cp.GetZone(&v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				failureDomainZoneKey:      "bar",
+				v1.LabelZoneFailureDomain: "pxzone3"},
+		},
+	})
+	require.NoError(t, err, "Expected an error on nil Node object")
+	require.Equal(t, "bar", zone, "Unexpected zone returned")
+}
+
 func TestAzureGetZoneNodeNil(t *testing.T) {
 	cp := New(azureName)
 	require.NotNil(t, cp, "Unexpected error on New")
