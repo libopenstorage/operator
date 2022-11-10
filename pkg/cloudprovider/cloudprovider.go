@@ -8,9 +8,14 @@ import (
 )
 
 const (
-	failureDomainZoneKey   = v1.LabelTopologyZone
-	failureDomainRegionKey = v1.LabelTopologyRegion
+	pxTopologyLabel = "topology.portworx.io"
+	pxZoneLabel     = pxTopologyLabel + "/zone"
+	//Deprecated: having this only to support backward compatibility
+	pxZoneLabelDeprecated = "px/zone"
 )
+
+// zoneLabelsPriority is the priority of zone labels that px uses to determine the zone
+var zoneLabelsPriority = [4]string{pxZoneLabel, pxZoneLabelDeprecated, v1.LabelTopologyZone, v1.LabelZoneFailureDomain}
 
 var (
 	providerRegistry     map[string]Ops
@@ -50,7 +55,14 @@ func (d *defaultProvider) GetZone(node *v1.Node) (string, error) {
 	if node == nil {
 		return "", fmt.Errorf("node cannot be nil")
 	}
-	return node.Labels[failureDomainZoneKey], nil
+	zone := "default"
+	for _, label := range zoneLabelsPriority {
+		if name, ok := node.Labels[label]; ok {
+			zone = name
+			break
+		}
+	}
+	return zone, nil
 }
 
 func init() {
