@@ -31,6 +31,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
@@ -836,7 +837,12 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -848,6 +854,10 @@ func TestStorageClusterIsCreatedFromOnPremDaemonset(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1059,7 +1069,12 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -1071,6 +1086,10 @@ func TestStorageClusterIsCreatedFromCloudDaemonset(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1159,7 +1178,12 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -1179,6 +1203,10 @@ func TestStorageClusterDoesNotHaveSecretsNamespaceIfSameAsClusterNamespace(t *te
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1281,7 +1309,12 @@ func TestStorageClusterWithAutoJournalAndOnPremStorage(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -1293,6 +1326,10 @@ func TestStorageClusterWithAutoJournalAndOnPremStorage(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1397,7 +1434,12 @@ func TestStorageClusterWithAutoJournalAndCloudStorage(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -1409,6 +1451,10 @@ func TestStorageClusterWithAutoJournalAndCloudStorage(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1766,7 +1812,12 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
@@ -1787,6 +1838,10 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 	cluster.Spec.Stork.Volumes = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -1908,7 +1963,12 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase:         constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
@@ -1920,6 +1980,8 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Len(t, cluster.Status.Conditions, 1)
+	cluster.Status.Conditions[0].LastTransitionTime = expectedCluster.Status.Conditions[0].LastTransitionTime
 	require.Equal(t, expectedCluster.Status, cluster.Status)
 
 	// Stop the migration process by removing the daemonset
@@ -2006,7 +2068,9 @@ func TestSuccessfulMigration(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -2092,6 +2156,8 @@ func TestSuccessfulMigration(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
@@ -2180,7 +2246,9 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -2212,6 +2280,10 @@ func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
 
 	// We wait until the daemonset termination wait routine fails
 	time.Sleep(3 * time.Second)
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 
 	// Validate status of the nodes
 	// The status should not change as the daemonset pod is not yet terminated
@@ -2666,7 +2738,9 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -2878,6 +2952,8 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
@@ -3006,7 +3082,12 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	cluster := &corev1.StorageCluster{}
@@ -3021,6 +3102,10 @@ func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
 	cluster.Spec.Volumes = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3129,7 +3214,12 @@ func TestStorageClusterServiceTypeBothDefault(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3150,6 +3240,10 @@ func TestStorageClusterServiceTypeBothDefault(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3259,7 +3353,12 @@ func TestStorageClusterServiceTypeBothNotDefault(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3280,6 +3379,10 @@ func TestStorageClusterServiceTypeBothNotDefault(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3389,7 +3492,12 @@ func TestStorageClusterServiceTypeOneNotDefault(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3410,6 +3518,10 @@ func TestStorageClusterServiceTypeOneNotDefault(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3514,7 +3626,12 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3535,6 +3652,10 @@ func TestStorageClusterWithCustomAnnotations(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3655,7 +3776,12 @@ func TestStorageClusterExternalKvdbAuthReuseOldSecretWithCert(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3676,6 +3802,10 @@ func TestStorageClusterExternalKvdbAuthReuseOldSecretWithCert(t *testing.T) {
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3805,7 +3935,12 @@ func TestStorageClusterExternalKvdbAuthReuseOldSecretWithPassword(t *testing.T) 
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 
@@ -3826,6 +3961,10 @@ func TestStorageClusterExternalKvdbAuthReuseOldSecretWithPassword(t *testing.T) 
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -3951,7 +4090,12 @@ func TestStorageClusterExternalKvdbAuthCreateNewSecretForDifferentCertNames(t *t
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	expectedSecret := &v1.Secret{
@@ -3991,6 +4135,10 @@ func TestStorageClusterExternalKvdbAuthCreateNewSecretForDifferentCertNames(t *t
 	err = testutil.Get(k8sClient, newSecret, expectedSecret.Name, expectedSecret.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedSecret.Data, newSecret.Data)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Stop the migration process by removing the daemonset
 	err = testutil.Delete(k8sClient, ds)
@@ -4096,7 +4244,12 @@ func TestStorageClusterExternalKvdbAuthCreateNewSecretForPlainTextACLTokenAndPas
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	expectedSecret := &v1.Secret{
@@ -4128,6 +4281,10 @@ func TestStorageClusterExternalKvdbAuthCreateNewSecretForPlainTextACLTokenAndPas
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	newSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, newSecret, expectedSecret.Name, expectedSecret.Namespace)
@@ -4223,8 +4380,10 @@ func TestSuccessfulMigrationOnDelete(t *testing.T) {
 		return true, nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
 	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Update the storage cluster update strategy to OnDelete
 	cluster.Spec.UpdateStrategy.Type = corev1.OnDeleteStorageClusterStrategyType
@@ -4376,6 +4535,8 @@ func TestSuccessfulMigrationOnDelete(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
@@ -4462,8 +4623,10 @@ func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
 		return true, nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
 	require.Equal(t, corev1.RollingUpdateStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -4608,6 +4771,8 @@ func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
@@ -4694,8 +4859,10 @@ func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
 		return true, nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, constants.PhaseAwaitingApproval, cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
 	require.Equal(t, corev1.OnDeleteStorageClusterStrategyType, cluster.Spec.UpdateStrategy.Type)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -4849,6 +5016,8 @@ func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
@@ -4943,7 +5112,12 @@ func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase:         constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
@@ -4955,6 +5129,8 @@ func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Len(t, cluster.Status.Conditions, 1)
+	cluster.Status.Conditions[0].LastTransitionTime = expectedCluster.Status.Conditions[0].LastTransitionTime
 	require.Equal(t, expectedCluster.Status, cluster.Status)
 
 	// Stop the migration process by removing the daemonset
@@ -4965,13 +5141,24 @@ func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
 func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	// PX pods don't crash when manually upgrade px to 2.12+ by changing the px image only
 	// Telemetry should be disabled in this case during migration
+	migrationRetryIntervalFunc = func() time.Duration {
+		return 2 * time.Second
+	}
+	defer func() {
+		migrationRetryIntervalFunc = getMigrationRetryInterval
+	}()
+
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "portworx",
 			Namespace: "portworx",
+			UID:       "100",
 		},
 		Spec: appsv1.DaemonSetSpec{
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.OnDeleteDaemonSetStrategyType,
+			},
 			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -5018,23 +5205,28 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	mockManifest.EXPECT().CanAccessRemoteManifest(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(ds.Spec.Template.Spec, nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().AnyTimes()
-	driver.EXPECT().String().AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.24.0",
 	}
 
-	migrator := New(ctrl)
+	node := constructNode(1)
+	err := k8sClient.Create(context.TODO(), node)
+	require.NoError(t, err)
+	dsPod := constructDaemonSetPod(ds, 1)
+	err = k8sClient.Create(context.TODO(), dsPod)
+	require.NoError(t, err)
 
+	migrator := New(ctrl)
 	go migrator.Start()
 	cluster := &corev1.StorageCluster{}
-	err := wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*15, func() (bool, error) {
 		err := testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 		if err != nil {
 			return false, nil
 		}
-
 		return true, nil
 	})
 	require.NoError(t, err)
@@ -5077,15 +5269,26 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 					},
 				},
 			},
+			UpdateStrategy: corev1.StorageClusterUpdateStrategy{
+				Type: corev1.OnDeleteStorageClusterStrategyType,
+			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 		},
 	}
 	require.Equal(t, expectedCluster.Annotations, cluster.Annotations)
 	require.ElementsMatch(t, expectedCluster.Spec.Env, cluster.Spec.Env)
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
 	require.Equal(t, expectedCluster.Status.Phase, cluster.Status.Phase)
+	expectedCondition := util.GetStorageClusterCondition(expectedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.Equal(t, expectedCondition.Status, condition.Status)
 
 	// Approve migration
 	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
@@ -5094,6 +5297,58 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 
 	// Validate the migration has started
 	err = validateMigrationIsInProgress(k8sClient, cluster)
+	require.NoError(t, err)
+
+	time.Sleep(time.Second)
+
+	// Validate components have been paused
+	cluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "true", cluster.Annotations[constants.AnnotationPauseComponentMigration])
+
+	// Start px pod migration
+	err = validateNodeStatus(k8sClient, node.Name, constants.LabelValueMigrationPending)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, node, node.Name, node.Namespace)
+	require.NoError(t, err)
+	node.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
+	err = testutil.Update(k8sClient, node)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, node.Name, constants.LabelValueMigrationStarting)
+	require.NoError(t, err)
+	err = testutil.Delete(k8sClient, dsPod)
+	require.NoError(t, err)
+	err = validateNodeStatus(k8sClient, node.Name, constants.LabelValueMigrationInProgress)
+	require.NoError(t, err)
+	operatorPod := constructOperatorPod(cluster, 1)
+	err = k8sClient.Create(context.TODO(), operatorPod)
+	require.NoError(t, err)
+
+	// Validate daemonset deleted
+	currDaemonSet := &appsv1.DaemonSet{}
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		err := testutil.Get(k8sClient, currDaemonSet, ds.Name, ds.Namespace)
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return true, nil
+	})
+	require.NoError(t, err)
+
+	// Validate migration completed
+	err = wait.PollImmediate(time.Millisecond*200, time.Second*5, func() (bool, error) {
+		cluster = &corev1.StorageCluster{}
+		err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
+		require.NoError(t, err)
+		condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+		if condition.Status != corev1.ClusterConditionStatusCompleted {
+			return false, nil
+		}
+		_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+		require.False(t, annotationExists)
+		return true, nil
+	})
 	require.NoError(t, err)
 
 	// Validate telemetry v1 config map got deleted but secret got preserved
@@ -5201,7 +5456,12 @@ func TestStorageClusterCreatedWithLongClusterID(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase:         constants.PhaseAwaitingApproval,
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusPending,
+			}},
 			DesiredImages: &corev1.ComponentImages{},
 		},
 	}
@@ -5213,6 +5473,8 @@ func TestStorageClusterCreatedWithLongClusterID(t *testing.T) {
 	expectedCluster.Spec.Env = nil
 	cluster.Spec.Env = nil
 	require.Equal(t, expectedCluster.Spec, cluster.Spec)
+	require.Len(t, cluster.Status.Conditions, 1)
+	cluster.Status.Conditions[0].LastTransitionTime = expectedCluster.Status.Conditions[0].LastTransitionTime
 	require.Equal(t, expectedCluster.Status, cluster.Status)
 
 	// Stop the migration process by removing the daemonset
@@ -5229,8 +5491,12 @@ func validateMigrationIsInProgress(
 		if err := testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace); err != nil {
 			return nil, true, err
 		}
-		if currCluster.Status.Phase != constants.PhaseMigrationInProgress {
-			return nil, true, fmt.Errorf("migration status expected to be in progress")
+		if currCluster.Status.Phase != string(corev1.ClusterStateInit) {
+			return nil, true, fmt.Errorf("storage cluster status expected to be initializing instead of %s", currCluster.Status.Phase)
+		}
+		condition := util.GetStorageClusterCondition(currCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+		if condition == nil || condition.Status != corev1.ClusterConditionStatusInProgress {
+			return nil, true, fmt.Errorf("migration status expected to be InProgress instead of %s", condition.Status)
 		}
 		return nil, false, nil
 	}

@@ -676,10 +676,7 @@ func (p *portworx) GetStorageNodes(
 	var err error
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
-		if (cluster.Status.Phase == "" ||
-			strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
-			cluster.Status.Phase == string(corev1.ClusterInit)) &&
-			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
+		if pxutil.IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
 			logrus.Warn(err)
@@ -720,12 +717,13 @@ func (p *portworx) DeleteStorage(
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
 		// No Delete strategy provided or Portworx not installed through the operator,
 		// then do not wipe Portworx
-		status := &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
-			Reason: storageClusterDeleteMsg,
+		condition := &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: storageClusterDeleteMsg,
 		}
-		return status, nil
+		return condition, nil
 	}
 
 	// Portworx needs to be removed if DeleteStrategy is specified
@@ -736,29 +734,31 @@ func (p *portworx) DeleteStorage(
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	deleteCompleted := string(corev1.ClusterConditionTypeDelete) +
-		string(corev1.ClusterOperationCompleted)
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
-		if cluster.Status.Phase == deleteCompleted {
+		deleteCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+		if deleteCondition != nil && deleteCondition.Status == corev1.ClusterConditionStatusCompleted {
 			return &corev1.ClusterCondition{
-				Type:   corev1.ClusterConditionTypeDelete,
-				Status: corev1.ClusterOperationCompleted,
-				Reason: completeMsg,
+				Source:  pxutil.PortworxComponentName,
+				Type:    corev1.ClusterConditionTypeDelete,
+				Status:  corev1.ClusterConditionStatusCompleted,
+				Message: completeMsg,
 			}, nil
 		}
 		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
 			return &corev1.ClusterCondition{
-				Type:   corev1.ClusterConditionTypeDelete,
-				Status: corev1.ClusterOperationFailed,
-				Reason: "Failed to run node wiper: " + err.Error(),
+				Source:  pxutil.PortworxComponentName,
+				Type:    corev1.ClusterConditionTypeDelete,
+				Status:  corev1.ClusterConditionStatusFailed,
+				Message: "Failed to run node wiper: " + err.Error(),
 			}, nil
 		}
 		return &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationInProgress,
-			Reason: "Started node wiper daemonset",
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusInProgress,
+			Message: "Started node wiper daemonset",
 		}, nil
 	} else if err != nil {
 		// We could not get the node wiper status and it does exist
@@ -775,23 +775,26 @@ func (p *portworx) DeleteStorage(
 			if err := u.WipeMetadata(); err != nil {
 				logrus.Errorf("Failed to delete portworx metadata: %v", err)
 				return &corev1.ClusterCondition{
-					Type:   corev1.ClusterConditionTypeDelete,
-					Status: corev1.ClusterOperationFailed,
-					Reason: "Failed to wipe metadata: " + err.Error(),
+					Source:  pxutil.PortworxComponentName,
+					Type:    corev1.ClusterConditionTypeDelete,
+					Status:  corev1.ClusterConditionStatusFailed,
+					Message: "Failed to wipe metadata: " + err.Error(),
 				}, nil
 			}
 		}
 		return &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
-			Reason: completeMsg,
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: completeMsg,
 		}, nil
 	}
 
 	return &corev1.ClusterCondition{
-		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationInProgress,
-		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypeDelete,
+		Status:  corev1.ClusterConditionStatusInProgress,
+		Message: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
 }
 
