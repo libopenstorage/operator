@@ -4234,32 +4234,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// GuestAccess disabled but hould not call update as cluster is still initializing
-	cluster.Status.Phase = string(corev1.ClusterInit)
-	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
-		}).
-		Return(nil, nil).
-		Times(0)
+	// GuestAccess disabled but should not call update as cluster is still initializing
+	cluster.Status.Phase = string(corev1.ClusterStateInit)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// GuestAccess disabled but should not call update as preflight failed
-	cluster.Status.Phase = util.PreflightFailedStatus
-	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.SecuritySystemGuestRoleName,
-		}).
-		Return(nil, nil).
-		Times(0)
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// GuestAccess disabled but should not call update as preflight just completed
-	cluster.Status.Phase = util.PreflightCompleteStatus
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
 			Name: component.SecuritySystemGuestRoleName,
@@ -4272,7 +4249,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 
 	// Disable GuestAccess. Should expect an update to be called.
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
-	cluster.Status.Phase = string(corev1.ClusterOnline)
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
 	inspectedRole := component.GuestRoleEnabled
 	inspectedRoleResp := &osdapi.SdkRoleInspectResponse{
 		Role: &inspectedRole,
@@ -11105,7 +11082,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.ClusterOnline),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
@@ -11305,7 +11282,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.ClusterOnline),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
@@ -11367,7 +11344,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.ClusterOnline),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
@@ -11543,29 +11520,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	require.Empty(t, pdbList.Items)
 
 	// TestCase: Do not create PDB if the cluster is initializing
-	cluster.Status.Phase = string(corev1.ClusterInit)
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	pdbList = &policyv1.PodDisruptionBudgetList{}
-	err = testutil.List(k8sClient, pdbList)
-	require.NoError(t, err)
-	require.Empty(t, pdbList.Items)
-
-	// TestCase: Do not create PDB if preflight failed
-	cluster.Status.Phase = util.PreflightFailedStatus
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	pdbList = &policyv1.PodDisruptionBudgetList{}
-	err = testutil.List(k8sClient, pdbList)
-	require.NoError(t, err)
-	require.Empty(t, pdbList.Items)
-
-	// TestCase: Do not create PDB if preflight just completed
-	cluster.Status.Phase = util.PreflightCompleteStatus
+	cluster.Status.Phase = string(corev1.ClusterStateInit)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11576,7 +11531,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	require.Empty(t, pdbList.Items)
 
 	// TestCase: Create PDBs when cluster is done initializing
-	cluster.Status.Phase = string(corev1.ClusterOnline)
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -11612,7 +11567,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.ClusterOnline),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
@@ -11737,7 +11692,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.ClusterOnline),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 

@@ -350,7 +350,8 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.Empty(t, updatedCluster.Status.Conditions)
 }
 
 func TestSingleClusterValidation(t *testing.T) {
@@ -397,7 +398,7 @@ func TestSingleClusterValidation(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 }
 
 func TestWaitForMigrationApproval(t *testing.T) {
@@ -497,7 +498,11 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	require.Len(t, currentCluster.Finalizers, 0)
 
 	// TestCase: Migration is approved but status is still in AwaitingMigrationApproval phase
-	currentCluster.Status.Phase = constants.PhaseAwaitingApproval
+	util.UpdateStorageClusterCondition(currentCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusPending,
+	})
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -517,7 +522,12 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	require.Len(t, currentCluster.Finalizers, 0)
 
 	// TestCase: Migration is approved and status shows migration in progress
-	currentCluster.Status.Phase = constants.PhaseMigrationInProgress
+	util.UpdateStorageClusterCondition(currentCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
+
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -535,7 +545,7 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	currentCluster.Finalizers = nil
 	err = k8sClient.Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
-	currentCluster.Status.Phase = "Failed"
+	currentCluster.Status.Phase = string(corev1.ClusterStateDegraded)
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -1460,7 +1470,7 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 }
 
 func TestReconcileForNonExistingCluster(t *testing.T) {
@@ -3173,7 +3183,12 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1.StorageCluster) {
-			c.Status.Phase = "Online"
+			c.Status.Phase = string(corev1.ClusterStateRunning)
+			util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeRuntimeState,
+				Status: corev1.ClusterConditionStatusOnline,
+			})
 		}).
 		Return(nil)
 
@@ -3192,7 +3207,10 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	newCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Online", newCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), newCluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 }
 
 func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
@@ -3227,7 +3245,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1.StorageCluster) {
-			c.Status.Phase = "Offline"
+			c.Status.Phase = string(corev1.ClusterStateDegraded)
 		}).
 		Return(fmt.Errorf("update status error"))
 
@@ -3248,7 +3266,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	newCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", newCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), newCluster.Status.Phase)
 }
 
 func TestFailedPreInstallFromDriver(t *testing.T) {
@@ -3495,7 +3513,7 @@ func TestGarbageCollection(t *testing.T) {
 
 	condition := &corev1.ClusterCondition{
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -3673,9 +3691,10 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, pxutil.PortworxComponentName, updatedCluster.Status.Conditions[0].Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
-	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If storage driver returns error, then controller should not return error but raise an event
@@ -3695,9 +3714,10 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, pxutil.PortworxComponentName, updatedCluster.Status.Conditions[0].Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
-	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is not present already, then add to the cluster
@@ -3709,8 +3729,9 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), updatedCluster)
 	require.NoError(t, err)
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationFailed,
+		Status: corev1.ClusterConditionStatusFailed,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3723,14 +3744,17 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
-	require.Equal(t, "DeleteFailed", updatedCluster.Status.Phase)
+	c := util.GetStorageClusterCondition(updatedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+	require.NotNil(t, condition)
+	require.Equal(t, condition.Status, c.Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is present, then update it
 	condition = &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationTimeout,
+		Status: corev1.ClusterConditionStatusTimeout,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3743,97 +3767,17 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
-	require.Equal(t, "DeleteTimeout", updatedCluster.Status.Phase)
+	c = util.GetStorageClusterCondition(updatedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+	require.NotNil(t, condition)
+	require.Equal(t, condition.Status, c.Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition status is completed, then remove delete finalizer
 	condition = &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
-	}
-	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
-
-	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, recorder.Events)
-
-	updatedCluster = &corev1.StorageCluster{}
-	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-}
-
-func TestDeleteStorageClusterShouldSetTelemetryCertOwnerRef(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	cluster := createStorageCluster()
-	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-		Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-	}
-	deletionTimeStamp := metav1.Now()
-	cluster.DeletionTimestamp = &deletionTimeStamp
-
-	driverName := "mock-driver"
-	storageLabels := map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  driverName,
-	}
-
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	podControl := &k8scontroller.FakePodControl{}
-	recorder := record.NewFakeRecorder(10)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
-	}
-
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
-	// Empty delete condition should not remove finalizer
-	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, nil)
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
-
-	k8sNode := createK8sNode("k8s-node", 10)
-	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
-
-	err := k8sClient.Create(context.TODO(), k8sNode)
-	require.NoError(t, err)
-	err = k8sClient.Create(context.TODO(), storagePod)
-	require.NoError(t, err)
-
-	request := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-	}
-	result, err := controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, recorder.Events)
-
-	require.Empty(t, podControl.Templates)
-	require.ElementsMatch(t, []string{storagePod.Name}, podControl.DeletePodName)
-
-	updatedCluster := &corev1.StorageCluster{}
-	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, updatedCluster.Status.Conditions, 1)
-	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
-
-	condition := &corev1.ClusterCondition{
-		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3957,7 +3901,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 
 	condition := &corev1.ClusterCondition{
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -4025,7 +3969,7 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
 	condition := &corev1.ClusterCondition{
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -8111,6 +8055,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeRuntimeState,
+		Status: corev1.ClusterConditionStatusOnline,
+	})
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
@@ -8255,7 +8205,7 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 
 	// TestCase: Add unsupported custom annotation key and remove previous one
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -9191,7 +9141,7 @@ func TestDoesTelemetryMatch(t *testing.T) {
 
 		condition := &corev1.ClusterCondition{
 			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
+			Status: corev1.ClusterConditionStatusCompleted,
 		}
 		driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -9296,7 +9246,9 @@ func TestEKSPreflightCheck(t *testing.T) {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.True(t, ok)
 	require.Equal(t, "false", check)
-	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: without the permission fixed, preflight check should return error directly
 	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
@@ -9306,7 +9258,9 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: fix the permission then rerun preflight
 	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
@@ -9316,7 +9270,91 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, util.PreflightCompleteStatus, cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+}
+
+func TestStorageClusterStateDuringValidation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "ns",
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+	validationErr := fmt.Errorf("driver validation failed")
+	driver.EXPECT().Validate().Return(validationErr).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	// Validation failed during fresh install
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedValidationReason, validationErr.Error()))
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.True(t, pxutil.IsFreshInstall(updatedCluster))
+
+	// Reconcile again and storage cluster phase should not be changed during fresh install
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	updatedCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.True(t, pxutil.IsFreshInstall(updatedCluster))
+
+	// Validation failed when updating a running cluster
+	updatedCluster.Status = corev1.StorageClusterStatus{
+		Phase: string(corev1.ClusterStateRunning),
+		Conditions: []corev1.ClusterCondition{
+			{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeRuntimeState,
+				Status: corev1.ClusterConditionStatusOnline,
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), updatedCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	updatedCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.False(t, pxutil.IsFreshInstall(updatedCluster))
 }
 
 func replaceOldPod(

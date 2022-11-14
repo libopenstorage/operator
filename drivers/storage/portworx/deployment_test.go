@@ -23,7 +23,6 @@ import (
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/preflight"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 )
@@ -1386,109 +1385,6 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	cluster.Spec.CloudStorage.Provider = nil
-}
-
-func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "node1",
-				Labels: map[string]string{v1.LabelTopologyZone: "zone1"},
-			},
-			Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "node2",
-				Labels: map[string]string{v1.LabelTopologyZone: "zone2"},
-			},
-			Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "node3",
-				Labels: map[string]string{v1.LabelTopologyZone: "zone3"},
-			},
-			Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"},
-		},
-	}}
-	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.21.14-eks-ba74326",
-	}
-	coreops.SetInstance(coreops.New(versionClient))
-	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
-	err := preflight.InitPreflightChecker(k8sClient)
-	require.NoError(t, err)
-
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(k8sClient, "", "")
-	require.NoError(t, err)
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			CloudStorage: &corev1.CloudStorageSpec{
-				CapacitySpecs: []corev1.CloudStorageCapacitySpec{
-					{
-						MinCapacityInGiB: 300,
-						Options: map[string]string{
-							"foo1": "bar1",
-						},
-					},
-					{
-						MinCapacityInGiB: 600,
-						Options: map[string]string{
-							"foo2": "bar2",
-							"type": "io1",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	expectedCapacitySpec := []corev1.CloudStorageCapacitySpec{
-		{
-			MinCapacityInGiB: 300,
-			Options: map[string]string{
-				"foo1": "bar1",
-				"type": "gp3",
-			},
-		},
-		{
-			MinCapacityInGiB: 600,
-			Options: map[string]string{
-				"foo2": "bar2",
-				"type": "io1",
-			},
-		},
-	}
-	require.Equal(t, expectedCapacitySpec, cluster.Spec.CloudStorage.CapacitySpecs)
-	require.NotNil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-	require.Equal(t, uint32(1), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-
-	expectedArgs := []string{
-		"-c", "px-cluster",
-		"-x", "kubernetes",
-		"-b",
-		"-cloud_provider", "aws",
-		"-s", "foo1=bar1,size=100,type=gp3",
-		"-s", "foo2=bar2,size=200,type=io1",
-		"-max_storage_nodes_per_zone", "1",
-		"-secret_type", "k8s",
-	}
-	actual, _ := driver.GetStoragePodSpec(cluster, fakeK8sNodes.Items[0].Name)
-	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
-
-	// Reset preflight for other tests
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	err = preflight.InitPreflightChecker(k8sClient)
-	require.NoError(t, err)
 }
 
 func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {

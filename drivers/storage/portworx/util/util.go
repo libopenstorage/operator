@@ -39,6 +39,8 @@ import (
 const (
 	// DriverName name of the portworx driver
 	DriverName = "portworx"
+	// PortworxComponentName name of portworx component to show in the cluster conditions
+	PortworxComponentName = "Portworx"
 	// DefaultStartPort is the default start port for Portworx
 	DefaultStartPort = 9001
 	// DefaultOpenshiftStartPort is the default start port for Portworx on OpenShift
@@ -1090,4 +1092,14 @@ func SetTelemetryCertOwnerRef(
 	secret.OwnerReferences = references
 
 	return k8sClient.Update(context.TODO(), secret)
+}
+
+// IsFreshInstall checks whether it's a fresh Portworx install
+func IsFreshInstall(cluster *corev1.StorageCluster) bool {
+	// To handle failures during fresh install e.g. validation falures,
+	// extra check for px runtime states is added here to avoid unexpected behaviors
+	return cluster.Status.Phase == "" ||
+		cluster.Status.Phase == string(corev1.ClusterStateInit) ||
+		(cluster.Status.Phase == string(corev1.ClusterStateDegraded) &&
+			util.GetStorageClusterCondition(cluster, PortworxComponentName, corev1.ClusterConditionTypeRuntimeState) == nil)
 }

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
@@ -111,6 +112,15 @@ func (h *Handler) Start() {
 		if err := h.processMigration(cluster, pxDaemonSet); err != nil {
 			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationFailedReason,
 				fmt.Sprintf("Migration failed, will retry in %v, %v", migrationRetryIntervalFunc(), err))
+
+			updatedCluster := &corev1.StorageCluster{}
+			if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
+				logrus.Errorf("Failed to get StorageCluster. %v", err)
+			}
+			updatedCluster.Status.Phase = string(corev1.ClusterStateDegraded)
+			if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
+				logrus.Errorf("Failed to update StorageCluster status. %v", err)
+			}
 			return false, nil
 		}
 
@@ -169,8 +179,12 @@ func (h *Handler) processMigration(
 		return err
 	}
 	// Unblock operator reconcile loop to start managing the storagecluster
-	cluster.Status.Phase = constants.PhaseMigrationInProgress
-	if err := h.client.Status().Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
+	if err := k8sutil.UpdateStorageClusterStatus(h.client, cluster); err != nil {
 		return err
 	}
 
@@ -223,6 +237,17 @@ func (h *Handler) processMigration(
 	// events and conditions in the status. That way there is a more permanent record that
 	// this cluster is a result of migration. After we have added that we can remove the
 	// migration-approved annotation after a successful migration.
+
+	// Mark migration as completed in the cluster condition list
+	util.UpdateStorageClusterCondition(updatedCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusCompleted,
+	})
+	if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
+		return err
+	}
+
 	return nil
 }
 

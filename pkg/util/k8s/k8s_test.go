@@ -1034,7 +1034,7 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 			Namespace: "test-ns",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Install",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -1047,14 +1047,14 @@ func TestUpdateStorageClusterStatus(t *testing.T) {
 	require.Equal(t, "1", cluster.ResourceVersion)
 
 	// Should increment the resource version on update
-	cluster.Status.Phase = "Update"
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
 	err = UpdateStorageClusterStatus(k8sClient, cluster)
 	require.NoError(t, err)
 
 	actualCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, actualCluster, "test", "test-ns")
 	require.NoError(t, err)
-	require.Equal(t, "Update", actualCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), actualCluster.Status.Phase)
 	require.Equal(t, "2", actualCluster.ResourceVersion)
 }
 

@@ -114,7 +114,12 @@ func (h *Handler) createStorageCluster(
 	logrus.Infof("Creating StorageCluster %v/%v for migration", stc.Namespace, stc.Name)
 	err = h.client.Create(context.TODO(), stc)
 	if err == nil {
-		stc.Status.Phase = constants.PhaseAwaitingApproval
+		stc.Status.Phase = string(corev1.ClusterStateInit)
+		util.UpdateStorageClusterCondition(stc, &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
+			Type:   corev1.ClusterConditionTypeMigration,
+			Status: corev1.ClusterConditionStatusPending,
+		})
 		err = h.client.Status().Update(context.TODO(), stc)
 	}
 	return stc, err

@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,11 +56,6 @@ const (
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
 	// MigrationDryRunFailedReason is added to an event when dry run fails.
 	MigrationDryRunFailedReason = "MigrationDryRunFailed"
-
-	// PreflightFailedStatus is set to storage cluster phase when preflight failed
-	PreflightFailedStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
-	// PreflightCompleteStatus is set to storage cluster phase when preflight passed
-	PreflightCompleteStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
 
 	// DefaultImageRegistry is the default registry when no registry is provided
 	DefaultImageRegistry = "docker.io"
@@ -479,4 +476,67 @@ func GetTopologySpreadConstraintsFromNodes(
 		})
 	}
 	return constraints, nil
+}
+
+// UpdateStorageClusterCondition update condition based on source and type
+func UpdateStorageClusterCondition(
+	cluster *corev1.StorageCluster,
+	toUpdate *corev1.ClusterCondition,
+) {
+	if toUpdate == nil || toUpdate.Source == "" || toUpdate.Type == "" {
+		logrus.Warn("empty or invalid storage cluster condition provided")
+		return
+	}
+
+	// Search for condition by source and type
+	foundIndex := -1
+	for i, condition := range cluster.Status.Conditions {
+		if toUpdate.Source == condition.Source && toUpdate.Type == condition.Type {
+			foundIndex = i
+			// No update needed but populate the last transition time
+			if toUpdate.Status == condition.Status &&
+				toUpdate.Message == condition.Message {
+				toUpdate.LastTransitionTime = condition.LastTransitionTime
+				return
+			}
+			break
+		}
+	}
+
+	// Create a new condition or overwrite existing one
+	var sortedConditions []corev1.ClusterCondition
+	if foundIndex == -1 {
+		sortedConditions = make([]corev1.ClusterCondition, len(cluster.Status.Conditions)+1)
+	} else {
+		sortedConditions = make([]corev1.ClusterCondition, len(cluster.Status.Conditions))
+	}
+
+	if toUpdate.LastTransitionTime.Equal(&metav1.Time{}) {
+		// Set timestamp if not provided, truncate to second
+		toUpdate.LastTransitionTime = metav1.NewTime(time.Now().Truncate(time.Second))
+	}
+	sortedConditions[0] = *toUpdate.DeepCopy()
+
+	for index, indexSorted := 0, 1; index < len(cluster.Status.Conditions) && indexSorted < len(sortedConditions); index++ {
+		if index == foundIndex {
+			continue
+		}
+		sortedConditions[indexSorted] = cluster.Status.Conditions[index]
+		indexSorted++
+	}
+	cluster.Status.Conditions = sortedConditions
+}
+
+// GetStorageClusterCondition returns the condition based on source and type
+func GetStorageClusterCondition(
+	cluster *corev1.StorageCluster,
+	conditionSource string,
+	conditionType corev1.ClusterConditionType,
+) *corev1.ClusterCondition {
+	for _, condition := range cluster.Status.Conditions {
+		if condition.Source == conditionSource && condition.Type == conditionType {
+			return condition.DeepCopy()
+		}
+	}
+	return nil
 }

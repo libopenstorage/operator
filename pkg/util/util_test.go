@@ -2,6 +2,7 @@ package util
 
 import (
 	"testing"
+	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
@@ -376,6 +377,117 @@ func TestGetTopologySpreadConstraints(t *testing.T) {
 	constraints, err := GetTopologySpreadConstraints(k8sClient, templateLabels)
 	require.NoError(t, err)
 	require.Equal(t, expectedConstraints, constraints)
+}
+
+func TestUpdateStorageClusterCondition(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	var expectedCondition1 *corev1.ClusterCondition
+	portworxComponentName := "Portworx"
+
+	// TestCase: add nil condition
+	UpdateStorageClusterCondition(cluster, expectedCondition1)
+	require.Empty(t, cluster.Status.Conditions)
+
+	// TestCase: add first condition without timestamp
+	timestamp := metav1.NewTime(time.Now().Truncate(time.Second))
+	expectedCondition1 = &corev1.ClusterCondition{
+		Source: portworxComponentName,
+		Type:   corev1.ClusterConditionTypePreflight,
+		Status: corev1.ClusterConditionStatusCompleted,
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition1)
+	require.Len(t, cluster.Status.Conditions, 1)
+	condition := GetStorageClusterCondition(cluster, expectedCondition1.Source, expectedCondition1.Type)
+	require.Equal(t, expectedCondition1, condition)
+	require.Equal(t, timestamp, condition.LastTransitionTime)
+
+	// TestCase: update with same condition, timestamp should not be changed
+	timestamp = expectedCondition1.LastTransitionTime
+	expectedCondition1 = &corev1.ClusterCondition{
+		Source:             portworxComponentName,
+		Type:               corev1.ClusterConditionTypePreflight,
+		Status:             corev1.ClusterConditionStatusCompleted,
+		LastTransitionTime: metav1.NewTime(timestamp.Time.Add(time.Second)),
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition1)
+	require.Len(t, cluster.Status.Conditions, 1)
+	condition = GetStorageClusterCondition(cluster, expectedCondition1.Source, expectedCondition1.Type)
+	require.Equal(t, expectedCondition1, condition)
+	require.Equal(t, timestamp, condition.LastTransitionTime)
+
+	// TestCase: add second condition
+	expectedCondition2 := &corev1.ClusterCondition{
+		Source: portworxComponentName,
+		Type:   corev1.ClusterConditionTypeUpgrade,
+		Status: corev1.ClusterConditionStatusInProgress,
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition2)
+	require.Len(t, cluster.Status.Conditions, 2)
+	require.Equal(t, cluster.Status.Conditions[0], *expectedCondition2)
+	require.Equal(t, cluster.Status.Conditions[1], *expectedCondition1)
+	condition = GetStorageClusterCondition(cluster, expectedCondition2.Source, expectedCondition2.Type)
+	require.Equal(t, expectedCondition2, condition)
+
+	// TestCase: update existing condition without timestamp
+	timestamp = metav1.NewTime(time.Now().Truncate(time.Second))
+	expectedCondition2 = &corev1.ClusterCondition{
+		Source:  portworxComponentName,
+		Type:    corev1.ClusterConditionTypeUpgrade,
+		Status:  corev1.ClusterConditionStatusFailed,
+		Message: "upgrade failed",
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition2)
+	require.Len(t, cluster.Status.Conditions, 2)
+	require.Equal(t, cluster.Status.Conditions[0], *expectedCondition2)
+	require.Equal(t, cluster.Status.Conditions[1], *expectedCondition1)
+	condition = GetStorageClusterCondition(cluster, expectedCondition2.Source, expectedCondition2.Type)
+	require.Equal(t, expectedCondition2, condition)
+	require.Equal(t, timestamp, condition.LastTransitionTime)
+
+	// TestCase: update exising condition with timestamp
+	timestamp = metav1.NewTime(time.Now().Add(time.Second).Truncate(time.Second))
+	expectedCondition2 = &corev1.ClusterCondition{
+		Source:             portworxComponentName,
+		Type:               corev1.ClusterConditionTypeUpgrade,
+		Status:             corev1.ClusterConditionStatusCompleted,
+		LastTransitionTime: timestamp,
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition2)
+	require.Len(t, cluster.Status.Conditions, 2)
+	require.Equal(t, cluster.Status.Conditions[0], *expectedCondition2)
+	require.Equal(t, cluster.Status.Conditions[1], *expectedCondition1)
+	condition = GetStorageClusterCondition(cluster, expectedCondition2.Source, expectedCondition2.Type)
+	require.Equal(t, expectedCondition2, condition)
+	require.Equal(t, timestamp, condition.LastTransitionTime)
+
+	// TestCase: insert a new condition
+	expectedCondition3 := &corev1.ClusterCondition{
+		Source: portworxComponentName,
+		Type:   corev1.ClusterConditionTypeRuntimeState,
+		Status: corev1.ClusterConditionStatusOnline,
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition3)
+	require.Len(t, cluster.Status.Conditions, 3)
+	require.Equal(t, cluster.Status.Conditions[0], *expectedCondition3)
+
+	// TestCase: update an old condition
+	expectedCondition1 = &corev1.ClusterCondition{
+		Source: portworxComponentName,
+		Type:   corev1.ClusterConditionTypePreflight,
+		Status: corev1.ClusterConditionStatusFailed,
+	}
+	UpdateStorageClusterCondition(cluster, expectedCondition1)
+	require.Len(t, cluster.Status.Conditions, 3)
+	require.Equal(t, cluster.Status.Conditions[0], *expectedCondition1)
+	require.Equal(t, cluster.Status.Conditions[1], *expectedCondition3)
+	require.Equal(t, cluster.Status.Conditions[2], *expectedCondition2)
+	condition = GetStorageClusterCondition(cluster, expectedCondition1.Source, expectedCondition1.Type)
+	require.Equal(t, expectedCondition1, condition)
 }
 
 func fakeK8sClient(initObjects ...runtime.Object) client.Client {

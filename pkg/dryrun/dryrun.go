@@ -51,6 +51,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	inttestutil "github.com/libopenstorage/operator/test/integration_test/utils"
 )
@@ -186,7 +187,12 @@ func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error
 	// Mock migration approved.
 	d.cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
 	d.cluster.Annotations[constants.AnnotationPauseComponentMigration] = "false"
-	d.cluster.Status.Phase = constants.PhaseMigrationInProgress
+	d.cluster.Status.Phase = string(corev1.ClusterStateInit)
+	util.UpdateStorageClusterCondition(d.cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
 	// Disable storage due to the driver will talk to portworx SDK to get storage node information.
 	// However dryrun is before installation so there won't be useful information.
 	// It will also disable PDB.

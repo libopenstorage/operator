@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -501,9 +500,7 @@ func (c *security) closeSdkConn() {
 }
 
 func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
-	if cluster.Status.Phase == "" ||
-		strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
-		cluster.Status.Phase == string(corev1.ClusterInit) {
+	if pxutil.IsFreshInstall(cluster) {
 		return nil
 	}
 
