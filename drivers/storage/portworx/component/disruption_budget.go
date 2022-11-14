@@ -2,7 +2,6 @@ package component
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -63,9 +62,7 @@ func (c *disruptionBudget) IsEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
-	if cluster.Status.Phase == "" ||
-		strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
-		cluster.Status.Phase == string(corev1.ClusterInit) {
+	if pxutil.IsFreshInstall(cluster) {
 		return nil
 	}
 

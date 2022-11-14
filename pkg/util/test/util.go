@@ -3825,7 +3825,7 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 
 // ValidateStorageClusterIsOnline wait for storage cluster to become online.
 func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
-	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterOnline), timeout, interval)
+	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterConditionStatusOnline), timeout, interval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
 	}

@@ -234,10 +234,10 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
-		cluster.Status.Phase = string(corev1.ClusterOperationFailed)
-		if updateErr := k8s.UpdateStorageClusterStatus(c.client, cluster); updateErr != nil {
+		if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
 			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
 		}
+
 		return reconcile.Result{}, err
 	}
 
@@ -273,8 +273,8 @@ func (c *Controller) waitingForMigrationApproval(cluster *corev1.StorageCluster)
 	// Even if the migration is approved, wait for the status to come out of initial
 	// or waiting migration approval state. This gives time to the migration routine,
 	// to prepare the cluster for migration after the approval.
-	return !approved || cluster.Status.Phase == "" ||
-		cluster.Status.Phase == constants.PhaseAwaitingApproval
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	return !approved || condition == nil || condition.Status == corev1.ClusterConditionStatusPending
 }
 
 func (c *Controller) validate(cluster *corev1.StorageCluster) error {
@@ -412,11 +412,11 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	if !ok || check == "skip" {
 		return nil
 	} else if check == "false" {
-		if cluster.Status.Phase == util.PreflightFailedStatus {
-			// TODO: scan condition list to check preflight result, use Phase for now
+		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition != nil && condition.Status == corev1.ClusterConditionStatusFailed {
 			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
 		}
-		// preflight passed, do nothing
+		// preflight passed or not required
 		return nil
 	}
 
@@ -434,13 +434,19 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// TODO: validate cloud permission for other providers as well
 
+	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypePreflight,
+	}
 	if err != nil {
 		logrus.Infof("storage cluster preflight check failed")
-		toUpdate.Status.Phase = util.PreflightFailedStatus
+		condition.Status = corev1.ClusterConditionStatusFailed
+		condition.Message = err.Error()
 	} else {
 		logrus.Infof("storage cluster preflight check passed")
-		toUpdate.Status.Phase = util.PreflightCompleteStatus
+		condition.Status = corev1.ClusterConditionStatusCompleted
 	}
+	util.UpdateStorageClusterCondition(toUpdate, condition)
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
@@ -577,6 +583,9 @@ func (c *Controller) syncStorageCluster(
 	if cluster.DeletionTimestamp != nil {
 		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
 			cluster.Namespace, cluster.Name)
+		if err := c.updateStorageClusterState(cluster, corev1.ClusterStateUninstall); err != nil {
+			logrus.Errorf("Failed to update StorageCluster status. %v", err)
+		}
 		return c.deleteStorageCluster(cluster)
 	}
 
@@ -588,6 +597,9 @@ func (c *Controller) syncStorageCluster(
 
 	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 	if err := c.runPreflightCheck(cluster); err != nil {
+		if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
+			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
+		}
 		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}
 
@@ -653,43 +665,33 @@ func (c *Controller) deleteStorageCluster(
 
 	if deleteFinalizerExists(cluster) {
 		toDelete := cluster.DeepCopy()
-		deleteClusterCondition, driverErr := c.Driver.DeleteStorage(toDelete)
+		deleteCondition, driverErr := c.Driver.DeleteStorage(toDelete)
 		if driverErr != nil {
 			msg := fmt.Sprintf("Driver failed to delete storage. %v", driverErr)
 			k8s.WarningEvent(c.recorder, toDelete, util.FailedSyncReason, msg)
 		}
-		// Check if there is an existing delete condition and overwrite it
-		foundIndex := -1
-		for i, deleteCondition := range toDelete.Status.Conditions {
-			if deleteCondition.Type == corev1.ClusterConditionTypeDelete {
-				foundIndex = i
-				break
+
+		if deleteCondition == nil {
+			deleteCondition = &corev1.ClusterCondition{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeDelete,
+				Status: corev1.ClusterConditionStatusInProgress,
 			}
-		}
-		if foundIndex == -1 {
-			if deleteClusterCondition == nil {
-				deleteClusterCondition = &corev1.ClusterCondition{
-					Type:   corev1.ClusterConditionTypeDelete,
-					Status: corev1.ClusterOperationInProgress,
-				}
-				if driverErr != nil {
-					deleteClusterCondition.Reason = err.Error()
-				}
+			if driverErr != nil {
+				deleteCondition.Message = driverErr.Error()
 			}
-			foundIndex = len(toDelete.Status.Conditions)
-			toDelete.Status.Conditions = append(toDelete.Status.Conditions, *deleteClusterCondition)
-		} else if deleteClusterCondition != nil {
-			// Update existing delete condition only if we have the latest Delete condition
-			toDelete.Status.Conditions[foundIndex] = *deleteClusterCondition
 		}
 
-		toDelete.Status.Phase = string(corev1.ClusterConditionTypeDelete) + string(toDelete.Status.Conditions[foundIndex].Status)
+		if toDelete.Status.Phase != string(corev1.ClusterStateUninstall) {
+			toDelete.Status.Phase = string(corev1.ClusterStateUninstall)
+		}
+		util.UpdateStorageClusterCondition(toDelete, deleteCondition)
 		if err := k8s.UpdateStorageClusterStatus(c.client, toDelete); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("error updating delete status for StorageCluster %v/%v: %v",
 				toDelete.Namespace, toDelete.Name, err)
 		}
 
-		if toDelete.Status.Conditions[foundIndex].Status == corev1.ClusterOperationCompleted {
+		if deleteCondition.Status == corev1.ClusterConditionStatusCompleted {
 			if err := c.removeMigrationLabels(); err != nil {
 				return fmt.Errorf("failed to remove migration labels from nodes: %v", err)
 			}
@@ -779,6 +781,15 @@ func (c *Controller) updateStorageClusterStatus(
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
 	}
+	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
+}
+
+func (c *Controller) updateStorageClusterState(
+	cluster *corev1.StorageCluster,
+	clusterState corev1.ClusterState,
+) error {
+	toUpdate := cluster.DeepCopy()
+	toUpdate.Status.Phase = string(clusterState)
 	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
 }
 

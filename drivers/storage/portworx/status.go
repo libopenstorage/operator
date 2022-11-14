@@ -19,6 +19,7 @@ import (
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -33,17 +34,88 @@ const (
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 ) error {
-	if cluster.Status.Phase == "" || strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) {
+	if cluster.Status.Phase == "" {
 		cluster.Status.ClusterName = cluster.Name
-		if cluster.Status.Phase == util.PreflightFailedStatus {
-			return nil
-		}
-		cluster.Status.Phase = string(corev1.ClusterInit)
+		cluster.Status.Phase = string(corev1.ClusterStateInit)
 		return nil
 	}
 
+	convertDeprecatedClusterStatus(cluster)
+	err := p.updatePortworxRuntimeStatus(cluster)
+	newState := getStorageClusterState(cluster)
+	cluster.Status.Phase = string(newState)
+	return err
+}
+
+func convertDeprecatedClusterStatus(
+	cluster *corev1.StorageCluster,
+) {
+	// Handling ALL deprecated storage cluster phases here and using empty timestamp to distinguish
+	switch cluster.Status.Phase {
+	case string(corev1.ClusterConditionStatusFailed):
+		cluster.Status.Phase = string(corev1.ClusterStateDegraded)
+	case constants.PhaseAwaitingApproval:
+		cluster.Status.Phase = string(corev1.ClusterStateInit)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:             pxutil.PortworxComponentName,
+			Type:               corev1.ClusterConditionTypeMigration,
+			Status:             corev1.ClusterConditionStatusPending,
+			LastTransitionTime: metav1.Time{},
+		})
+	case constants.PhaseMigrationInProgress:
+		cluster.Status.Phase = string(corev1.ClusterStateInit)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:             pxutil.PortworxComponentName,
+			Type:               corev1.ClusterConditionTypeMigration,
+			Status:             corev1.ClusterConditionStatusInProgress,
+			LastTransitionTime: metav1.Time{},
+		})
+
+	case string(corev1.ClusterConditionTypeDelete) + string(corev1.ClusterConditionStatusInProgress):
+		fallthrough
+	case string(corev1.ClusterConditionTypeDelete) + string(corev1.ClusterConditionStatusCompleted):
+		fallthrough
+	case string(corev1.ClusterConditionTypeDelete) + string(corev1.ClusterConditionStatusFailed):
+		status := strings.TrimPrefix(cluster.Status.Phase, string(corev1.ClusterConditionTypeDelete))
+		cluster.Status.Phase = string(corev1.ClusterStateUninstall)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:             pxutil.PortworxComponentName,
+			Type:               corev1.ClusterConditionTypeDelete,
+			Status:             corev1.ClusterConditionStatus(status),
+			LastTransitionTime: metav1.Time{},
+		})
+	case string(corev1.ClusterConditionStatusOnline):
+		cluster.Status.Phase = string(corev1.ClusterStateRunning)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:             pxutil.PortworxComponentName,
+			Type:               corev1.ClusterConditionTypeRuntimeState,
+			Status:             corev1.ClusterConditionStatusOnline,
+			LastTransitionTime: metav1.Time{},
+		})
+	case string(corev1.ClusterConditionStatusOffline):
+		fallthrough
+	case string(corev1.ClusterConditionStatusUnknown):
+		fallthrough
+	case string(corev1.ClusterConditionStatusNotInQuorum):
+		cluster.Status.Phase = string(corev1.ClusterStateDegraded)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:             pxutil.PortworxComponentName,
+			Type:               corev1.ClusterConditionTypeRuntimeState,
+			Status:             corev1.ClusterConditionStatus(cluster.Status.Phase),
+			LastTransitionTime: metav1.Time{},
+		})
+	}
+}
+
+func (p *portworx) updatePortworxRuntimeStatus(
+	cluster *corev1.StorageCluster,
+) error {
 	if !pxutil.IsPortworxEnabled(cluster) {
-		cluster.Status.Phase = string(corev1.ClusterOnline)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
+			Type:   corev1.ClusterConditionTypeRuntimeState,
+			Status: corev1.ClusterConditionStatusOnline,
+		})
 		return nil
 	}
 
@@ -51,7 +123,7 @@ func (p *portworx) UpdateStorageClusterStatus(
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
 		p.updateRemainingStorageNodesWithoutError(cluster, nil)
-		if cluster.Status.Phase == string(corev1.ClusterInit) &&
+		if pxutil.IsFreshInstall(cluster) &&
 			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
@@ -79,18 +151,81 @@ func (p *portworx) UpdateStorageClusterStatus(
 		return fmt.Errorf("empty ClusterInspect response")
 	}
 
-	newClusterStatus := mapClusterStatus(pxCluster.Cluster.Status)
-	if cluster.Status.Phase != string(corev1.ClusterOnline) &&
-		newClusterStatus == corev1.ClusterOnline {
+	runtimeStatus := mapPortworxRuntimeStatus(pxCluster.Cluster.Status)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	if (condition == nil || condition.Status != corev1.ClusterConditionStatusOnline) &&
+		runtimeStatus == corev1.ClusterConditionStatusOnline {
 		msg := fmt.Sprintf("Storage cluster %v online", cluster.GetName())
 		p.normalEvent(cluster, util.ClusterOnlineReason, msg)
 	}
 
-	cluster.Status.Phase = string(newClusterStatus)
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeRuntimeState,
+		Status: runtimeStatus,
+	})
+
 	cluster.Status.ClusterName = pxCluster.Cluster.Name
 	cluster.Status.ClusterUID = pxCluster.Cluster.Id
 
 	return p.updateStorageNodes(cluster)
+}
+
+// getPortworxConditions returns a map of portworx conditions with type as keys
+func getPortworxConditions(
+	cluster *corev1.StorageCluster,
+) map[corev1.ClusterConditionType]*corev1.ClusterCondition {
+	pxConditions := make(map[corev1.ClusterConditionType]*corev1.ClusterCondition)
+	for _, condition := range cluster.Status.Conditions {
+		if condition.Source == pxutil.PortworxComponentName {
+			pxConditions[condition.Type] = condition.DeepCopy()
+		}
+	}
+	return pxConditions
+}
+
+// getStorageClusterState iterates storage cluster condition list and returns the cluster state
+func getStorageClusterState(
+	cluster *corev1.StorageCluster,
+) corev1.ClusterState {
+	if len(cluster.Status.Conditions) == 0 {
+		return corev1.ClusterStateInit
+	}
+
+	// TODO: put more components into consideration in the future, currently the list only contains PX conditions
+	pxConditions := getPortworxConditions(cluster)
+	if len(pxConditions) == 0 {
+		return corev1.ClusterStateInit
+	}
+
+	// Portworx delete conditions:
+	// InProgress, Completed, Failed
+	deleteCondition := pxConditions[corev1.ClusterConditionTypeDelete]
+	if deleteCondition != nil {
+		return corev1.ClusterStateUninstall
+	}
+
+	// DaemonSet migration conditions:
+	// Pending, InProgress, Completed
+	migrationCondition := pxConditions[corev1.ClusterConditionTypeMigration]
+	if migrationCondition != nil && migrationCondition.Status != corev1.ClusterConditionStatusCompleted {
+		return corev1.ClusterStateInit
+	}
+
+	// Portworx runtime state conditions:
+	// Online, Offline, NotInQuorum, Unknown
+	runtimeCondition := pxConditions[corev1.ClusterConditionTypeRuntimeState]
+	if pxConditions[corev1.ClusterConditionTypeRuntimeState] == nil {
+		return corev1.ClusterStateInit
+	} else if runtimeCondition.Status == corev1.ClusterConditionStatusOnline {
+		return corev1.ClusterStateRunning
+	} else if runtimeCondition.Status == corev1.ClusterConditionStatusOffline ||
+		runtimeCondition.Status == corev1.ClusterConditionStatusNotInQuorum ||
+		runtimeCondition.Status == corev1.ClusterConditionStatusUnknown {
+		return corev1.ClusterStateDegraded
+	}
+
+	return corev1.ClusterStateUnknown
 }
 
 func (p *portworx) getKvdbMap(
@@ -370,7 +505,7 @@ func (p *portworx) updateStorageNodeStatus(
 	return nil
 }
 
-func mapClusterStatus(status api.Status) corev1.ClusterConditionStatus {
+func mapPortworxRuntimeStatus(status api.Status) corev1.ClusterConditionStatus {
 	switch status {
 	case api.Status_STATUS_NONE:
 		fallthrough
@@ -379,12 +514,12 @@ func mapClusterStatus(status api.Status) corev1.ClusterConditionStatus {
 	case api.Status_STATUS_OFFLINE:
 		fallthrough
 	case api.Status_STATUS_ERROR:
-		return corev1.ClusterOffline
+		return corev1.ClusterConditionStatusOffline
 
 	case api.Status_STATUS_NOT_IN_QUORUM:
 		fallthrough
 	case api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE:
-		return corev1.ClusterNotInQuorum
+		return corev1.ClusterConditionStatusNotInQuorum
 
 	case api.Status_STATUS_OK:
 		fallthrough
@@ -399,12 +534,12 @@ func mapClusterStatus(status api.Status) corev1.ClusterConditionStatus {
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
 	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
-		return corev1.ClusterOnline
+		return corev1.ClusterConditionStatusOnline
 
 	case api.Status_STATUS_DECOMMISSION:
 		fallthrough
 	default:
-		return corev1.ClusterUnknown
+		return corev1.ClusterConditionStatusUnknown
 	}
 }
 

@@ -2409,35 +2409,8 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 
 	// Status should be set to initializing if not set
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
-	require.Equal(t, "Initializing", cluster.Status.Phase)
-}
-
-func TestUpdateClusterStatusWithPreflight(t *testing.T) {
-	driver := portworx{}
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Status: corev1.StorageClusterStatus{
-			Phase: util.PreflightFailedStatus,
-		},
-	}
-
-	err := driver.UpdateStorageClusterStatus(cluster)
-	require.NoError(t, err)
-
-	// Status should not change when preflight failed
-	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
-	require.Equal(t, util.PreflightFailedStatus, cluster.Status.Phase)
-
-	// Status should change to initializing when preflight passed
-	cluster.Status.Phase = util.PreflightCompleteStatus
-	err = driver.UpdateStorageClusterStatus(cluster)
-	require.NoError(t, err)
-	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
-	require.Equal(t, string(corev1.ClusterInit), cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	require.Empty(t, cluster.Status.Conditions)
 }
 
 func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
@@ -2457,14 +2430,118 @@ func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
-	require.Equal(t, "Initializing", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	require.Empty(t, cluster.Status.Conditions)
 
 	// If portworx is disabled, change status as online
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+}
+
+func TestUpdateDeprecatedClusterStatus(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer restoreEtcHosts(t)
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	// Online status
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Id:     "cluster-id",
+			Name:   "cluster-name",
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	cluster.Status = corev1.StorageClusterStatus{
+		Phase: string(corev1.ClusterConditionStatusOnline),
+	}
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+
+	// Offline status
+	expectedClusterResp.Cluster.Status = api.Status_STATUS_OFFLINE
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	cluster.Status = corev1.StorageClusterStatus{
+		Phase: string(corev1.ClusterConditionStatusOffline),
+	}
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 }
 
 func TestUpdateClusterStatus(t *testing.T) {
@@ -2519,7 +2596,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -2539,13 +2616,39 @@ func TestUpdateClusterStatus(t *testing.T) {
 	mockClusterServer.EXPECT().
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
 		Return(expectedClusterResp, nil).
-		Times(1)
-
+		Times(2)
+	// Migration in progress
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 	require.Equal(t, "cluster-name", cluster.Status.ClusterName)
 	require.Equal(t, "cluster-id", cluster.Status.ClusterUID)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	require.Len(t, cluster.Status.Conditions, 2)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
+	// Migration completed
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusCompleted,
+	})
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "cluster-name", cluster.Status.ClusterName)
+	require.Equal(t, "cluster-id", cluster.Status.ClusterUID)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 
 	// Status Init
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_INIT
@@ -2556,7 +2659,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 
 	// Status Offline
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OFFLINE
@@ -2567,7 +2673,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 
 	// Status Error
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_ERROR
@@ -2578,7 +2687,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 
 	// Status Decommission
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_DECOMMISSION
@@ -2589,7 +2701,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Unknown", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusUnknown, condition.Status)
 
 	// Status Maintenance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_MAINTENANCE
@@ -2600,7 +2715,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status NeedsReboot
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NEEDS_REBOOT
@@ -2611,7 +2729,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status NotInQuorum
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM
@@ -2622,7 +2743,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "NotInQuorum", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusNotInQuorum, condition.Status)
 
 	// Status NotInQuorumNoStorage
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
@@ -2633,7 +2757,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "NotInQuorum", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusNotInQuorum, condition.Status)
 
 	// Status Ok
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OK
@@ -2644,7 +2771,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status StorageDown
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DOWN
@@ -2655,7 +2785,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status StorageDegraded
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -2666,7 +2799,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status StorageRebalance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_REBALANCE
@@ -2677,7 +2813,10 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status StorageDriveReplace
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
@@ -2688,18 +2827,35 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 
 	// Status Invalid
 	expectedClusterResp.Cluster.Status = api.Status(9999)
 	mockClusterServer.EXPECT().
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
 		Return(expectedClusterResp, nil).
-		Times(1)
-
+		Times(2)
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "Unknown", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusUnknown, condition.Status)
+	// Uninstall in progress
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateUninstall), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusUnknown, condition.Status)
 }
 
 func TestUpdateClusterStatusForNodes(t *testing.T) {
@@ -2753,7 +2909,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -2860,7 +3016,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Initializing", nodeStatus.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateInit), nodeStatus.Status.Phase)
 	require.Equal(t, corev1.NodeInitStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status Offline
@@ -3126,7 +3282,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 			Image: "test/image:1.2.3.4",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3216,7 +3372,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3305,7 +3461,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3374,7 +3530,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Maintenance",
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
@@ -3413,7 +3569,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 
 	// TestCase: If the cluster is initializing then do not return an error on
 	// grpc connection timeout
-	cluster.Status.Phase = string(corev1.ClusterInit)
+	cluster.Status.Phase = string(corev1.ClusterStateInit)
 
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -3474,7 +3630,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3616,7 +3772,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3823,7 +3979,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -3854,7 +4010,10 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, "Offline", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
 	nodeStatusList := &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
@@ -3879,7 +4038,10 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
 
-	require.Equal(t, "Online", cluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 	nodeStatusList = &corev1.StorageNodeList{}
 	err = testutil.List(k8sClient, nodeStatusList)
 	require.NoError(t, err)
@@ -3940,7 +4102,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -4222,7 +4384,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -4434,7 +4596,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -4549,7 +4711,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -4852,7 +5014,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -4996,7 +5158,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -5397,9 +5559,10 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// If no delete strategy is provided, condition should be complete
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Message)
 
 	// Verify that all components have been removed
 	err = testutil.List(k8sClient, serviceAccountList)
@@ -5694,9 +5857,10 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Message)
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
@@ -6125,9 +6289,10 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Message)
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
@@ -6321,9 +6486,10 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Equal(t, "Started node wiper daemonset", condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Started node wiper daemonset", condition.Message)
 
 	// Check wiper service account
 	sa := &v1.ServiceAccount{}
@@ -6463,9 +6629,10 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
 
 	// Check when daemon set's status is updated
@@ -6476,9 +6643,10 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
 
 	// Check when only few pods are ready
@@ -6502,9 +6670,10 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
 
 	// Check when all pods are ready
@@ -6528,9 +6697,10 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallMsg)
 
 	// Node wiper daemon set should be removed
 	dsList := &appsv1.DaemonSetList{}
@@ -6540,13 +6710,18 @@ func TestDeleteClusterWithUninstallWhenNodeWiperCreated(t *testing.T) {
 
 	// TestCase: Wiper daemonset should not be created again if already
 	// completed and deleted
-	cluster.Status.Phase = "DeleteCompleted"
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterConditionStatusCompleted,
+	})
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallMsg)
 
 	dsList = &appsv1.DaemonSetList{}
 	err = k8sClient.List(context.TODO(), dsList)
@@ -6592,9 +6767,10 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [0] In Progress [0] Total [0]")
 
 	// Check when daemon set's status is updated
@@ -6605,9 +6781,10 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [0] In Progress [2] Total [2]")
 
 	// Check when only few pods are ready
@@ -6631,9 +6808,10 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, condition.Status)
-	require.Contains(t, condition.Reason,
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Contains(t, condition.Message,
 		"Wipe operation still in progress: Completed [1] In Progress [1] Total [2]")
 
 	// Check when all pods are ready
@@ -6657,9 +6835,10 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	// Node wiper daemon set should be removed
 	dsList := &appsv1.DaemonSetList{}
@@ -6669,13 +6848,18 @@ func TestDeleteClusterWithUninstallWipeStrategyWhenNodeWiperCreated(t *testing.T
 
 	// TestCase: Wiper daemonset should not be created again if already
 	// completed and deleted
-	cluster.Status.Phase = "DeleteCompleted"
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterConditionStatusCompleted,
+	})
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	dsList = &appsv1.DaemonSetList{}
 	err = k8sClient.List(context.TODO(), dsList)
@@ -6744,7 +6928,7 @@ func testDeleteEssentialSecret(t *testing.T, wipe bool) {
 
 	// Check condition
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 
 	secrets := &v1.SecretList{}
 	err = testutil.List(k8sClient, secrets)
@@ -6821,9 +7005,10 @@ func TestReinstall(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallMsg)
 
 	// Check config maps are retained
 	configMaps = &v1.ConfigMapList{}
@@ -6910,9 +7095,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	// Check config maps are deleted
 	configMaps = &v1.ConfigMapList{}
@@ -6995,9 +7181,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 	require.NoError(t, err)
 
 	// Check condition
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	// Check config maps are deleted
 	configMaps = &v1.ConfigMapList{}
@@ -7052,9 +7239,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
 	require.Error(t, err)
@@ -7081,9 +7269,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
 	require.Error(t, err)
@@ -7110,9 +7299,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
 	require.Error(t, err)
@@ -7142,9 +7332,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
 	require.Error(t, err)
@@ -7174,9 +7365,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(cluster.Name + "/foo")
 	require.Error(t, err)
@@ -7233,9 +7425,10 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbDataWhenOverwrite
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Contains(t, condition.Reason, storageClusterUninstallAndWipeMsg)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Contains(t, condition.Message, storageClusterUninstallAndWipeMsg)
 
 	_, err = kvdbMem.Get(clusterID + "/foo")
 	require.Error(t, err)
@@ -7274,9 +7467,10 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
-	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+	require.Contains(t, condition.Message, "Failed to wipe metadata")
 
 	// Fail if unknown kvdb type given in url
 	cluster.Spec.Kvdb.Endpoints = []string{"zookeeper://kvdb.com:2001"}
@@ -7284,9 +7478,10 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
-	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+	require.Contains(t, condition.Message, "Failed to wipe metadata")
 
 	// Fail if unknown kvdb version found
 	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
@@ -7297,9 +7492,10 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
-	require.Contains(t, condition.Reason, "Failed to wipe metadata")
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+	require.Contains(t, condition.Message, "Failed to wipe metadata")
 
 	// Fail if error getting kvdb version
 	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
@@ -7310,10 +7506,11 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
-	require.Contains(t, condition.Reason, "Failed to wipe metadata")
-	require.Contains(t, condition.Reason, "kvdb version error")
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+	require.Contains(t, condition.Message, "Failed to wipe metadata")
+	require.Contains(t, condition.Message, "kvdb version error")
 
 	// Fail if error initializing kvdb
 	cluster.Spec.Kvdb.Endpoints = []string{"etcd://kvdb.com:2001"}
@@ -7327,10 +7524,11 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationFailed, condition.Status)
-	require.Contains(t, condition.Reason, "Failed to wipe metadata")
-	require.Contains(t, condition.Reason, "kvdb initialize error")
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+	require.Contains(t, condition.Message, "Failed to wipe metadata")
+	require.Contains(t, condition.Message, "kvdb initialize error")
 }
 
 func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
@@ -7354,9 +7552,10 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 	condition, err := driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Message)
 
 	// Uninstall delete strategy
 	cluster.Spec.DeleteStrategy.Type = corev1.UninstallStorageClusterStrategyType
@@ -7365,9 +7564,10 @@ func TestDeleteClusterWithPortworxDisabled(t *testing.T) {
 	condition, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
+	require.Equal(t, pxutil.PortworxComponentName, condition.Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, condition.Type)
-	require.Equal(t, corev1.ClusterOperationCompleted, condition.Status)
-	require.Equal(t, storageClusterDeleteMsg, condition.Reason)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, storageClusterDeleteMsg, condition.Message)
 
 }
 
@@ -7429,7 +7629,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -7672,7 +7872,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 
@@ -8204,14 +8404,19 @@ func TestGetStorageNodesWithConnectionErrors(t *testing.T) {
 	require.Empty(t, nodes)
 
 	// TestCase: GRPC connection timeout, but with Initializing StorageCluster status
-	cluster.Status.Phase = string(corev1.ClusterInit)
+	cluster.Status.Phase = string(corev1.ClusterStateInit)
 
 	nodes, err = driver.GetStorageNodes(cluster)
 	require.NoError(t, err)
 	require.Empty(t, nodes)
 
 	// TestCase: GRPC connection timeout, but with Online StorageCluster status
-	cluster.Status.Phase = string(corev1.ClusterOnline)
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeRuntimeState,
+		Status: corev1.ClusterConditionStatusOnline,
+	})
 
 	nodes, err = driver.GetStorageNodes(cluster)
 	require.Error(t, err)
@@ -8232,7 +8437,7 @@ func TestStorageUpgradeClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.NodeInitStatus),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 	totalNodes := uint32(12)
@@ -8326,7 +8531,7 @@ func testStoragelessNodesUpgrade(t *testing.T, expectedValue uint32, storageless
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: string(corev1.NodeInitStatus),
+			Phase: string(corev1.ClusterStateRunning),
 		},
 	}
 
