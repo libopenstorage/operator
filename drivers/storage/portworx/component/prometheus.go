@@ -268,6 +268,7 @@ func (c *prometheus) createOperatorClusterRole() error {
 						"alertmanagers/finalizers",
 						"alertmanagerconfigs",
 						"prometheuses",
+						"prometheuses/status",
 						"prometheuses/finalizers",
 						"thanosrulers",
 						"thanosrulers/finalizers",
