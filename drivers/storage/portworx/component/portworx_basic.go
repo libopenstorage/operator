@@ -372,7 +372,7 @@ func (c *portworxBasic) createClusterRole() error {
 				{
 					APIGroups: []string{""},
 					Resources: []string{"events"},
-					Verbs:     []string{"create", "patch"},
+					Verbs:     []string{"create", "patch", "update"},
 				},
 				{
 					APIGroups: []string{"core.libopenstorage.org"},
@@ -390,6 +390,11 @@ func (c *portworxBasic) createClusterRole() error {
 					Resources:     []string{"podsecuritypolicies"},
 					ResourceNames: []string{constants.PrivilegedPSPName},
 					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups: []string{"certificates.k8s.io"},
+					Resources: []string{"certificatesigningrequests"},
+					Verbs:     []string{"get", "list", "create", "watch", "delete", "update"},
 				},
 			},
 		},
