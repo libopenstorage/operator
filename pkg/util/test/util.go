@@ -1952,11 +1952,9 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 			return nil, true, err
 		}
 
-		// Validate CSI snapshot controller on non-ocp env, since ocp deploys its own snapshot controller
-		if !isOpenshift(cluster) {
-			if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
-				return nil, true, err
-			}
+		// Validate CSI snapshot controller
+		if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
+			return nil, true, err
 		}
 		return nil, false, nil
 	}
@@ -2191,6 +2189,26 @@ func validateCSISnapshotController(cluster *corev1.StorageCluster, pxImageList m
 	deployment.Namespace = cluster.Namespace
 	deployment.Name = "px-csi-ext"
 	t := func() (interface{}, bool, error) {
+		// Check whether snapshot controller container should be installed
+		installSnapshotController := true
+		podList, err := coreops.Instance().ListPods(nil)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to list pods from all namespaces")
+		}
+		for _, p := range podList.Items {
+			// ignore pods deployed by operator
+			if label, ok := p.Labels["app"]; ok && label == "px-csi-driver" {
+				continue
+			}
+			for _, c := range p.Spec.Containers {
+				if strings.Contains(c.Image, "/snapshot-controller:") {
+					logrus.Infof("found external snapshot controller in pod %s/%s", p.Namespace, p.Name)
+					installSnapshotController = false
+					break
+				}
+			}
+		}
+
 		existingDeployment, err := appops.Instance().GetDeployment(deployment.Name, deployment.Namespace)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get deployment %s/%s", deployment.Namespace, deployment.Name)
@@ -2199,7 +2217,7 @@ func validateCSISnapshotController(cluster *corev1.StorageCluster, pxImageList m
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get pods of deployment %s/%s", deployment.Namespace, deployment.Name)
 		}
-		if cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController {
+		if cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController && installSnapshotController {
 			if image, ok := pxImageList["csiSnapshotController"]; ok {
 				if err := validateContainerImageInsidePods(cluster, image, "csi-snapshot-controller", &v1.PodList{Items: pods}); err != nil {
 					return nil, true, err
