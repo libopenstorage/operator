@@ -76,6 +76,8 @@ spec:
               mountPath: /var/run/docker.sock
             - name: containerddir
               mountPath: /run/containerd
+            - name: containerdvardir
+              mountPath: /var/lib/containerd
             - name: criosock
               mountPath: /var/run/crio
             - name: crioconf
@@ -132,6 +134,9 @@ spec:
         - name: containerddir
           hostPath:
             path: /run/containerd
+        - name: containerdvardir
+          hostPath:
+            path: /var/lib/containerd
         - name: criosock
           hostPath:
             path: /var/run/crio
