@@ -649,11 +649,21 @@ func addMigrationConstraints(podSpec *v1.PodSpec) {
 		if term.MatchExpressions == nil {
 			term.MatchExpressions = make([]v1.NodeSelectorRequirement, 0)
 		}
-		selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
-			Key:      constants.LabelPortworxDaemonsetMigration,
-			Operator: v1.NodeSelectorOpIn,
-			Values:   []string{constants.LabelValueMigrationPending},
-		})
+		// Skip appending migration constraints if it's already there
+		foundMigrationKey := false
+		for _, expression := range selectorTerms[i].MatchExpressions {
+			if expression.Key == constants.LabelPortworxDaemonsetMigration {
+				foundMigrationKey = true
+				break
+			}
+		}
+		if !foundMigrationKey {
+			selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
+				Key:      constants.LabelPortworxDaemonsetMigration,
+				Operator: v1.NodeSelectorOpIn,
+				Values:   []string{constants.LabelValueMigrationPending},
+			})
+		}
 	}
 	podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = selectorTerms
 }
