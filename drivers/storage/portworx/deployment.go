@@ -1545,6 +1545,11 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 			mountPath: "/run/containerd",
 		},
 		{
+			name:      "containerdvardir",
+			hostPath:  "/var/lib/containerd",
+			mountPath: "/var/lib/containerd",
+		},
+		{
 			name:      "criosock",
 			hostPath:  "/var/run/crio",
 			mountPath: "/var/run/crio",
