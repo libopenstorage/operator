@@ -181,6 +181,10 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 		require.NoError(t, err)
 	}
 
+	// It's possible portworx daemonset becomes ready but node initialization is not finished yet,
+	// so give it 10 more seconds given it happens rarely
+	time.Sleep(10 * time.Second)
+
 	logrus.Infof("Restarting portworx operator to trigger migration")
 	restartPortworxOperator(t)
 

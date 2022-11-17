@@ -124,13 +124,13 @@ spec:
             httpGet:
               host: 127.0.0.1
               path: /status
-              port: 9001
+              port: 9002
           readinessProbe:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 9015
+              port: 9016
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
             privileged: true
