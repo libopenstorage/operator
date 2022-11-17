@@ -1259,7 +1259,18 @@ func getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
-	storageNodes = uint64(len(nodeList.Items) / numZones)
+	totalPxNodes := 0
+	for _, node := range nodeList.Items {
+		shouldRun, _, err := k8s.CheckPredicatesForStoragePod(&node, cluster, nil)
+		if err != nil {
+			return 0, err
+		}
+		if shouldRun {
+			totalPxNodes++
+		}
+	}
+
+	storageNodes = uint64(totalPxNodes / numZones)
 	return uint32(storageNodes), nil
 }
 
