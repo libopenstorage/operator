@@ -171,6 +171,37 @@ func (c *autopilot) createConfigMap(
 			provider.Name, provider.Type, params)
 	}
 
+	if cluster.Spec.Autopilot.GitOps != nil {
+		config += "\ngitops:"
+
+		keys := make([]string, 0, len(cluster.Spec.Autopilot.GitOps.Params))
+		for k := range cluster.Spec.Autopilot.GitOps.Params {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		params := ""
+		for _, key := range keys {
+			val := cluster.Spec.Autopilot.GitOps.Params[key]
+			if key == "defaultReviewers" {
+				params += fmt.Sprintf(`
+    defaultReviewers:`)
+				for _, v := range val.([]interface{}) {
+					params += fmt.Sprintf(`
+      - "%s"`, v.(string))
+				}
+				continue
+			}
+			params += fmt.Sprintf(`
+    %s: %s`, key, val.(string))
+		}
+
+		config += fmt.Sprintf(`
+  name: %s
+  type: %s
+  params:%s`, cluster.Spec.Autopilot.GitOps.Name, cluster.Spec.Autopilot.GitOps.Type, params)
+	}
+
 	for key, value := range cluster.Spec.Autopilot.Args {
 		if _, exists := autopilotConfigParams[key]; exists {
 			config += fmt.Sprintf("\n%s: %s", key, value)

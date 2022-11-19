@@ -886,6 +886,19 @@ spec:
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                           description: Map of key-value params for the provider.
+                  gitops:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Unique name of the data provider.
+                        type:
+                          type: string
+                          description: Type of the data provider. For instance - prometheus
+                        params:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                          description: Map of key-value params for the provider.
               monitoring:
                 type: object
                 description: Contains monitoring configuration for the storage cluster.

@@ -509,6 +509,8 @@ type AutopilotSpec struct {
 	LockImage bool `json:"lockImage,omitempty"`
 	// Providers is a list of input data providers for autopilot if it needs any
 	Providers []DataProviderSpec `json:"providers,omitempty"`
+	// GitOps is used to configure autopilot to use gitops model
+	GitOps *GitOpsSpec `json:"gitops,omitempty"`
 	// Args is a map of arguments given to autopilot
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by autopilot
@@ -525,6 +527,13 @@ type DataProviderSpec struct {
 	Type string `json:"type,omitempty"`
 	// Params is a list of key-value params for the provider
 	Params map[string]string `json:"params,omitempty"`
+}
+
+// GitOpsSpec contains the details for GitOps provider like github or bitbucket
+type GitOpsSpec struct {
+	Name   string                 `json:"name,omitempty"`
+	Type   string                 `json:"type"`
+	Params map[string]interface{} `json:"params"`
 }
 
 // MonitoringSpec contains monitoring configuration for the storage cluster.
