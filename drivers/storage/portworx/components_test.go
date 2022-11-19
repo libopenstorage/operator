@@ -3042,6 +3042,19 @@ func TestAutopilotInstall(t *testing.T) {
 						},
 					},
 				},
+				GitOps: &corev1.GitOpsSpec{
+					Name: "test",
+					Type: "bitbucket-scm",
+					Params: map[string]interface{}{
+						"defaultReviewers": []string{"user1", "user2"},
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
+					},
+				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
 					"log-level":         "debug",
@@ -4090,8 +4103,127 @@ func TestSecurityInstall(t *testing.T) {
 
 func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	// Should not return error and raise no event
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	// // invalid values of ca cert
+	// empty value of ca cert ok if serverCert and serverKey specified
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{}
+	s, _ = json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
+	t.Logf("TLS spec under validation (expect no error): %+v", string(s))
+
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
+	recorder = record.NewFakeRecorder(10)
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	// Should not return error and raise no event
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	// invalid value of rootCA
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: can not specify both filename and secretRef as source for tls certs")
+
+	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "rootCA: for kubernetes secret must specify both name and key")
+
+	// missing serverCert
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, serverKeyFileName)
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	// // invalid values of serverCert
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: can not specify both filename and secretRef as source for tls certs")
+
+	// missing serverKey
+	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, nil)
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	// // invalid values of serverKey
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName:  stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: file path (not_under_etc_pwx) not under folder /etc/pwx")
+
+	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{
+		FileName: stringPtr("not_under_etc_pwx"),
+		SecretRef: &corev1.SecretRef{
+			SecretName: "somesecret",
+			SecretKey:  "somekey",
+		},
+	}
+	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: can not specify both filename and secretRef as source for tls certs")
+}
+
+func validateThatWarningEventIsRaisedOnPreinstall(t *testing.T, cluster *corev1.StorageCluster, errStr string) {
+	s, _ := json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
+	t.Logf("TLS spec under validation: %+v", string(s))
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
