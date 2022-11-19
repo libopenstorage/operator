@@ -12,4 +12,17 @@ data:
     - name: second
       type: datadog
       params: auth=foobar,url=http://datadog:9090
+    gitops:
+      name: test
+      type: bitbucket-scm
+      params:
+        baseUrl: http://10.13.108.10:7990
+        branch: master
+        defaultReviewers:
+          - "user1"
+          - "user2"
+        folder: workloads
+        projectKey: PXAUT
+        repo: autopilot-bb
+        user: oksana
     min_poll_interval: 4

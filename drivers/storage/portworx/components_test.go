@@ -3103,6 +3103,19 @@ func TestAutopilotInstall(t *testing.T) {
 						},
 					},
 				},
+				GitOps: &corev1.GitOpsSpec{
+					Name: "test",
+					Type: "bitbucket-scm",
+					Params: map[string]interface{}{
+						"defaultReviewers": []string{"user1", "user2"},
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
+					},
+				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
 					"log-level":         "debug",
@@ -4246,7 +4259,7 @@ func TestTLSSpecValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 0)
 
-	//// invalid values of ca cert
+	// // invalid values of ca cert
 	// empty value of ca cert ok if serverCert and serverKey specified
 	cluster.Spec.Security.TLS.RootCA = &corev1.CertLocation{}
 	s, _ = json.MarshalIndent(cluster.Spec.Security.TLS, "", "\t")
@@ -4296,7 +4309,7 @@ func TestTLSSpecValidation(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, nil, serverKeyFileName)
 	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
 
-	//// invalid values of serverCert
+	// // invalid values of serverCert
 	cluster.Spec.Security.TLS.ServerCert = &corev1.CertLocation{}
 	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverCert: must specify location of tls certificate as either file or kubernetes secret")
 
@@ -4324,7 +4337,7 @@ func TestTLSSpecValidation(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, nil)
 	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
 
-	//// invalid values of serverKey
+	// // invalid values of serverKey
 	cluster.Spec.Security.TLS.ServerKey = &corev1.CertLocation{}
 	validateThatWarningEventIsRaisedOnPreinstall(t, cluster, "serverKey: must specify location of tls certificate as either file or kubernetes secret")
 
