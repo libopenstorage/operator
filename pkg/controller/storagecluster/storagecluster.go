@@ -1061,10 +1061,10 @@ func (c *Controller) podsShouldBeOnNode(
 
 // nodeShouldRunStoragePod checks a set of preconditions against a (node, storagecluster) and
 // returns a summary. Returned booleans are:
-// * shouldRun:
+//   - shouldRun:
 //     Returns true when a pod should run on the node if a storage pod is not already
 //     running on that node.
-// * shouldContinueRunning:
+//   - shouldContinueRunning:
 //     Returns true when the pod should continue running on a node if a storage pod is
 //     already running on that node.
 func (c *Controller) nodeShouldRunStoragePod(
