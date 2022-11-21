@@ -3,7 +3,6 @@ package manifest
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -168,7 +167,7 @@ func downloadManifest() (*releaseManifest, error) {
 
 	// Write the manifest for future use instead of downloading it every time
 	manifestPath := manifestFilepath(remoteReleaseManifest)
-	err = ioutil.WriteFile(manifestPath, body, 0644)
+	err = os.WriteFile(manifestPath, body, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +184,7 @@ func loadManifestFromFile(filename string) (*releaseManifest, error) {
 }
 
 func readReleaseManifest(filename string) ([]byte, error) {
-	return ioutil.ReadFile(filename)
+	return os.ReadFile(filename)
 }
 
 func loadManifest(content []byte) (*releaseManifest, error) {

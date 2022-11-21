@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -280,7 +280,7 @@ func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextCon
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
+	json, err := os.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
 	apiextensionsv1beta1.AddToScheme(s)
@@ -2156,7 +2156,7 @@ func GetImagesFromVersionURL(url, k8sVersion string) (map[string]string, error) 
 		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxVersionURL, err)
 	}
 
-	htmlData, err := ioutil.ReadAll(resp.Body)
+	htmlData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
 	}

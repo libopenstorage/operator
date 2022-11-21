@@ -166,10 +166,10 @@ func addMigrationConstraints(podSpec *v1.PodSpec) {
 
 // CheckPredicatesForStoragePod checks if a StorageCluster pod can run on a node
 // Returned booleans are:
-// * shouldRun:
+//   - shouldRun:
 //     Returns true when a pod should run on the node if a storage pod is not already
 //     running on that node.
-// * shouldContinueRunning:
+//   - shouldContinueRunning:
 //     Returns true when the pod should continue running on a node if a storage pod is
 //     already running on that node.
 func CheckPredicatesForStoragePod(

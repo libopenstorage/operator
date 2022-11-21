@@ -74,6 +74,8 @@ PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/promethe
 CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v3.0.3/client/config/crd
 CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v4.2.1/client/config/crd
 
+GOLINT = go run github.com/golangci/golangci-lint/cmd/golangci-lint
+
 BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
 RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
 BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d )
@@ -118,14 +120,9 @@ $(GOPATH)/bin/mockgen:
 vendor-tidy:
 	go mod tidy
 
-lint: $(GOPATH)/bin/golint
+lint:
 	# golint check ...
-	@for file in $(GO_FILES); do \
-		golint $${file}; \
-		if [ -n "$$(golint $${file})" ]; then \
-			exit 1; \
-		fi; \
-	done
+	$(GOLINT) run --timeout=5m ./...
 
 vet:
 	# go vet check ...
