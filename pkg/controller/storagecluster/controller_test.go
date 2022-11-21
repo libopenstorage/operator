@@ -1145,6 +1145,8 @@ func testStoragelessNodesDisaggregatedMode(t *testing.T, expectedValue uint32, s
 		recorder: recorder,
 	}
 	driver.EXPECT().UpdateDriver(gomock.Any()).MinTimes(1)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).MinTimes(1)
 
 	err := controller.setStorageClusterDefaults(cluster)
@@ -1261,6 +1263,8 @@ func testClusterDefaultsMaxStorageNodesPerZone(t *testing.T, expectedValue uint3
 		Driver: driver,
 	}
 	driver.EXPECT().UpdateDriver(gomock.Any()).MinTimes(1)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).MinTimes(1)
 
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
