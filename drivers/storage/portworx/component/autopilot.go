@@ -184,8 +184,8 @@ func (c *autopilot) createConfigMap(
 		for _, key := range keys {
 			val := cluster.Spec.Autopilot.GitOps.Params[key]
 			if key == "defaultReviewers" {
-				params += fmt.Sprintf(`
-    defaultReviewers:`)
+				params += `
+    defaultReviewers:`
 				for _, v := range val.([]interface{}) {
 					params += fmt.Sprintf(`
       - "%s"`, v.(string))
