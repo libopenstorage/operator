@@ -200,9 +200,9 @@ func (c *autopilot) createConfigMap(
 			if key == "defaultReviewers" {
 				params += `
     defaultReviewers:`
-				for _, v := range val.([]interface{}) {
+				for _, v := range val.([]string) {
 					params += fmt.Sprintf(`
-      - "%s"`, v.(string))
+      - "%s"`, v)
 				}
 				continue
 			}
