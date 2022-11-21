@@ -1236,7 +1236,7 @@ func getDefaultStorageNodesDisaggregatedMode(
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
 // intention of having at least 3 nodes in the cluster.
-func getDefaultMaxStorageNodesPerZone(
+func (c *Controller) getDefaultMaxStorageNodesPerZone(
 	nodeList *v1.NodeList,
 	cluster *corev1.StorageCluster,
 	recorder record.EventRecorder,
@@ -1244,9 +1244,19 @@ func getDefaultMaxStorageNodesPerZone(
 	if len(nodeList.Items) == 0 {
 		return 0, nil
 	}
+	filteredList := v1.NodeList{}
+	for _, node := range nodeList.Items {
+		shouldRun, _, err := c.nodeShouldRunStoragePod(&node, cluster)
+		if err != nil {
+			return 0, err
+		}
+		if shouldRun {
+			filteredList.Items = append(filteredList.Items, node)
+		}
+	}
 
 	// Check if storage nodes are explicitly set using labels
-	storageNodes, disaggregatedMode, err := getDefaultStorageNodesDisaggregatedMode(nodeList, cluster, recorder)
+	storageNodes, disaggregatedMode, err := getDefaultStorageNodesDisaggregatedMode(&filteredList, cluster, recorder)
 	if err != nil {
 		return 0, err
 	}
@@ -1254,12 +1264,12 @@ func getDefaultMaxStorageNodesPerZone(
 		return uint32(storageNodes), nil
 	}
 
-	zoneMap, err := getZoneMap(nodeList, "", "")
+	zoneMap, err := getZoneMap(&filteredList, "", "")
 	if err != nil {
 		return 0, err
 	}
 	numZones := len(zoneMap)
-	storageNodes = uint64(len(nodeList.Items) / numZones)
+	storageNodes = uint64(len(filteredList.Items) / numZones)
 	return uint32(storageNodes), nil
 }
 
@@ -1395,7 +1405,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		err = nil
 		if toUpdate.Status.Phase == "" {
 			// Let's do this only when it's a fresh install of px
-			maxStorageNodesPerZone, err = getDefaultMaxStorageNodesPerZone(nodeList, toUpdate, c.recorder)
+			maxStorageNodesPerZone, err = c.getDefaultMaxStorageNodesPerZone(nodeList, toUpdate, c.recorder)
 			if err != nil {
 				logrus.Errorf("could not set defult value for max_storage_nodes_per_zone (first install): %v", err)
 			}
