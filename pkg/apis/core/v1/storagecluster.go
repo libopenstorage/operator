@@ -1,6 +1,7 @@
 package v1
 
 import (
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -558,7 +559,8 @@ type PrometheusSpec struct {
 	// RemoteWriteEndpoint specifies the remote write endpoint
 	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
 	// AlertManager spec for configuring alert manager
-	AlertManager *AlertManagerSpec `json:"alertManager,omitempty"`
+	AlertManager                *AlertManagerSpec `json:"alertManager,omitempty"`
+	monitoringv1.PrometheusSpec `json:",inline"`
 }
 
 // AlertManagerSpec contains configuration of AlertManager
