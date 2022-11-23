@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1259,6 +1260,15 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
 		return err
+	}
+
+	// set / reset TLS env-vars depending on the updated cluster settings
+	if pxutil.IsAutoTLS(toUpdate) {
+		os.Setenv(pxutil.EnvKeyPortworxEnableTLS, "true")
+		os.Setenv(pxutil.EnvKeyPortworxEnforceTLS, "true")
+	} else if !pxutil.IsTLSEnabledOnCluster(&toUpdate.Spec) {
+		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
+		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
 	}
 
 	// Update the cluster only if anything has changed

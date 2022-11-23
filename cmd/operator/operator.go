@@ -65,6 +65,11 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
+			Name:   "trace",
+			Usage:  "Enable trace logging",
+			Hidden: true,
+		},
+		cli.BoolFlag{
 			Name:  "verbose",
 			Usage: "Enable verbose logging",
 		},
@@ -126,10 +131,12 @@ func run(c *cli.Context) {
 		log.Fatalf("driver option is required")
 	}
 
-	verbose := c.Bool("verbose")
-	if verbose {
+	if c.Bool("trace") {
+		log.SetLevel(log.TraceLevel)
+	} else if c.Bool("verbose") {
 		log.SetLevel(log.DebugLevel)
 	} else {
+		// set INFO logs as default
 		log.SetLevel(log.InfoLevel)
 	}
 

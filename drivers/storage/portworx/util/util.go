@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -132,6 +133,8 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationPreflightCheck do preflight check before installing Portworx
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
+	// AnnotationIsAutoTLS annotation whether to set up cluster with automatic SSL/TLS credentials
+	AnnotationIsAutoTLS = pxAnnotationPrefix + "/is-auto-tls"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -253,6 +256,8 @@ var (
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
+	// MinAutoTLSVersion is a minimal PX version that supports "auto-TLS" setup
+	MinAutoTLSVersion, _ = version.NewVersion("3.0.0")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -324,6 +329,22 @@ func IsOpenshift(cluster *corev1.StorageCluster) bool {
 func IsHostPidEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationHostPid])
 	return err == nil && enabled
+}
+
+// IsAutoTLS returns true if the AutoTLS-annotation is true value, and cluster version qualifies
+func IsAutoTLS(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsAutoTLS])
+	if err != nil || !enabled {
+		logrus.WithError(err).Tracef("> IsAutoTLS() early return FALSE")
+		return false
+	}
+
+	if cluster.Spec.Version == "latest" {
+		return true
+	} else if v, err := version.NewVersion(cluster.Spec.Version); err == nil {
+		return v.GreaterThanOrEqual(MinAutoTLSVersion)
+	}
+	return false
 }
 
 // RunOnMaster returns true if the annotation has truth value for running on master
@@ -701,7 +722,8 @@ func GetPortworxConn(sdkConn *grpc.ClientConn, k8sClient client.Client, namespac
 		return nil, fmt.Errorf("failed to get endpoint for portworx volume driver")
 	}
 
-	endpoint := pxService.Spec.ClusterIP
+	// note, using symbolic name for the `endpoint`, as SSL certificates won't have K8s service IP
+	endpoint := PortworxServiceName + "." + namespace + ".svc.cluster.local"
 	sdkPort := defaultSDKPort
 
 	// Get the ports from service
@@ -736,6 +758,15 @@ func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
 	capool, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load CA system certs: %v", err)
+	} else if capool == nil {
+		capool = x509.NewCertPool()
+	}
+	// add K8s CA if cert available
+	content, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if err == nil && len(content) > 0 {
+		if capool.AppendCertsFromPEM(content) {
+			logrus.Tracef("> GetDialOptions() - added K8s CA into CA-pool")
+		}
 	}
 	return []grpc.DialOption{grpc.WithTransportCredentials(
 		credentials.NewClientTLSFromCert(capool, ""),
@@ -745,6 +776,8 @@ func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
 // IsTLSEnabled checks if TLS is enabled for the operator
 func IsTLSEnabled() bool {
 	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEnableTLS))
+	logrus.WithError(err).Tracef("> IsTLSEnabled() RET %v  [%q]", err == nil && enabled, os.Getenv(EnvKeyPortworxEnableTLS))
+
 	return err == nil && enabled
 }
 
