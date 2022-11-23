@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -762,7 +761,7 @@ func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
 		capool = x509.NewCertPool()
 	}
 	// add K8s CA if cert available
-	content, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	content, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	if err == nil && len(content) > 0 {
 		if capool.AppendCertsFromPEM(content) {
 			logrus.Tracef("> GetDialOptions() - added K8s CA into CA-pool")
