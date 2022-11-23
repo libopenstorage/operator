@@ -132,8 +132,8 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationPreflightCheck do preflight check before installing Portworx
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
-	// AnnotationIsAutoTLS annotation whether to set up cluster with automatic SSL/TLS credentials
-	AnnotationIsAutoTLS = pxAnnotationPrefix + "/is-auto-tls"
+	// AnnotationAutoTLS annotation whether to set up cluster with automatic SSL/TLS credentials
+	AnnotationAutoTLS = pxAnnotationPrefix + "/auto-tls"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -255,8 +255,8 @@ var (
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
-	// MinAutoTLSVersion is a minimal PX version that supports "auto-TLS" setup
-	MinAutoTLSVersion, _ = version.NewVersion("3.0.0")
+	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
+	MinimumPxVersionAutoTLS, _ = version.NewVersion("3.0.0")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -330,20 +330,15 @@ func IsHostPidEnabled(cluster *corev1.StorageCluster) bool {
 	return err == nil && enabled
 }
 
-// IsAutoTLS returns true if the AutoTLS-annotation is true value, and cluster version qualifies
-func IsAutoTLS(cluster *corev1.StorageCluster) bool {
-	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsAutoTLS])
+// IsAutoTLSEnabled returns true if the AutoTLS-annotation is true value, and cluster version qualifies
+func IsAutoTLSEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationAutoTLS])
 	if err != nil || !enabled {
-		logrus.WithError(err).Tracef("> IsAutoTLS() early return FALSE")
+		logrus.WithError(err).Tracef("> IsAutoTLSEnabled() early return FALSE")
 		return false
 	}
 
-	if cluster.Spec.Version == "latest" {
-		return true
-	} else if v, err := version.NewVersion(cluster.Spec.Version); err == nil {
-		return v.GreaterThanOrEqual(MinAutoTLSVersion)
-	}
-	return false
+	return GetPortworxVersion(cluster).GreaterThanOrEqual(MinimumPxVersionAutoTLS)
 }
 
 // RunOnMaster returns true if the annotation has truth value for running on master

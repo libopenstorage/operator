@@ -79,7 +79,7 @@ type template struct {
 	isIKS           bool
 	isOpenshift     bool
 	isK3s           bool
-	isAutoTLS       bool
+	autoTLSEnabled  bool
 	runOnMaster     bool
 	imagePullPolicy v1.PullPolicy
 	serviceType     v1.ServiceType
@@ -131,7 +131,7 @@ func newTemplate(
 	t.serviceType = pxutil.ServiceType(cluster, "")
 	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
 	t.startPort = pxutil.StartPort(cluster)
-	t.isAutoTLS = pxutil.IsAutoTLS(cluster)
+	t.autoTLSEnabled = pxutil.IsAutoTLSEnabled(cluster)
 
 	return t, nil
 }
@@ -988,7 +988,7 @@ func (t *template) getArguments() []string {
 		}
 	}
 
-	if t.isAutoTLS {
+	if t.autoTLSEnabled {
 		logrus.Tracef("AutoTLS is enabled! Setting oci-monitor arugments")
 		args = append(args, "--auto-tls")
 	}
@@ -1126,7 +1126,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 	}
 
 	// We're setting this to signal to porx that tls is enabled
-	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) || t.isAutoTLS {
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) || t.autoTLSEnabled {
 		// Set:
 		//    env:
 		//    - name: PX_ENABLE_TLS

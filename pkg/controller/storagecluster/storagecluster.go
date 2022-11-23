@@ -1262,14 +1262,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		return err
 	}
 
-	// set / reset TLS env-vars depending on the updated cluster settings
-	if pxutil.IsAutoTLS(toUpdate) {
-		os.Setenv(pxutil.EnvKeyPortworxEnableTLS, "true")
-		os.Setenv(pxutil.EnvKeyPortworxEnforceTLS, "true")
-	} else if !pxutil.IsTLSEnabledOnCluster(&toUpdate.Spec) {
-		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
-		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
-	}
+	c.setSecuritySpecDefaults(toUpdate)
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
@@ -1398,6 +1391,17 @@ func (c *Controller) log(clus *corev1.StorageCluster) *logrus.Entry {
 	}
 
 	return logrus.WithFields(logFields)
+}
+
+// setSecuritySpecDefaults resets SSL/TLS env-vars depending on the given cluster settings
+func (c *Controller) setSecuritySpecDefaults(clus *corev1.StorageCluster) {
+	if pxutil.IsAutoTLSEnabled(clus) {
+		os.Setenv(pxutil.EnvKeyPortworxEnableTLS, "true")
+		os.Setenv(pxutil.EnvKeyPortworxEnforceTLS, "true")
+	} else if !pxutil.IsTLSEnabledOnCluster(&clus.Spec) {
+		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
+		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
+	}
 }
 
 func storagePodsEnabled(
