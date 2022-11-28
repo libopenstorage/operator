@@ -374,8 +374,7 @@ func restartPortworxOperator(t *testing.T) {
 }
 
 func shouldSkipMigrationTests(tc *types.TestCase) bool {
-	k8sVersion, _ := k8sutil.GetVersion()
-	return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22)
+	return false
 }
 
 func validateStorageClusterFromDaemonSet(
