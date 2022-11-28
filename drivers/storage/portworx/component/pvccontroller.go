@@ -12,6 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -485,10 +486,10 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 									LabelSelector: &metav1.LabelSelector{
 										MatchExpressions: []metav1.LabelSelectorRequirement{
 											{
-												Key:      "storage",
+												Key:      constants.LabelKeyStoragePod,
 												Operator: metav1.LabelSelectorOpIn,
 												Values: []string{
-													"true",
+													constants.LabelValueTrue,
 												},
 											},
 										},
