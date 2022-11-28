@@ -197,13 +197,13 @@ func (c *autopilot) createConfigMap(
 		params := ""
 		for _, key := range keys {
 			val := cluster.Spec.Autopilot.GitOps.Params[key]
-			if key == "defaultReviewers" {
+			if key == AutopilotDefaultReviewersKey {
 				switch val.(type) {
 				default:
 					return fmt.Errorf("invalid spec type for defaultReviewers: %T. Expected array of strings", val)
 				case []string:
-					params += `
-    defaultReviewers:`
+					params += fmt.Sprintf(`
+    %s:`, AutopilotDefaultReviewersKey)
 					for _, v := range val.([]string) {
 						params += fmt.Sprintf(`
       - "%s"`, v)
