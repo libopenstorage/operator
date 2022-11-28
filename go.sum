@@ -1798,6 +1798,8 @@ github.com/portworx/sched-ops v1.20.4-rc1.0.20210921050234-561b707a5d96/go.mod h
 github.com/portworx/sched-ops v1.20.4-rc1.0.20211217234328-ead591c0f22d/go.mod h1:5xy8TTt9m/8UGG8Hw5NHxwc/mctjCsmj7mpcR7jIFjI=
 github.com/portworx/sched-ops v1.20.4-rc1.0.20220927173018-c9d3edcaef50 h1:41V8dUt1hhpZBvzfOGHGJ1NRZKlknCC1l8FaslyqSN8=
 github.com/portworx/sched-ops v1.20.4-rc1.0.20220927173018-c9d3edcaef50/go.mod h1:LnhSWHaCvwWrmgqgNPFTrm4YModpyDcl9k8RqSC/8Co=
+github.com/portworx/sched-ops v1.20.4-rc1.0.20221128225328-393a71866e72 h1:ywxS4uOexcy6giyUD0HolUIvcGR9xmILRACrodBV4c8=
+github.com/portworx/sched-ops v1.20.4-rc1.0.20221128225328-393a71866e72/go.mod h1:kWSSbY1NirZ0dIGVZUyL9u5ttxSAgUzEBkGGRsZetzU=
 github.com/portworx/talisman v0.0.0-20191007232806-837747f38224/go.mod h1:OjpMH9Uh5o9ntVGktm4FbjLNwubJ3ITih2OfYrAeWtA=
 github.com/portworx/talisman v0.0.0-20210302012732-8af4564777f7/go.mod h1:e8a6uFpSbOlRpZQlW9aXYogC+GWAo065G0RL9hDkD4Q=
 github.com/portworx/torpedo v0.20.4-rc1.0.20210325154352-eb81b0cdd145/go.mod h1:CkLAs/ojTzSu3SPyeDxc3qhsbRU78H5Xz1qJlj1Ap1U=
