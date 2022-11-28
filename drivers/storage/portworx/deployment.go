@@ -979,7 +979,7 @@ func (t *template) getArguments() []string {
 	}
 
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arguments")
 		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
 			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
 			args = append(args, tlsArgs...)
@@ -989,7 +989,7 @@ func (t *template) getArguments() []string {
 	}
 
 	if t.autoTLSEnabled {
-		logrus.Tracef("AutoTLS is enabled! Setting oci-monitor arugments")
+		logrus.Tracef("AutoTLS is enabled! Setting oci-monitor arguments")
 		args = append(args, "--auto-tls")
 	}
 
