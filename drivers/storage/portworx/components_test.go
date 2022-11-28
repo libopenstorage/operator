@@ -3189,6 +3189,90 @@ func TestAutopilotInstall(t *testing.T) {
 	require.Equal(t, expectedDeployment, autopilotDeployment)
 }
 
+func TestAutopilotInstallIncorrectSpec(t *testing.T) {
+	// testing the case, where the `defaultReviewers` has been set as []interface{} instead of []string
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				GitOps: &corev1.GitOpsSpec{
+					Name: "test",
+					Type: "bitbucket-scm",
+					Params: map[string]interface{}{
+						"defaultReviewers": []interface{}{"user1", "user2"},
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "debug",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	recorder := record.NewFakeRecorder(10)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Failed to setup Autopilot. invalid spec type for defaultReviewers: []interface{}. Expected array of strings",
+			v1.EventTypeWarning, util.FailedComponentReason),
+	)
+}
+
 func TestAutopilotWithoutImage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
