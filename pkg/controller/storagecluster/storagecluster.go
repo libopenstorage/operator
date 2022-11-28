@@ -1427,6 +1427,9 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
 
+	logrus.Infof("MYD: cluster: %v", cluster)
+	logrus.Infof("MYD: toUpdate: %v", toUpdate)
+
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
