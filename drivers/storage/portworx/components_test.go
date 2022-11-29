@@ -6391,6 +6391,25 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Len(t, prometheus.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, prometheus.OwnerReferences[0].Name)
 	require.Equal(t, expectedPrometheus.Spec, prometheus.Spec)
+
+	// Modify resources and security context.
+	cluster.Spec.Monitoring.Prometheus.Resources = v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("4Gi"),
+			v1.ResourceCPU:    resource.MustParse("4"),
+		},
+	}
+	runAsNonRoot := false
+	cluster.Spec.Monitoring.Prometheus.SecurityContext = &v1.PodSecurityContext{
+		RunAsNonRoot: &runAsNonRoot,
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, prometheus.Spec.Resources.Requests, cluster.Spec.Monitoring.Prometheus.Resources.Requests)
+	require.Equal(t, prometheus.Spec.SecurityContext, cluster.Spec.Monitoring.Prometheus.SecurityContext)
 }
 
 func TestCompleteInstallDuringMigration(t *testing.T) {

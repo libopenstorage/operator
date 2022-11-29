@@ -517,6 +517,11 @@ type PrometheusSpec struct {
 	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
 	// AlertManager spec for configuring alert manager
 	AlertManager *AlertManagerSpec `json:"alertManager,omitempty"`
+	// Define resources requests and limits for single Pods. The value will pass through to Prometheus CR.
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// This defaults to the default PodSecurityContext. The value will pass through to Prometheus CR.
+	SecurityContext *v1.PodSecurityContext `json:"securityContext,omitempty"`
 }
 
 // AlertManagerSpec contains configuration of AlertManager
