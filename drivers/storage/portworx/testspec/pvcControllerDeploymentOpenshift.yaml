@@ -51,15 +51,6 @@ spec:
             cpu: 200m
       hostNetwork: true
       affinity:
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: "storage"
-                    operator: In
-                    values:
-                      - "true"
-              topologyKey: "kubernetes.io/hostname"
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
