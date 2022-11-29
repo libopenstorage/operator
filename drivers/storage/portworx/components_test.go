@@ -3268,7 +3268,7 @@ func TestAutopilotInstallIncorrectSpec(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v Failed to setup Autopilot. invalid spec type for defaultReviewers: []interface{}. Expected array of strings",
+		fmt.Sprintf("%v %v Failed to setup Autopilot. invalid spec type for defaultReviewers: []interface {}. Expected array of strings",
 			v1.EventTypeWarning, util.FailedComponentReason),
 	)
 }
