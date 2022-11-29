@@ -12,7 +12,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -367,9 +366,6 @@ func (c *pvcController) createDeployment(
 		return err
 	}
 
-	deployment := c.getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity,
-		updatedTopologySpreadConstraints)
-
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
@@ -377,10 +373,11 @@ func (c *pvcController) createDeployment(
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
-			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
-		!reflect.DeepEqual(deployment.Spec.Template.Spec.Affinity, existingDeployment.Spec.Template.Spec.Affinity)
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isCreated || modified {
+		deployment := c.getPVCControllerDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity,
+			updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -479,24 +476,6 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 						},
 					},
 					Affinity: &v1.Affinity{
-						PodAffinity: &v1.PodAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-								{
-									TopologyKey: "kubernetes.io/hostname",
-									LabelSelector: &metav1.LabelSelector{
-										MatchExpressions: []metav1.LabelSelectorRequirement{
-											{
-												Key:      constants.LabelKeyStoragePod,
-												Operator: metav1.LabelSelectorOpIn,
-												Values: []string{
-													constants.LabelValueTrue,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
 						PodAntiAffinity: &v1.PodAntiAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
 								{
