@@ -625,12 +625,34 @@ func (c *prometheus) createPrometheusInstance(
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: prometheusRuleLabels(),
 			},
-			Resources: v1.ResourceRequirements{
-				Requests: map[v1.ResourceName]resource.Quantity{
-					v1.ResourceMemory: resource.MustParse("400Mi"),
-				},
-			},
 		},
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Resources.Limits != nil {
+		prometheusInst.Spec.Resources.Limits = cluster.Spec.Monitoring.Prometheus.Resources.Limits
+	} else {
+		prometheusInst.Spec.Resources.Limits = map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory:           resource.MustParse("800Mi"),
+			v1.ResourceCPU:              resource.MustParse("1"),
+			v1.ResourceEphemeralStorage: resource.MustParse("5Gi"),
+		}
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Resources.Requests != nil {
+		prometheusInst.Spec.Resources.Requests = cluster.Spec.Monitoring.Prometheus.Resources.Requests
+	} else {
+		prometheusInst.Spec.Resources.Requests = map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("400Mi"),
+		}
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.SecurityContext != nil {
+		prometheusInst.Spec.SecurityContext = cluster.Spec.Monitoring.Prometheus.SecurityContext
+	} else {
+		runAsNonRoot := true
+		prometheusInst.Spec.SecurityContext = &v1.PodSecurityContext{
+			RunAsNonRoot: &runAsNonRoot,
+		}
 	}
 
 	if cluster.Spec.Monitoring.Prometheus.AlertManager != nil &&
