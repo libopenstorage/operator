@@ -1,7 +1,6 @@
 package v1
 
 import (
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -559,8 +558,12 @@ type PrometheusSpec struct {
 	// RemoteWriteEndpoint specifies the remote write endpoint
 	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
 	// AlertManager spec for configuring alert manager
-	AlertManager                *AlertManagerSpec `json:"alertManager,omitempty"`
-	monitoringv1.PrometheusSpec `json:",inline"`
+	AlertManager *AlertManagerSpec `json:"alertManager,omitempty"`
+	// Define resources requests and limits for single Pods. The value will pass through to Prometheus CR.
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// This defaults to the default PodSecurityContext. The value will pass through to Prometheus CR.
+	SecurityContext *v1.PodSecurityContext `json:"securityContext,omitempty"`
 }
 
 // AlertManagerSpec contains configuration of AlertManager
