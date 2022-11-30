@@ -174,6 +174,13 @@ func (c *autopilot) createConfigMap(
 
 	if cluster.Spec.Autopilot.GitOps != nil {
 		config += "\ngitops:"
+		if cluster.Spec.Autopilot.GitOps.Type == "" {
+			return fmt.Errorf("gitops Type field is required")
+		}
+
+		if len(cluster.Spec.Autopilot.GitOps.Params) == 0 {
+			return fmt.Errorf("gitops params cannot be empty")
+		}
 
 		keys := make([]string, 0, len(cluster.Spec.Autopilot.GitOps.Params))
 		for k := range cluster.Spec.Autopilot.GitOps.Params {
@@ -185,21 +192,18 @@ func (c *autopilot) createConfigMap(
 		for _, key := range keys {
 			val := cluster.Spec.Autopilot.GitOps.Params[key]
 			if key == AutopilotDefaultReviewersKey {
-				switch val := val.(type) {
-				default:
-					return fmt.Errorf("invalid spec type for defaultReviewers: %T. Expected array of strings", val)
-				case []string:
-					params += fmt.Sprintf(`
+				params += fmt.Sprintf(`
     %s:`, AutopilotDefaultReviewersKey)
-					for _, v := range val {
-						params += fmt.Sprintf(`
+				values := strings.Split(val, ",")
+				for _, v := range values {
+					v = strings.TrimSpace(v)
+					params += fmt.Sprintf(`
       - "%s"`, v)
-					}
 				}
 				continue
 			}
 			params += fmt.Sprintf(`
-    %s: %s`, key, val.(string))
+    %s: %s`, key, val)
 		}
 
 		config += fmt.Sprintf(`
