@@ -117,7 +117,7 @@ func (c *FakeStorageClusters) UpdateStatus(ctx context.Context, storageCluster *
 // Delete takes name of the storageCluster and deletes it. Returns an error if one occurs.
 func (c *FakeStorageClusters) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(storageclustersResource, c.ns, name), &corev1.StorageCluster{})
+		Invokes(testing.NewDeleteActionWithOptions(storageclustersResource, c.ns, name, opts), &corev1.StorageCluster{})
 
 	return err
 }
