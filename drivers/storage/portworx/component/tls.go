@@ -8,6 +8,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,7 +32,7 @@ func (t *tls) Priority() int32 {
 	return int32(0) // same as auth component
 }
 
-// Initialize initializes the componenet
+// Initialize initializes the component
 func (t *tls) Initialize(
 	_ client.Client,
 	_ version.Version,
@@ -61,6 +62,14 @@ func (t *tls) Reconcile(cluster *corev1.StorageCluster) error {
 func (t *tls) validateTLSSpecs(cluster *corev1.StorageCluster) error {
 	if pxutil.IsTLSEnabledOnCluster(&cluster.Spec) {
 		tls := cluster.Spec.Security.TLS
+
+		if tls.ServerCert == nil && tls.ServerKey == nil &&
+			pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
+			// if cert files not specified, we'll turn on the automatic SSL setup
+			logrus.Debugf("TLS certificates not provided -- will request new certs from Kubernetes")
+			return nil
+		}
+
 		// validate that any file paths are rooted to our mounted folder: /etc/pwx
 		if err := validateCertLocation("serverCert", tls.ServerCert); err != nil {
 			return err

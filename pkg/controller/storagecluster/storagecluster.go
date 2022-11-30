@@ -1395,10 +1395,10 @@ func (c *Controller) log(clus *corev1.StorageCluster) *logrus.Entry {
 
 // setSecuritySpecDefaults resets SSL/TLS env-vars depending on the given cluster settings
 func (c *Controller) setSecuritySpecDefaults(clus *corev1.StorageCluster) {
-	if pxutil.IsAutoTLSEnabled(clus) {
+	if pxutil.IsTLSEnabledOnCluster(&clus.Spec) {
 		os.Setenv(pxutil.EnvKeyPortworxEnableTLS, "true")
 		os.Setenv(pxutil.EnvKeyPortworxEnforceTLS, "true")
-	} else if !pxutil.IsTLSEnabledOnCluster(&clus.Spec) {
+	} else {
 		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
 		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
 	}

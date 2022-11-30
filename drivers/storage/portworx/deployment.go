@@ -79,7 +79,6 @@ type template struct {
 	isIKS           bool
 	isOpenshift     bool
 	isK3s           bool
-	autoTLSEnabled  bool
 	runOnMaster     bool
 	imagePullPolicy v1.PullPolicy
 	serviceType     v1.ServiceType
@@ -131,7 +130,6 @@ func newTemplate(
 	t.serviceType = pxutil.ServiceType(cluster, "")
 	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
 	t.startPort = pxutil.StartPort(cluster)
-	t.autoTLSEnabled = pxutil.IsAutoTLSEnabled(cluster)
 
 	return t, nil
 }
@@ -988,11 +986,6 @@ func (t *template) getArguments() []string {
 		}
 	}
 
-	if t.autoTLSEnabled {
-		logrus.Tracef("AutoTLS is enabled! Setting oci-monitor arguments")
-		args = append(args, "--auto-tls")
-	}
-
 	if pxutil.EssentialsEnabled() {
 		for args[len(args)-1] == "--oem" {
 			args = args[:len(args)-1]
@@ -1126,7 +1119,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 	}
 
 	// We're setting this to signal to porx that tls is enabled
-	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) || t.autoTLSEnabled {
+	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
 		// Set:
 		//    env:
 		//    - name: PX_ENABLE_TLS
@@ -1531,6 +1524,13 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 	// TLS is assumed to be filled up here with defaults (validated by storagecluster controller. See validateTLSSpecs() )
 	tls := t.cluster.Spec.Security.TLS
 	ret := []volumeInfo{}
+
+	// if auto-tls setup requested, it's OK not to have crt/key files configured
+	if tls.ServerCert == nil && tls.ServerKey == nil &&
+		pxutil.GetPortworxVersion(t.cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
+		return ret
+	}
+
 	if !pxutil.IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
 	}

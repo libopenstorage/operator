@@ -330,17 +330,6 @@ func IsHostPidEnabled(cluster *corev1.StorageCluster) bool {
 	return err == nil && enabled
 }
 
-// IsAutoTLSEnabled returns true if the AutoTLS-annotation is true value, and cluster version qualifies
-func IsAutoTLSEnabled(cluster *corev1.StorageCluster) bool {
-	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationAutoTLS])
-	if err != nil || !enabled {
-		logrus.WithError(err).Tracef("> IsAutoTLSEnabled() early return FALSE")
-		return false
-	}
-
-	return GetPortworxVersion(cluster).GreaterThanOrEqual(MinimumPxVersionAutoTLS)
-}
-
 // RunOnMaster returns true if the annotation has truth value for running on master
 func RunOnMaster(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationRunOnMaster])
@@ -843,45 +832,55 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 
 // GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
-	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil {
-		tls := cluster.Spec.Security.TLS
-		if IsEmptyOrNilCertLocation(tls.ServerCert) {
-			return nil, fmt.Errorf("spec.security.tls.serverCert is required")
-		}
-		if IsEmptyOrNilCertLocation(tls.ServerKey) {
-			return nil, fmt.Errorf("spec.security.tls.serverKey is required")
-		}
-
-		apicert, apikey := "", ""
-		if !IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
-			apicert = path.Join(DefaultTLSServerCertMountPath, tls.ServerCert.SecretRef.SecretKey)
-		} else {
-			apicert = *tls.ServerCert.FileName
-		}
-		if !IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
-			apikey = path.Join(DefaultTLSServerKeyMountPath, tls.ServerKey.SecretRef.SecretKey)
-		} else {
-			apikey = *tls.ServerKey.FileName
-		}
-
-		args := []string{
-			"-apicert", apicert,
-			"-apikey", apikey,
-			"-apidisclientauth",
-		}
-		if !IsEmptyOrNilCertLocation(tls.RootCA) {
-			if !IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
-				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, tls.RootCA.SecretRef.SecretKey))
-			} else if !IsEmptyOrNilStringPtr(tls.RootCA.FileName) {
-				args = append(args, "-apirootca", *tls.RootCA.FileName)
-			}
-		} else {
-			logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
-		}
-
-		return args, nil
+	if cluster.Spec.Security == nil || cluster.Spec.Security.TLS == nil {
+		// no security setup configured, yet this func got called
+		return nil, fmt.Errorf("spec.security.tls is required")
 	}
-	return nil, fmt.Errorf("spec.security.tls is required")
+
+	tls := cluster.Spec.Security.TLS
+
+	// with px-3.0.0, we'll auto-generate SSL/TLS certs if they were not provided
+	if tls.ServerCert == nil && tls.ServerKey == nil &&
+		GetPortworxVersion(cluster).GreaterThanOrEqual(MinimumPxVersionAutoTLS) {
+		return []string{"--auto-tls"}, nil
+	}
+	// else -- individual SSL certs need to be provided, and checked...
+
+	if IsEmptyOrNilCertLocation(tls.ServerCert) {
+		return nil, fmt.Errorf("spec.security.tls.serverCert is required")
+	}
+	if IsEmptyOrNilCertLocation(tls.ServerKey) {
+		return nil, fmt.Errorf("spec.security.tls.serverKey is required")
+	}
+
+	apicert, apikey := "", ""
+	if !IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
+		apicert = path.Join(DefaultTLSServerCertMountPath, tls.ServerCert.SecretRef.SecretKey)
+	} else {
+		apicert = *tls.ServerCert.FileName
+	}
+	if !IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
+		apikey = path.Join(DefaultTLSServerKeyMountPath, tls.ServerKey.SecretRef.SecretKey)
+	} else {
+		apikey = *tls.ServerKey.FileName
+	}
+
+	args := []string{
+		"-apicert", apicert,
+		"-apikey", apikey,
+		"-apidisclientauth",
+	}
+	if !IsEmptyOrNilCertLocation(tls.RootCA) {
+		if !IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
+			args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, tls.RootCA.SecretRef.SecretKey))
+		} else if !IsEmptyOrNilStringPtr(tls.RootCA.FileName) {
+			args = append(args, "-apirootca", *tls.RootCA.FileName)
+		}
+	} else {
+		logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
+	}
+
+	return args, nil
 }
 
 // IsEmptyOrNilCertLocation is a helper function that checks whether a CertLocation is empty
