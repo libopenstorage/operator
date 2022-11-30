@@ -132,8 +132,6 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationPreflightCheck do preflight check before installing Portworx
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
-	// AnnotationAutoTLS annotation whether to set up cluster with automatic SSL/TLS credentials
-	AnnotationAutoTLS = pxAnnotationPrefix + "/auto-tls"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
