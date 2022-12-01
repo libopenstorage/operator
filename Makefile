@@ -177,6 +177,13 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
+DOCK_BUILD_CNT	:= golang:1.19.1
+
+docker-build:
+	@echo "Building using docker"
+	docker run --rm -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
+		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
+
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"
 	docker push $(OPERATOR_IMG)
