@@ -205,6 +205,9 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
+	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer restoreEtcHosts(t)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",

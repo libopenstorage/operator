@@ -253,6 +253,8 @@ var (
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
+	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
+	MinimumPxVersionAutoTLS, _ = version.NewVersion("3.0.0")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -701,7 +703,8 @@ func GetPortworxConn(sdkConn *grpc.ClientConn, k8sClient client.Client, namespac
 		return nil, fmt.Errorf("failed to get endpoint for portworx volume driver")
 	}
 
-	endpoint := pxService.Spec.ClusterIP
+	// note, using symbolic name for the `endpoint`, as SSL certificates won't have K8s service IP
+	endpoint := PortworxServiceName + "." + namespace + ".svc.cluster.local"
 	sdkPort := defaultSDKPort
 
 	// Get the ports from service
@@ -736,6 +739,15 @@ func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
 	capool, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load CA system certs: %v", err)
+	} else if capool == nil {
+		capool = x509.NewCertPool()
+	}
+	// add K8s CA if cert available
+	content, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if err == nil && len(content) > 0 {
+		if capool.AppendCertsFromPEM(content) {
+			logrus.Tracef("> GetDialOptions() - added K8s CA into CA-pool")
+		}
 	}
 	return []grpc.DialOption{grpc.WithTransportCredentials(
 		credentials.NewClientTLSFromCert(capool, ""),
@@ -745,6 +757,8 @@ func GetDialOptions(tls bool) ([]grpc.DialOption, error) {
 // IsTLSEnabled checks if TLS is enabled for the operator
 func IsTLSEnabled() bool {
 	enabled, err := strconv.ParseBool(os.Getenv(EnvKeyPortworxEnableTLS))
+	logrus.WithError(err).Tracef("> IsTLSEnabled() RET %v  [%q]", err == nil && enabled, os.Getenv(EnvKeyPortworxEnableTLS))
+
 	return err == nil && enabled
 }
 
@@ -816,45 +830,55 @@ func AppendTLSEnv(clusterSpec *corev1.StorageClusterSpec, envMap map[string]*v1.
 
 // GetOciMonArgumentsForTLS constructs tls related arguments for oci-mon
 func GetOciMonArgumentsForTLS(cluster *corev1.StorageCluster) ([]string, error) {
-	if cluster.Spec.Security != nil && cluster.Spec.Security.TLS != nil {
-		tls := cluster.Spec.Security.TLS
-		if IsEmptyOrNilCertLocation(tls.ServerCert) {
-			return nil, fmt.Errorf("spec.security.tls.serverCert is required")
-		}
-		if IsEmptyOrNilCertLocation(tls.ServerKey) {
-			return nil, fmt.Errorf("spec.security.tls.serverKey is required")
-		}
-
-		apicert, apikey := "", ""
-		if !IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
-			apicert = path.Join(DefaultTLSServerCertMountPath, tls.ServerCert.SecretRef.SecretKey)
-		} else {
-			apicert = *tls.ServerCert.FileName
-		}
-		if !IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
-			apikey = path.Join(DefaultTLSServerKeyMountPath, tls.ServerKey.SecretRef.SecretKey)
-		} else {
-			apikey = *tls.ServerKey.FileName
-		}
-
-		args := []string{
-			"-apicert", apicert,
-			"-apikey", apikey,
-			"-apidisclientauth",
-		}
-		if !IsEmptyOrNilCertLocation(tls.RootCA) {
-			if !IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
-				args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, tls.RootCA.SecretRef.SecretKey))
-			} else if !IsEmptyOrNilStringPtr(tls.RootCA.FileName) {
-				args = append(args, "-apirootca", *tls.RootCA.FileName)
-			}
-		} else {
-			logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
-		}
-
-		return args, nil
+	if cluster.Spec.Security == nil || cluster.Spec.Security.TLS == nil {
+		// no security setup configured, yet this func got called
+		return nil, fmt.Errorf("spec.security.tls is required")
 	}
-	return nil, fmt.Errorf("spec.security.tls is required")
+
+	tls := cluster.Spec.Security.TLS
+
+	// with px-3.0.0, we'll auto-generate SSL/TLS certs if they were not provided
+	if tls.ServerCert == nil && tls.ServerKey == nil &&
+		GetPortworxVersion(cluster).GreaterThanOrEqual(MinimumPxVersionAutoTLS) {
+		return []string{"--auto-tls"}, nil
+	}
+	// else -- individual SSL certs need to be provided, and checked...
+
+	if IsEmptyOrNilCertLocation(tls.ServerCert) {
+		return nil, fmt.Errorf("spec.security.tls.serverCert is required")
+	}
+	if IsEmptyOrNilCertLocation(tls.ServerKey) {
+		return nil, fmt.Errorf("spec.security.tls.serverKey is required")
+	}
+
+	apicert, apikey := "", ""
+	if !IsEmptyOrNilSecretReference(tls.ServerCert.SecretRef) {
+		apicert = path.Join(DefaultTLSServerCertMountPath, tls.ServerCert.SecretRef.SecretKey)
+	} else {
+		apicert = *tls.ServerCert.FileName
+	}
+	if !IsEmptyOrNilSecretReference(tls.ServerKey.SecretRef) {
+		apikey = path.Join(DefaultTLSServerKeyMountPath, tls.ServerKey.SecretRef.SecretKey)
+	} else {
+		apikey = *tls.ServerKey.FileName
+	}
+
+	args := []string{
+		"-apicert", apicert,
+		"-apikey", apikey,
+		"-apidisclientauth",
+	}
+	if !IsEmptyOrNilCertLocation(tls.RootCA) {
+		if !IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
+			args = append(args, "-apirootca", path.Join(DefaultTLSCACertMountPath, tls.RootCA.SecretRef.SecretKey))
+		} else if !IsEmptyOrNilStringPtr(tls.RootCA.FileName) {
+			args = append(args, "-apirootca", *tls.RootCA.FileName)
+		}
+	} else {
+		logrus.Tracef("No RootCA specified, skipping -apirootca oci-mon argument")
+	}
+
+	return args, nil
 }
 
 // IsEmptyOrNilCertLocation is a helper function that checks whether a CertLocation is empty

@@ -98,6 +98,16 @@ func TestGetOciMonArgumentsForTLS(t *testing.T) {
 	cluster = testutil.CreateClusterWithTLS(nil, serverCertFileName, serverKeyFileName)
 	_, err = GetOciMonArgumentsForTLS(cluster)
 	assert.Nil(t, err)
+
+	// test auto-ssl setup
+	cluster.Spec.Version = "3.0.0"
+	cluster.Spec.Security.TLS.ServerCert = nil
+	cluster.Spec.Security.TLS.ServerKey = nil
+	cluster.Spec.Security.TLS.RootCA = nil
+	args, err = GetOciMonArgumentsForTLS(cluster)
+	// validate
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, []string{"--auto-tls"}, args)
 }
 
 func TestAuthEnabled(t *testing.T) {

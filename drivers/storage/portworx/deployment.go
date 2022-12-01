@@ -977,7 +977,7 @@ func (t *template) getArguments() []string {
 	}
 
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arguments")
 		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
 			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
 			args = append(args, tlsArgs...)
@@ -1524,6 +1524,13 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 	// TLS is assumed to be filled up here with defaults (validated by storagecluster controller. See validateTLSSpecs() )
 	tls := t.cluster.Spec.Security.TLS
 	ret := []volumeInfo{}
+
+	// if auto-tls setup requested, it's OK not to have crt/key files configured
+	if tls.ServerCert == nil && tls.ServerKey == nil &&
+		pxutil.GetPortworxVersion(t.cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
+		return ret
+	}
+
 	if !pxutil.IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
 	}
