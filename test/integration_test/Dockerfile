@@ -14,3 +14,4 @@ WORKDIR /
 
 COPY operator.test /
 COPY testspec /testspec
+COPY test-deploy.sh /
