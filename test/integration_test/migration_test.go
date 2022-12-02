@@ -15,6 +15,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/portworx/sched-ops/task"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -121,6 +122,9 @@ func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
 		objects, err := ci_utils.ParseSpecs("migration/prometheus-operator.yaml")
 		require.NoError(t, err)
 
+		err = updateComponentImages(objects)
+		require.NoError(t, err)
+
 		logrus.Infof("Installing prometheus operator")
 		err = ci_utils.CreateObjects(objects)
 		require.NoError(t, err)
@@ -155,7 +159,7 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 	err := ci_utils.UpdatePortworxDaemonSetImages(ds)
 	require.NoError(t, err)
 
-	err = updateComponentDeploymentImages(objects)
+	err = updateComponentImages(objects)
 	require.NoError(t, err)
 
 	logrus.Infof("Creating portworx objects")
@@ -308,7 +312,7 @@ func extractPortworxDaemonSetFromObjects(objects []runtime.Object) (*appsv1.Daem
 	return pxDaemonSet, remainingObjects
 }
 
-func updateComponentDeploymentImages(objects []runtime.Object) error {
+func updateComponentImages(objects []runtime.Object) error {
 	k8sVersion, err := k8sutil.GetVersion()
 	if err != nil {
 		return err
@@ -353,6 +357,24 @@ func updateComponentDeploymentImages(objects []runtime.Object) error {
 						c.Image = ci_utils.PxSpecImages["metricsCollectorProxy"]
 					}
 				}
+			} else if dep.Name == "prometheus-operator" {
+				for i := 0; i < len(dep.Spec.Template.Spec.Containers); i++ {
+					c := &dep.Spec.Template.Spec.Containers[i]
+					if c.Name == "prometheus-operator" {
+						c.Image = ci_utils.PxSpecImages["prometheusOperator"]
+						for i, arg := range c.Args {
+							if strings.Contains(arg, "--prometheus-config-reloader") {
+								c.Args[i] = fmt.Sprintf("--prometheus-config-reloader=%s", ci_utils.PxSpecImages["prometheusConfigReloader"])
+							}
+						}
+					}
+				}
+			}
+		}
+		if alertManager, ok := obj.(*monitoringv1.Alertmanager); ok {
+			if alertManager.Name == "portworx" {
+				alertManagerImage := ci_utils.PxSpecImages["alertManager"]
+				alertManager.Spec.Image = &alertManagerImage
 			}
 		}
 	}
