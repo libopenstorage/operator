@@ -26,6 +26,7 @@ spec:
       memory: 800Mi
   securityContext:
     runAsNonRoot: true
+    runAsUser: 65534
   ruleSelector:
     matchLabels:
       prometheus: portworx

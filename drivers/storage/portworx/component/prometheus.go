@@ -53,6 +53,8 @@ const (
 	PrometheusServiceName = "px-prometheus"
 	// PrometheusInstanceName name of the prometheus instance
 	PrometheusInstanceName = "px-prometheus"
+
+	defaultRunAsUser = 65534
 )
 
 type prometheus struct {
@@ -469,7 +471,7 @@ func getPrometheusOperatorDeploymentSpec(
 ) *appsv1.Deployment {
 	replicas := int32(1)
 	runAsNonRoot := true
-	runAsUser := int64(65534)
+	runAsUser := int64(defaultRunAsUser)
 	labels := map[string]string{
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
@@ -650,8 +652,10 @@ func (c *prometheus) createPrometheusInstance(
 		prometheusInst.Spec.SecurityContext = cluster.Spec.Monitoring.Prometheus.SecurityContext
 	} else {
 		runAsNonRoot := true
+		runAsUser := int64(defaultRunAsUser)
 		prometheusInst.Spec.SecurityContext = &v1.PodSecurityContext{
 			RunAsNonRoot: &runAsNonRoot,
+			RunAsUser:    &runAsUser,
 		}
 	}
 
