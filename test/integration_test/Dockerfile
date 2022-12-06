@@ -21,3 +21,4 @@ WORKDIR /
 COPY operator.test /
 COPY testspec /testspec
 COPY test-deploy.sh /
+COPY operator-test-pod-template.yaml /
