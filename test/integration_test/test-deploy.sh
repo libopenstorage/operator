@@ -1,7 +1,7 @@
 #!/bin/bash -x
 
-test_pod_template="/testspecs/operator-test-pod-template.yaml"
-test_pod_spec="/testspecs/operator-test-pod.yaml"
+test_pod_template="operator-test-pod-template.yaml"
+test_pod_spec="operator-test-pod.yaml"
 
 test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
@@ -134,12 +134,6 @@ case $i in
         ;;
 esac
 done
-
-apk update
-apk add jq
-
-apt-get -y update
-apt-get install -y jq
 
 # Copy test pod template to a new file
 cp $test_pod_template $test_pod_spec
