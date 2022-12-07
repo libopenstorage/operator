@@ -19,15 +19,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/openstorage/api"
 	ocp_configv1 "github.com/openshift/api/config/v1"
-	appops "github.com/portworx/sched-ops/k8s/apps"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	k8serrors "github.com/portworx/sched-ops/k8s/errors"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
-	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
-	rbacops "github.com/portworx/sched-ops/k8s/rbac"
-	"github.com/portworx/sched-ops/task"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -52,10 +44,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/libopenstorage/openstorage/api"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
 	ocp_secv1 "github.com/openshift/api/security/v1"
+	appops "github.com/portworx/sched-ops/k8s/apps"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	k8serrors "github.com/portworx/sched-ops/k8s/errors"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
+	rbacops "github.com/portworx/sched-ops/k8s/rbac"
+	"github.com/portworx/sched-ops/task"
 )
 
 const (
@@ -122,6 +122,7 @@ var TestSpecPath = "testspec"
 
 var (
 	pxVer2_12, _                      = version.NewVersion("2.12.0-")
+	opVer1_11, _                      = version.NewVersion("1.11.0-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2")
@@ -3789,17 +3790,26 @@ func ConstructPxReleaseManifestURL(specGenURL string) (string, error) {
 	return u.String(), nil
 }
 
-func validateStorageClusterInState(cluster *corev1.StorageCluster, status corev1.ClusterConditionStatus) func() (interface{}, bool, error) {
+func validateStorageClusterInState(cluster *corev1.StorageCluster, state string, conditions []corev1.ClusterCondition) func() (interface{}, bool, error) {
 	return func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
 		}
-		if cluster.Status.Phase != string(status) {
+		if cluster.Status.Phase != state {
 			if cluster.Status.Phase == "" {
 				return nil, true, fmt.Errorf("failed to get cluster status")
 			}
 			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
+		}
+		for _, condition := range conditions {
+			c := util.GetStorageClusterCondition(cluster, condition.Source, condition.Type)
+			if c == nil {
+				return nil, true, fmt.Errorf("failed to get cluster condition %s%s%s", condition.Source, condition.Type, condition.Status)
+			} else if c.Status != condition.Status {
+				return nil, true, fmt.Errorf("expect condition %s%s%s but got %s%s%s", condition.Source, condition.Type, condition.Status,
+					c.Source, c.Type, c.Status)
+			}
 		}
 		return cluster, false, nil
 	}
@@ -3825,7 +3835,18 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 
 // ValidateStorageClusterIsOnline wait for storage cluster to become online.
 func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
-	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, corev1.ClusterConditionStatusOnline), timeout, interval)
+	state := string(corev1.ClusterConditionStatusOnline)
+	var conditions []corev1.ClusterCondition
+	opVersion, _ := GetPxOperatorVersion()
+	if opVersion.GreaterThanOrEqual(opVer1_11) {
+		state = string(corev1.ClusterStateRunning)
+		conditions = append(conditions, corev1.ClusterCondition{
+			Source: "Portworx",
+			Type:   corev1.ClusterConditionTypeRuntimeState,
+			Status: corev1.ClusterConditionStatusOnline,
+		})
+	}
+	out, err := task.DoRetryWithTimeout(validateStorageClusterInState(cluster, state, conditions), timeout, interval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for StorageCluster to be ready, Err: %v", err)
 	}
