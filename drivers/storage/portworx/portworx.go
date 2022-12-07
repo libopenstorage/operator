@@ -1172,7 +1172,7 @@ func setAutopilotDefaults(
 
 	// px-3.0.0 -- add PX_ENABLE_TLS=true env to AutoPilot when Security + TLS are enabled
 	sec := toUpdate.Spec.Security
-	if sec != nil && sec.Enabled && sec.TLS != nil && *sec.TLS.Enabled &&
+	if sec != nil && sec.Enabled && sec.TLS != nil && && sec.TLS.Enabled != nil && *sec.TLS.Enabled &&
 		pxutil.GetPortworxVersion(toUpdate).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
 		newEnv := make([]v1.EnvVar, 0, len(toUpdate.Spec.Autopilot.Env)+1)
 		updated := false
