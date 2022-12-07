@@ -99,6 +99,9 @@ github.com/beorn7/perks/quantile
 # github.com/bkielbasa/cyclop v1.2.0
 ## explicit; go 1.15
 github.com/bkielbasa/cyclop/pkg/analyzer
+# github.com/blang/semver/v4 v4.0.0
+## explicit; go 1.14
+github.com/blang/semver/v4
 # github.com/blizzy78/varnamelen v0.8.0
 ## explicit; go 1.16
 github.com/blizzy78/varnamelen
@@ -634,6 +637,12 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.15
 github.com/openshift/api/config/v1
 github.com/openshift/api/security/v1
+# github.com/operator-framework/api v0.17.1
+## explicit; go 1.18
+github.com/operator-framework/api/pkg/lib/version
+github.com/operator-framework/api/pkg/operators
+github.com/operator-framework/api/pkg/operators/v1
+github.com/operator-framework/api/pkg/operators/v1alpha1
 # github.com/pborman/uuid v1.2.0
 ## explicit
 github.com/pborman/uuid
@@ -669,7 +678,7 @@ github.com/portworx/kvdb/etcd/common
 github.com/portworx/kvdb/etcd/v2
 github.com/portworx/kvdb/etcd/v3
 github.com/portworx/kvdb/mem
-# github.com/portworx/sched-ops v1.20.4-rc1.0.20220927173018-c9d3edcaef50
+# github.com/portworx/sched-ops v1.20.4-rc1.0.20221208153443-c95ed6d757fa
 ## explicit; go 1.19
 github.com/portworx/sched-ops/k8s/apiextensions
 github.com/portworx/sched-ops/k8s/apps
@@ -677,6 +686,7 @@ github.com/portworx/sched-ops/k8s/common
 github.com/portworx/sched-ops/k8s/core
 github.com/portworx/sched-ops/k8s/errors
 github.com/portworx/sched-ops/k8s/operator
+github.com/portworx/sched-ops/k8s/operatormarketplace
 github.com/portworx/sched-ops/k8s/prometheus
 github.com/portworx/sched-ops/k8s/rbac
 github.com/portworx/sched-ops/k8s/storage

@@ -32,6 +32,9 @@ var (
 	// PxOperatorVersion is the version of installed px operator found
 	PxOperatorVersion *version.Version
 
+	// PxOperatorTag is the version of px operator that will be used for Openshift Marketplace deployment
+	PxOperatorTag string
+
 	// PxDeviceSpecs is a list of `;` separated Portworx device specs
 	PxDeviceSpecs string
 
