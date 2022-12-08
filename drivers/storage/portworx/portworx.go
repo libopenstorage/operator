@@ -549,7 +549,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.AlertManager = ""
 	}
 
-	setDefaultAutopilotProviders(toUpdate)
+	setAutopilotDefaults(toUpdate)
 	return nil
 }
 
@@ -1151,11 +1151,14 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 	}
 }
 
-func setDefaultAutopilotProviders(
+func setAutopilotDefaults(
 	toUpdate *corev1.StorageCluster,
 ) {
-	if toUpdate.Spec.Autopilot != nil && toUpdate.Spec.Autopilot.Enabled &&
-		len(toUpdate.Spec.Autopilot.Providers) == 0 {
+	if toUpdate.Spec.Autopilot == nil || !toUpdate.Spec.Autopilot.Enabled {
+		return
+	}
+
+	if len(toUpdate.Spec.Autopilot.Providers) == 0 {
 		toUpdate.Spec.Autopilot.Providers = []corev1.DataProviderSpec{
 			{
 				Name: "default",
@@ -1165,6 +1168,28 @@ func setDefaultAutopilotProviders(
 				},
 			},
 		}
+	}
+
+	// px-3.0.0 -- add PX_ENABLE_TLS=true env to AutoPilot when Security + TLS are enabled
+	sec := toUpdate.Spec.Security
+	if sec != nil && sec.Enabled && sec.TLS != nil && sec.TLS.Enabled != nil && *sec.TLS.Enabled &&
+		pxutil.GetPortworxVersion(toUpdate).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
+		newEnv := make([]v1.EnvVar, 0, len(toUpdate.Spec.Autopilot.Env)+1)
+		updated := false
+		for _, ev := range toUpdate.Spec.Autopilot.Env {
+			if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
+				ev.Value = "true"
+				updated = true
+			}
+			newEnv = append(newEnv, ev)
+		}
+		if !updated {
+			newEnv = append(newEnv, v1.EnvVar{
+				Name:  pxutil.EnvKeyPortworxEnableTLS,
+				Value: "true",
+			})
+		}
+		toUpdate.Spec.Autopilot.Env = newEnv
 	}
 }
 

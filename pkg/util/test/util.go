@@ -2893,7 +2893,7 @@ func getPxOperatorImageTag() (string, error) {
 		var tag string
 		for _, container := range operatorDeployment.Spec.Template.Spec.Containers {
 			if container.Name == "portworx-operator" {
-				if strings.Contains(container.Image, "sha256") { // PX Operator deployed via Openshift Marketplace will have sha256 as part of image
+				if strings.Contains(container.Image, "registry.connect.redhat.com") { // PX Operator deployed via Openshift Marketplace will have "registry.connect.redhat.com" as part of image
 					for _, env := range container.Env {
 						if env.Name == "OPERATOR_CONDITION_NAME" {
 							tag = strings.Split(env.Value, ".v")[1]
@@ -2909,7 +2909,7 @@ func getPxOperatorImageTag() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("Failed to get PX Operator tag")
+	return "", fmt.Errorf("failed to get PX Operator tag")
 }
 
 // ValidateAlertManager validates alertManager components

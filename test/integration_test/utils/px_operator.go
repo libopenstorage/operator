@@ -57,7 +57,7 @@ func getPXOperatorImageTag() (string, error) {
 	var tag string
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == PortworxOperatorContainerName {
-			if strings.Contains(container.Image, "sha256") { // PX Operator deployed via Openshift Marketplace will have sha256 as part of image
+			if strings.Contains(container.Image, "registry.connect.redhat.com") { // PX Operator deployed via Openshift Marketplace will have "registry.connect.redhat.com" as part of image
 				for _, env := range container.Env {
 					if env.Name == "OPERATOR_CONDITION_NAME" {
 						logrus.Infof("Looks like portworx-operator was installed via Openshift Marketplace, image [%s]", container.Image)
@@ -73,7 +73,7 @@ func getPXOperatorImageTag() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("Failed to find PX Operator tag")
+	return "", fmt.Errorf("failed to find PX Operator tag")
 }
 
 // GetPxOperatorImage return PX Operator image

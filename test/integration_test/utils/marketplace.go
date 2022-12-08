@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	defaultCatalogSourceName      = "test-catalog"
-	defaultCatalogSourceNamespace = "openshift-marketplace"
-	defaultOperatorGroupName      = "test-operator-group"
-	defaultSubscriptionName       = "test-portworx-certified"
+	defaultOperatorRegistryImageName = "docker.io/portworx/px-operator-registry"
+	defaultCatalogSourceName         = "test-catalog"
+	defaultCatalogSourceNamespace    = "openshift-marketplace"
+	defaultOperatorGroupName         = "test-operator-group"
+	defaultSubscriptionName          = "test-portworx-certified"
 
 	getInstallPlanListTimeout       = 1 * time.Minute
 	getInstallPlanListRetryInterval = 2 * time.Second
@@ -24,7 +25,7 @@ const (
 // DeployAndValidatePxOperatorViaMarketplace deploys and validates PX Operator via Openshift Marketplace
 func DeployAndValidatePxOperatorViaMarketplace() error {
 	// Deploy CatalogSource
-	opRegistryImage := fmt.Sprintf("docker.io/portworx/px-operator-registry:%s", PxOperatorTag)
+	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, PxOperatorTag)
 	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
 	if err != nil {
 		return err
@@ -63,7 +64,7 @@ func DeleteAndValidatePxOperatorViaMarketplace() error {
 	// Get currentCSV from Subscription
 	currentCSV, err := GetCurrentCSV(defaultSubscriptionName, PxNamespace)
 	if err != nil {
-		return fmt.Errorf("Failed to get currentCSV, Err: %v", err)
+		return fmt.Errorf("failed to get currentCSV, Err: %v", err)
 	}
 
 	// Delete ClusterVersion
@@ -109,7 +110,7 @@ func DeployCatalogSource(name, namespace, registryImage string) (*v1alpha1.Catal
 	testCatalogSourceTemplate.Namespace = namespace
 	testCatalogSource, err := opmpops.Instance().CreateCatalogSource(testCatalogSourceTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create CatalogSource [%s] in namespace [%s], Err: %v", testCatalogSourceTemplate.Name, testCatalogSourceTemplate.Namespace, err)
+		return nil, fmt.Errorf("failed to create CatalogSource [%s] in namespace [%s], Err: %v", testCatalogSourceTemplate.Name, testCatalogSourceTemplate.Namespace, err)
 	}
 	logrus.Infof("Successfully created test CatalogSrouce [%s] in namespace [%s]", testCatalogSource.Name, testCatalogSource.Namespace)
 	return testCatalogSource, nil
@@ -127,7 +128,7 @@ func DeployOperatorGroup(name, namespace string) (*v1.OperatorGroup, error) {
 	testOperatorGroupTemplate.Namespace = namespace
 	testOperatorGroup, err := opmpops.Instance().CreateOperatorGroup(testOperatorGroupTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create OperatorGroup [%s] in namespace [%s], Err: %v", testOperatorGroupTemplate.Name, testOperatorGroupTemplate.Namespace, err)
+		return nil, fmt.Errorf("failed to create OperatorGroup [%s] in namespace [%s], Err: %v", testOperatorGroupTemplate.Name, testOperatorGroupTemplate.Namespace, err)
 	}
 	logrus.Infof("Successfully created test OperatorGroup [%s] in namespace [%s]", testOperatorGroup.Name, testOperatorGroup.Namespace)
 	return testOperatorGroup, nil
@@ -150,7 +151,7 @@ func DeploySubscription(name, namespace, opTag string, testCatalogSource *v1alph
 	testSubscriptionTemplate.Namespace = namespace
 	testSubscription, err := opmpops.Instance().CreateSubscription(testSubscriptionTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create Subscription [%s] in namespace [%s], Err: %v", testSubscriptionTemplate.Name, testSubscriptionTemplate.Namespace, err)
+		return nil, fmt.Errorf("failed to create Subscription [%s] in namespace [%s], Err: %v", testSubscriptionTemplate.Name, testSubscriptionTemplate.Namespace, err)
 	}
 	logrus.Infof("Successfully created test Subscription [%s] in namespace [%s]", testSubscription.Name, testSubscription.Namespace)
 	return testSubscription, nil
@@ -162,20 +163,20 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 	t := func() (interface{}, bool, error) {
 		instpl, err := opmpops.Instance().ListInstallPlans(namespace)
 		if err != nil {
-			return nil, true, fmt.Errorf("Failed to get list of InstallPlans in namespace [%s], Err: %v", namespace, err)
+			return nil, true, fmt.Errorf("failed to get list of InstallPlans in namespace [%s], Err: %v", namespace, err)
 		}
 
 		if instpl != nil && len(instpl.Items) > 0 {
 			logrus.Infof("Successfully got list of InstallPlans in namespace [%s]", namespace)
 			for _, instp := range instpl.Items {
 				if subscription.Name == instp.OwnerReferences[0].Name {
-					logrus.Infof("Found the correct InstallPlan [%s] in namespace [%s]", instp.Name, instp.Namespace)
+					logrus.Infof("found the correct InstallPlan [%s] in namespace [%s]", instp.Name, instp.Namespace)
 					return instp, false, nil
 				}
 			}
-			return nil, true, fmt.Errorf("Failed to find the correct InstallPlan with OwnerReference for Subscription [%s]", subscription.Name)
+			return nil, true, fmt.Errorf("failed to find the correct InstallPlan with OwnerReference for Subscription [%s]", subscription.Name)
 		}
-		return nil, true, fmt.Errorf("Failed to find any InstallPlans in namespace [%s]", namespace)
+		return nil, true, fmt.Errorf("failed to find any InstallPlans in namespace [%s]", namespace)
 	}
 
 	instPlan, err := task.DoRetryWithTimeout(t, getInstallPlanListTimeout, getInstallPlanListRetryInterval)
@@ -188,7 +189,7 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 	installPlan.Spec.Approved = true
 	_, err = opmpops.Instance().UpdateInstallPlan(&installPlan)
 	if err != nil {
-		return fmt.Errorf("Failed to update InstallPlan [%s]", installPlan.Name)
+		return fmt.Errorf("failed to update InstallPlan [%s]", installPlan.Name)
 	}
 	logrus.Infof("Successfully Approved InstallPlan [%s]", installPlan.Name)
 	return nil
@@ -198,7 +199,7 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 func DeleteClusterServiceVersion(name, namespace string) error {
 	logrus.Infof("Deleting ClusterServiceVersion [%s] in namespace [%s]", name, namespace)
 	if err := opmpops.Instance().DeleteClusterServiceVersion(name, namespace); err != nil {
-		return fmt.Errorf("Failed to delete ClusterServiceVersion [%s] in namespace [%s], Err: %v", name, namespace, err)
+		return fmt.Errorf("failed to delete ClusterServiceVersion [%s] in namespace [%s], Err: %v", name, namespace, err)
 	}
 	logrus.Infof("Successfully deleted ClusterServiceVersion [%s] in namespace [%s]", name, namespace)
 	return nil
@@ -208,7 +209,7 @@ func DeleteClusterServiceVersion(name, namespace string) error {
 func DeleteSubscription(name, namespace string) error {
 	logrus.Infof("Deleting Subscription [%s] in namespace [%s]", name, namespace)
 	if err := opmpops.Instance().DeleteSubscription(name, namespace); err != nil {
-		return fmt.Errorf("Failed to delete Subscription [%s] in namespace [%s], Err: %v", name, namespace, err)
+		return fmt.Errorf("failed to delete Subscription [%s] in namespace [%s], Err: %v", name, namespace, err)
 	}
 	logrus.Infof("Successfully deleted Subscription [%s] in namespace [%s]", name, namespace)
 	return nil
@@ -218,7 +219,7 @@ func DeleteSubscription(name, namespace string) error {
 func DeleteOperatorGroup(name, namespace string) error {
 	logrus.Infof("Deleting OperatorGroup [%s] in namespace [%s]", name, namespace)
 	if err := opmpops.Instance().DeleteOperatorGroup(name, namespace); err != nil {
-		return fmt.Errorf("Failed to delete OperatorGroup [%s] in namespace [%s], Err: %v", name, namespace, err)
+		return fmt.Errorf("failed to delete OperatorGroup [%s] in namespace [%s], Err: %v", name, namespace, err)
 	}
 	logrus.Infof("Successfully deleted OperatorGroup [%s] in namespace [%s]", name, namespace)
 	return nil
@@ -228,7 +229,7 @@ func DeleteOperatorGroup(name, namespace string) error {
 func DeleteCatalogSource(name, namespace string) error {
 	logrus.Infof("Deleting CatalogSource [%s] in namespace [%s]", name, namespace)
 	if err := opmpops.Instance().DeleteCatalogSource(name, namespace); err != nil {
-		return fmt.Errorf("Failed to delete CatalogSource [%s] in namespace [%s], Err: %v", name, namespace, err)
+		return fmt.Errorf("failed to delete CatalogSource [%s] in namespace [%s], Err: %v", name, namespace, err)
 	}
 	logrus.Infof("Successfully deleted CatalogSource [%s] in namespace [%s]", name, namespace)
 	return nil
@@ -236,16 +237,16 @@ func DeleteCatalogSource(name, namespace string) error {
 
 // GetCurrentCSV gets currentCSV from Subscription object and returns it as a string
 func GetCurrentCSV(name, namespace string) (string, error) {
-	logrus.Infof("Getting currentCSV from Subscription [%s] in namespace [%s]", name)
+	logrus.Infof("Getting currentCSV from Subscription [%s] in namespace [%s]", name, namespace)
 	testSubscription, err := opmpops.Instance().GetSubscription(name, namespace)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get Subscription [%s] in namespace [%s], Err: %v", name, namespace, err)
+		return "", fmt.Errorf("failed to get Subscription [%s] in namespace [%s], Err: %v", name, namespace, err)
 	}
 	logrus.Infof("Successfully created got Subscription [%s] in namespace [%s]", testSubscription.Name, testSubscription.Namespace)
 
 	currentCSV := testSubscription.Status.CurrentCSV
 	if len(currentCSV) == 0 {
-		return "", fmt.Errorf("Got empty currentCSV from Subscription [%s]", testSubscription.Name)
+		return "", fmt.Errorf("got empty currentCSV from Subscription [%s]", testSubscription.Name)
 	}
 	return currentCSV, nil
 }
