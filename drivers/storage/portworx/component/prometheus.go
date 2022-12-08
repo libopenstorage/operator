@@ -203,7 +203,7 @@ func (c *prometheus) createPrometheusCRDs() error {
 		if err := k8sutil.ParseObjectFromFile(file, c.scheme, crd); err != nil {
 			return err
 		}
-		if err := k8sutil.CreateCRD(crd); err != nil {
+		if err := k8sutil.CreateOrUpdateCRD(crd); err != nil {
 			return err
 		}
 	}
