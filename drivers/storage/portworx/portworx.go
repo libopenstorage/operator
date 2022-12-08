@@ -1008,7 +1008,8 @@ func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 		if toUpdate.Spec.CloudStorage == nil {
 			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 		}
-		if toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
+		if len(toUpdate.Spec.CloudStorage.CapacitySpecs) == 0 &&
+			toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
 			defaultEKSCloudStorageDevice := defaultEksCloudStorageDevice
 			deviceSpecs := []string{defaultEKSCloudStorageDevice}
 			toUpdate.Spec.CloudStorage.DeviceSpecs = &deviceSpecs

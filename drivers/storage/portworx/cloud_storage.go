@@ -15,6 +15,9 @@ import (
 	// importing azure cloud provider so that it registers itself
 	// as a provider of the StorageManager interface
 	_ "github.com/libopenstorage/cloudops/azure/storagemanager"
+	// importing aws cloud provider so that it registers itself
+	// as a provider of the StorageManager interface
+	_ "github.com/libopenstorage/cloudops/aws/storagemanager"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
 	v1 "k8s.io/api/core/v1"
