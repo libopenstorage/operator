@@ -24,6 +24,7 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -139,6 +140,35 @@ func ParseObjectFromFile(
 	codecs := serializer.NewCodecFactory(scheme)
 	_, _, err = codecs.UniversalDeserializer().Decode([]byte(objBytes), nil, obj)
 	return err
+}
+
+// CreateOrUpdateCRD creates a crd if not present or update it
+func CreateOrUpdateCRD(
+	crd *apiextensionsv1.CustomResourceDefinition,
+) error {
+	deployedCRD, err := apiextensionsops.Instance().GetCRD(crd.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return apiextensionsops.Instance().RegisterCRD(crd)
+	} else if err != nil {
+		return err
+	}
+
+	// After CRD is deployed, some new fields may be added, hence we use DeepDerivative instead of DeepEqual.
+	// For example, following section will be added to prometheus CRD.
+	//   conversion:
+	//    strategy: None
+	// We only compare spec, as other fields will change after it's deployed, for example: creationTimestamp: null will
+	// be changed to a real timestamp.
+	if !equality.Semantic.DeepDerivative(crd.Spec, deployedCRD.Spec) {
+		//if !reflect.DeepEqual(crd.Spec, deployedCRD.Spec) {
+		logrus.Infof("Updating CRD %s", crd.Name)
+		crd.ResourceVersion = deployedCRD.ResourceVersion
+		if _, err = apiextensionsops.Instance().UpdateCRD(crd); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // CreateCRD creates a crd if not present
