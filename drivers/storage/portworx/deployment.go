@@ -479,7 +479,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       30,
 			InitialDelaySeconds: 840,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/status",
@@ -489,7 +489,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 		},
 		ReadinessProbe: &v1.Probe{
 			PeriodSeconds: 10,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/health",
@@ -520,7 +520,7 @@ func (t *template) kvdbContainer() v1.Container {
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       30,
 			InitialDelaySeconds: 840,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
 					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
@@ -529,7 +529,7 @@ func (t *template) kvdbContainer() v1.Container {
 		},
 		ReadinessProbe: &v1.Probe{
 			PeriodSeconds: 10,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
 					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
@@ -624,7 +624,7 @@ func (t *template) telemetryContainer() *v1.Container {
 			},
 		},
 		LivenessProbe: &v1.Probe{
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/1.0/status",
@@ -634,7 +634,7 @@ func (t *template) telemetryContainer() *v1.Container {
 			PeriodSeconds: 30,
 		},
 		ReadinessProbe: &v1.Probe{
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/1.0/status",
@@ -977,7 +977,7 @@ func (t *template) getArguments() []string {
 	}
 
 	if pxutil.IsTLSEnabledOnCluster(&t.cluster.Spec) {
-		logrus.Tracef("TLS is enabled! Getting oci-monitor arugments")
+		logrus.Tracef("TLS is enabled! Getting oci-monitor arguments")
 		if tlsArgs, err := pxutil.GetOciMonArgumentsForTLS(t.cluster); err == nil {
 			logrus.Tracef("oci-monitor arguments for TLS: %v\n", tlsArgs)
 			args = append(args, tlsArgs...)
@@ -1524,6 +1524,13 @@ func (t *template) GetVolumeInfoForTLSCerts() []volumeInfo {
 	// TLS is assumed to be filled up here with defaults (validated by storagecluster controller. See validateTLSSpecs() )
 	tls := t.cluster.Spec.Security.TLS
 	ret := []volumeInfo{}
+
+	// if auto-tls setup requested, it's OK not to have crt/key files configured
+	if tls.ServerCert == nil && tls.ServerKey == nil &&
+		pxutil.GetPortworxVersion(t.cluster).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
+		return ret
+	}
+
 	if !pxutil.IsEmptyOrNilSecretReference(tls.RootCA.SecretRef) {
 		ret = append(ret, t.getVolumeInfoFromCertLocation(*tls.RootCA, "apirootca", pxutil.DefaultTLSCACertMountPath))
 	}
@@ -1617,6 +1624,11 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 			name:      "containerddir",
 			hostPath:  "/run/containerd",
 			mountPath: "/run/containerd",
+		},
+		{
+			name:      "containerdvardir",
+			hostPath:  "/var/lib/containerd",
+			mountPath: "/var/lib/containerd",
 		},
 		{
 			name:      "criosock",

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,6 +109,9 @@ func TestImageURN(t *testing.T) {
 
 	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
+
+	out = getImageURN("", "customRegistry.io", "registry.k8s.io/pause:3.1")
+	require.Equal(t, "customRegistry.io/pause:3.1", out)
 }
 
 func TestImageURNPreserved(t *testing.T) {
@@ -359,6 +363,29 @@ func TestHaveTopologySpreadConstraintsChanged(t *testing.T) {
 	require.False(t, HaveTopologySpreadConstraintsChanged(updatedConstraints, existingConstraints))
 }
 
+func TestHasSchedulerStateChanged(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+			},
+		},
+	}
+	require.False(t, HasSchedulerStateChanged(cluster, "stork"))
+
+	cluster.Spec.Stork.Enabled = false
+	require.True(t, HasSchedulerStateChanged(cluster, "stork"))
+	require.False(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+
+	cluster.Spec.Stork.Enabled = true
+	require.True(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+	require.False(t, HasSchedulerStateChanged(cluster, "stork"))
+
+	cluster.Spec.Stork = nil
+	require.False(t, HasSchedulerStateChanged(cluster, "default-scheduler"))
+	require.True(t, HasSchedulerStateChanged(cluster, "stork"))
+}
+
 func TestGetTopologySpreadConstraints(t *testing.T) {
 	fakeNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -399,8 +426,14 @@ func TestGetTopologySpreadConstraints(t *testing.T) {
 
 func fakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	cluster_v1alpha1.AddToScheme(s)
+	if err := corev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := monitoringv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := cluster_v1alpha1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }

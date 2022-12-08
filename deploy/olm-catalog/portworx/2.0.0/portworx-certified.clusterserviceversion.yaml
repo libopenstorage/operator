@@ -52,7 +52,7 @@ spec:
   version: 2.0.0
   minKubeVersion: "1.12.0"
   maturity: stable
-  replaces: portworx-operator.v1.9.1
+  replaces: portworx-operator.v1.10.0
   maintainers:
   - name: Portworx
     email: support@portworx.com
@@ -219,7 +219,6 @@ spec:
                 imagePullPolicy: Always
                 command:
                 - /operator
-                - --verbose
                 - --driver=portworx
                 - --leader-elect=true
                 env:

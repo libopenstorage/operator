@@ -1,7 +1,7 @@
 package manifest
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -55,7 +55,7 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 	}
 
 	defer resp.Body.Close()
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func parseVersionManifest(content []byte) (*Version, error) {

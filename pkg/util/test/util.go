@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,7 +20,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
-
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -48,7 +47,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -136,10 +135,18 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	corev1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	cluster_v1alpha1.AddToScheme(s)
-	ocp_configv1.AddToScheme(s)
+	if err := corev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := monitoringv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := cluster_v1alpha1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := ocp_configv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }
 
@@ -329,13 +336,17 @@ func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextCon
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
-	json, err := ioutil.ReadFile(path.Join(TestSpecPath, fileName))
+	json, err := os.ReadFile(path.Join(TestSpecPath, fileName))
 	assert.NoError(t, err)
 	s := scheme.Scheme
-	apiextensionsv1beta1.AddToScheme(s)
-	apiextensionsv1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
-	ocp_secv1.Install(s)
+	err = apiextensionsv1beta1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = apiextensionsv1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = monitoringv1.AddToScheme(s)
+	assert.NoError(t, err)
+	err = ocp_secv1.Install(s)
+	assert.NoError(t, err)
 	codecs := serializer.NewCodecFactory(s)
 	obj, _, err := codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
 	assert.NoError(t, err)
@@ -368,9 +379,12 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 				Type:   apiextensionsv1.Established,
 				Status: apiextensionsv1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1().
+			_, err = fakeClient.ApiextensionsV1().
 				CustomResourceDefinitions().
 				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		} else if !errors.IsNotFound(err) {
 			return false, err
@@ -391,9 +405,12 @@ func ActivateV1beta1CRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName 
 				Type:   apiextensionsv1beta1.Established,
 				Status: apiextensionsv1beta1.ConditionTrue,
 			}}
-			fakeClient.ApiextensionsV1beta1().
+			_, err = fakeClient.ApiextensionsV1beta1().
 				CustomResourceDefinitions().
 				UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+			if err != nil {
+				return false, err
+			}
 			return true, nil
 		} else if !errors.IsNotFound(err) {
 			return false, err
@@ -1113,7 +1130,8 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 			continue
 		}
 
-		if pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(dummyPod, &node) {
+		matches, err := affinityhelper.GetRequiredNodeAffinity(dummyPod).Match(&node)
+		if err == nil && matches {
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}
@@ -1934,11 +1952,9 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 			return nil, true, err
 		}
 
-		// Validate CSI snapshot controller on non-ocp env, since ocp deploys its own snapshot controller
-		if !isOpenshift(cluster) {
-			if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
-				return nil, true, err
-			}
+		// Validate CSI snapshot controller
+		if err := validateCSISnapshotController(cluster, pxImageList, timeout, interval); err != nil {
+			return nil, true, err
 		}
 		return nil, false, nil
 	}
@@ -2173,6 +2189,26 @@ func validateCSISnapshotController(cluster *corev1.StorageCluster, pxImageList m
 	deployment.Namespace = cluster.Namespace
 	deployment.Name = "px-csi-ext"
 	t := func() (interface{}, bool, error) {
+		// Check whether snapshot controller container should be installed
+		installSnapshotController := true
+		podList, err := coreops.Instance().ListPods(nil)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to list pods from all namespaces")
+		}
+		for _, p := range podList.Items {
+			// ignore pods deployed by operator
+			if label, ok := p.Labels["app"]; ok && label == "px-csi-driver" {
+				continue
+			}
+			for _, c := range p.Spec.Containers {
+				if strings.Contains(c.Image, "/snapshot-controller:") {
+					logrus.Infof("found external snapshot controller in pod %s/%s", p.Namespace, p.Name)
+					installSnapshotController = false
+					break
+				}
+			}
+		}
+
 		existingDeployment, err := appops.Instance().GetDeployment(deployment.Name, deployment.Namespace)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get deployment %s/%s", deployment.Namespace, deployment.Name)
@@ -2181,7 +2217,7 @@ func validateCSISnapshotController(cluster *corev1.StorageCluster, pxImageList m
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get pods of deployment %s/%s", deployment.Namespace, deployment.Name)
 		}
-		if cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController {
+		if cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController && installSnapshotController {
 			if image, ok := pxImageList["csiSnapshotController"]; ok {
 				if err := validateContainerImageInsidePods(cluster, image, "csi-snapshot-controller", &v1.PodList{Items: pods}); err != nil {
 					return nil, true, err
@@ -3677,7 +3713,7 @@ func GetImagesFromVersionURL(url, k8sVersion string) (map[string]string, error) 
 		return nil, fmt.Errorf("failed to send GET request to %s, Err: %v", pxVersionURL, err)
 	}
 
-	htmlData, err := ioutil.ReadAll(resp.Body)
+	htmlData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %+v", resp.Body)
 	}

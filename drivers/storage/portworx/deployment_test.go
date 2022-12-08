@@ -2,7 +2,6 @@ package portworx
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -468,7 +467,8 @@ func TestPodSpecWithTLS(t *testing.T) {
 	cluster := testutil.CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName)
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec after defaults = \n, %v", string(s))
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
@@ -495,7 +495,8 @@ func TestPodSpecWithTLS(t *testing.T) {
 	}
 	s, _ = json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under test = \n, %v", string(s))
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	// validate
@@ -1033,7 +1034,8 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -1446,7 +1448,8 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -2303,7 +2306,8 @@ func TestPodSpecForK3s(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2431,7 +2435,8 @@ func TestPodWithTelemetry(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2442,7 +2447,8 @@ func TestPodWithTelemetry(t *testing.T) {
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
 	delete(cluster.Annotations, "portworx.io/arcus-location")
 	driver = portworx{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2457,7 +2463,8 @@ func TestPodWithTelemetry(t *testing.T) {
 		},
 	}
 	driver = portworx{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2467,7 +2474,8 @@ func TestPodWithTelemetry(t *testing.T) {
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
 	cluster.Spec.Env = nil
 	driver = portworx{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2477,7 +2485,8 @@ func TestPodWithTelemetry(t *testing.T) {
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
 	driver = portworx{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2517,7 +2526,8 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2525,7 +2535,8 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 
 	// Upgrade px version, ccm should upgrade and reset telemetry image specified, ccm container should be removed
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -2534,7 +2545,8 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 	// Disable telemetry
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.Equal(t, len(expected.Containers), len(actual.Containers))
@@ -2562,7 +2574,8 @@ func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -3213,7 +3226,8 @@ func TestStorageNodeConfig(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	setupMockStorageManager(mockCtrl)
+	err := setupMockStorageManager(mockCtrl)
+	require.NoError(t, err)
 
 	_, yamlData := generateValidYamlData(t)
 
@@ -3547,7 +3561,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for desired image stork >= 2.5 and px 2.6+, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3565,7 +3579,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3582,7 +3596,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3599,7 +3613,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
+	assert.True(t, appsSecretSet)
 
 	// for stork >= 2.5 and px 2.6+ with annotation, use apps issuer env var
 	cluster.Spec.Image = "portworx/image:2.6.0"
@@ -3616,8 +3630,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 			appsSecretSet = true
 		}
 	}
-	assert.True(t, storkSecretSet)
-
+	assert.True(t, appsSecretSet)
 }
 
 func TestIKSEnvVariables(t *testing.T) {
@@ -3815,7 +3828,7 @@ func TestPodSpecWithClusterIDOverwritten(t *testing.T) {
 }
 
 func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec {
-	json, err := ioutil.ReadFile(fileName)
+	json, err := os.ReadFile(fileName)
 	assert.NoError(t, err)
 
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)
@@ -3828,7 +3841,7 @@ func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec 
 }
 
 func getExpectedPodSpec(t *testing.T, podSpecFileName string) *v1.PodSpec {
-	json, err := ioutil.ReadFile(podSpecFileName)
+	json, err := os.ReadFile(podSpecFileName)
 	assert.NoError(t, err)
 
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(json), nil, nil)

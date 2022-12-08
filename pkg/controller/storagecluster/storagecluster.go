@@ -21,9 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -56,8 +54,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
+	preflight "github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -405,6 +406,57 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
+func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if !ok || check == "skip" {
+		return nil
+	} else if check == "false" {
+		if cluster.Status.Phase == util.PreflightFailedStatus {
+			// TODO: scan condition list to check preflight result, use Phase for now
+			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
+		}
+		// preflight passed, do nothing
+		return nil
+	}
+
+	// Only do the preflight check on demand once a time
+	toUpdate := cluster.DeepCopy()
+	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	var err error
+
+	// Do the preflight check for eks only for now to check the cloud drive permission
+	if preflight.IsEKS() {
+		if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
+			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
+		}
+	}
+
+	// TODO: validate cloud permission for other providers as well
+
+	if err != nil {
+		logrus.Infof("storage cluster preflight check failed")
+		toUpdate.Status.Phase = util.PreflightFailedStatus
+	} else {
+		logrus.Infof("storage cluster preflight check passed")
+		toUpdate.Status.Phase = util.PreflightCompleteStatus
+	}
+
+	// Update the cluster only if anything has changed
+	if !reflect.DeepEqual(cluster, toUpdate) {
+		toUpdate.DeepCopyInto(cluster)
+		if err := c.client.Update(context.TODO(), cluster); err != nil {
+			return err
+		}
+
+		cluster.Status = *toUpdate.Status.DeepCopy()
+		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
 func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (string, error) {
 	if len(cluster.Spec.Nodes) == 0 {
 		return "", nil
@@ -532,6 +584,11 @@ func (c *Controller) syncStorageCluster(
 	if err := c.setStorageClusterDefaults(cluster); err != nil {
 		return fmt.Errorf("failed to update StorageCluster %v/%v with default values: %v",
 			cluster.Namespace, cluster.Name, err)
+	}
+
+	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
+	if err := c.runPreflightCheck(cluster); err != nil {
+		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}
 
 	// Ensure Stork is deployed with right configuration
@@ -787,8 +844,13 @@ func (c *Controller) syncNodes(
 	errCh := make(chan error, createDiff+deleteDiff)
 	createWait := sync.WaitGroup{}
 
-	logrus.Debugf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
+	msg := fmt.Sprintf("Nodes needing storage pods for storage cluster %v: %+v, creating %d",
 		cluster.Name, nodesNeedingStoragePods, createDiff)
+	if createDiff > 0 {
+		logrus.Infof(msg)
+	} else {
+		logrus.Debugf(msg)
+	}
 
 	// Batch the pod creates. Batch sizes start at slowStartInitialBatchSize
 	// and double with each successful iteration in a kind of "slow start".
@@ -806,8 +868,8 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
-				err := c.podControl.CreatePodsOnNode(
-					nodeName,
+				err := c.podControl.CreatePods(
+					context.TODO(),
 					cluster.Namespace,
 					podTemplates[idx],
 					cluster,
@@ -844,21 +906,28 @@ func (c *Controller) syncNodes(
 		createWait.Wait()
 		skippedPods := createDiff - batchSize
 		if errorCount < len(errCh) && skippedPods > 0 {
-			logrus.Debugf("Slow-start failure. Skipping creation of %d pods", skippedPods)
+			logrus.Infof("Slow-start failure. Skipping creation of %d pods", skippedPods)
 			// The skipped pods will be retried later. The next controller resync will
 			// retry the slow start process.
 			break
 		}
 	}
 
-	logrus.Debugf("Pods to delete for storage cluster %s: %+v, deleting %d",
+	msg = fmt.Sprintf("Pods to delete for storage cluster %s: %+v, deleting %d",
 		cluster.Name, podsToDelete, deleteDiff)
+	if deleteDiff > 0 {
+		logrus.Infof(msg)
+	} else {
+		logrus.Debugf(msg)
+	}
+
 	deleteWait := sync.WaitGroup{}
 	deleteWait.Add(deleteDiff)
 	for i := 0; i < deleteDiff; i++ {
 		go func(idx int) {
 			defer deleteWait.Done()
 			err := c.podControl.DeletePod(
+				context.TODO(),
 				cluster.Namespace,
 				podsToDelete[idx],
 				cluster,
@@ -1051,10 +1120,10 @@ func (c *Controller) podsShouldBeOnNode(
 
 // nodeShouldRunStoragePod checks a set of preconditions against a (node, storagecluster) and
 // returns a summary. Returned booleans are:
-// * shouldRun:
+//   - shouldRun:
 //     Returns true when a pod should run on the node if a storage pod is not already
 //     running on that node.
-// * shouldContinueRunning:
+//   - shouldContinueRunning:
 //     Returns true when the pod should continue running on a node if a storage pod is
 //     already running on that node.
 func (c *Controller) nodeShouldRunStoragePod(
@@ -1124,70 +1193,6 @@ func (c *Controller) CreatePodTemplate(
 	}
 	return newTemplate, nil
 }
-func (c *Controller) getCurrentMaxStorageNodesPerZone(
-	cluster *corev1.StorageCluster,
-	nodeList *v1.NodeList,
-	cloudProvider cloudprovider.Ops,
-) (uint32, error) {
-	storageNodeMap := make(map[string]*storageapi.StorageNode)
-
-	if storagePodsEnabled(cluster) {
-		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
-		if err != nil {
-			logrus.Errorf("Couldn't get storage node list %v", err)
-			return 0, err
-		}
-		for _, storageNode := range storageNodeList {
-			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
-				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
-			}
-		}
-		zoneMap := make(map[string]uint32)
-		for _, node := range nodeList.Items {
-			if _, ok := storageNodeMap[node.Name]; ok {
-				zone, err := cloudProvider.GetZone(&node)
-				if err != nil {
-					return 0, err
-				}
-				count := zoneMap[zone]
-				zoneMap[zone] = count + 1
-			}
-		}
-		maxValue := uint32(0)
-		for _, value := range zoneMap {
-			if value > maxValue {
-				maxValue = value
-			}
-		}
-		return maxValue, nil
-	}
-	return 0, fmt.Errorf("storage disabled")
-}
-
-// getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
-// intention of having at least 3 nodes in the cluster.
-func getDefaultMaxStorageNodesPerZone(zoneMap map[string]uint64) uint32 {
-	numZones := len(zoneMap)
-	switch numZones {
-	case 0, 1:
-		// If there is a single Zone, have all 3 nodes in the same zone
-		return 3
-	case 2:
-		// If there are two zones, it'll be tricky since we'll always lose quorum when a zone
-		// goes down. Let's have 2 nodes in a zone so that we have a 4 node cluster.
-		return 2
-	default:
-		// In a cluster with 3 or more zones, let's have one node in each zone.
-		return 1
-	}
-}
-
-func (c *Controller) isPxImageBeingUpdated(toUpdate *corev1.StorageCluster) bool {
-	pxEnabled := storagePodsEnabled(toUpdate)
-	newVersion := pxutil.GetImageTag(strings.TrimSpace(toUpdate.Spec.Image))
-	return pxEnabled &&
-		(toUpdate.Spec.Version == "" || newVersion != toUpdate.Status.Version)
-}
 
 func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) error {
 	toUpdate := cluster.DeepCopy()
@@ -1240,70 +1245,24 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		toUpdate.Spec.CloudStorage.NodePoolLabel = key
 	}
 
-	nodeList := &v1.NodeList{}
-	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	cloudProvider := cloudprovider.Get()
+	zoneMap, err := cloudprovider.GetZoneMap(c.client, "", "")
 	if err != nil {
-		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
-			toUpdate, err)
-	}
-	var cloudProviderName string
-	zoneMap := make(map[string]uint64)
-
-	for _, node := range nodeList.Items {
-		// Get the cloud provider
-		// From kubernetes node spec:  <ProviderName>://<ProviderSpecificNodeID>
-		if len(node.Spec.ProviderID) != 0 {
-			tokens := strings.Split(node.Spec.ProviderID, "://")
-			if len(tokens) == 2 {
-				cloudProviderName = tokens[0]
-				break
-			} // else provider id is invalid
-		}
-	}
-
-	cloudProvider := cloudprovider.New(cloudProviderName)
-
-	for _, node := range nodeList.Items {
-		if zone, err := cloudProvider.GetZone(&node); err == nil {
-			instancesCount := zoneMap[zone]
-			zoneMap[zone] = instancesCount + 1
-		}
+		return err
 	}
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
 		ZoneToInstancesMap: zoneMap,
-		CloudProvider:      cloudProviderName,
+		CloudProvider:      cloudProvider.Name(),
 	}); err != nil {
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
-	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
-	if toUpdate.Spec.CloudStorage != nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
-		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
-		maxStorageNodesPerZone := uint32(0)
-		err = nil
-		if toUpdate.Status.Phase == "" {
-			// Let's do this only when it's a fresh install of px
-			maxStorageNodesPerZone = getDefaultMaxStorageNodesPerZone(zoneMap)
-		} else {
-			// Upgrade scenario
-			if c.isPxImageBeingUpdated(toUpdate) {
-				// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
-				maxStorageNodesPerZone, err = c.getCurrentMaxStorageNodesPerZone(cluster, nodeList, cloudProvider)
-				if err != nil {
-					logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
-				}
-			}
-		}
-		if err == nil && maxStorageNodesPerZone != 0 {
-			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
-			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
-		}
+	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
+		return err
 	}
 
-	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
+	c.setSecuritySpecDefaults(toUpdate)
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
@@ -1361,7 +1320,7 @@ func (c *Controller) getStoragePods(
 
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing Pods
-	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
+	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func(ctx context.Context) (metav1.Object, error) {
 		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
@@ -1384,7 +1343,7 @@ func (c *Controller) getStoragePods(
 		controllerKind,
 		undeletedCluster,
 	)
-	return cm.ClaimPods(allPods)
+	return cm.ClaimPods(context.TODO(), allPods)
 }
 
 func (c *Controller) createStorageNode(
@@ -1432,6 +1391,17 @@ func (c *Controller) log(clus *corev1.StorageCluster) *logrus.Entry {
 	}
 
 	return logrus.WithFields(logFields)
+}
+
+// setSecuritySpecDefaults resets SSL/TLS env-vars depending on the given cluster settings
+func (c *Controller) setSecuritySpecDefaults(clus *corev1.StorageCluster) {
+	if pxutil.IsTLSEnabledOnCluster(&clus.Spec) {
+		os.Setenv(pxutil.EnvKeyPortworxEnableTLS, "true")
+		os.Setenv(pxutil.EnvKeyPortworxEnforceTLS, "true")
+	} else {
+		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
+		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
+	}
 }
 
 func storagePodsEnabled(

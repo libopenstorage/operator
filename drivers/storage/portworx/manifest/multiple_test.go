@@ -3,7 +3,7 @@ package manifest
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -170,7 +170,12 @@ func TestReadingLocalManifestFile(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
+
+	defer func() {
+		os.RemoveAll(manifestDir)
+	}()
 
 	r, err := newDeprecatedManifest("2.1.5").Get()
 	require.NoError(t, err)
@@ -185,7 +190,8 @@ func TestRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -198,7 +204,7 @@ func TestRemoteManifest(t *testing.T) {
 	// Should download remote manifest if not present
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 releases:
   3.2.1:
     stork: stork/image:3.2.1
@@ -245,7 +251,8 @@ func TestInvalidRemoteManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -259,7 +266,7 @@ func TestInvalidRemoteManifest(t *testing.T) {
 	// manifest, return error
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte("invalid-yaml"))),
+			Body: io.NopCloser(bytes.NewReader([]byte("invalid-yaml"))),
 		}, nil
 	}
 
@@ -286,7 +293,7 @@ func TestInvalidRemoteManifest(t *testing.T) {
 	// If downloaded manifest is invalid, use the existing remote manifest
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 releases:
   2.0.0:
     stork: stork/image:2.0.0
@@ -302,7 +309,7 @@ releases:
 
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte("invalid-yaml"))),
+			Body: io.NopCloser(bytes.NewReader([]byte("invalid-yaml"))),
 		}, nil
 	}
 
@@ -320,7 +327,7 @@ func TestFailureToWriteRemoteManifest(t *testing.T) {
 	// As the manifest directory is not setup, writing the remote manifest will fail
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 releases:
   2.0.0:
     stork: stork/image:2.0.0
@@ -343,7 +350,7 @@ func TestFailureToReadManifestFromResponse(t *testing.T) {
 	// As the manifest directory is not setup, writing the remote manifest will fail
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(&failedReader{}),
+			Body: io.NopCloser(&failedReader{}),
 		}, nil
 	}
 	readManifest = func(_ string) ([]byte, error) {
@@ -370,7 +377,8 @@ func TestCustomURLToDownloadManifest(t *testing.T) {
 		return nil, fmt.Errorf("http error")
 	}
 
-	newDeprecatedManifest("2.0.0").Get()
+	_, err := newDeprecatedManifest("2.0.0").Get()
+	require.Error(t, err)
 
 	// Use default url if no env variable set
 	os.Unsetenv(envKeyReleaseManifestURL)
@@ -379,7 +387,8 @@ func TestCustomURLToDownloadManifest(t *testing.T) {
 		return nil, fmt.Errorf("http error")
 	}
 
-	newDeprecatedManifest("2.0.0").Get()
+	_, err = newDeprecatedManifest("2.0.0").Get()
+	require.Error(t, err)
 }
 
 func maskLoadManifest(manifest string) {

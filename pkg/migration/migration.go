@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	schedulehelper "k8s.io/component-helpers/scheduling/corev1"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/libopenstorage/operator/drivers/storage"
@@ -68,7 +68,7 @@ func New(ctrl *storagecluster.Controller) *Handler {
 func (h *Handler) Start() {
 	var pxDaemonSet *appsv1.DaemonSet
 
-	wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
+	pollErr := wait.PollImmediateInfinite(migrationRetryIntervalFunc(), func() (bool, error) {
 		var err error
 		pxDaemonSet, err = h.getPortworxDaemonSet(pxDaemonSet)
 		if errors.IsNotFound(err) {
@@ -119,6 +119,10 @@ func (h *Handler) Start() {
 		)
 		return true, nil
 	})
+
+	if pollErr != nil {
+		logrus.Errorf("Failed while polling for the migration. %v", pollErr)
+	}
 }
 
 func (h *Handler) createStorageClusterIfAbsent(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
@@ -190,7 +194,7 @@ func (h *Handler) processMigration(
 	}
 
 	updatedCluster := &corev1.StorageCluster{}
-	if h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
 		return err
 	}
 	// Notify operator to start installing the new components
@@ -645,11 +649,21 @@ func addMigrationConstraints(podSpec *v1.PodSpec) {
 		if term.MatchExpressions == nil {
 			term.MatchExpressions = make([]v1.NodeSelectorRequirement, 0)
 		}
-		selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
-			Key:      constants.LabelPortworxDaemonsetMigration,
-			Operator: v1.NodeSelectorOpIn,
-			Values:   []string{constants.LabelValueMigrationPending},
-		})
+		// Skip appending migration constraints if it's already there
+		foundMigrationKey := false
+		for _, expression := range selectorTerms[i].MatchExpressions {
+			if expression.Key == constants.LabelPortworxDaemonsetMigration {
+				foundMigrationKey = true
+				break
+			}
+		}
+		if !foundMigrationKey {
+			selectorTerms[i].MatchExpressions = append(term.MatchExpressions, v1.NodeSelectorRequirement{
+				Key:      constants.LabelPortworxDaemonsetMigration,
+				Operator: v1.NodeSelectorOpIn,
+				Values:   []string{constants.LabelValueMigrationPending},
+			})
+		}
 	}
 	podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = selectorTerms
 }
@@ -687,7 +701,11 @@ func sortedPortworxNodes(cluster *corev1.StorageCluster, nodes []*v1.Node) []*v1
 }
 
 func fitsNode(pod *v1.Pod, node *v1.Node) bool {
-	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
+	fitsNodeAffinity, err := affinityhelper.GetRequiredNodeAffinity(pod).Match(node)
+	if err != nil {
+		logrus.Warnf("Failed to check if the pod fits the node %s. %v", node.Name, err)
+		return false
+	}
 	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(node.Spec.Taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
 	})

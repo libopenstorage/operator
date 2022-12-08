@@ -68,6 +68,7 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+      schedulerName: stork
       volumes:
         - name: socket-dir
           hostPath:

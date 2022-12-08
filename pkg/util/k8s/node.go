@@ -38,7 +38,7 @@ func IsNodeBeingDeleted(node *v1.Node, cl client.Client) (bool, error) {
 		}
 
 		if machine.GetDeletionTimestamp() != nil {
-			logrus.Debugf("machine: %s is being deleted. timestamp set: %v.",
+			logrus.Infof("machine: %s is being deleted. timestamp set: %v.",
 				machineName, machine.GetDeletionTimestamp())
 			return true, nil
 		}

@@ -117,7 +117,7 @@ func (c *FakeStorageNodes) UpdateStatus(ctx context.Context, storageNode *corev1
 // Delete takes name of the storageNode and deletes it. Returns an error if one occurs.
 func (c *FakeStorageNodes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(storagenodesResource, c.ns, name), &corev1.StorageNode{})
+		Invokes(testing.NewDeleteActionWithOptions(storagenodesResource, c.ns, name, opts), &corev1.StorageNode{})
 
 	return err
 }

@@ -7,13 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/util"
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 const (
@@ -32,8 +33,11 @@ const (
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 ) error {
-	if cluster.Status.Phase == "" {
+	if cluster.Status.Phase == "" || strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) {
 		cluster.Status.ClusterName = cluster.Name
+		if cluster.Status.Phase == util.PreflightFailedStatus {
+			return nil
+		}
 		cluster.Status.Phase = string(corev1.ClusterInit)
 		return nil
 	}
@@ -217,7 +221,7 @@ func (p *portworx) updateRemainingStorageNodes(
 		pxNodeExists := currentPxNodes[storageNode.Name]
 		pxPodExists := currentPxPodNodes[storageNode.Name]
 		if !pxNodeExists && !pxPodExists {
-			logrus.Debugf("Deleting orphan StorageNode %v/%v",
+			logrus.Infof("Deleting orphan StorageNode %v/%v",
 				storageNode.Namespace, storageNode.Name)
 
 			err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
@@ -238,7 +242,7 @@ func (p *portworx) updateRemainingStorageNodes(
 			if storageNode.Status.Phase != newPhase {
 				storageNodeCopy := storageNode.DeepCopy()
 				storageNodeCopy.Status.Phase = newPhase
-				logrus.Debugf("Updating StorageNode %v/%v status",
+				logrus.Infof("Updating StorageNode %v/%v status",
 					storageNode.Namespace, storageNode.Name)
 				err = p.k8sClient.Status().Update(context.TODO(), storageNodeCopy)
 				if err != nil && !errors.IsNotFound(err) {
@@ -287,7 +291,7 @@ func (p *portworx) createOrUpdateStorageNode(
 
 	var err error
 	if errors.IsNotFound(getErr) {
-		logrus.Debugf("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
+		logrus.Infof("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
 		err = p.k8sClient.Create(context.TODO(), storageNode)
 	} else if !reflect.DeepEqual(originalStorageNode, storageNode) {
 		logrus.Debugf("Updating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)

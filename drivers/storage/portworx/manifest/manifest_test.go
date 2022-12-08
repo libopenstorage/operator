@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -45,7 +45,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -100,7 +100,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 	// Add this to ensure configmap takes precedence over remote endpoint
 	httpGet = func(url string) (*http.Response, error) {
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte(`
+			Body: io.NopCloser(bytes.NewReader([]byte(`
 version: 3.2.1
 components:
   stork: stork/image:3.2.1
@@ -142,7 +142,8 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -176,7 +177,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -197,7 +198,8 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -214,7 +216,7 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 			"2.5.0": {},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -261,7 +263,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -289,7 +291,7 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		// Return empty response without any versions
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader([]byte{})),
+			Body: io.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	}
 
@@ -394,7 +396,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
@@ -418,7 +421,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, k8sVersion)
 	rel = m.GetVersions(cluster, true)
@@ -430,7 +434,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, nil)
 	rel = m.GetVersions(cluster, true)
@@ -465,7 +470,8 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
@@ -500,7 +506,7 @@ func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -533,7 +539,8 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -555,7 +562,7 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -620,7 +627,8 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	expected.Components.Stork = "image/stork:2.5.1"
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
@@ -637,7 +645,7 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		body, _ := yaml.Marshal(expected)
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -676,7 +684,8 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 		os.Getenv("GOPATH"),
 		"src/github.com/libopenstorage/operator/drivers/storage/portworx/manifest/testspec",
 	)
-	os.Symlink(linkPath, manifestDir)
+	err := os.Symlink(linkPath, manifestDir)
+	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
 
 	defer func() {
@@ -698,7 +707,7 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 			},
 		})
 		return &http.Response{
-			Body: ioutil.NopCloser(bytes.NewReader(body)),
+			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
 
@@ -772,7 +781,8 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
@@ -787,7 +797,8 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	k8sClient.Update(context.TODO(), versionsConfigMap)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)

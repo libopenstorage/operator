@@ -3,19 +3,11 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudstorage"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -25,6 +17,18 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -38,6 +42,7 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
+	defaultEksCloudStorageDevice      = "type=gp3,size=150"
 )
 
 type portworx struct {
@@ -85,7 +90,6 @@ func (p *portworx) Init(
 func (p *portworx) Validate() error {
 	return nil
 }
-
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
 		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)
@@ -152,7 +156,186 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 	return pxutil.SelectorLabels()
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) {
+func (p *portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upgradingPortworx bool) error {
+	// Set max node per zone
+	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
+	if toUpdate.Spec.CloudStorage != nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone == nil &&
+		toUpdate.Spec.CloudStorage.MaxStorageNodes == nil {
+		maxStorageNodesPerZone := uint32(0)
+		var err error
+
+		nodeList := &v1.NodeList{}
+		err = p.k8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		if pxutil.IsFreshInstall(toUpdate) {
+			// Let's do this only when it's a fresh install of px
+			maxStorageNodesPerZone, err = p.getDefaultMaxStorageNodesPerZone(toUpdate, nodeList)
+			if err != nil {
+				logrus.Errorf("could not set default value for max_storage_nodes_per_zone (first install): %v", err)
+			}
+		} else if upgradingPortworx {
+			// Upgrade scenario
+			// If PX image is not changing, we don't have to update the values. This is to prevent pod restarts
+			maxStorageNodesPerZone, err = p.getCurrentMaxStorageNodesPerZone(toUpdate, nodeList)
+			if err != nil {
+				logrus.Errorf("could not set a default value for max_storage_nodes_per_zone %v", err)
+			}
+		}
+		if err == nil && maxStorageNodesPerZone != 0 {
+			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
+			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
+		}
+	}
+
+	return nil
+}
+
+func (p *portworx) getDefaultStorageNodesDisaggregatedMode(
+	cluster *corev1.StorageCluster,
+) (uint64, bool, error) {
+	// Check if ENABLE_ASG_STORAGE_PARTITIONING is set to false. If not, we can look at the 'portworx.io/node-type' label
+	for _, envVar := range cluster.Spec.Env {
+		if envVar.Name == util.StoragePartitioningEnvKey {
+			if envVar.Value == "false" {
+				return 0, false, nil
+			}
+			break
+		}
+	}
+
+	// This will return a zone map of storage nodes in each zones
+	nodeTypeZoneMap, err := cloudprovider.GetZoneMap(p.k8sClient, util.NodeTypeKey, util.StorageNodeValue)
+	if err != nil {
+		return 0, false, err
+	}
+	totalNodes := uint64(0)
+	// We'll find the zone with least number of labels
+	minValue := uint64(math.MaxUint64)
+	prevKey := ""
+	prevValue := uint64(math.MaxUint64)
+	for key, value := range nodeTypeZoneMap {
+		totalNodes += value
+		if value < minValue {
+			minValue = value
+		}
+		if prevValue != math.MaxUint64 && prevValue != value {
+			k8sutil.InfoEvent(
+				p.recorder, cluster, util.UnevenStorageNodesReason,
+				fmt.Sprintf("Uneven number of storage nodes labelled across zones."+
+					" %v has %v, %v has %v", prevKey, prevValue, key, value),
+			)
+		}
+		prevKey = key
+		prevValue = value
+	}
+	if totalNodes == 0 {
+		// no node is labelled with portworx.io/node-type
+		nodeTypeZoneMap, err = cloudprovider.GetZoneMap(p.k8sClient, util.NodeTypeKey, util.StoragelessNodeValue)
+		if err == nil {
+			for _, value := range nodeTypeZoneMap {
+				totalNodes += value
+			}
+			if totalNodes > 0 {
+				k8sutil.InfoEvent(
+					p.recorder, cluster, util.AllStoragelessNodesReason,
+					fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
+				)
+				return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
+			}
+		}
+		return 0, false, err
+	}
+	return minValue, true, nil
+}
+
+// getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
+// intention of having at least 3 nodes in the cluster.
+func (p *portworx) getDefaultMaxStorageNodesPerZone(
+	cluster *corev1.StorageCluster,
+	nodeList *v1.NodeList,
+) (uint32, error) {
+	if len(nodeList.Items) == 0 {
+		return 0, nil
+	}
+
+	// Check if storage nodes are explicitly set using labels
+	storageNodes, disaggregatedMode, err := p.getDefaultStorageNodesDisaggregatedMode(cluster)
+	if err != nil {
+		return 0, err
+	}
+	if disaggregatedMode {
+		return uint32(storageNodes), nil
+	}
+
+	zoneMap, err := cloudprovider.GetZoneMap(p.k8sClient, "", "")
+	if err != nil {
+		return 0, err
+	}
+	numZones := len(zoneMap)
+	storageNodes = uint64(len(nodeList.Items) / numZones)
+	return uint32(storageNodes), nil
+}
+
+func (p *portworx) getCurrentMaxStorageNodesPerZone(
+	cluster *corev1.StorageCluster,
+	nodeList *v1.NodeList,
+) (uint32, error) {
+	storageNodeMap := make(map[string]*storageapi.StorageNode)
+
+	if pxutil.IsPortworxEnabled(cluster) {
+		storageNodeList, err := p.GetStorageNodes(cluster)
+		if err != nil {
+			logrus.Errorf("Couldn't get storage node list: %v", err)
+			return 0, err
+		}
+		for _, storageNode := range storageNodeList {
+			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
+				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+			}
+		}
+		zoneMap := make(map[string]uint32)
+		cloudProvider := cloudprovider.Get()
+		for _, node := range nodeList.Items {
+			if _, ok := storageNodeMap[node.Name]; ok {
+				zone, err := cloudProvider.GetZone(&node)
+				if err != nil {
+					return 0, err
+				}
+				count := zoneMap[zone]
+				zoneMap[zone] = count + 1
+			}
+		}
+		maxValue := uint32(0)
+		for _, value := range zoneMap {
+			if value > maxValue {
+				maxValue = value
+			}
+		}
+		return maxValue, nil
+	}
+	return 0, fmt.Errorf("storage disabled")
+}
+
+func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
+	if toUpdate.Annotations == nil {
+		toUpdate.Annotations = make(map[string]string)
+	}
+	// Initialize the preflight check annotation
+	if preflight.RequiresCheck() {
+		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+		}
+	}
+
+	if preflight.IsEKS() {
+		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
+	}
+
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
 	}
@@ -174,6 +357,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	toUpdate.Spec.Version = pxutil.GetImageTag(toUpdate.Spec.Image)
 	pxVersionChanged := pxEnabled &&
 		(toUpdate.Spec.Version == "" || toUpdate.Spec.Version != toUpdate.Status.Version)
+
+	if err := p.setMaxStorageNodePerZone(toUpdate, pxVersionChanged); err != nil {
+		return err
+	}
 
 	if pxVersionChanged || autoUpdateComponents(toUpdate) || p.hasComponentChanged(toUpdate) {
 		// Force latest versions only if the component update strategy is Once
@@ -363,6 +550,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+	return nil
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -488,7 +676,9 @@ func (p *portworx) GetStorageNodes(
 	var err error
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
-		if (cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit)) &&
+		if (cluster.Status.Phase == "" ||
+			strings.Contains(cluster.Status.Phase, string(corev1.ClusterConditionTypePreflight)) ||
+			cluster.Status.Phase == string(corev1.ClusterInit)) &&
 			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
@@ -581,7 +771,7 @@ func (p *portworx) DeleteStorage(
 		}
 		// all the nodes are wiped
 		if removeData {
-			logrus.Debugf("Deleting portworx metadata")
+			logrus.Infof("Deleting portworx metadata")
 			if err := u.WipeMetadata(); err != nil {
 				logrus.Errorf("Failed to delete portworx metadata: %v", err)
 				return &corev1.ClusterCondition{
@@ -662,128 +852,25 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		return
 	}
 
-	if toUpdate.Spec.Kvdb == nil {
-		toUpdate.Spec.Kvdb = &corev1.KvdbSpec{}
-	}
-	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
-		toUpdate.Spec.Kvdb.Internal = true
-	}
 	if toUpdate.Spec.SecretsProvider == nil {
 		toUpdate.Spec.SecretsProvider = stringPtr(defaultSecretsProvider)
 	}
 	startPort := uint32(t.startPort)
 	toUpdate.Spec.StartPort = &startPort
 
-	// If no storage spec is provided, initialize one where Portworx takes all available drives
-	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
-		// Only initialize storage spec when there's no node level cloud storage spec specified
-		initializeStorageSpec := true
-		for _, nodeSpec := range toUpdate.Spec.Nodes {
-			if nodeSpec.CloudStorage != nil {
-				initializeStorageSpec = false
-				break
-			}
-		}
-		if initializeStorageSpec {
-			toUpdate.Spec.Storage = &corev1.StorageSpec{}
-		}
-	}
-	if toUpdate.Spec.Storage != nil {
-		if toUpdate.Spec.Storage.Devices == nil &&
-			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
-			toUpdate.Spec.Storage.UseAll == nil {
-			toUpdate.Spec.Storage.UseAll = boolPtr(true)
-		}
-	}
+	setPortworxKvdbDefaults(toUpdate)
+
+	setPortworxStorageSpecDefaults(toUpdate)
+
+	setNodeSpecDefaults(toUpdate)
+
+	setPlacementDefaults(toUpdate, t, k8sVersion)
+
+	setCSIDefaults(toUpdate, t, k8sVersion)
 
 	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
 		toUpdate.Spec.Monitoring.Telemetry.Image = ""
-	}
-
-	setNodeSpecDefaults(toUpdate)
-
-	if toUpdate.Spec.Placement == nil {
-		toUpdate.Spec.Placement = &corev1.PlacementSpec{}
-	}
-	if toUpdate.Spec.Placement.NodeAffinity == nil {
-		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: t.getSelectorTerms(k8sVersion),
-			},
-		}
-	}
-	if t.runOnMaster {
-		masterTolerationFound := false
-		for _, t := range toUpdate.Spec.Placement.Tolerations {
-			if (t.Key == k8sutil.NodeRoleLabelMaster ||
-				t.Key == k8sutil.NodeRoleLabelControlPlane) &&
-				t.Effect == v1.TaintEffectNoSchedule {
-				masterTolerationFound = true
-				break
-			}
-		}
-		if !masterTolerationFound {
-			toUpdate.Spec.Placement.Tolerations = append(
-				toUpdate.Spec.Placement.Tolerations,
-				v1.Toleration{
-					Key:    k8sutil.NodeRoleLabelMaster,
-					Effect: v1.TaintEffectNoSchedule,
-				},
-			)
-			if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
-				toUpdate.Spec.Placement.Tolerations = append(
-					toUpdate.Spec.Placement.Tolerations,
-					v1.Toleration{
-						Key:    k8sutil.NodeRoleLabelControlPlane,
-						Effect: v1.TaintEffectNoSchedule,
-					},
-				)
-			}
-		}
-	}
-
-	// Check if feature gate is set. If it is, honor the flag here and remove it.
-	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
-	if featureGateSet {
-		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
-		if err != nil {
-			csiEnabled = true
-		}
-
-		// Feature flag set, but CSI spec is not defined. In this case,
-		// we want to use the feature flag value in the CSI spec.
-		if toUpdate.Spec.CSI == nil {
-			toUpdate.Spec.CSI = &corev1.CSISpec{
-				Enabled: csiEnabled,
-			}
-		} else {
-			// Set CSI spec as enabled if it's already enabled OR the flag is true.
-			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
-		}
-
-		// Always remove the feature flag. Clear the feature gates map if none are set.
-		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
-		if len(toUpdate.Spec.FeatureGates) == 0 {
-			toUpdate.Spec.FeatureGates = nil
-		}
-	}
-
-	// Enable CSI if running in k3s environment or
-	// if this is a new Portworx installation
-	if t.isK3s || toUpdate.Spec.Version == "" {
-		if toUpdate.Spec.CSI == nil {
-			toUpdate.Spec.CSI = &corev1.CSISpec{
-				Enabled: true,
-			}
-		}
-	}
-
-	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
-	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
-		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
-			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
-		}
 	}
 
 	setSecuritySpecDefaults(toUpdate)
@@ -875,6 +962,146 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs
+}
+
+func setPortworxKvdbDefaults(toUpdate *corev1.StorageCluster) {
+	if toUpdate.Spec.Kvdb == nil {
+		toUpdate.Spec.Kvdb = &corev1.KvdbSpec{}
+	}
+	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
+		toUpdate.Spec.Kvdb.Internal = true
+	}
+}
+
+func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
+	// If no storage spec is provided, initialize one where Portworx takes all available drives
+	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
+		// Only initialize storage spec when there's no node level cloud storage spec specified
+		initializeStorageSpec := true
+		for _, nodeSpec := range toUpdate.Spec.Nodes {
+			if nodeSpec.CloudStorage != nil {
+				initializeStorageSpec = false
+				break
+			}
+		}
+		if preflight.RunningOnCloud() {
+			setPortworxCloudStorageSpecDefaults(toUpdate)
+			if toUpdate.Spec.CloudStorage != nil {
+				initializeStorageSpec = false
+			}
+		}
+		if initializeStorageSpec {
+			toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		}
+	}
+	if toUpdate.Spec.Storage != nil {
+		if toUpdate.Spec.Storage.Devices == nil &&
+			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
+			toUpdate.Spec.Storage.UseAll == nil {
+			toUpdate.Spec.Storage.UseAll = boolPtr(true)
+		}
+	}
+}
+
+func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
+	if preflight.IsEKS() {
+		if toUpdate.Spec.CloudStorage == nil {
+			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+		if toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
+			defaultEKSCloudStorageDevice := defaultEksCloudStorageDevice
+			deviceSpecs := []string{defaultEKSCloudStorageDevice}
+			toUpdate.Spec.CloudStorage.DeviceSpecs = &deviceSpecs
+		}
+	}
+	// TODO: add default cloud storage specs for other providers
+}
+
+func setPlacementDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) {
+	if toUpdate.Spec.Placement == nil {
+		toUpdate.Spec.Placement = &corev1.PlacementSpec{}
+	}
+	if toUpdate.Spec.Placement.NodeAffinity == nil {
+		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: t.getSelectorTerms(k8sVersion),
+			},
+		}
+	}
+	if t.runOnMaster {
+		masterTolerationFound := false
+		for _, t := range toUpdate.Spec.Placement.Tolerations {
+			if (t.Key == k8sutil.NodeRoleLabelMaster ||
+				t.Key == k8sutil.NodeRoleLabelControlPlane) &&
+				t.Effect == v1.TaintEffectNoSchedule {
+				masterTolerationFound = true
+				break
+			}
+		}
+		if !masterTolerationFound {
+			toUpdate.Spec.Placement.Tolerations = append(
+				toUpdate.Spec.Placement.Tolerations,
+				v1.Toleration{
+					Key:    k8sutil.NodeRoleLabelMaster,
+					Effect: v1.TaintEffectNoSchedule,
+				},
+			)
+			if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
+				toUpdate.Spec.Placement.Tolerations = append(
+					toUpdate.Spec.Placement.Tolerations,
+					v1.Toleration{
+						Key:    k8sutil.NodeRoleLabelControlPlane,
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				)
+			}
+		}
+	}
+}
+
+func setCSIDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) {
+	// Check if feature gate is set. If it is, honor the flag here and remove it.
+	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
+	if featureGateSet {
+		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
+		if err != nil {
+			csiEnabled = true
+		}
+
+		// Feature flag set, but CSI spec is not defined. In this case,
+		// we want to use the feature flag value in the CSI spec.
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: csiEnabled,
+			}
+		} else {
+			// Set CSI spec as enabled if it's already enabled OR the flag is true.
+			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
+		}
+
+		// Always remove the feature flag. Clear the feature gates map if none are set.
+		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
+		if len(toUpdate.Spec.FeatureGates) == 0 {
+			toUpdate.Spec.FeatureGates = nil
+		}
+	}
+
+	// Enable CSI if running in k3s environment or
+	// if this is a new Portworx installation
+	if t.isK3s || toUpdate.Spec.Version == "" {
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: true,
+			}
+		}
+	}
+
+	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
+	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
+		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
+			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
+		}
+	}
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {

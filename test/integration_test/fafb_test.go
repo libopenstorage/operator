@@ -1,3 +1,4 @@
+//go:build fafb
 // +build fafb
 
 package integrationtest

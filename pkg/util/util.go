@@ -39,16 +39,37 @@ const (
 	MigrationPendingReason = "MigrationPending"
 	// MigrationCompletedReason is added to an event when the migration is completed.
 	MigrationCompletedReason = "MigrationCompleted"
-	// MigrationFailed is added to an event when the migration fails.
+	// MigrationFailedReason is added to an event when the migration fails.
 	MigrationFailedReason = "MigrationFailed"
+	// UnevenStorageNodesReason is added to an event when there are uneven number of storage nodes are labelled across zones
+	UnevenStorageNodesReason = "UnevenStorageNodes"
+	// AllStoragelessNodesReason is added to an event when all the nodes in the cluster is  labelled as storageless
+	AllStoragelessNodesReason = "AllStoragelessNodes"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
 	// MigrationDryRunFailedReason is added to an event when dry run fails.
 	MigrationDryRunFailedReason = "MigrationDryRunFailed"
 
+	// PreflightFailedStatus is set to storage cluster phase when preflight failed
+	PreflightFailedStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
+	// PreflightCompleteStatus is set to storage cluster phase when preflight passed
+	PreflightCompleteStatus = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
+
 	// DefaultImageRegistry is the default registry when no registry is provided
 	DefaultImageRegistry = "docker.io"
+
+	// StorkSchedulerName is the default scheduler for px-csi-ext pods
+	StorkSchedulerName = "stork"
+
+	// NodeTypeKey is the key of the label used to set node as storage or storageless
+	NodeTypeKey = "portworx.io/node-type"
+	// StorageNodeValue is the value for storage node
+	StorageNodeValue = "storage"
+	// StoragelessNodeValue is the value for storage node
+	StoragelessNodeValue = "storageless"
+	// StoragePartitioningEnvKey is the storage spec environment variable used to set storage/storageless node type
+	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
 )
 
 var (
@@ -59,6 +80,7 @@ var (
 		"index.docker.io":             true,
 		"registry-1.docker.io":        true,
 		"registry.connect.redhat.com": true,
+		"registry.k8s.io":             true,
 	}
 
 	// podTopologySpreadConstraintKeys is a list of topology keys considered for pod spread constraints
@@ -281,6 +303,21 @@ func HasNodeAffinityChanged(
 		return cluster.Spec.Placement.NodeAffinity != nil
 	}
 	return !reflect.DeepEqual(cluster.Spec.Placement.NodeAffinity, existingAffinity.NodeAffinity)
+}
+
+// HasSchedulerStateChanged checks if the stork has been enabled/disabled in the StorageCluster
+func HasSchedulerStateChanged(
+	cluster *corev1.StorageCluster,
+	previousSchedulerName string,
+) bool {
+	if cluster.Spec.Stork == nil {
+		return v1.DefaultSchedulerName != previousSchedulerName
+	}
+	currentSchedulerName := v1.DefaultSchedulerName
+	if cluster.Spec.Stork.Enabled {
+		currentSchedulerName = StorkSchedulerName
+	}
+	return currentSchedulerName != previousSchedulerName
 }
 
 // ExtractVolumesAndMounts returns a list of Kubernetes volumes and volume mounts from the

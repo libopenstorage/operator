@@ -18,6 +18,13 @@ spec:
   resources:
     requests:
       memory: 400Mi
+    limits:
+      cpu: 1
+      ephemeral-storage: 5Gi
+      memory: 800Mi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
   ruleSelector:
     matchLabels:
       prometheus: portworx

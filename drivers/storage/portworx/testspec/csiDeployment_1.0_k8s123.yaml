@@ -100,6 +100,7 @@ spec:
             - name: http-endpoint
               containerPort: 8080
               protocol: TCP
+      schedulerName: stork
       volumes:
         - name: socket-dir
           hostPath:

@@ -20,11 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -102,22 +99,20 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.NoError(t, err)
 
 	// Stork ConfigMap
-	expectedPolicy := schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	expectedPolicy := SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}
-	var actualPolicy schedulerv1.Policy
+	var actualPolicy SchedulerPolicy
 	storkConfigMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 	require.NoError(t, err)
@@ -126,13 +121,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.Len(t, storkConfigMap.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
 
-	decoderChangeVersion, _ := version.NewVersion(policyDecoderChangeVersion)
-	if k8sVersion.LessThan(decoderChangeVersion) {
-		err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
-	} else {
-		err = runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), []byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
-	}
-
+	err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
 	require.NoError(t, err)
 
 	// Surprisingly the decoded object does not have kind and API version, both fields are empty. The encoded string
@@ -861,7 +850,8 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	// Case: Custom registry should be added back if not present in images
 	customRegistry = "test-registry:3333"
 	cluster.Spec.CustomImageRegistry = customRegistry
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -993,7 +983,8 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 	// Case: Custom repo-registry should be added back if not present in images
 	customRepo = "test-registry:1111/newest-repo"
 	cluster.Spec.CustomImageRegistry = customRepo
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1074,7 +1065,8 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 
 	// Case: Updated image pull secet should be applied to the deployment
 	imagePullSecret = "new-secret"
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1093,7 +1085,8 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 
 	// Case: If empty, remove image pull secret from the deployment
 	imagePullSecret = ""
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1110,7 +1103,8 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 
 	// Case: If nil, remove image pull secret from the deployment
 	cluster.Spec.ImagePullSecret = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1128,7 +1122,8 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 	// Case: Image pull secret should be added back if not present in deployment
 	imagePullSecret = "pull-secret"
 	cluster.Spec.ImagePullSecret = &imagePullSecret
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1213,7 +1208,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 	// Case: Updated tolerations should be applied to the deployment
 	tolerations[0].Value = "baz"
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1235,7 +1231,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 		Effect:   v1.TaintEffectNoExecute,
 	})
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1253,7 +1250,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 	// Case: Removed tolerations should be removed from the deployment
 	tolerations = []v1.Toleration{tolerations[0]}
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1270,7 +1268,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 
 	// Case: If tolerations are empty, should be removed from the deployment
 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1287,7 +1286,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 
 	// Case: Tolerations should be added back if not present in deployment
 	cluster.Spec.Placement.Tolerations = tolerations
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1304,7 +1304,8 @@ func TestStorkTolerationsChange(t *testing.T) {
 
 	// Case: If placement is empty, deployment should not have tolerations
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1397,7 +1398,8 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 		MatchExpressions[0].
 		Key = "px/disabled"
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1414,7 +1416,8 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 
 	// Case: If node affinity is removed, it should be removed from the deployment
 	cluster.Spec.Placement.NodeAffinity = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1431,7 +1434,8 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 
 	// Case: Node affinity should be added back if not present in deployment
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1448,7 +1452,8 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 
 	// Case: If placement is nil, node affinity should be removed from the deployment
 	cluster.Spec.Placement = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1534,7 +1539,8 @@ func TestStorkVolumesChange(t *testing.T) {
 	volumeSpecs[0].MountPropagation = &propagation
 	volumeSpecs[0].HostPath.Type = &pathType
 	cluster.Spec.Stork.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = controller.syncStork(cluster)
@@ -1558,7 +1564,8 @@ func TestStorkVolumesChange(t *testing.T) {
 		},
 	})
 	cluster.Spec.Stork.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = controller.syncStork(cluster)
@@ -1574,7 +1581,8 @@ func TestStorkVolumesChange(t *testing.T) {
 	// Case: Removed volumes should be removed from the deployment
 	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
 	cluster.Spec.Stork.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = controller.syncStork(cluster)
@@ -1589,7 +1597,8 @@ func TestStorkVolumesChange(t *testing.T) {
 
 	// Case: If volumes are empty, should be removed from the deployment
 	cluster.Spec.Stork.Volumes = []corev1.VolumeSpec{}
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -1602,7 +1611,8 @@ func TestStorkVolumesChange(t *testing.T) {
 
 	// Case: Volumes should be added back if not present in deployment
 	cluster.Spec.Stork.Volumes = volumeSpecs
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 	volumes, volumeMounts = expectedVolumesAndMounts(volumeSpecs)
 
 	err = controller.syncStork(cluster)
@@ -1617,7 +1627,8 @@ func TestStorkVolumesChange(t *testing.T) {
 
 	// Case: If volumes is nil, deployment should not have volumes
 	cluster.Spec.Stork.Volumes = nil
-	k8sClient.Update(context.TODO(), cluster)
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
 
 	err = controller.syncStork(cluster)
 	require.NoError(t, err)
@@ -2290,18 +2301,16 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 		AnyTimes()
 
 	// TestCase: Deploy default policy when stork is deployed
-	defaultPolicy := &schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	defaultPolicy := &SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}
@@ -2318,7 +2327,7 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	require.Equal(t, string(defaultPolicyBytes), storkConfigMap.Data["policy.cfg"])
 
 	// TestCase: Reconcile to original policy if changed by the user
-	modifiedPolicy := defaultPolicy.DeepCopy()
+	modifiedPolicy := *defaultPolicy
 	modifiedPolicy.Extenders[0].PrioritizeVerb = ""
 	modifiedPolicy.Extenders[0].Weight = 10
 	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)

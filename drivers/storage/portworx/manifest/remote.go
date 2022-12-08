@@ -50,7 +50,7 @@ func (m *remote) Get() (*Version, error) {
 		manifestURL = manifestURLFromVersion(pxVersion)
 	}
 
-	logrus.Debugf("Getting version manifest from %v", manifestURL)
+	logrus.Infof("Getting version manifest from %v", manifestURL)
 	return m.downloadVersionManifest(manifestURL)
 }
 

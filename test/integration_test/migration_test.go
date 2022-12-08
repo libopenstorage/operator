@@ -1,3 +1,4 @@
+//go:build integrationtest
 // +build integrationtest
 
 package integrationtest
@@ -14,6 +15,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/portworx/sched-ops/task"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -120,6 +122,9 @@ func MigrationWithAllComponents(tc *types.TestCase) func(*testing.T) {
 		objects, err := ci_utils.ParseSpecs("migration/prometheus-operator.yaml")
 		require.NoError(t, err)
 
+		err = updateComponentImages(objects)
+		require.NoError(t, err)
+
 		logrus.Infof("Installing prometheus operator")
 		err = ci_utils.CreateObjects(objects)
 		require.NoError(t, err)
@@ -154,7 +159,7 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 	err := ci_utils.UpdatePortworxDaemonSetImages(ds)
 	require.NoError(t, err)
 
-	err = updateComponentDeploymentImages(objects)
+	err = updateComponentImages(objects)
 	require.NoError(t, err)
 
 	logrus.Infof("Creating portworx objects")
@@ -179,6 +184,10 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 			ci_utils.DefaultValidateApplicationTimeout, ci_utils.DefaultValidateApplicationRetryInterval)
 		require.NoError(t, err)
 	}
+
+	// It's possible portworx daemonset becomes ready but node initialization is not finished yet,
+	// so give it 10 more seconds given it happens rarely
+	time.Sleep(10 * time.Second)
 
 	logrus.Infof("Restarting portworx operator to trigger migration")
 	restartPortworxOperator(t)
@@ -235,8 +244,12 @@ func testMigration(t *testing.T, ds *appsv1.DaemonSet, objects, appSpecs []runti
 }
 
 func approveMigration(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
-	cluster.Annotations[constants.AnnotationMigrationApproved] = "true"
-	return operatorops.Instance().UpdateStorageCluster(cluster)
+	liveCluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	liveCluster.Annotations[constants.AnnotationMigrationApproved] = "true"
+	return operatorops.Instance().UpdateStorageCluster(liveCluster)
 }
 
 func validateStorageClusterIsCreatedForDaemonSet(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
@@ -299,7 +312,7 @@ func extractPortworxDaemonSetFromObjects(objects []runtime.Object) (*appsv1.Daem
 	return pxDaemonSet, remainingObjects
 }
 
-func updateComponentDeploymentImages(objects []runtime.Object) error {
+func updateComponentImages(objects []runtime.Object) error {
 	k8sVersion, err := k8sutil.GetVersion()
 	if err != nil {
 		return err
@@ -344,6 +357,24 @@ func updateComponentDeploymentImages(objects []runtime.Object) error {
 						c.Image = ci_utils.PxSpecImages["metricsCollectorProxy"]
 					}
 				}
+			} else if dep.Name == "prometheus-operator" {
+				for i := 0; i < len(dep.Spec.Template.Spec.Containers); i++ {
+					c := &dep.Spec.Template.Spec.Containers[i]
+					if c.Name == "prometheus-operator" {
+						c.Image = ci_utils.PxSpecImages["prometheusOperator"]
+						for i, arg := range c.Args {
+							if strings.Contains(arg, "--prometheus-config-reloader") {
+								c.Args[i] = fmt.Sprintf("--prometheus-config-reloader=%s", ci_utils.PxSpecImages["prometheusConfigReloader"])
+							}
+						}
+					}
+				}
+			}
+		}
+		if alertManager, ok := obj.(*monitoringv1.Alertmanager); ok {
+			if alertManager.Name == "portworx" {
+				alertManagerImage := ci_utils.PxSpecImages["alertManager"]
+				alertManager.Spec.Image = &alertManagerImage
 			}
 		}
 	}
@@ -365,8 +396,7 @@ func restartPortworxOperator(t *testing.T) {
 }
 
 func shouldSkipMigrationTests(tc *types.TestCase) bool {
-	k8sVersion, _ := k8sutil.GetVersion()
-	return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22)
+	return false
 }
 
 func validateStorageClusterFromDaemonSet(

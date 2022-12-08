@@ -238,8 +238,12 @@ func DeleteObjects(objects []runtime.Object) error {
 // The skip flag will not validate termination of certain objects.
 func ValidateObjectsAreTerminated(objects []runtime.Object, skip bool) error {
 	s := scheme.Scheme
-	apiextensionsv1.AddToScheme(s)
-	monitoringv1.AddToScheme(s)
+	if err := apiextensionsv1.AddToScheme(s); err != nil {
+		return err
+	}
+	if err := monitoringv1.AddToScheme(s); err != nil {
+		return err
+	}
 	k8sClient, err := k8sutil.NewK8sClient(s)
 	if err != nil {
 		return err
@@ -328,9 +332,15 @@ func decodeSpec(specContents []byte) (runtime.Object, error) {
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(specContents), nil, nil)
 	if err != nil {
 		scheme := runtime.NewScheme()
-		apiextensionsv1.AddToScheme(scheme)
-		monitoringv1.AddToScheme(scheme)
-		corev1.AddToScheme(scheme)
+		if err := apiextensionsv1.AddToScheme(scheme); err != nil {
+			return nil, err
+		}
+		if err := monitoringv1.AddToScheme(scheme); err != nil {
+			return nil, err
+		}
+		if err := corev1.AddToScheme(scheme); err != nil {
+			return nil, err
+		}
 		codecs := serializer.NewCodecFactory(scheme)
 		obj, _, err = codecs.UniversalDeserializer().Decode([]byte(specContents), nil, nil)
 		if err != nil {

@@ -27,7 +27,8 @@ func TestAlertManagerInstall(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(1)
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -44,10 +45,11 @@ func TestAlertManagerInstall(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Placement = nil
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -56,7 +58,7 @@ func TestAlertManagerInstall(t *testing.T) {
 			v1.EventTypeWarning, util.FailedComponentReason, cluster.Namespace, component.AlertManagerConfigSecretName))
 
 	// Create an alert manager config, so alert manager install can proceed
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -66,6 +68,7 @@ func TestAlertManagerInstall(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -101,7 +104,8 @@ func TestRemoveAlertManager(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -118,9 +122,10 @@ func TestRemoveAlertManager(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -130,8 +135,9 @@ func TestRemoveAlertManager(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	service := &v1.Service{}
@@ -160,7 +166,8 @@ func TestDisableAlertManager(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -177,9 +184,10 @@ func TestDisableAlertManager(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
-	k8sClient.Create(
+	err = k8sClient.Create(
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -189,8 +197,9 @@ func TestDisableAlertManager(t *testing.T) {
 		},
 		&client.CreateOptions{},
 	)
+	require.NoError(t, err)
 
-	err := driver.PreInstall(cluster)
+	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	service := &v1.Service{}

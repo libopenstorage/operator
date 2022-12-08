@@ -35,6 +35,7 @@ import (
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/version"
 )
 
@@ -136,7 +137,10 @@ func run(c *cli.Context) {
 	if pprofEnabled {
 		go func() {
 			log.Infof("pprof profiling is enabled, creating profiling server at port %v", defaultPprofPort)
-			http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", defaultPprofPort), nil)
+			err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", defaultPprofPort), nil)
+			if err != nil {
+				log.Errorf("Error setting up profiling server. %v", err)
+			}
 		}()
 	}
 
@@ -225,7 +229,11 @@ func run(c *cli.Context) {
 		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
-	if err = d.Init(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
+	if err := preflight.InitPreflightChecker(); err != nil {
+		log.Fatalf("Error initializing preflight checker: %v", err)
+	}
+
+	if err := d.Init(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
@@ -319,7 +327,7 @@ func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error)
 		managerOpts.LeaderElection = true
 		managerOpts.LeaderElectionID = c.String(flagLeaderElectLockName)
 		managerOpts.LeaderElectionNamespace = c.String(flagLeaderElectLockNamespace)
-		managerOpts.LeaderElectionResourceLock = resourcelock.ConfigMapsResourceLock
+		managerOpts.LeaderElectionResourceLock = resourcelock.ConfigMapsLeasesResourceLock
 	}
 	return manager.New(config, managerOpts)
 }

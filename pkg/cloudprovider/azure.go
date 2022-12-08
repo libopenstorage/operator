@@ -6,16 +6,16 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/libopenstorage/cloudops"
 )
 
-const (
-	azureName = "azure"
-)
-
-type azure struct{}
+type azure struct {
+	defaultProvider
+}
 
 func (a *azure) Name() string {
-	return azureName
+	return cloudops.Azure
 }
 
 func (a *azure) GetZone(node *v1.Node) (string, error) {
@@ -23,11 +23,11 @@ func (a *azure) GetZone(node *v1.Node) (string, error) {
 		return "", fmt.Errorf("node cannot be nil")
 	}
 	// if region is empty we want isAvailabilityZone to be false
-	region, ok := node.Labels[failureDomainRegionKey]
+	region, ok := node.Labels[v1.LabelTopologyRegion]
 	if !ok {
 		logrus.Warnf("Failed to get azure region info for node %v", node.Name)
 	}
-	zone, ok := node.Labels[failureDomainZoneKey]
+	zone, ok := node.Labels[v1.LabelTopologyZone]
 	if !ok {
 		logrus.Warnf("Failed to get azure zone info for node %v", node.Name)
 	}

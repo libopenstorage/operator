@@ -43,8 +43,9 @@ const (
 	AutopilotContainerName = "autopilot"
 	// AutopilotDefaultProviderEndpoint endpoint of default provider
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
-
-	defaultAutopilotCPU = "0.1"
+	// AutopilotDefaultReviewersKey is a key for default reviewers array in gitops config map
+	AutopilotDefaultReviewersKey = "defaultReviewers"
+	defaultAutopilotCPU          = "0.1"
 )
 
 var (
@@ -169,6 +170,46 @@ func (c *autopilot) createConfigMap(
   type: %s
   params: %s`,
 			provider.Name, provider.Type, params)
+	}
+
+	if cluster.Spec.Autopilot.GitOps != nil {
+		config += "\ngitops:"
+		if cluster.Spec.Autopilot.GitOps.Type == "" {
+			return fmt.Errorf("gitops Type field is required")
+		}
+
+		if len(cluster.Spec.Autopilot.GitOps.Params) == 0 {
+			return fmt.Errorf("gitops params cannot be empty")
+		}
+
+		keys := make([]string, 0, len(cluster.Spec.Autopilot.GitOps.Params))
+		for k := range cluster.Spec.Autopilot.GitOps.Params {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		params := ""
+		for _, key := range keys {
+			val := cluster.Spec.Autopilot.GitOps.Params[key]
+			if key == AutopilotDefaultReviewersKey {
+				params += fmt.Sprintf(`
+    %s:`, AutopilotDefaultReviewersKey)
+				values := strings.Split(val, ",")
+				for _, v := range values {
+					v = strings.TrimSpace(v)
+					params += fmt.Sprintf(`
+      - "%s"`, v)
+				}
+				continue
+			}
+			params += fmt.Sprintf(`
+    %s: %s`, key, val)
+		}
+
+		config += fmt.Sprintf(`
+  name: %s
+  type: %s
+  params:%s`, cluster.Spec.Autopilot.GitOps.Name, cluster.Spec.Autopilot.GitOps.Type, params)
 	}
 
 	for key, value := range cluster.Spec.Autopilot.Args {

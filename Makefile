@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.9.1
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.10.0
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -74,6 +74,8 @@ PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/promethe
 CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v3.0.3/client/config/crd
 CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v4.2.1/client/config/crd
 
+GOLINT = go run github.com/golangci/golangci-lint/cmd/golangci-lint
+
 BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
 RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
 BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d )
@@ -95,15 +97,6 @@ vendor:
 # Tools download  (if missing)
 # - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
 
-$(GOPATH)/bin/golint:
-	go get -u golang.org/x/lint/golint
-
-$(GOPATH)/bin/errcheck:
-	GO111MODULE=off go get -u github.com/kisielk/errcheck
-
-$(GOPATH)/bin/staticcheck:
-	GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.2.1
-
 $(GOPATH)/bin/revive:
 	GO111MODULE=off go get -u github.com/mgechev/revive
 
@@ -118,29 +111,26 @@ $(GOPATH)/bin/mockgen:
 vendor-tidy:
 	go mod tidy
 
-lint: $(GOPATH)/bin/golint
+lint:
 	# golint check ...
-	@for file in $(GO_FILES); do \
-		golint $${file}; \
-		if [ -n "$$(golint $${file})" ]; then \
-			exit 1; \
-		fi; \
-	done
+	$(GOLINT) run --timeout=5m ./...
 
 vet:
 	# go vet check ...
-	@go vet $(PKGS)
+	go vet ./...
 
 check-fmt:
 	# gofmt check ...
 	@bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
-errcheck: $(GOPATH)/bin/errcheck
+errcheck:
 	# errcheck check ...
+	@GO111MODULE=off go get -u github.com/kisielk/errcheck
 	@errcheck -verbose -blank $(PKGS)
 
-staticcheck: $(GOPATH)/bin/staticcheck
+staticcheck:
 	# staticcheck check ...
+	@GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
 	@staticcheck $(PKGS)
 
 revive: $(GOPATH)/bin/revive
@@ -187,12 +177,19 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
+DOCK_BUILD_CNT	:= golang:1.19.1
+
+docker-build:
+	@echo "Building using docker"
+	docker run --rm -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
+		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
+
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"
 	docker push $(OPERATOR_IMG)
 
 verify-bundle-dir:
-	docker run -it --rm \
+	docker run -t --rm \
 		-v $(BASE_DIR)/deploy:/deploy \
 		python:3 bash -c "pip3 install operator-courier==2.1.11 && operator-courier --verbose verify --ui_validate_io /deploy/olm-catalog/portworx"
 
@@ -276,6 +273,7 @@ mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
 	mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
+	mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
 
 clean: clean-release-manifest clean-bundle
 	@echo "Cleaning up binaries"

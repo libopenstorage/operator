@@ -509,6 +509,8 @@ type AutopilotSpec struct {
 	LockImage bool `json:"lockImage,omitempty"`
 	// Providers is a list of input data providers for autopilot if it needs any
 	Providers []DataProviderSpec `json:"providers,omitempty"`
+	// GitOps is used to configure autopilot to use gitops model
+	GitOps *GitOpsSpec `json:"gitops,omitempty"`
 	// Args is a map of arguments given to autopilot
 	Args map[string]string `json:"args,omitempty"`
 	// Env is a list of environment variables used by autopilot
@@ -524,6 +526,13 @@ type DataProviderSpec struct {
 	// Type is the type of data provider. For instance, prometheus
 	Type string `json:"type,omitempty"`
 	// Params is a list of key-value params for the provider
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// GitOpsSpec contains the details for GitOps provider like github or bitbucket
+type GitOpsSpec struct {
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"`
 	Params map[string]string `json:"params,omitempty"`
 }
 
@@ -559,6 +568,11 @@ type PrometheusSpec struct {
 	RemoteWriteEndpoint string `json:"remoteWriteEndpoint,omitempty"`
 	// AlertManager spec for configuring alert manager
 	AlertManager *AlertManagerSpec `json:"alertManager,omitempty"`
+	// Define resources requests and limits for single Pods. The value will pass through to Prometheus CR.
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// This defaults to the default PodSecurityContext. The value will pass through to Prometheus CR.
+	SecurityContext *v1.PodSecurityContext `json:"securityContext,omitempty"`
 }
 
 // AlertManagerSpec contains configuration of AlertManager
@@ -642,6 +656,8 @@ const (
 	ClusterConditionTypeDelete ClusterConditionType = "Delete"
 	// ClusterConditionTypeInstall indicates the status for an install operation on the cluster
 	ClusterConditionTypeInstall ClusterConditionType = "Install"
+	// ClusterConditionTypePreflight indicates the status for preflight check on the cluster
+	ClusterConditionTypePreflight ClusterConditionType = "Preflight"
 )
 
 // ClusterConditionStatus is the enum type for cluster condition statuses
