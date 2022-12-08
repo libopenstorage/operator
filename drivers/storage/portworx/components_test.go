@@ -3574,6 +3574,52 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 		},
 	}
 	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: automatic TLS setup, when no CRT/KEY/CA files provided
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+	// test
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
