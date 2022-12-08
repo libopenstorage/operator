@@ -517,6 +517,7 @@ github.com/leonklingele/grouper/pkg/analyzer/vars
 ## explicit; go 1.13
 github.com/libopenstorage/cloudops
 github.com/libopenstorage/cloudops/aws
+github.com/libopenstorage/cloudops/aws/storagemanager
 github.com/libopenstorage/cloudops/azure/storagemanager
 github.com/libopenstorage/cloudops/backoff
 github.com/libopenstorage/cloudops/mock
