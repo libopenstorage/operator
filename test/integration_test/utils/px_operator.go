@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -13,7 +14,8 @@ import (
 )
 
 const (
-	pxOperatorMasterVersion = "9.9.9.9"
+	pxOperatorMasterVersion  = "9.9.9.9"
+	pxOperatorDeploymentName = "portworx-operator"
 )
 
 var (
@@ -42,7 +44,7 @@ func GetPXOperatorVersion() (*version.Version, error) {
 		opVersion, _ = version.NewVersion(pxOperatorMasterVersion)
 	}
 
-	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())
+	logrus.Infof("Testing portworx-operator version [%s]", opVersion.String())
 	return opVersion, nil
 }
 
@@ -52,16 +54,26 @@ func getPXOperatorImageTag() (string, error) {
 		return "", err
 	}
 
-	var image string
+	var tag string
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == PortworxOperatorContainerName {
-			image = container.Image
-			logrus.Infof("Get portworx-operator image installed: %s", image)
-			break
+			if strings.Contains(container.Image, "registry.connect.redhat.com") { // PX Operator deployed via Openshift Marketplace will have "registry.connect.redhat.com" as part of image
+				for _, env := range container.Env {
+					if env.Name == "OPERATOR_CONDITION_NAME" {
+						logrus.Infof("Looks like portworx-operator was installed via Openshift Marketplace, image [%s]", container.Image)
+						tag = strings.Split(env.Value, ".v")[1]
+						return tag, nil
+					}
+				}
+			} else {
+				logrus.Infof("Get portworx-operator image installed [%s]", container.Image)
+				tag = strings.Split(container.Image, ":")[1]
+				return tag, nil
+			}
 		}
 	}
 
-	return strings.Split(image, ":")[1], nil
+	return "", fmt.Errorf("failed to find PX Operator tag")
 }
 
 // GetPxOperatorImage return PX Operator image
@@ -107,4 +119,26 @@ func UpdateAndValidatePxOperator(pxOperator *appsv1.Deployment, f func(*appsv1.D
 // UpdatePxOperator update PX Operator deploymnent
 func UpdatePxOperator(pxOperator *appsv1.Deployment) (*appsv1.Deployment, error) {
 	return appops.Instance().UpdateDeployment(pxOperator)
+}
+
+// ValidatePxOperator validatea PX Operator deployment is created
+func ValidatePxOperator(namespace string) (*appsv1.Deployment, error) {
+	pxOperatorDeployment := &appsv1.Deployment{}
+	pxOperatorDeployment.Name = pxOperatorDeploymentName
+	pxOperatorDeployment.Namespace = namespace
+	if err := appops.Instance().ValidateDeployment(pxOperatorDeployment, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval); err != nil {
+		return nil, err
+	}
+	return pxOperatorDeployment, nil
+}
+
+// ValidatePxOperatorDeleted validate PX Operator deployment is deleted
+func ValidatePxOperatorDeleted(namespace string) (*appsv1.Deployment, error) {
+	pxOperatorDeployment := &appsv1.Deployment{}
+	pxOperatorDeployment.Name = pxOperatorDeploymentName
+	pxOperatorDeployment.Namespace = namespace
+	if err := appops.Instance().ValidateTerminatedDeployment(pxOperatorDeployment, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval); err != nil {
+		return nil, err
+	}
+	return pxOperatorDeployment, nil
 }

@@ -33,6 +33,7 @@ func setup() error {
 	var operatorUpgradeHopsImages string
 	var logLevel string
 	var err error
+
 	flag.StringVar(&ci_utils.PxDockerUsername,
 		"portworx-docker-username",
 		"",
@@ -53,6 +54,10 @@ func setup() error {
 		"px-upgrade-hops-url-list",
 		"",
 		"List of Portworx Spec Generator URLs separated by commas used for upgrade hops")
+	flag.StringVar(&ci_utils.PxOperatorTag,
+		"operator-image-tag",
+		"",
+		"Operator tag that is needed for deploying PX Operator via Openshift MarketPlace")
 	flag.StringVar(&operatorUpgradeHopsImages,
 		"operator-upgrade-hops-image-list",
 		"",
@@ -95,6 +100,14 @@ func setup() error {
 		"Log level")
 	flag.Parse()
 
+	// Set log level
+	logrusLevel, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		return err
+	}
+	logrus.SetLevel(logrusLevel)
+	logrus.SetOutput(os.Stdout)
+
 	ci_utils.K8sVersion, err = test_util.GetK8SVersion()
 	if err != nil {
 		return err
@@ -115,16 +128,13 @@ func setup() error {
 
 	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
 	if err != nil {
-		return fmt.Errorf("failed to discover installed portworx operator version: %v", err)
+		logrus.Warnf("failed to discover installed portworx operator version: %v", err)
+		if len(ci_utils.PxOperatorTag) != 0 && ci_utils.IsOcp {
+			logrus.Infof("operator tag was passed in --operator-image-tag [%s], this tag will be used to deploy PX Operator via Openshift Marketplace", ci_utils.PxOperatorTag)
+		} else {
+			return fmt.Errorf("operator is not deployed in this environment, cannot proceed")
+		}
 	}
-
-	// Set log level
-	logrusLevel, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		return err
-	}
-	logrus.SetLevel(logrusLevel)
-	logrus.SetOutput(os.Stdout)
 
 	return nil
 }

@@ -6,6 +6,7 @@ test_pod_spec="operator-test-pod.yaml"
 test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
 px_upgrade_hops_url_list=""
+operator_image_tag=""
 operator_upgrade_hops_image_list=""
 focus_tests=""
 short_test=false
@@ -57,6 +58,12 @@ case $i in
     --px-upgrade-hops-url-list)
         echo "List of Portworx Spec Generator URLs to use as Upgrade hops for test: $2"
         px_upgrade_hops_url_list=$2
+        shift
+        shift
+        ;;
+    --operator-image-tag)
+        echo "Operator tag that is needed for deploying PX Operator via Openshift MarketPlace: $2"
+        operator_image_tag=$2
         shift
         shift
         ;;
@@ -226,6 +233,14 @@ if [ "$px_upgrade_hops_url_list" != "" ]; then
     sed -i 's|'PX_UPGRADE_HOPS_URL_LIST'|'"$px_upgrade_hops_url_list"'|g' $test_pod_spec
 else
     sed -i '/PX_UPGRADE_HOPS_URL_LIST/d' $test_pod_spec
+fi
+
+# Operator image tag
+if [ "$operator_image_tag" != "" ]; then
+	echo "Operator image tag for Openshift Marketplace: $operator_image_tag"
+    sed -i 's|'OPERATOR_IMAGE_TAG'|'"$operator_image_tag"'|g' $test_pod_spec
+else
+    sed -i '/OPERATOR_IMAGE_TAG/d' $test_pod_spec
 fi
 
 # Operator upgrade hops image list
