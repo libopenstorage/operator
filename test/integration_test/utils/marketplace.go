@@ -1,14 +1,19 @@
 package utils
 
 import (
+	"encoding/base64"
 	"fmt"
 	"time"
 
-	v1 "github.com/operator-framework/api/pkg/operators/v1"
+	op_v1 "github.com/operator-framework/api/pkg/operators/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
+	"github.com/portworx/sched-ops/k8s/core"
 	opmpops "github.com/portworx/sched-ops/k8s/operatormarketplace"
 	"github.com/portworx/sched-ops/task"
 	"github.com/sirupsen/logrus"
+	core_v1 "k8s.io/api/core/v1"
+	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -18,14 +23,19 @@ const (
 	defaultOperatorGroupName         = "test-operator-group"
 	defaultSubscriptionName          = "test-portworx-certified"
 
-	getInstallPlanListTimeout       = 1 * time.Minute
-	getInstallPlanListRetryInterval = 2 * time.Second
+	defaultPxVsphereSecretName = "px-vsphere-secret"
+
+	getInstallPlanListTimeout       = 10 * time.Minute
+	getInstallPlanListRetryInterval = 5 * time.Second
+
+	getPxVsphereSecretTimeout       = 10 * time.Minute
+	getPxVsphereSecretRetryInterval = 5 * time.Second
 )
 
 // DeployAndValidatePxOperatorViaMarketplace deploys and validates PX Operator via Openshift Marketplace
-func DeployAndValidatePxOperatorViaMarketplace() error {
+func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	// Deploy CatalogSource
-	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, PxOperatorTag)
+	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, operatorVersion)
 	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
 	if err != nil {
 		return err
@@ -38,18 +48,18 @@ func DeployAndValidatePxOperatorViaMarketplace() error {
 	}
 
 	// Deploy Subscription
-	testSubscription, err := DeploySubscription(defaultSubscriptionName, PxNamespace, PxOperatorTag, testCatalogSource)
+	testSubscription, err := DeploySubscription(defaultSubscriptionName, PxNamespace, operatorVersion, testCatalogSource)
 	if err != nil {
 		return err
 	}
 
 	// Approve InstallPlan
-	if err := ApproveInstallPlan(PxNamespace, PxOperatorTag, testSubscription); err != nil {
+	if err := ApproveInstallPlan(PxNamespace, operatorVersion, testSubscription); err != nil {
 		return err
 	}
 
-	// Validate PX Operator deployment
-	if _, err := ValidatePxOperator(PxNamespace); err != nil {
+	// Validate PX Operator deployment and version
+	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
 		return err
 	}
 
@@ -96,6 +106,40 @@ func DeleteAndValidatePxOperatorViaMarketplace() error {
 	return nil
 }
 
+// UpdateAndValidatePxOperatorViaMarketplace updates and validates PX Operator and its resources via Openshift Marketplace
+func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
+	// Edit CatalogSource with the new PX Operator version
+	updateParamFunc := func(testCatalogSource *v1alpha1.CatalogSource) *v1alpha1.CatalogSource {
+		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, operatorVersion)
+		return testCatalogSource
+	}
+
+	testCatalogSource := &v1alpha1.CatalogSource{}
+	testCatalogSource.Name = defaultCatalogSourceName
+	testCatalogSource.Namespace = defaultCatalogSourceNamespace
+	if _, err := UpdateCatalogSource(testCatalogSource, updateParamFunc); err != nil {
+		return err
+	}
+
+	// Get subscription
+	testSubscription, err := opmpops.Instance().GetSubscription(defaultSubscriptionName, PxNamespace)
+	if err != nil {
+		return err
+	}
+
+	// Wait for new InstallPlan with that new version in clusterServiceVersionNames and approve it
+	if err := ApproveInstallPlan(PxNamespace, operatorVersion, testSubscription); err != nil {
+		return err
+	}
+
+	// Validate PX Operator deployment and version
+	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // DeployCatalogSource creates CatalogSource resource
 func DeployCatalogSource(name, namespace, registryImage string) (*v1alpha1.CatalogSource, error) {
 	logrus.Infof("Create test CatalogSrouce [%s] in namespace [%s]", name, namespace)
@@ -117,10 +161,10 @@ func DeployCatalogSource(name, namespace, registryImage string) (*v1alpha1.Catal
 }
 
 // DeployOperatorGroup creates OperatorGroup resource
-func DeployOperatorGroup(name, namespace string) (*v1.OperatorGroup, error) {
+func DeployOperatorGroup(name, namespace string) (*op_v1.OperatorGroup, error) {
 	logrus.Infof("Create test OperatorGroup [%s] in namespace [%s]", name, namespace)
-	testOperatorGroupTemplate := &v1.OperatorGroup{
-		Spec: v1.OperatorGroupSpec{
+	testOperatorGroupTemplate := &op_v1.OperatorGroup{
+		Spec: op_v1.OperatorGroupSpec{
 			TargetNamespaces: []string{namespace},
 		},
 	}
@@ -170,11 +214,15 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 			logrus.Infof("Successfully got list of InstallPlans in namespace [%s]", namespace)
 			for _, instp := range instpl.Items {
 				if subscription.Name == instp.OwnerReferences[0].Name {
-					logrus.Infof("found the correct InstallPlan [%s] in namespace [%s]", instp.Name, instp.Namespace)
-					return instp, false, nil
+					for _, clusterServiceVersions := range instp.Spec.ClusterServiceVersionNames {
+						if clusterServiceVersions == fmt.Sprintf("portworx-operator.v%s", opTag) {
+							logrus.Infof("found the correct InstallPlan [%s] in namespace [%s]", instp.Name, instp.Namespace)
+							return instp, false, nil
+						}
+					}
 				}
 			}
-			return nil, true, fmt.Errorf("failed to find the correct InstallPlan with OwnerReference for Subscription [%s]", subscription.Name)
+			return nil, true, fmt.Errorf("failed to find the correct InstallPlan with OwnerReference for Subscription [%s] and/or PX Operator version [%s]", subscription.Name, opTag)
 		}
 		return nil, true, fmt.Errorf("failed to find any InstallPlans in namespace [%s]", namespace)
 	}
@@ -235,6 +283,25 @@ func DeleteCatalogSource(name, namespace string) error {
 	return nil
 }
 
+// UpdateCatalogSource updates CatalogSource resource
+func UpdateCatalogSource(catalogSource *v1alpha1.CatalogSource, f func(*v1alpha1.CatalogSource) *v1alpha1.CatalogSource) (*v1alpha1.CatalogSource, error) {
+	logrus.Infof("Updating CatalogSource [%s] in namespace [%s]", catalogSource.Name, catalogSource.Namespace)
+	// Get CatalogSource
+	liveCatalogSource, err := opmpops.Instance().GetCatalogSource(catalogSource.Name, catalogSource.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	newCatalogSource := f(liveCatalogSource)
+
+	latestCatalogSource, err := opmpops.Instance().UpdateCatalogSource(newCatalogSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update CatalogSource [%s] in namespace [%s], Err: %v", catalogSource.Name, catalogSource.Namespace, err)
+	}
+	logrus.Infof("Successfully updated CatalogSource [%s] in namespace [%s]", latestCatalogSource.Name, latestCatalogSource.Namespace)
+	return latestCatalogSource, nil
+}
+
 // GetCurrentCSV gets currentCSV from Subscription object and returns it as a string
 func GetCurrentCSV(name, namespace string) (string, error) {
 	logrus.Infof("Getting currentCSV from Subscription [%s] in namespace [%s]", name, namespace)
@@ -249,4 +316,40 @@ func GetCurrentCSV(name, namespace string) (string, error) {
 		return "", fmt.Errorf("got empty currentCSV from Subscription [%s]", testSubscription.Name)
 	}
 	return currentCSV, nil
+}
+
+// CreatePxVsphereSecret creates secret for PX to authenticate with vSphere
+func CreatePxVsphereSecret(namespace, pxVsphereUsername, pxVspherePassword string) error {
+	logrus.Infof("Creating secret [%s]", defaultPxVsphereSecretName)
+	name, _ := base64.StdEncoding.DecodeString(pxVsphereUsername)
+	password, _ := base64.StdEncoding.DecodeString(pxVspherePassword)
+
+	secret := core_v1.Secret{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      defaultPxVsphereSecretName,
+			Namespace: namespace,
+		},
+		Type: "Opaque",
+		Data: map[string][]byte{
+			"VSPHERE_USER":     name,
+			"VSPHERE_PASSWORD": password,
+		},
+	}
+
+	t := func() (interface{}, bool, error) {
+		if _, err := core.Instance().CreateSecret(&secret); err != nil {
+			if k8s_errors.IsAlreadyExists(err) {
+				logrus.Warnf("Secret [%s] already exists, reusing it.", secret.Name)
+				return nil, false, nil
+			}
+			return nil, true, fmt.Errorf("failed to create secret [%s], Err: %v", secret.Name, err)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, getPxVsphereSecretTimeout, getPxVsphereSecretRetryInterval); err != nil {
+		return err
+	}
+
+	return nil
 }
