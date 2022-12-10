@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/go-version"
 	ocp_secv1 "github.com/openshift/api/security/v1"
@@ -12,14 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	opcorev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 )
 
 const (
@@ -85,20 +86,35 @@ func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 	// Note SCC does not belong to namespace hence we don't set owner reference to StorageCluster.
 	// By design cross-namespace owner reference is invalid.
 	for _, scc := range s.getSCCs(cluster) {
+		out := &ocp_secv1.SecurityContextConstraints{}
 		err := s.k8sClient.Get(context.TODO(),
 			types.NamespacedName{
 				Name: scc.Name,
 			},
-			&ocp_secv1.SecurityContextConstraints{})
+			out)
 
 		if errors.IsNotFound(err) {
 			err = s.k8sClient.Create(context.TODO(), &scc)
-		}
+			if err != nil {
+				return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
+			}
+		} else if err != nil {
+			return err
+		} else {
+			// Skip reconcile the SCC if the annotation is set to true.
+			enabled, err := strconv.ParseBool(out.Annotations[constants.AnnotationReconcileObject])
+			if err == nil && !enabled {
+				return nil
+			}
 
-		if err != nil {
-			return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
+			scc.ResourceVersion = out.ResourceVersion
+			err = s.k8sClient.Update(context.TODO(), &scc)
+			if err != nil {
+				return fmt.Errorf("failed to update %s security context constraints: %s", scc.Name, err)
+			}
 		}
 	}
+
 	return nil
 }
 

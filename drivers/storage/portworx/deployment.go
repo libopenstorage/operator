@@ -460,7 +460,10 @@ func configureStorageNodeSpec(node *corev1.StorageNode, config *cloudstorage.Con
 func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Container {
 	pxImage := util.GetImageURN(t.cluster, t.cluster.Spec.Image)
 	sc := &v1.SecurityContext{
-		Privileged: boolPtr(true),
+		Privileged: boolPtr(pxutil.GetPrivileged(cluster)),
+		Capabilities: &v1.Capabilities{
+			Add: pxutil.GetContainerCapabilities(t.cluster),
+		},
 	}
 	if t.isBottleRocketOS() {
 		sc.Privileged = boolPtr(false)

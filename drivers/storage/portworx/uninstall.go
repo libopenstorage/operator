@@ -177,7 +177,6 @@ func (u *uninstallPortworx) RunNodeWiper(
 		coresPwx = path.Join(pwxHostPathRoot, path.Base(varCores))
 	}
 
-	trueVar := true
 	labels := map[string]string{
 		"name": pxNodeWiperDaemonSetName,
 	}
@@ -234,7 +233,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 							ImagePullPolicy: pxutil.ImagePullPolicy(u.cluster),
 							Args:            args,
 							SecurityContext: &v1.SecurityContext{
-								Privileged: &trueVar,
+								Privileged: boolPtr(pxutil.GetPrivileged(u.cluster)),
+								Capabilities: &v1.Capabilities{
+									Add: pxutil.GetContainerCapabilities(u.cluster),
+								},
 							},
 							ReadinessProbe: &v1.Probe{
 								InitialDelaySeconds: 30,
