@@ -69,7 +69,7 @@ BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(RELEASE_VER)
 REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(RELEASE_VER)
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
-PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-19.0.1
+PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-42.1.0
 PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/prometheus-community/helm-charts/$(PROMETHEUS_OPERATOR_HELM_CHARTS_TAG)/charts/kube-prometheus-stack/crds
 CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v3.0.3/client/config/crd
 CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v4.2.1/client/config/crd
@@ -176,6 +176,13 @@ operator:
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
+
+DOCK_BUILD_CNT	:= golang:1.19.1
+
+docker-build:
+	@echo "Building using docker"
+	docker run --rm -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
+		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
 
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"

@@ -2854,28 +2854,26 @@ func getPortworxVersionFromManifestURL(url string) string {
 
 // GetPxOperatorVersion returns PX Operator version
 func GetPxOperatorVersion() (*version.Version, error) {
-	image, err := getPxOperatorImage()
+	imageTag, err := getPxOperatorImageTag()
 	if err != nil {
 		return nil, err
 	}
 
 	// We may run the automation on operator installed using private images,
 	// so assume we are testing the latest operator version if failed to parse the tag
-	versionTag := strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
-	opVersion, err := version.NewVersion(versionTag)
+	opVersion, err := version.NewVersion(imageTag)
 	if err != nil {
 		masterVersionTag := PxOperatorMasterVersion
 		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", PxOperatorMasterVersion)
 		opVersion, _ = version.NewVersion(masterVersionTag)
 	}
 
-	logrus.Infof("Testing portworx-operator version: %s", opVersion.String())
+	logrus.Infof("Testing portworx-operator version [%s]", opVersion.String())
 	return opVersion, nil
 }
 
-func getPxOperatorImage() (string, error) {
+func getPxOperatorImageTag() (string, error) {
 	labelSelector := map[string]string{}
-	var image string
 
 	NamespaceList, err := coreops.Instance().ListNamespaces(labelSelector)
 	if err != nil {
@@ -2890,18 +2888,28 @@ func getPxOperatorImage() (string, error) {
 			}
 			return "", err
 		}
-
 		logrus.Infof("Found deployment name: %s in namespace: %s", operatorDeployment.Name, operatorDeployment.Namespace)
 
+		var tag string
 		for _, container := range operatorDeployment.Spec.Template.Spec.Containers {
 			if container.Name == "portworx-operator" {
-				image = container.Image
-				logrus.Infof("Get portworx-operator image installed: %s", image)
-				break
+				if strings.Contains(container.Image, "registry.connect.redhat.com") { // PX Operator deployed via Openshift Marketplace will have "registry.connect.redhat.com" as part of image
+					for _, env := range container.Env {
+						if env.Name == "OPERATOR_CONDITION_NAME" {
+							tag = strings.Split(env.Value, ".v")[1]
+							logrus.Infof("Looks like portworx-operator was installed via Openshift Marketplace, image [%s], actual tag [%s]", container.Image, tag)
+							return tag, nil
+						}
+					}
+				} else {
+					tag = strings.Split(container.Image, ":")[1]
+					logrus.Infof("Get portworx-operator image installed [%s], actual tag [%s]", container.Image, tag)
+					return tag, nil
+				}
 			}
 		}
 	}
-	return image, nil
+	return "", fmt.Errorf("failed to get PX Operator tag")
 }
 
 // ValidateAlertManager validates alertManager components

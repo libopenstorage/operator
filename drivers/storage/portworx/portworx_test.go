@@ -447,6 +447,8 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	require.False(t, ok)
 	_, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.False(t, ok)
+	require.NotNil(t, cluster.Spec.Storage)
+	require.Nil(t, cluster.Spec.CloudStorage)
 
 	// TestCase: test eks
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
@@ -471,10 +473,25 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	require.Equal(t, "true", check)
 
 	// Check cloud storage spec
-	expectedCloudStorage := "type=gp3,size=150"
+	require.Nil(t, cluster.Spec.Storage)
 	require.NotNil(t, cluster.Spec.CloudStorage.DeviceSpecs)
-	require.Contains(t, *cluster.Spec.CloudStorage.DeviceSpecs, expectedCloudStorage)
+	expectedCloudStorageDevice := "type=gp3,size=150"
+	require.Contains(t, *cluster.Spec.CloudStorage.DeviceSpecs, expectedCloudStorageDevice)
 	require.True(t, cluster.Spec.Kvdb.Internal)
+
+	// Check cloud storage spec when capacity spec specified
+	cluster.Spec = corev1.StorageClusterSpec{
+		CloudStorage: &corev1.CloudStorageSpec{
+			CapacitySpecs: []corev1.CloudStorageCapacitySpec{{
+				MinCapacityInGiB: 500,
+			}},
+		},
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Storage)
+	require.NotNil(t, cluster.Spec.CloudStorage)
+	require.Empty(t, cluster.Spec.CloudStorage.DeviceSpecs)
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))

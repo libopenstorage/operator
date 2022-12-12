@@ -1,13 +1,13 @@
 package portworx
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
-	"os/user"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,12 +26,13 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	ocp_secv1 "github.com/openshift/api/security/v1"
-
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -52,6 +53,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	etcHostsFile       = "/etc/hosts"
+	tempEtcHostsMarker = "### px-operator unit-test"
 )
 
 func TestOrderOfComponents(t *testing.T) {
@@ -3568,6 +3574,52 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 		},
 	}
 	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: automatic TLS setup, when no CRT/KEY/CA files provided
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+			},
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+	// test
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 2)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxEnableTLS,
+			Value: "true",
+		},
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
@@ -4681,8 +4733,6 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	require.Equal(t, "true", updatedUserToken.Annotations[component.AnnotationSkipResource])
 }
 
-var tempEtcHosts = "/etc/hosts.orig-pre-go-test"
-
 // setupEtcHosts sets up given ip/hosts in `/etc/hosts` file for "local" DNS resolution  (i.e. emulate K8s DNS)
 // - you will need to be a root-user to run this
 // - also, make sure your `/etc/nsswitch.conf` file contains `hosts: files ...` as a first entry
@@ -4691,20 +4741,13 @@ func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
 	if len(hostnames) <= 0 {
 		return
 	}
-	if u, err := user.Current(); err != nil {
-		require.NoError(t, err)
-	} else if u.Uid != "0" {
-		t.Skip("This test requires ROOT user")
+	if err := unix.Access(etcHostsFile, unix.W_OK); err != nil {
+		t.Skipf("This test requires ROOT user  (writeable /etc/hosts): %s", err)
 	}
 
 	// read original content
 	content, err := os.ReadFile("/etc/hosts")
 	require.NoError(t, err)
-
-	if _, err = os.Stat(tempEtcHosts); os.IsNotExist(err) {
-		err = os.Rename("/etc/hosts", tempEtcHosts)
-		require.NoError(t, err)
-	}
 
 	if ip == "" {
 		ip = "127.0.0.1"
@@ -4712,6 +4755,8 @@ func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
 
 	// update content
 	bb := bytes.NewBuffer(content)
+	bb.WriteRune('\n')
+	bb.WriteString(tempEtcHostsMarker)
 	bb.WriteRune('\n')
 	for _, hn := range hostnames {
 		bb.WriteString(ip)
@@ -4722,15 +4767,42 @@ func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
 		bb.WriteString(".svc.cluster.local")
 		bb.WriteRune('\n')
 	}
-	err = os.WriteFile("/etc/hosts", bb.Bytes(), 0666)
+
+	// overwrite /etc/hosts
+	fd, err := os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
 	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
 }
 
 func restoreEtcHosts(t *testing.T) {
-	if _, err := os.Stat(tempEtcHosts); err == nil {
-		err = os.Rename(tempEtcHosts, "/etc/hosts")
-		require.NoError(t, err)
+	fd, err := os.Open(etcHostsFile)
+	require.NoError(t, err)
+	var bb bytes.Buffer
+	scan := bufio.NewScanner(fd)
+	for scan.Scan() {
+		line := scan.Text()
+		if line == tempEtcHostsMarker {
+			// skip copying everything below `tempEtcHostsMarker`
+			break
+		}
+		bb.WriteString(line)
+		bb.WriteRune('\n')
 	}
+	fd.Close()
+
+	// overwrite /etc/hosts
+	require.True(t, bb.Len() > 0)
+	fd, err = os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
+	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
 }
 
 func TestGuestAccessSecurity(t *testing.T) {

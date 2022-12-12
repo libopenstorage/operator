@@ -25,6 +25,7 @@ var (
 	pxVer2_2, _   = version.NewVersion("2.2")
 	pxVer2_5, _   = version.NewVersion("2.5")
 	pxVer2_10, _  = version.NewVersion("2.10")
+	pxVer2_13, _  = version.NewVersion("2.13")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
@@ -259,9 +260,14 @@ func (c *CSIConfiguration) DriverBasePath() string {
 }
 
 func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
-	provisionerImage := "docker.io/openstorage/csi-provisioner:v3.2.1-1"
-	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1"
-	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v6.0.1"
+	provisionerImage := "k8s.gcr.io/sig-storage/csi-provisioner:v3.3.0"
+	snapshotterImage := "k8s.gcr.io/sig-storage/csi-snapshotter:v6.1.0"
+	snapshotControllerImage := "k8s.gcr.io/sig-storage/snapshot-controller:v6.1.0"
+
+	// Provisioner fork can only be removed in PX 2.13 and later.
+	if g.pxVersion.LessThan(pxVer2_13) {
+		provisionerImage = "docker.io/openstorage/csi-provisioner:v3.2.1-1"
+	}
 
 	// For k8s 1.19 and earlier, use older versions
 	if g.kubeVersion.LessThan(k8sVer1_20) {
@@ -278,12 +284,12 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 
 	return &CSIImages{
 		Attacher:                "docker.io/openstorage/csi-attacher:v1.2.1-1",
-		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1",
+		NodeRegistrar:           "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.6.2",
 		Provisioner:             provisionerImage,
 		Snapshotter:             snapshotterImage,
-		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.5.0",
+		Resizer:                 "k8s.gcr.io/sig-storage/csi-resizer:v1.6.0",
 		SnapshotController:      snapshotControllerImage,
-		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.6.0",
+		HealthMonitorController: "k8s.gcr.io/sig-storage/csi-external-health-monitor-controller:v0.7.0",
 	}
 }
 

@@ -64,6 +64,7 @@ spec:
     - -is-gke=IS_GKE
     - -cloud-provider=CLOUD_PROVIDER
     - -px-upgrade-hops-url-list=PX_UPGRADE_HOPS_URL_LIST
+    - -operator-image-tag=OPERATOR_IMAGE_TAG
     - -operator-upgrade-hops-image-list=OPERATOR_UPGRADE_HOPS_IMAGE_LIST
     - -log-level=LOG_LEVEL
     - -test.run=FOCUS_TESTS
