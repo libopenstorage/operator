@@ -24,11 +24,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
 	schedcomp "k8s.io/component-base/config/v1alpha1"
 	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
 	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
-
 	"sigs.k8s.io/yaml"
 )
 
@@ -863,7 +861,7 @@ func (c *Controller) createStorkSchedDeployment(
 	}
 
 	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForPinnedStorkScheduler) &&
-		!c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+		c.kubernetesVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
 		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
 	} else {
 		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
