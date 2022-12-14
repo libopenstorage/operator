@@ -21,7 +21,14 @@ spec:
         args:
         - -w
         securityContext:
-          privileged: true
+          privileged: false
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - SYS_PTRACE
+              - SYS_RAWIO
+              - SYS_MODULE
+              - LINUX_IMMUTABLE
         readinessProbe:
           initialDelaySeconds: 30
           exec:

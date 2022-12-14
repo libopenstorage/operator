@@ -1207,9 +1207,7 @@ func GetPrivileged(cluster *corev1.StorageCluster) bool {
 	privStr := strings.TrimSpace(cluster.Annotations["portworx.io/container-privileged"])
 	b, err := strconv.ParseBool(privStr)
 	if err != nil {
-		logrus.WithField("annotation", privStr).WithError(err).Errorf("Failed to parse bool")
-		// Backward compatible: default to true.
-		return true
+		return false
 	}
 
 	return b
