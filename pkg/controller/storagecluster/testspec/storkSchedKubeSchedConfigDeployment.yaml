@@ -30,29 +30,28 @@ spec:
       containers:
       - command:
         - /usr/local/bin/kube-scheduler
-        - --address=0.0.0.0
-        - --leader-elect=true
-        - --scheduler-name=stork
-        - --policy-configmap=stork-config
-        - --policy-configmap-namespace=kube-test
-        - --lock-object-name=stork-scheduler
-        image: k8s.gcr.io/kube-scheduler-amd64:v1.21.4
+        - --bind-address=0.0.0.0
+        - --config=/etc/kubernetes/stork-config.yaml
+        image: k8s.gcr.io/kube-scheduler-amd64:v1.23.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 10251
-            scheme: HTTP
+            port: 10259
+            scheme: HTTPS
           initialDelaySeconds: 15
         name: stork-scheduler
         readinessProbe:
           httpGet:
             path: /healthz
-            port: 10251
-            scheme: HTTP
+            port: 10259
+            scheme: HTTPS
         resources:
           requests:
             cpu: '0.1'
+        volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: scheduler-config
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -65,3 +64,7 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       hostPID: false
       serviceAccountName: stork-scheduler
+      volumes:
+      - configMap:
+          name: stork-config
+        name: scheduler-config

@@ -1567,6 +1567,9 @@ k8s.io/kube-openapi/pkg/spec3
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/util/sets
 k8s.io/kube-openapi/pkg/validation/spec
+# k8s.io/kube-scheduler v0.0.0 => k8s.io/kube-scheduler v0.25.1
+## explicit; go 1.19
+k8s.io/kube-scheduler/config/v1beta3
 # k8s.io/kubernetes v1.25.1 => k8s.io/kubernetes v1.25.1
 ## explicit; go 1.19
 k8s.io/kubernetes/pkg/api/legacyscheme
@@ -1587,6 +1590,9 @@ k8s.io/kubernetes/pkg/controller
 k8s.io/kubernetes/pkg/controller/daemon/util
 k8s.io/kubernetes/pkg/features
 k8s.io/kubernetes/pkg/fieldpath
+k8s.io/kubernetes/pkg/scheduler/apis/config
+k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3
+k8s.io/kubernetes/pkg/scheduler/framework/plugins/names
 k8s.io/kubernetes/pkg/util/hash
 k8s.io/kubernetes/pkg/util/parsers
 k8s.io/kubernetes/pkg/util/taints
