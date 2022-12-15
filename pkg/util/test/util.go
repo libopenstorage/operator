@@ -1472,12 +1472,13 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 		}
 
 		K8sVer1_22, _ := version.NewVersion("1.22")
+		k8sMinVersionForKubeSchedulerConfiguration, _ := version.NewVersion("1.23")
 		kubeVersion, _, err := GetFullVersion()
 		if err != nil {
 			return nil, true, err
 		}
 
-		if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+		if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) && kubeVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
 			// TODO Image tag for stork-scheduler is hardcoded to v1.21.4 for clusters 1.22 and up
 			if err = validateImageTag("v1.21.4", cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
 				return nil, true, err

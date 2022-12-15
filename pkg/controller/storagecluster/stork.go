@@ -24,6 +24,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	schedcomp "k8s.io/component-base/config/v1alpha1"
+	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
+	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -41,12 +45,16 @@ const (
 	storkSchedDeploymentName         = "stork-scheduler"
 	storkSchedContainerName          = "stork-scheduler"
 	storkServicePort                 = 8099
+
+	defaultKubeSchedulerPort = 10259
+
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
 	// Stork scheduler cannot run with kube-scheduler image > v1.22
-	pinnedStorkSchedulerVersion          = "1.21.4"
-	minK8SVersionForPinnedStorkScheduler = "1.22.0"
+	pinnedStorkSchedulerVersion                = "1.21.4"
+	minK8sVersionForPinnedStorkScheduler       = "1.22.0"
+	minK8sVersionForKubeSchedulerConfiguration = "1.23.0"
 )
 
 const (
@@ -233,10 +241,67 @@ func (c *Controller) createStorkConfigMap(
 		},
 	}
 
-	policyConfig, err := json.Marshal(policy)
+	leaderElect := true
+	schedulerName := storkDeploymentName
+	kubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "KubeSchedulerConfiguration",
+			APIVersion: "kubescheduler.config.k8s.io/v1beta3",
+		},
+		LeaderElection: schedcomp.LeaderElectionConfiguration{
+			LeaderElect:       &leaderElect,
+			ResourceNamespace: clusterNamespace,
+			ResourceName:      storkSchedDeploymentName,
+			LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
+			RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
+			RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
+			ResourceLock:      "leases",
+		},
+		Profiles: []schedconfig.KubeSchedulerProfile{
+			{
+				SchedulerName: &schedulerName,
+			},
+		},
+		Extenders: []schedconfig.Extender{
+			{
+				URLPrefix: fmt.Sprintf(
+					"http://%s.%s:%d",
+					storkServiceName, clusterNamespace, storkServicePort,
+				),
+				FilterVerb:       "filter",
+				PrioritizeVerb:   "prioritize",
+				Weight:           5,
+				EnableHTTPS:      false,
+				NodeCacheCapable: false,
+				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+			},
+		},
+	}
+
+	// Auto fill the default configuration params
+	schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfiguration)
+
+	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
 	if err != nil {
-		logrus.WithError(err).Errorf("Could not encode policy object")
+		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
 		return err
+	}
+	var policyConfig []byte
+	var dataKey string
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+		policyConfig, err = yaml.Marshal(kubeSchedulerConfiguration)
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not encode policy object")
+			return err
+		}
+		dataKey = "stork-config.yaml"
+	} else {
+		policyConfig, err = json.Marshal(policy)
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not encode policy object")
+			return err
+		}
+		dataKey = "policy.cfg"
 	}
 
 	return k8sutil.CreateOrUpdateConfigMap(
@@ -248,7 +313,7 @@ func (c *Controller) createStorkConfigMap(
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: map[string]string{
-				"policy.cfg": string(policyConfig),
+				dataKey: string(policyConfig),
 			},
 		},
 		ownerRef,
@@ -358,7 +423,7 @@ func (c *Controller) createStorkSchedClusterRole() error {
 				},
 				{
 					APIGroups: []string{""},
-					Resources: []string{"nodes"},
+					Resources: []string{"nodes", "namespaces"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
@@ -783,13 +848,20 @@ func (c *Controller) createStorkSchedDeployment(
 		kubeSchedImage = "k8s.gcr.io/kube-scheduler-amd64"
 	}
 
-	k8sVersion, err := version.NewVersion(minK8SVersionForPinnedStorkScheduler)
+	k8sMinVersionForPinnedStorkScheduler, err := version.NewVersion(minK8sVersionForPinnedStorkScheduler)
 	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", minK8SVersionForPinnedStorkScheduler)
+		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForPinnedStorkScheduler)
 		return err
 	}
 
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sVersion) {
+	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
+	if err != nil {
+		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
+		return err
+	}
+
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForPinnedStorkScheduler) &&
+		c.kubernetesVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
 		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
 	} else {
 		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
@@ -799,14 +871,23 @@ func (c *Controller) createStorkSchedDeployment(
 		kubeSchedImage,
 	)
 
-	command := []string{
-		"/usr/local/bin/kube-scheduler",
-		"--address=0.0.0.0",
-		"--leader-elect=true",
-		"--scheduler-name=stork",
-		"--policy-configmap=" + storkConfigMapName,
-		"--policy-configmap-namespace=" + cluster.Namespace,
-		"--lock-object-name=stork-scheduler",
+	var command []string
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+		command = []string{
+			"/usr/local/bin/kube-scheduler",
+			"--bind-address=0.0.0.0",
+			"--config=/etc/kubernetes/stork-config.yaml",
+		}
+	} else {
+		command = []string{
+			"/usr/local/bin/kube-scheduler",
+			"--address=0.0.0.0",
+			"--leader-elect=true",
+			"--scheduler-name=stork",
+			"--policy-configmap=" + storkConfigMapName,
+			"--policy-configmap-namespace=" + cluster.Namespace,
+			"--lock-object-name=stork-scheduler",
+		}
 	}
 
 	if val, ok := cluster.Spec.Stork.Args["verbose"]; ok && val == "true" {
@@ -858,7 +939,14 @@ func (c *Controller) createStorkSchedDeployment(
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isStorkSchedDeploymentCreated || modified {
-		deployment := getStorkSchedDeploymentSpec(cluster, ownerRef, imageName, command, targetCPUQuantity, updatedTopologySpreadConstraints)
+		deployment := getStorkSchedDeploymentSpec(
+			cluster,
+			ownerRef,
+			imageName,
+			command,
+			targetCPUQuantity,
+			updatedTopologySpreadConstraints,
+			c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -874,11 +962,45 @@ func getStorkSchedDeploymentSpec(
 	command []string,
 	cpuQuantity resource.Quantity,
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
+	needsKubeSchedulerConfiguration bool,
 ) *apps.Deployment {
 	pullPolicy := imagePullPolicy(cluster)
 	replicas := int32(3)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
+
+	var scheme v1.URIScheme
+	var port int
+	var volumeMounts []v1.VolumeMount
+	var volumes []v1.Volume
+
+	if needsKubeSchedulerConfiguration {
+		scheme = v1.URISchemeHTTPS
+		port = defaultKubeSchedulerPort
+		volumeMounts = []v1.VolumeMount{
+			{
+				Name:      "scheduler-config",
+				MountPath: "/etc/kubernetes",
+			},
+		}
+		volumes = []v1.Volume{
+			{
+				Name: "scheduler-config",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: "stork-config",
+						},
+					},
+				},
+			},
+		}
+	} else {
+		scheme = v1.URISchemeHTTP
+		port = 10251
+		volumeMounts = nil
+		volumes = nil
+	}
 
 	deployment := &apps.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -916,16 +1038,18 @@ func getStorkSchedDeploymentSpec(
 								InitialDelaySeconds: 15,
 								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt(10251),
+										Path:   "/healthz",
+										Port:   intstr.FromInt(port),
+										Scheme: scheme,
 									},
 								},
 							},
 							ReadinessProbe: &v1.Probe{
 								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt(10251),
+										Path:   "/healthz",
+										Port:   intstr.FromInt(port),
+										Scheme: scheme,
 									},
 								},
 							},
@@ -934,8 +1058,10 @@ func getStorkSchedDeploymentSpec(
 									v1.ResourceCPU: cpuQuantity,
 								},
 							},
+							VolumeMounts: volumeMounts,
 						},
 					},
+					Volumes: volumes,
 					Affinity: &v1.Affinity{
 						PodAntiAffinity: &v1.PodAntiAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
