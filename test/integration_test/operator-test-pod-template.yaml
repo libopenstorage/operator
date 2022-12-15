@@ -64,6 +64,7 @@ spec:
     - -is-eks=IS_EKS
     - -is-aks=IS_AKS
     - -is-gke=IS_GKE
+    - -is-oke=IS_OKE
     - -cloud-provider=CLOUD_PROVIDER
     - -px-upgrade-hops-url-list=PX_UPGRADE_HOPS_URL_LIST
     - -operator-image-tag=OPERATOR_IMAGE_TAG
