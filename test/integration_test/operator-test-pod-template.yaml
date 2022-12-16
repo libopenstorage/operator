@@ -54,6 +54,8 @@ spec:
     - -portworx-spec-gen-url=PORTWORX_SPEC_GEN_URL
     - -portworx-docker-username=PORTWORX_DOCKER_USERNAME
     - -portworx-docker-password=PORTWORX_DOCKER_PASSWORD
+    - -portworx-vsphere-username=PORTWORX_VSPHERE_USERNAME
+    - -portworx-vsphere-password=PORTWORX_VSPHERE_PASSWORD
     - -portworx-image-override=PX_IMAGE_OVERRIDE
     - -portworx-device-specs=PORTWORX_DEVICE_SPECS
     - -portworx-kvdb-spec=PORTWORX_KVDB_SPEC

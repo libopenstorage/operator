@@ -12,6 +12,8 @@ focus_tests=""
 short_test=false
 portworx_docker_username=""
 portworx_docker_password=""
+portworx_vsphere_username=""
+portworx_vsphere_password=""
 portworx_image_override=""
 cloud_provider=""
 is_ocp=false
@@ -32,7 +34,7 @@ case $i in
         shift
         ;;
     --portworx-docker-username)
-        echo "Operator Docker username used to pull OCI image for test: $2"
+        echo "Portworx Docker username used to pull OCI image for test: $2"
         portworx_docker_username=$2
         shift
         shift
@@ -40,6 +42,18 @@ case $i in
     --portworx-docker-password)
         echo "Portworx Docker password used to pull OCI image for test: $2"
         portworx_docker_password=$2
+        shift
+        shift
+        ;;
+    --portworx-vsphere-username)
+        echo "Encoded base64 Portworx vSphere username used for authentication with vSphere for test: $2"
+        portworx_vsphere_username=$2
+        shift
+        shift
+        ;;
+    --portworx-vsphere-password)
+        echo "Encoded base64 Portworx vSphere password used for authentication with vSphere for test: $2"
+        portworx_vsphere_password=$2
         shift
         shift
         ;;
@@ -259,9 +273,20 @@ else
     sed -i '/PORTWORX_DOCKER_PASSWORD/d' $test_pod_spec
 fi
 
+# Encoded base64 Portworx vSphere credentials
+if [ "$portworx_vsphere_username" != "" ] && [ "$portworx_vsphere_password" != "" ]; then
+    sed -i "s|PORTWORX_VSPHERE_USERNAME|$portworx_vsphere_username|g" $test_pod_spec
+    sed -i "s|PORTWORX_VSPHERE_PASSWORD|$portworx_vsphere_password|g" $test_pod_spec
+else
+    sed -i '/PORTWORX_VSPHERE_USERNAME/d' $test_pod_spec
+    sed -i '/PORTWORX_VSPHERE_PASSWORD/d' $test_pod_spec
+fi
+
 # Set test image
 sed -i 's|'openstorage/px-operator-test:.*'|'"$test_image_name"'|g' $test_pod_spec
 sed -i 's|'PX_IMAGE_OVERRIDE'|'"$portworx_image_override"'|g' $test_pod_spec
+
+cat $test_pod_spec
 
 kubectl delete -f $test_pod_template
 kubectl create -f $test_pod_spec

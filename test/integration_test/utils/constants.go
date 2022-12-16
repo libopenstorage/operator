@@ -8,10 +8,15 @@ import (
 
 // Global test parameters that are set at the beginning of the run
 var (
-	//PxDockerUsername docker user name for internal repo
+	//PxDockerUsername docker username for internal repo
 	PxDockerUsername string
 	// PxDockerPassword docker credential for internal repo
 	PxDockerPassword string
+
+	//PxVsphereUsername vSpehre username for authentication
+	PxVsphereUsername string
+	// PxVspherePassword vSphere password for authentication
+	PxVspherePassword string
 
 	// PxSpecGenURL spec url to get component images
 	PxSpecGenURL string

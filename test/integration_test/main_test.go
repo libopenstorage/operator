@@ -42,6 +42,14 @@ func setup() error {
 		"portworx-docker-password",
 		"",
 		"Portworx Docker password used for pull")
+	flag.StringVar(&ci_utils.PxVsphereUsername,
+		"portworx-vsphere-username",
+		"",
+		"Encoded base64 Portworx vSphere username")
+	flag.StringVar(&ci_utils.PxVspherePassword,
+		"portworx-vsphere-password",
+		"",
+		"Encoded base64 Portworx vSphere password")
 	flag.StringVar(&ci_utils.PxSpecGenURL,
 		"portworx-spec-gen-url",
 		"",

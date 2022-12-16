@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 
 	appops "github.com/portworx/sched-ops/k8s/apps"
+	"github.com/portworx/sched-ops/task"
 )
 
 const (
@@ -129,7 +130,41 @@ func ValidatePxOperator(namespace string) (*appsv1.Deployment, error) {
 	if err := appops.Instance().ValidateDeployment(pxOperatorDeployment, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval); err != nil {
 		return nil, err
 	}
+
+	logrus.Infof("Successfuly validated PX Operator deployment")
 	return pxOperatorDeployment, nil
+}
+
+// ValidatePxOperatorDeploymentAndVersion validates PX Operator deployment is created and compares PX Operator version to the expected
+func ValidatePxOperatorDeploymentAndVersion(expectedOpVersion, namespace string) error {
+	pxOperatorDeployment := &appsv1.Deployment{}
+	pxOperatorDeployment.Name = pxOperatorDeploymentName
+	pxOperatorDeployment.Namespace = namespace
+
+	t := func() (interface{}, bool, error) {
+		if err := appops.Instance().ValidateDeployment(pxOperatorDeployment, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval); err != nil {
+			return nil, true, err
+		}
+
+		// Get PX Operator image tag
+		opVersion, err := getPXOperatorImageTag()
+		if err != nil {
+			return nil, true, err
+		}
+
+		if opVersion != expectedOpVersion {
+			return nil, true, fmt.Errorf("failed to validate PX Operator version, Expected version: %s, actual version: %s", expectedOpVersion, opVersion)
+		}
+
+		logrus.Infof("Successfuly validated PX Operator deployment and version [%s]", opVersion)
+		return nil, false, nil
+	}
+
+	_, err := task.DoRetryWithTimeout(t, getInstallPlanListTimeout, getInstallPlanListRetryInterval)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ValidatePxOperatorDeleted validate PX Operator deployment is deleted
