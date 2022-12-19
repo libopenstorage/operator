@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
@@ -21,12 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
-	schedulerv1 "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
+	schedcomp "k8s.io/component-base/config/v1alpha1"
+	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -39,6 +40,8 @@ func TestStorkInstallation(t *testing.T) {
 	testStorkInstallation(t, minSupportedK8sVersion)
 	testStorkInstallation(t, policyDecoderChangeVersion)
 	testStorkInstallation(t, "1.18.0")
+	testStorkInstallation(t, "1.23.0")
+	testStorkInstallation(t, "1.25.0")
 }
 
 func testStorkInstallation(t *testing.T, k8sVersionStr string) {
@@ -101,48 +104,100 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 
 	require.NoError(t, err)
 
-	// Stork ConfigMap
-	expectedPolicy := schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
-			{
-				URLPrefix:      "http://stork-service.kube-test:8099",
-				FilterVerb:     "filter",
-				PrioritizeVerb: "prioritize",
-				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
+	require.NoError(t, err)
+
+	if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+		// Stork ConfigMap
+		leaderElect := true
+		schedulerName := storkDeploymentName
+		expectedKubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "KubeSchedulerConfiguration",
+				APIVersion: "kubescheduler.config.k8s.io/v1beta3",
 			},
-		},
-	}
-	var actualPolicy schedulerv1.Policy
-	storkConfigMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, storkConfigMapName, storkConfigMap.Name)
-	require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
-	require.Len(t, storkConfigMap.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+			LeaderElection: schedcomp.LeaderElectionConfiguration{
+				LeaderElect:       &leaderElect,
+				ResourceNamespace: "kube-test",
+				ResourceName:      storkSchedDeploymentName,
+				LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
+				RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
+				RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
+				ResourceLock:      "leases",
+			},
+			Profiles: []schedconfig.KubeSchedulerProfile{
+				{
+					SchedulerName: &schedulerName,
+				},
+			},
+			Extenders: []schedconfig.Extender{
+				{
+					URLPrefix: fmt.Sprintf(
+						"http://%s.%s:%d",
+						storkServiceName, "kube-test", storkServicePort,
+					),
+					FilterVerb:       "filter",
+					PrioritizeVerb:   "prioritize",
+					Weight:           5,
+					EnableHTTPS:      false,
+					NodeCacheCapable: false,
+					HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		}
 
-	decoderChangeVersion, _ := version.NewVersion(policyDecoderChangeVersion)
-	if k8sVersion.LessThan(decoderChangeVersion) {
-		err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
+		var actualKubeSchedulerConfiguration = schedconfig.KubeSchedulerConfiguration{}
+		storkConfigMap := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Equal(t, storkConfigMapName, storkConfigMap.Name)
+		require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
+		require.Len(t, storkConfigMap.OwnerReferences, 1)
+		require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+
+		err = yaml.Unmarshal([]byte(storkConfigMap.Data["stork-config.yaml"]), &actualKubeSchedulerConfiguration)
+		require.NoError(t, err)
+
+		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.TypeMeta, actualKubeSchedulerConfiguration.TypeMeta))
+		require.Equal(t, expectedKubeSchedulerConfiguration.Profiles[0].SchedulerName, actualKubeSchedulerConfiguration.Profiles[0].SchedulerName)
+		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.LeaderElection, actualKubeSchedulerConfiguration.LeaderElection))
+		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.Extenders[0], actualKubeSchedulerConfiguration.Extenders[0]))
 	} else {
-		err = runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), []byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
+		// Stork ConfigMap
+		expectedPolicy := SchedulerPolicy{
+			Kind:       "Policy",
+			APIVersion: "kubescheduler.config.k8s.io/v1",
+			Extenders: []SchedulerExtender{
+				{
+					URLPrefix:      "http://stork-service.kube-test:8099",
+					FilterVerb:     "filter",
+					PrioritizeVerb: "prioritize",
+					Weight:         5,
+					HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
+				},
+			},
+		}
+		var actualPolicy SchedulerPolicy
+		storkConfigMap := &v1.ConfigMap{}
+		err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Equal(t, storkConfigMapName, storkConfigMap.Name)
+		require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
+		require.Len(t, storkConfigMap.OwnerReferences, 1)
+		require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+
+		err = json.Unmarshal([]byte(storkConfigMap.Data["policy.cfg"]), &actualPolicy)
+		require.NoError(t, err)
+
+		// Surprisingly the decoded object does not have kind and API version, both fields are empty. The encoded string
+		// does have both. There is no functionality issue so far however we need to keep an eye on it.
+		// The decoder and encoder are both following official k8s code and test code.
+		// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
+		// https://github.com/kubernetes/kubernetes/blob/release-1.21/test/integration/util/util.go#L432
+		//
+		// As a result of above, we only verify the extender instead of entire policy object here.
+		require.True(t, reflect.DeepEqual(expectedPolicy.Extenders[0], actualPolicy.Extenders[0]))
 	}
-
-	require.NoError(t, err)
-
-	// Surprisingly the decoded object does not have kind and API version, both fields are empty. The encoded string
-	// does have both. There is no functionality issue so far however we need to keep an eye on it.
-	// The decoder and encoder are both following official k8s code and test code.
-	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
-	// https://github.com/kubernetes/kubernetes/blob/release-1.21/test/integration/util/util.go#L432
-	//
-	// As a result of above, we only verify the extender instead of entire policy object here.
-	require.True(t, reflect.DeepEqual(expectedPolicy.Extenders[0], actualPolicy.Extenders[0]))
 
 	// ServiceAccounts
 	serviceAccountList := &v1.ServiceAccountList{}
@@ -258,21 +313,39 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.Equal(t, expectedStorkDeployment.Spec, storkDeployment.Spec)
 
 	// Sched Scheduler Deployment
-	expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedDeployment.yaml")
-	schedDeployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
-	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
-	require.Len(t, schedDeployment.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
-	// Ignoring resource comparison as the parsing from string creates different objects
-	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
-	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
-	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
-	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
-		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minSupportedK8sVersion, k8sVersionStr, -1)
-	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+	if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+		expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedKubeSchedConfigDeployment.yaml")
+		schedDeployment := &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+		require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+		require.Len(t, schedDeployment.OwnerReferences, 1)
+		require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+		// Ignoring resource comparison as the parsing from string creates different objects
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+		schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+		require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
+		require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+	} else {
+		expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedDeployment.yaml")
+		schedDeployment := &appsv1.Deployment{}
+		err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+		require.NoError(t, err)
+		require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+		require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+		require.Len(t, schedDeployment.OwnerReferences, 1)
+		require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+		// Ignoring resource comparison as the parsing from string creates different objects
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+		schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+		require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minSupportedK8sVersion, k8sVersionStr, -1)
+		require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+	}
 
 	// Stork Snapshot StorageClass
 	storkStorageClass := &storagev1.StorageClass{}
@@ -401,6 +474,44 @@ func TestStorkSchedulerK8SVersions(t *testing.T) {
 	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
 	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
 		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, "1.21.4", k8sVersionStr, -1)
+	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+
+	k8sVersionStr = "1.23.0"
+	setup()
+
+	expectedSchedDeployment = testutil.GetExpectedDeployment(t, "storkSchedKubeSchedConfigDeployment.yaml")
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+	require.Len(t, schedDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
+	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
+
+	k8sVersionStr = "1.25.0"
+	setup()
+
+	expectedSchedDeployment = testutil.GetExpectedDeployment(t, "storkSchedKubeSchedConfigDeployment.yaml")
+	schedDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchedDeployment.Name, schedDeployment.Name)
+	require.Equal(t, expectedSchedDeployment.Namespace, schedDeployment.Namespace)
+	require.Len(t, schedDeployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, schedDeployment.OwnerReferences[0].Name)
+	// Ignoring resource comparison as the parsing from string creates different objects
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
+	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
 	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 }
 
@@ -2297,18 +2408,16 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 		AnyTimes()
 
 	// TestCase: Deploy default policy when stork is deployed
-	defaultPolicy := &schedulerv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Policy",
-			APIVersion: "v1",
-		},
-		Extenders: []schedulerv1.Extender{
+	defaultPolicy := &SchedulerPolicy{
+		Kind:       "Policy",
+		APIVersion: "kubescheduler.config.k8s.io/v1",
+		Extenders: []SchedulerExtender{
 			{
 				URLPrefix:      "http://stork-service.kube-test:8099",
 				FilterVerb:     "filter",
 				PrioritizeVerb: "prioritize",
 				Weight:         5,
-				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute},
+				HTTPTimeout:    metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
 			},
 		},
 	}
@@ -2325,7 +2434,7 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	require.Equal(t, string(defaultPolicyBytes), storkConfigMap.Data["policy.cfg"])
 
 	// TestCase: Reconcile to original policy if changed by the user
-	modifiedPolicy := defaultPolicy.DeepCopy()
+	modifiedPolicy := *defaultPolicy
 	modifiedPolicy.Extenders[0].PrioritizeVerb = ""
 	modifiedPolicy.Extenders[0].Weight = 10
 	modifiedPolicyBytes, _ := json.Marshal(modifiedPolicy)
@@ -2362,7 +2471,6 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 	require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
 	require.Equal(t, string(modifiedPolicyBytes), storkConfigMap.Data["policy.cfg"])
 }
-
 func TestStorkSchedulerWithMissingLabelsFromSelector(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 

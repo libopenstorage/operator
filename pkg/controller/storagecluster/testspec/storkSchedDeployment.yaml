@@ -42,12 +42,14 @@ spec:
           httpGet:
             path: /healthz
             port: 10251
+            scheme: HTTP
           initialDelaySeconds: 15
         name: stork-scheduler
         readinessProbe:
           httpGet:
             path: /healthz
             port: 10251
+            scheme: HTTP
         resources:
           requests:
             cpu: '0.1'

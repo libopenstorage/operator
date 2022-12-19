@@ -29,9 +29,8 @@ func TestDryRun(t *testing.T) {
 	clusterName := "px-cluster"
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "portworx",
-			Namespace:   "portworx",
-			ClusterName: "cluster-name",
+			Name:      "portworx",
+			Namespace: "portworx",
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: v1.PodTemplateSpec{
