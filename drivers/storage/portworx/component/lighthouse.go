@@ -277,7 +277,7 @@ func (c *lighthouse) createService(
 	serviceType := pxutil.ServiceType(cluster, LhServiceName)
 	if serviceType != "" {
 		newService.Spec.Type = serviceType
-	} else if !pxutil.IsAKS(cluster) && !pxutil.IsGKE(cluster) && !pxutil.IsEKS(cluster) {
+	} else if !pxutil.IsAKS(cluster) && !pxutil.IsGKE(cluster) && !pxutil.IsEKS(cluster) && !pxutil.IsOKE(cluster) {
 		newService.Spec.Type = v1.ServiceTypeNodePort
 	}
 

@@ -1261,6 +1261,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 			Annotations: map[string]string{
 				pxutil.AnnotationIsAKS:       "true",
 				pxutil.AnnotationIsGKE:       "true",
+				pxutil.AnnotationIsOKE:       "true",
 				pxutil.AnnotationIsEKS:       "true",
 				pxutil.AnnotationServiceType: "ClusterIP",
 			},
@@ -1738,6 +1739,40 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
+func TestPVCControllerInstallForOKE(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationIsOKE: "true",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+
+	// Despite invalid pvc controller annotation, install for OKE
+	cluster.Annotations[pxutil.AnnotationPVCController] = "invalid"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+}
+
 func TestPVCControllerInstallForAKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -1798,6 +1833,7 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 				pxutil.AnnotationIsPKS:         "true",
 				pxutil.AnnotationIsEKS:         "true",
 				pxutil.AnnotationIsGKE:         "true",
+				pxutil.AnnotationIsOKE:         "true",
 				pxutil.AnnotationIsAKS:         "true",
 				pxutil.AnnotationIsOpenshift:   "true",
 			},
@@ -1840,6 +1876,7 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 				pxutil.AnnotationIsPKS:             "true",
 				pxutil.AnnotationIsEKS:             "true",
 				pxutil.AnnotationIsGKE:             "true",
+				pxutil.AnnotationIsOKE:             "true",
 				pxutil.AnnotationIsAKS:             "true",
 				pxutil.AnnotationIsOpenshift:       "true",
 				constants.AnnotationDisableStorage: "true",
@@ -2538,6 +2575,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 			Annotations: map[string]string{
 				pxutil.AnnotationIsAKS:       "true",
 				pxutil.AnnotationIsGKE:       "true",
+				pxutil.AnnotationIsOKE:       "true",
 				pxutil.AnnotationIsEKS:       "true",
 				pxutil.AnnotationServiceType: "ClusterIP",
 			},
