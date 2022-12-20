@@ -96,6 +96,14 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		cluster.Annotations["portworx.io/is-gke"] = "true"
 	}
 
+	// Add OKE annotation
+	if IsOke {
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
+		cluster.Annotations["portworx.io/is-oke"] = "true"
+	}
+
 	// Populate cloud storage
 	if len(PxDeviceSpecs) != 0 {
 		pxDeviceSpecs := strings.Split(PxDeviceSpecs, ";")
