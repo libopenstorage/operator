@@ -7250,7 +7250,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// the node. Start using configuration from another spec block that matches.
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["test"] = "bar"
+	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels = map[string]string{"test": "bar"}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
