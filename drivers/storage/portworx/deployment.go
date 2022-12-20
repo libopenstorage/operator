@@ -804,6 +804,24 @@ func (t *template) getArguments() []string {
 		"-x", "kubernetes",
 	}
 
+	if t.cluster.Spec.Resources != nil && t.cluster.Spec.Resources.Limits != nil {
+		if memory, ok := t.cluster.Spec.Resources.Limits[v1.ResourceMemory]; ok {
+			bytes, b := memory.AsInt64()
+			if b {
+				args = append(args, "--memory")
+				args = append(args, fmt.Sprint(bytes))
+			} else {
+				logrus.Errorf("failed to parse memory %+v", memory)
+			}
+		}
+
+		if cpu, ok := t.cluster.Spec.Resources.Limits[v1.ResourceCPU]; ok {
+			f := cpu.AsApproximateFloat64()
+			args = append(args, "--cpus")
+			args = append(args, fmt.Sprintf("%f", f))
+		}
+	}
+
 	if t.cluster.Spec.Kvdb != nil {
 		if t.cluster.Spec.Kvdb.Internal {
 			args = append(args, "-b")
