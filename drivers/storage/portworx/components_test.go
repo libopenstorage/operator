@@ -1767,7 +1767,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	command = append(command, "--port="+component.AksPVCControllerInsecurePort)
 	command = append(command, "--secure-port="+component.AksPVCControllerSecurePort)
 	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
-	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port = intstr.Parse(component.AksPVCControllerInsecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.AksPVCControllerInsecurePort)
 
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 
@@ -2049,7 +2049,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port")
 	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
 	require.Equal(t, "10252",
-		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port.String())
 
 	// Change the insecure port
 	expectedPort := "10000"
@@ -2063,7 +2063,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port="+expectedPort)
 	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
 	require.Equal(t, expectedPort,
-		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port.String())
 
 	// Change the secure port
 	expectedSecurePort := "10001"
@@ -2077,7 +2077,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port="+expectedSecurePort)
 	require.Contains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port="+expectedPort)
 	require.Equal(t, expectedPort,
-		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port.String())
 
 	// Reset the ports to default
 	cluster.Annotations[pxutil.AnnotationPVCControllerPort] = ""
@@ -2091,7 +2091,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--secure-port")
 	require.NotContains(t, deployment.Spec.Template.Spec.Containers[0].Command, "--port")
 	require.Equal(t, "10252",
-		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.Handler.HTTPGet.Port.String())
+		deployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port.String())
 }
 
 func TestPVCControllerRollbackImageChanges(t *testing.T) {

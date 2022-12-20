@@ -322,7 +322,7 @@ func createManager(c *cli.Context, config *rest.Config) (manager.Manager, error)
 		managerOpts.LeaderElection = true
 		managerOpts.LeaderElectionID = c.String(flagLeaderElectLockName)
 		managerOpts.LeaderElectionNamespace = c.String(flagLeaderElectLockNamespace)
-		managerOpts.LeaderElectionResourceLock = resourcelock.ConfigMapsResourceLock
+		managerOpts.LeaderElectionResourceLock = resourcelock.ConfigMapsLeasesResourceLock
 	}
 	return manager.New(config, managerOpts)
 }

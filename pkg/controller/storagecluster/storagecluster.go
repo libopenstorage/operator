@@ -810,8 +810,8 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
-				err := c.podControl.CreatePodsOnNode(
-					nodeName,
+				err := c.podControl.CreatePods(
+					context.TODO(),
 					cluster.Namespace,
 					podTemplates[idx],
 					cluster,
@@ -869,6 +869,7 @@ func (c *Controller) syncNodes(
 		go func(idx int) {
 			defer deleteWait.Done()
 			err := c.podControl.DeletePod(
+				context.TODO(),
 				cluster.Namespace,
 				podsToDelete[idx],
 				cluster,
@@ -1483,7 +1484,7 @@ func (c *Controller) getStoragePods(
 
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing Pods
-	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
+	undeletedCluster := k8scontroller.RecheckDeletionTimestamp(func(ctx context.Context) (metav1.Object, error) {
 		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
@@ -1506,7 +1507,7 @@ func (c *Controller) getStoragePods(
 		controllerKind,
 		undeletedCluster,
 	)
-	return cm.ClaimPods(allPods)
+	return cm.ClaimPods(context.TODO(), allPods)
 }
 
 func (c *Controller) createStorageNode(

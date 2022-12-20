@@ -139,7 +139,6 @@ func (h *Handler) addObject(
 	obj.SetCreationTimestamp(metav1.Time{})
 	obj.SetFinalizers(nil)
 	obj.SetOwnerReferences(nil)
-	obj.SetClusterName("")
 	obj.SetManagedFields(nil)
 
 	gvk := obj.GetObjectKind().GroupVersionKind()

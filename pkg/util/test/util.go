@@ -46,7 +46,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -873,7 +873,8 @@ func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error)
 		if coreops.Instance().IsNodeMaster(node) {
 			continue
 		}
-		if pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(dummyPod, &node) {
+		matches, err := affinityhelper.GetRequiredNodeAffinity(dummyPod).Match(&node)
+		if err == nil && matches {
 			nodeNameListWithPxPods = append(nodeNameListWithPxPods, node.Name)
 		}
 	}

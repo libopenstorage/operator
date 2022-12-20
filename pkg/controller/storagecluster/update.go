@@ -215,7 +215,7 @@ func (c *Controller) controlledHistories(
 
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing histories
-	canAdoptFunc := controller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
+	canAdoptFunc := controller.RecheckDeletionTimestamp(func(ctx context.Context) (metav1.Object, error) {
 		fresh, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
 			return nil, err
@@ -238,7 +238,7 @@ func (c *Controller) controlledHistories(
 		controllerKind,
 		canAdoptFunc,
 	)
-	return cm.ClaimControllerRevisions(histories)
+	return cm.ClaimControllerRevisions(context.TODO(), histories)
 }
 
 func (c *Controller) snapshot(
