@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/stretchr/testify/require"
@@ -32,6 +30,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
