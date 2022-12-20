@@ -121,10 +121,10 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	pxVer2_12, _   = version.NewVersion("2.12.0-")
-	opVer1_10, _   = version.NewVersion("1.10.0-")
-	opVer1_9_1, _  = version.NewVersion("1.9.1-")
-	opVer1_10_1, _ = version.NewVersion("1.10.1-")
+	pxVer2_12, _                      = version.NewVersion("2.12.0-")
+	opVer1_10, _                      = version.NewVersion("1.10.0-")
+	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
+	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2")
 )
 
 // MockDriver creates a mock storage driver
@@ -1480,7 +1480,7 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 		}
 
 		opVersion, _ := GetPxOperatorVersion()
-		if opVersion.LessThanOrEqual(opVer1_10_1) {
+		if opVersion.LessThan(minOpVersionForKubeSchedConfig) {
 			if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
 				// Image tag for stork-scheduler is hardcoded to v1.21.4 for clusters 1.22 and up for Operator version 1.10.1 and below
 				if err = validateImageTag("v1.21.4", cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
@@ -3652,7 +3652,7 @@ func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
 	// only if Portworx service is not deployed in kube-system namespace.
 	if isPKS(cluster) || isEKS(cluster) ||
 		isGKE(cluster) || isAKS(cluster) ||
-		cluster.Namespace != "kube-system" {
+		isOKE(cluster) || cluster.Namespace != "kube-system" {
 		return true
 	}
 	return false
@@ -3679,6 +3679,11 @@ func isPKS(cluster *corev1.StorageCluster) bool {
 
 func isGKE(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-gke"])
+	return err == nil && enabled
+}
+
+func isOKE(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-oke"])
 	return err == nil && enabled
 }
 

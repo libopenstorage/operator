@@ -63,6 +63,9 @@ var (
 
 	// IsGke is an indication that this is GKE cluster or not
 	IsGke bool
+
+	// IsOke is an indication that this is OKE cluster or not
+	IsOke bool
 )
 
 const (
