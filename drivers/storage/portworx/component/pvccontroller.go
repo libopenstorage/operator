@@ -100,7 +100,7 @@ func (c *pvcController) IsEnabled(cluster *corev1.StorageCluster) bool {
 	// if Portworx is not deployed in kube-system namespace.
 	if pxutil.IsPKS(cluster) || pxutil.IsEKS(cluster) ||
 		pxutil.IsGKE(cluster) || pxutil.IsAKS(cluster) ||
-		cluster.Namespace != "kube-system" {
+		pxutil.IsOKE(cluster) || cluster.Namespace != "kube-system" {
 		return true
 	}
 	return false

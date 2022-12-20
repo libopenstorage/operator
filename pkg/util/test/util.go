@@ -2090,7 +2090,7 @@ func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
 	// only if Portworx service is not deployed in kube-system namespace.
 	if isPKS(cluster) || isEKS(cluster) ||
 		isGKE(cluster) || isAKS(cluster) ||
-		cluster.Namespace != "kube-system" {
+		isOKE(cluster) || cluster.Namespace != "kube-system" {
 		return true
 	}
 	return false
@@ -2117,6 +2117,11 @@ func isPKS(cluster *corev1.StorageCluster) bool {
 
 func isGKE(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-gke"])
+	return err == nil && enabled
+}
+
+func isOKE(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/is-oke"])
 	return err == nil && enabled
 }
 
