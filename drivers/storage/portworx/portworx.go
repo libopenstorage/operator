@@ -42,7 +42,8 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
-	defaultEksCloudStorageDevice      = "type=gp3,size=150"
+	defaultEksCloudStorageType        = "gp3"
+	defaultEksCloudStorageDeviceSize  = "150"
 )
 
 type portworx struct {
@@ -1004,6 +1005,18 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage.UseAll = boolPtr(true)
 		}
 	}
+	if toUpdate.Spec.CloudStorage != nil && preflight.IsEKS() {
+		// Set default drive type to gp3 if not specified
+		for i := 0; i < len(toUpdate.Spec.CloudStorage.CapacitySpecs); i++ {
+			spec := &toUpdate.Spec.CloudStorage.CapacitySpecs[i]
+			if spec.Options == nil {
+				spec.Options = make(map[string]string)
+			}
+			if _, ok := spec.Options["type"]; !ok {
+				spec.Options["type"] = defaultEksCloudStorageType
+			}
+		}
+	}
 }
 
 func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
@@ -1013,7 +1026,7 @@ func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 		}
 		if len(toUpdate.Spec.CloudStorage.CapacitySpecs) == 0 &&
 			toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
-			defaultEKSCloudStorageDevice := defaultEksCloudStorageDevice
+			defaultEKSCloudStorageDevice := fmt.Sprintf("type=%s,size=%s", defaultEksCloudStorageType, defaultEksCloudStorageDeviceSize)
 			deviceSpecs := []string{defaultEKSCloudStorageDevice}
 			toUpdate.Spec.CloudStorage.DeviceSpecs = &deviceSpecs
 		}
