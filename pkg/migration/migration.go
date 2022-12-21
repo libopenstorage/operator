@@ -220,6 +220,20 @@ func (h *Handler) processMigration(
 
 	// TODO: Wait for all components to be up, before marking the migration as completed
 
+	// Mark migration as completed in the cluster condition list
+	updatedCluster = &corev1.StorageCluster{}
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
+		return err
+	}
+	util.UpdateStorageClusterCondition(updatedCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusCompleted,
+	})
+	if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
+		return err
+	}
+
 	// TODO: once daemonset is deleted, if we restart operator all code after this line
 	// will not be re-executed, so we should delete daemonset after everything is finished.
 	logrus.Infof("Deleting portworx DaemonSet")
@@ -237,16 +251,6 @@ func (h *Handler) processMigration(
 	// events and conditions in the status. That way there is a more permanent record that
 	// this cluster is a result of migration. After we have added that we can remove the
 	// migration-approved annotation after a successful migration.
-
-	// Mark migration as completed in the cluster condition list
-	util.UpdateStorageClusterCondition(updatedCluster, &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusCompleted,
-	})
-	if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
-		return err
-	}
 
 	return nil
 }
