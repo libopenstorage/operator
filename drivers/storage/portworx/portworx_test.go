@@ -482,9 +482,18 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	// Check cloud storage spec when capacity spec specified
 	cluster.Spec = corev1.StorageClusterSpec{
 		CloudStorage: &corev1.CloudStorageSpec{
-			CapacitySpecs: []corev1.CloudStorageCapacitySpec{{
-				MinCapacityInGiB: 500,
-			}},
+			CapacitySpecs: []corev1.CloudStorageCapacitySpec{
+				{
+					MinCapacityInGiB: 500,
+					MinIOPS:          1000,
+				},
+				{
+					MinCapacityInGiB: 700,
+					Options: map[string]string{
+						"type": "io1",
+					},
+				},
+			},
 		},
 	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -492,6 +501,9 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	require.Nil(t, cluster.Spec.Storage)
 	require.NotNil(t, cluster.Spec.CloudStorage)
 	require.Empty(t, cluster.Spec.CloudStorage.DeviceSpecs)
+	require.Len(t, cluster.Spec.CloudStorage.CapacitySpecs, 2)
+	require.Equal(t, "gp3", cluster.Spec.CloudStorage.CapacitySpecs[0].Options["type"])
+	require.Equal(t, "io1", cluster.Spec.CloudStorage.CapacitySpecs[1].Options["type"])
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
