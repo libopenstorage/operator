@@ -1458,6 +1458,21 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.True(t, cluster.Spec.CSI.Enabled)
 	require.Nil(t, cluster.Spec.FeatureGates)
+
+	cluster.Spec.CSI = nil
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.25.0",
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.CSI)
+
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.26.0",
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.True(t, cluster.Spec.CSI.Enabled)
 }
 
 func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
