@@ -2471,6 +2471,63 @@ func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 }
 
+func TestUpdateClusterStatusMarkMigrationCompleted(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				constants.AnnotationDisableStorage: "True",
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusInProgress,
+			}},
+		},
+	}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.PortworxDaemonSetName,
+			Namespace: "kube-test",
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(ds)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	// Migration is still in progress, PX is online
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+
+	// Daemonset deleted
+	err = k8sClient.Delete(context.TODO(), ds)
+	require.NoError(t, err)
+
+	err = driver.UpdateStorageClusterStatus(cluster)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+}
+
 func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -2644,11 +2701,11 @@ func TestUpdateClusterStatus(t *testing.T) {
 		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
 		Return(expectedClusterResp, nil).
 		Times(2)
-	// Migration in progress
+	// Migration not completed
 	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusInProgress,
+		Status: corev1.ClusterConditionStatusPending,
 	})
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -2658,7 +2715,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	require.Len(t, cluster.Status.Conditions, 2)
 	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
 	require.NotNil(t, condition)
-	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
 	require.NotNil(t, condition)
 	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)

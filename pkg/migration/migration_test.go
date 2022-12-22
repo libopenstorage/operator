@@ -2156,8 +2156,6 @@ func TestSuccessfulMigration(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
@@ -2952,8 +2950,6 @@ func TestOldComponentsAreDeleted(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestStorageClusterWithExtraListOfVolumes(t *testing.T) {
@@ -4535,8 +4531,6 @@ func TestSuccessfulMigrationOnDelete(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
@@ -4771,8 +4765,6 @@ func TestSuccessfulMigrationRollingUpdateToOnDelete(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
@@ -5016,8 +5008,6 @@ func TestSuccessfulMigrationOnDeleteToRollingUpdate(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestStorageClusterCreatedWithInvalidClusterName(t *testing.T) {
@@ -5341,12 +5331,10 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 		cluster = &corev1.StorageCluster{}
 		err = testutil.Get(k8sClient, cluster, clusterName, ds.Namespace)
 		require.NoError(t, err)
-		condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-		if condition.Status != corev1.ClusterConditionStatusCompleted {
+		_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
+		if annotationExists {
 			return false, nil
 		}
-		_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
-		require.False(t, annotationExists)
 		return true, nil
 	})
 	require.NoError(t, err)
