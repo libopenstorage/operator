@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/pkg/controller/csr"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -213,7 +214,7 @@ func (c *Controller) SetEventRecorder(r record.EventRecorder) {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (c *Controller) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := logrus.WithFields(map[string]interface{}{
 		"Request.Namespace": request.Namespace,
 		"Request.Name":      request.Name,
@@ -241,6 +242,8 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		return reconcile.Result{}, err
 	}
+
+	c.registerCSRAutoApproval(cluster)
 
 	if c.waitingForMigrationApproval(cluster) {
 		k8s.InfoEvent(
@@ -1427,6 +1430,11 @@ func (c *Controller) setSecuritySpecDefaults(clus *corev1.StorageCluster) {
 		os.Unsetenv(pxutil.EnvKeyPortworxEnableTLS)
 		os.Unsetenv(pxutil.EnvKeyPortworxEnforceTLS)
 	}
+}
+
+// registerCSRAutoApproval will set up CSR auto-approval for the given cluster
+func (c *Controller) registerCSRAutoApproval(cluster *corev1.StorageCluster) {
+	csr.RegisterAutoApproval(cluster.GetName(), pxutil.CSRAutoApprovalEnabled(cluster))
 }
 
 func storagePodsEnabled(
