@@ -311,7 +311,7 @@ func (c *Controller) snapshot(
 			currSC.Status.CollisionCount = new(int32)
 		}
 		*currSC.Status.CollisionCount++
-		updateErr := c.client.Status().Update(context.TODO(), currSC)
+		updateErr := k8s.UpdateStorageClusterStatus(c.client, currSC)
 		if updateErr != nil {
 			return nil, updateErr
 		}

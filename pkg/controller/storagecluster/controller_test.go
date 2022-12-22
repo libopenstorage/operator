@@ -2986,6 +2986,11 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	require.Contains(t, err.Error(), "pod template error for k8s-node-1")
 	require.Empty(t, result)
 
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
+
 	// Verify there is event raised for failure to create pod templates for node spec
 	require.Len(t, recorder.Events, 1)
 	eventMsg := <-recorder.Events
@@ -3010,6 +3015,11 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod template error for k8s-node-2")
 	require.Empty(t, result)
+
+	existingCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	// Verify there is event raised for failure to create pod templates for node spec
 	require.Len(t, recorder.Events, 1)
@@ -3090,6 +3100,11 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod control error")
 	require.Empty(t, result)
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	// Verify there is event raised for failure to create/delete pods
 	require.Len(t, recorder.Events, 2)
@@ -3307,6 +3322,11 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pre-install error")
 	require.Empty(t, result)
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -5045,6 +5065,11 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid value for MaxUnavailable")
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -8462,6 +8487,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	revisions := &appsv1.ControllerRevisionList{}
@@ -8489,6 +8515,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)
@@ -8520,6 +8547,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)
@@ -8546,6 +8574,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)

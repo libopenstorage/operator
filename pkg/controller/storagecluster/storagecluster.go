@@ -32,9 +32,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -44,6 +41,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -58,10 +56,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
-	preflight "github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -239,7 +240,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
-		if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
+		if updateErr := c.updateLiveStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
 			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
 		}
 
@@ -257,6 +258,9 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if err := c.syncStorageCluster(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
+		if updateErr := c.updateLiveStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
+			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
+		}
 		return reconcile.Result{}, err
 	}
 
@@ -766,8 +770,9 @@ func (c *Controller) syncStorageCluster(
 	if cluster.DeletionTimestamp != nil {
 		logrus.Infof("Storage cluster %v/%v has been marked for deletion",
 			cluster.Namespace, cluster.Name)
-		if err := c.updateStorageClusterState(cluster, corev1.ClusterStateUninstall); err != nil {
+		if err := c.updateLiveStorageClusterState(cluster, corev1.ClusterStateUninstall); err != nil {
 			logrus.Errorf("Failed to update StorageCluster status. %v", err)
+			return err
 		}
 		return c.deleteStorageCluster(cluster)
 	}
@@ -781,7 +786,7 @@ func (c *Controller) syncStorageCluster(
 	if preflightShouldRun(cluster) {
 		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 		if err := c.runPreflightCheck(cluster); err != nil {
-			if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
+			if updateErr := c.updateLiveStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
 				logrus.Errorf("failed to update StorageCluster status. %v", updateErr)
 			}
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
@@ -984,11 +989,22 @@ func (c *Controller) updateStorageClusterStatus(
 	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
 }
 
-func (c *Controller) updateStorageClusterState(
+func (c *Controller) updateLiveStorageClusterState(
 	cluster *corev1.StorageCluster,
 	clusterState corev1.ClusterState,
 ) error {
-	toUpdate := cluster.DeepCopy()
+	toUpdate := &corev1.StorageCluster{}
+	err := c.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		toUpdate,
+	)
+	if err != nil {
+		return err
+	}
 	toUpdate.Status.Phase = string(clusterState)
 	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
 }
