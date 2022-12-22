@@ -174,18 +174,30 @@ func (h *Handler) processMigration(
 	// correctly as we go through different phases of migration we can use that instead of this
 	// internal annotation.
 	// Block the component migration until the portworx pod migration is finished.
-	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
-	if err := h.client.Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
+	liveCluster := &corev1.StorageCluster{}
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, liveCluster); err != nil {
 		return err
 	}
-	// Unblock operator reconcile loop to start managing the storagecluster
-	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusInProgress,
-	})
-	if err := k8sutil.UpdateStorageClusterStatus(h.client, cluster); err != nil {
+	liveCluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
+	if err := h.client.Update(context.TODO(), liveCluster, &client.UpdateOptions{}); err != nil {
 		return err
+	}
+
+	// Unblock operator reconcile loop to start managing the storagecluster
+	liveCluster = &corev1.StorageCluster{}
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, liveCluster); err != nil {
+		return err
+	}
+	condition := util.GetStorageClusterCondition(liveCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	if condition != nil && condition.Status == corev1.ClusterConditionStatusPending {
+		util.UpdateStorageClusterCondition(liveCluster, &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
+			Type:   corev1.ClusterConditionTypeMigration,
+			Status: corev1.ClusterConditionStatusInProgress,
+		})
+		if err := k8sutil.UpdateStorageClusterStatus(h.client, liveCluster); err != nil {
+			return err
+		}
 	}
 
 	if err := h.updateDaemonsetToRunOnPendingNodes(ds); err != nil {
@@ -207,32 +219,18 @@ func (h *Handler) processMigration(
 		return err
 	}
 
-	updatedCluster := &corev1.StorageCluster{}
-	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
+	liveCluster = &corev1.StorageCluster{}
+	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, liveCluster); err != nil {
 		return err
 	}
 	// Notify operator to start installing the new components
 	logrus.Infof("Starting operator managed components")
-	delete(updatedCluster.Annotations, constants.AnnotationPauseComponentMigration)
-	if err := h.client.Update(context.TODO(), updatedCluster, &client.UpdateOptions{}); err != nil {
+	delete(liveCluster.Annotations, constants.AnnotationPauseComponentMigration)
+	if err := h.client.Update(context.TODO(), liveCluster, &client.UpdateOptions{}); err != nil {
 		return err
 	}
 
 	// TODO: Wait for all components to be up, before marking the migration as completed
-
-	// Mark migration as completed in the cluster condition list
-	updatedCluster = &corev1.StorageCluster{}
-	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
-		return err
-	}
-	util.UpdateStorageClusterCondition(updatedCluster, &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusCompleted,
-	})
-	if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
-		return err
-	}
 
 	// TODO: once daemonset is deleted, if we restart operator all code after this line
 	// will not be re-executed, so we should delete daemonset after everything is finished.
@@ -609,7 +607,7 @@ func (h *Handler) getPortworxDaemonSet(ds *appsv1.DaemonSet) (*appsv1.DaemonSet,
 	err := h.client.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      portworxDaemonSetName,
+			Name:      constants.PortworxDaemonSetName,
 			Namespace: ds.Namespace,
 		},
 		pxDaemonSet,
@@ -624,12 +622,12 @@ func (h *Handler) findPortworxDaemonSet() (*appsv1.DaemonSet, error) {
 	}
 
 	for _, ds := range dsList.Items {
-		if ds.Name == portworxDaemonSetName {
+		if ds.Name == constants.PortworxDaemonSetName {
 			return ds.DeepCopy(), nil
 		}
 	}
 
-	return nil, errors.NewNotFound(appsv1.Resource("DaemonSet"), portworxDaemonSetName)
+	return nil, errors.NewNotFound(appsv1.Resource("DaemonSet"), constants.PortworxDaemonSetName)
 }
 
 func (h *Handler) deletePortworxDaemonSet(ds *appsv1.DaemonSet) error {

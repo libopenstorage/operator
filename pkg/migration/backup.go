@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/pkg/constants"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
@@ -156,7 +157,7 @@ func (h *Handler) addObject(
 }
 
 func (h *Handler) getDaemonSetComponent(namespace string, objs *[]client.Object) error {
-	if err := h.addObject(portworxDaemonSetName, namespace, &appsv1.DaemonSet{}, objs); err != nil {
+	if err := h.addObject(constants.PortworxDaemonSetName, namespace, &appsv1.DaemonSet{}, objs); err != nil {
 		return err
 	}
 
