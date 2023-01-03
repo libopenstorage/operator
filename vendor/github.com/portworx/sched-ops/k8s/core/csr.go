@@ -158,6 +158,7 @@ func (c *Client) WatchCertificateSigningRequests(csr *certv1.CertificateSigningR
 	return nil
 }
 
+// CertificateSigningRequestsUpdateApproval used to approve or decline the CSR
 func (c *Client) CertificateSigningRequestsUpdateApproval(
 	name string,
 	csr *certv1.CertificateSigningRequest,
