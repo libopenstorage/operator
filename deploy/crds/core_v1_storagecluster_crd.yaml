@@ -643,6 +643,30 @@ spec:
                                               type: string
                                             mode:
                                               type: integer
+                  resources:
+                    type: object
+                    description: Specifies the resource requirements for stork and stork scheduler.
+                    properties:
+                      requests:
+                        type: object
+                        description: Requested resources.
+                        properties:
+                          memory:
+                            type: string
+                            description: Requested memory.
+                          cpu:
+                            type: string
+                            description: Requested cpu.
+                      limits:
+                        type: object
+                        description: Resource limit.
+                        properties:
+                          memory:
+                            type: string
+                            description: Memory limit.
+                          cpu:
+                            type: string
+                            description: CPU limit.
               userInterface:
                 type: object
                 description: Contains spec of a user interface for the storage driver.
@@ -909,6 +933,30 @@ spec:
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                           description: Map of key-value params for the provider.
+                  resources:
+                    type: object
+                    description: Specifies the resource requirements for the autopilot pod.
+                    properties:
+                      requests:
+                        type: object
+                        description: Requested resources.
+                        properties:
+                          memory:
+                            type: string
+                            description: Requested memory.
+                          cpu:
+                            type: string
+                            description: Requested cpu.
+                      limits:
+                        type: object
+                        description: Resource limit.
+                        properties:
+                          memory:
+                            type: string
+                            description: Memory limit.
+                          cpu:
+                            type: string
+                            description: CPU limit.
               monitoring:
                 type: object
                 description: Contains monitoring configuration for the storage cluster.
