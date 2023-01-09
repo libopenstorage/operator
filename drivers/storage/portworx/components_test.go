@@ -3716,7 +3716,7 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	}
 	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 
-	// TestCase: remove PX_ENABLE_TLS=true when AutoPilot disabled
+	// TestCase: remove PX_ENABLE_TLS=true when AutoPilot disabled.
 	cluster = &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
