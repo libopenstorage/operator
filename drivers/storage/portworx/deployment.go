@@ -477,7 +477,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       30,
 			InitialDelaySeconds: 840,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/status",
@@ -487,7 +487,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 		},
 		ReadinessProbe: &v1.Probe{
 			PeriodSeconds: 10,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/health",
@@ -518,7 +518,7 @@ func (t *template) kvdbContainer() v1.Container {
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       30,
 			InitialDelaySeconds: 840,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
 					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
@@ -527,7 +527,7 @@ func (t *template) kvdbContainer() v1.Container {
 		},
 		ReadinessProbe: &v1.Probe{
 			PeriodSeconds: 10,
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
 					Port: intstr.FromInt(kvdbTargetPort),
 					Host: "127.0.0.1",
@@ -622,7 +622,7 @@ func (t *template) telemetryContainer() *v1.Container {
 			},
 		},
 		LivenessProbe: &v1.Probe{
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/1.0/status",
@@ -632,7 +632,7 @@ func (t *template) telemetryContainer() *v1.Container {
 			PeriodSeconds: 30,
 		},
 		ReadinessProbe: &v1.Probe{
-			Handler: v1.Handler{
+			ProbeHandler: v1.ProbeHandler{
 				HTTPGet: &v1.HTTPGetAction{
 					Host: "127.0.0.1",
 					Path: "/1.0/status",

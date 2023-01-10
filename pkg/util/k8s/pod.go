@@ -5,8 +5,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	schedulehelper "k8s.io/component-helpers/scheduling/corev1"
+	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper"
-	pluginhelper "k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -185,7 +185,11 @@ func CheckPredicatesForStoragePod(
 
 	taints := node.Spec.Taints
 	fitsNodeName := len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
-	fitsNodeAffinity := pluginhelper.PodMatchesNodeSelectorAndAffinityTerms(pod, node)
+	fitsNodeAffinity, err := affinityhelper.GetRequiredNodeAffinity(pod).Match(node)
+	if err != nil {
+		logrus.Warnf("Failed to match node affinity of the pod to node %s. %v", node.Name, err)
+		return false, false, err
+	}
 
 	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule

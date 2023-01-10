@@ -2594,7 +2594,6 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
-
 func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -2610,7 +2609,17 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 							{
 								Key:      metav1.ObjectNameField,
 								Operator: v1.NodeSelectorOpNotIn,
-								Values:   []string{"k8s-node-1", "k8s-node-2"},
+								Values:   []string{"k8s-node-1"},
+							},
+							{
+								Key:      metav1.ObjectNameField,
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"k8s-node-2"},
+							},
+							{
+								Key:      metav1.ObjectNameField,
+								Operator: v1.NodeSelectorOpNotIn,
+								Values:   []string{"k8s-node-3"},
 							},
 						},
 					},
@@ -2693,7 +2702,6 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 	require.ElementsMatch(t, []string{runningPod.Name}, podControl.DeletePodName)
 }
-
 func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -7242,7 +7250,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	// the node. Start using configuration from another spec block that matches.
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels["test"] = "bar"
+	cluster.Spec.Nodes[0].Selector.LabelSelector.MatchLabels = map[string]string{"test": "bar"}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 

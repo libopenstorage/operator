@@ -17,7 +17,7 @@ rules:
     resources: ["endpoints"]
     verbs: ["get", "delete", "update", "patch"]
   - apiGroups: [""]
-    resources: ["nodes"]
+    resources: ["nodes","namespaces"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
