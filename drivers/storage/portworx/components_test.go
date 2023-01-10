@@ -3633,10 +3633,14 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
 			Version: pxutil.MinimumPxVersionAutoTLS.String(),
 		},
 	}
+
 	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 
 	// validate
@@ -3658,6 +3662,104 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 		},
 	}
 	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: remove PX_ENABLE_TLS=true when TLS disabled
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(false),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxEnableTLS,
+						Value: "true",
+					},
+				},
+			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+
+	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Env)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: remove PX_ENABLE_TLS=true when AutoPilot disabled.
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxEnableTLS,
+						Value: "true",
+					},
+				},
+			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+
+	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Autopilot.Env)
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.Error(t, err)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
