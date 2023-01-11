@@ -601,6 +601,7 @@ func (t *telemetry) createCollectorConfigMap(
 	config := fmt.Sprintf(
 		`scrapeConfig:
   interval: 10
+  batchSize: 5
   k8sConfig:
     pods:
     - podSelector:%s
