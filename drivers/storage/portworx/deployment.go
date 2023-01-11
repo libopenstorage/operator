@@ -1233,6 +1233,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
+		t.getCSIVolumeInfoList,
 		t.getK3sVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
@@ -1422,6 +1423,7 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		volumeInfo{
 			name:         "csi-driver-path",
 			hostPath:     t.csiConfig.DriverBasePath(),
+			mountPath:    t.csiConfig.DriverBasePath(),
 			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
 		},
 	)
