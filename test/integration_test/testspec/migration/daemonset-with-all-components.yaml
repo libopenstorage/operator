@@ -105,6 +105,8 @@ spec:
           securityContext:
             privileged: true
           volumeMounts:
+            - name: csi-driver-path
+              mountPath: /var/lib/kubelet/plugins/pxd.portworx.com
             - name: diagsdump
               mountPath: /var/cores
             - name: dockersock

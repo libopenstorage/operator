@@ -58,6 +58,8 @@ spec:
           securityContext:
             privileged: true
           volumeMounts:
+            - name: csi-driver-path
+              mountPath: /var/lib/kubelet/csi-plugins/com.openstorage.pxd
             - name: diagsdump
               mountPath: /var/cores
             - name: dockersock
