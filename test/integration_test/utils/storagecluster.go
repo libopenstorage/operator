@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -165,7 +165,8 @@ func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	// Populate default values to empty fields first
 	k8sVersion, _ := version.NewVersion(K8sVersion)
-	portworx.SetPortworxDefaults(cluster, k8sVersion)
+	err := portworx.SetPortworxDefaults(cluster, k8sVersion)
+	require.NoError(t, err)
 
 	// Deploy cluster
 	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)

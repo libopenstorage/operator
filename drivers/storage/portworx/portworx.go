@@ -42,7 +42,8 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
-	defaultEksCloudStorageDevice      = "type=gp3,size=150"
+	defaultEksCloudStorageType        = "gp3"
+	defaultEksCloudStorageDeviceSize  = "150"
 )
 
 type portworx struct {
@@ -348,7 +349,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
-		SetPortworxDefaults(toUpdate, p.k8sVersion)
+		if err := SetPortworxDefaults(toUpdate, p.k8sVersion); err != nil {
+			return err
+		}
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -550,6 +553,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setAutopilotDefaults(toUpdate)
+	setTLSDefaults(toUpdate)
 	return nil
 }
 
@@ -846,13 +850,13 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cl
 }
 
 // SetPortworxDefaults populates default storage cluster spec values
-func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) {
+func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) error {
 	if k8sVersion == nil {
 		k8sVersion = pxutil.MinimumSupportedK8sVersion
 	}
 	t, err := newTemplate(toUpdate, "")
 	if err != nil {
-		return
+		return err
 	}
 
 	if toUpdate.Spec.SecretsProvider == nil {
@@ -869,7 +873,9 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 
 	setPlacementDefaults(toUpdate, t, k8sVersion)
 
-	setCSIDefaults(toUpdate, t, k8sVersion)
+	if err := setCSIDefaults(toUpdate, t, k8sVersion); err != nil {
+		return err
+	}
 
 	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
@@ -877,6 +883,8 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 	}
 
 	setSecuritySpecDefaults(toUpdate)
+
+	return nil
 }
 
 func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
@@ -1004,6 +1012,18 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage.UseAll = boolPtr(true)
 		}
 	}
+	if toUpdate.Spec.CloudStorage != nil && preflight.IsEKS() {
+		// Set default drive type to gp3 if not specified
+		for i := 0; i < len(toUpdate.Spec.CloudStorage.CapacitySpecs); i++ {
+			spec := &toUpdate.Spec.CloudStorage.CapacitySpecs[i]
+			if spec.Options == nil {
+				spec.Options = make(map[string]string)
+			}
+			if _, ok := spec.Options["type"]; !ok {
+				spec.Options["type"] = defaultEksCloudStorageType
+			}
+		}
+	}
 }
 
 func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
@@ -1013,7 +1033,7 @@ func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 		}
 		if len(toUpdate.Spec.CloudStorage.CapacitySpecs) == 0 &&
 			toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
-			defaultEKSCloudStorageDevice := defaultEksCloudStorageDevice
+			defaultEKSCloudStorageDevice := fmt.Sprintf("type=%s,size=%s", defaultEksCloudStorageType, defaultEksCloudStorageDeviceSize)
 			deviceSpecs := []string{defaultEKSCloudStorageDevice}
 			toUpdate.Spec.CloudStorage.DeviceSpecs = &deviceSpecs
 		}
@@ -1063,7 +1083,7 @@ func setPlacementDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersi
 	}
 }
 
-func setCSIDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) {
+func setCSIDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) error {
 	// Check if feature gate is set. If it is, honor the flag here and remove it.
 	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
 	if featureGateSet {
@@ -1100,12 +1120,34 @@ func setCSIDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *ve
 		}
 	}
 
+	// Enable CSI if running on k8s 1.26+
+	if toUpdate.Spec.CSI == nil {
+		var err error
+		// Refresh k8s version, so we don't have to restart operator. We have seen issues
+		// that operator still caches old k8s version after k8s upgrade.
+		k8sVersion, err = k8sutil.GetVersion()
+		if err != nil {
+			return err
+		}
+
+		// We update CSI in StorageCluster instead of changing IsEnabled API in CSI component, due to
+		// IsEnabled does not return error, if k8s.GetVersion() fails, IsEnabled will return wrong result.
+		if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_26) {
+			logrus.Infof("Enable CSI on k8s 1.26+, current k8s version %s", k8sVersion.String())
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: true,
+			}
+		}
+	}
+
 	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
 	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
 		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
 			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
 		}
 	}
+
+	return nil
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
@@ -1173,27 +1215,75 @@ func setAutopilotDefaults(
 			},
 		}
 	}
+}
 
-	// px-3.0.0 -- add PX_ENABLE_TLS=true env to AutoPilot when Security + TLS are enabled
+func setTLSDefaults(
+	toUpdate *corev1.StorageCluster,
+) {
 	sec := toUpdate.Spec.Security
-	if sec != nil && sec.Enabled && sec.TLS != nil && sec.TLS.Enabled != nil && *sec.TLS.Enabled &&
-		pxutil.GetPortworxVersion(toUpdate).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
-		newEnv := make([]v1.EnvVar, 0, len(toUpdate.Spec.Autopilot.Env)+1)
+	secEnabled := true
+
+	if pxutil.GetPortworxVersion(toUpdate).LessThan(pxutil.MinimumPxVersionAutoTLS) {
+		// px version too low for auto-ssl setup, bail out..
+		return
+	} else if sec == nil || !sec.Enabled || sec.TLS == nil || sec.TLS.Enabled == nil || !*sec.TLS.Enabled {
+		// security/TLS not enabled
+		secEnabled = false
+		// proceed to check env-vars
+	}
+
+	type listOpType struct {
+		list    *[]v1.EnvVar
+		enabled bool
+	}
+	var listOps []listOpType
+
+	if toUpdate.Spec.Autopilot != nil {
+		listOps = append(listOps, listOpType{
+			&toUpdate.Spec.Autopilot.Env,
+			toUpdate.Spec.Autopilot.Enabled && secEnabled,
+		})
+	}
+	if toUpdate.Spec.Stork != nil {
+		listOps = append(listOps, listOpType{
+			&toUpdate.Spec.Stork.Env,
+			toUpdate.Spec.Stork.Enabled && secEnabled,
+		})
+	}
+
+	// update env-lists, set (or remove) PX_ENABLE_TLS=true
+	for _, listOp := range listOps {
+		newEnv := make([]v1.EnvVar, 0, len(*listOp.list)+1)
 		updated := false
-		for _, ev := range toUpdate.Spec.Autopilot.Env {
-			if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
-				ev.Value = "true"
+		if listOp.enabled {
+			// enabled component -- add/update PX_ENABLE_TLS=true
+			for _, ev := range *listOp.list {
+				if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
+					ev.Value = "true"
+					updated = true
+				}
+				newEnv = append(newEnv, ev)
+			}
+			if !updated {
+				newEnv = append(newEnv, v1.EnvVar{
+					Name:  pxutil.EnvKeyPortworxEnableTLS,
+					Value: "true",
+				})
 				updated = true
 			}
-			newEnv = append(newEnv, ev)
+		} else {
+			// disabled component -- remove PX_ENABLE_TLS
+			for _, ev := range *listOp.list {
+				if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
+					updated = true
+					continue
+				}
+				newEnv = append(newEnv, ev)
+			}
 		}
-		if !updated {
-			newEnv = append(newEnv, v1.EnvVar{
-				Name:  pxutil.EnvKeyPortworxEnableTLS,
-				Value: "true",
-			})
+		if updated {
+			*listOp.list = newEnv
 		}
-		toUpdate.Spec.Autopilot.Env = newEnv
 	}
 }
 

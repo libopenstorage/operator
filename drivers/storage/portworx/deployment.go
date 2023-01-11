@@ -5,18 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/cloudops"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudstorage"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,6 +18,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/cloudops"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -156,6 +159,26 @@ func (p *portworx) generateCloudStorageSpecs(
 			cluster.Namespace,
 			p.k8sClient,
 			metav1.NewControllerRef(cluster, pxutil.StorageClusterKind()),
+		}
+
+		// TODO: use decision matrix instead of dividing the total capacity by number of storage nodes for EKS
+		if preflight.IsEKS() {
+			config := &cloudstorage.Config{
+				StorageInstancesPerZone: instancesPerZone,
+			}
+			storageInstancesCount := uint64(len(p.zoneToInstancesMap)) * instancesPerZone
+			if storageInstancesCount == 0 {
+				return nil, fmt.Errorf("unable to get total number of storage instances")
+			}
+			for _, spec := range cluster.Spec.CloudStorage.CapacitySpecs {
+				driveConfig := cloudstorage.CloudDriveConfig{
+					SizeInGiB: spec.MinCapacityInGiB / storageInstancesCount,
+					IOPS:      spec.MinIOPS,
+					Options:   spec.Options,
+				}
+				config.CloudStorage = append(config.CloudStorage, driveConfig)
+			}
+			return config, nil
 		}
 
 		if err = cloudStorageManager.CreateStorageDistributionMatrix(); err != nil {
@@ -758,24 +781,41 @@ func (t *template) copySelectorRequirements(reqs []v1.NodeSelectorRequirement) [
 }
 
 func (t *template) getCloudStorageArguments(cloudDeviceSpec cloudstorage.CloudDriveConfig) string {
-	devSpec := strings.Join(
-		[]string{
-			"type=" + cloudDeviceSpec.Type,
-			"size=" + strconv.FormatUint(cloudDeviceSpec.SizeInGiB, 10),
-			"iops=" + strconv.FormatUint(uint64(cloudDeviceSpec.IOPS), 10)},
-		",",
-	)
+	devSpecMap := make(map[string]string)
+	if cloudDeviceSpec.Type != "" {
+		devSpecMap["type"] = cloudDeviceSpec.Type
+	}
+	if cloudDeviceSpec.SizeInGiB > 0 {
+		devSpecMap["size"] = strconv.FormatUint(cloudDeviceSpec.SizeInGiB, 10)
+	}
+	if cloudDeviceSpec.IOPS > 0 {
+		devSpecMap["iops"] = strconv.FormatUint(uint64(cloudDeviceSpec.IOPS), 10)
+	}
 	for k, v := range cloudDeviceSpec.Options {
+		devSpecMap[k] = v
+	}
+
+	var keys []string
+	for k := range devSpecMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	devSpec := ""
+	for _, k := range keys {
+		if devSpec == "" {
+			devSpec = k + "=" + devSpecMap[k]
+			continue
+		}
 		devSpec = strings.Join(
 			[]string{
 				devSpec,
-				k + "=" + v,
+				k + "=" + devSpecMap[k],
 			},
 			",",
 		)
 	}
 	return devSpec
-
 }
 
 func (t *template) getCloudProvider() string {
