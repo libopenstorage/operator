@@ -971,6 +971,7 @@ func CountStorageNodes(
 		if err != nil {
 			return -1, err
 		}
+		logrus.Infof("MYD (%v) shouldRun:%v shouldContinueRunning: %v", node.Name, shouldRun, shouldContinueRunning)
 		if shouldRun || shouldContinueRunning {
 			k8sNodesStoragePodCouldRun[node.Name] = true
 		}
@@ -994,6 +995,7 @@ func CountStorageNodes(
 			}
 		}
 	}
+	logrus.Infof("MYD storageNodesCount: %v", storageNodesCount)
 
 	return storageNodesCount, nil
 }
