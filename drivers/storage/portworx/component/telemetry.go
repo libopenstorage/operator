@@ -408,11 +408,15 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	return nil
 }
 
-// PWX-27401 only reconcile metrics collector if it's already running, revert once collector memory issue got resolved
+// PWX-27401 only reconcile metrics collector if it's already running
 func (t *telemetry) shouldReconcileMetricsCollector(
 	cluster *corev1.StorageCluster,
 ) error {
-	if t.reconcileMetricsCollector != nil {
+	// reconcile metrics collector by default, keep the code in case we need to disable it again
+	if t.reconcileMetricsCollector == nil {
+		t.reconcileMetricsCollector = boolPtr(true)
+		return nil
+	} else if t.reconcileMetricsCollector != nil {
 		return nil
 	}
 	// Check if collector V1 or V2 deployment exists
