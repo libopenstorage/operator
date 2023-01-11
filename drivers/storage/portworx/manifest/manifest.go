@@ -31,7 +31,7 @@ const (
 	defaultNodeWiperImage      = "portworx/px-node-wiper:2.10.0"
 	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
-	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
+	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.4"
 	defaultCCMGoImage          = "purestorage/ccm-go:1.0.3"
 	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
 	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.1"
