@@ -677,7 +677,8 @@ func (t *telemetry) createCCMJavaConfigMap(
             "/var/cores/*px-cores*",
             "/var/cores/*.heap",
             "/var/cores/*.stack",
-            "/var/cores/.alerts/alerts*"
+            "/var/cores/.alerts/alerts*",
+			"/var/cores/px_status/*.log"
         ],
         "skip_patterns": [],
         "additional_files": [
@@ -687,7 +688,9 @@ func (t *telemetry) createCCMJavaConfigMap(
             "/var/cores/px_cache_mon.log",
             "/var/cores/px_cache_mon_watch.log",
             "/var/cores/px_healthmon_watch.log",
-            "/var/cores/px_event_watch.log"
+            "/var/cores/px_event_watch.log",
+			"/var/cores/px_info.log",
+			"/var/cores/px_patch_fs.log"
         ],
         "phonehome_sent": "/var/cache/phonehome.sent"
       },
