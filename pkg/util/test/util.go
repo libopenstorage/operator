@@ -106,7 +106,7 @@ const (
 	defaultTelemetrySecretValidationTimeout  = 30 * time.Second
 	defaultTelemetrySecretValidationInterval = time.Second
 
-	defaultTelemetryInPxctlValidationTimeout  = 5 * time.Minute
+	defaultTelemetryInPxctlValidationTimeout  = 20 * time.Minute
 	defaultTelemetryInPxctlValidationInterval = 30 * time.Second
 
 	defaultPxAuthValidationTimeout  = 20 * time.Minute
