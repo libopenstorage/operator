@@ -29,7 +29,16 @@ type TestCase struct {
 	PureBackendRequirements *PureBackendRequirements
 	// AppSpecs is the specs for application workload
 	AppSpecs func(*testing.T) []runtime.Object
+	// Resource used by the test cluster. This is needed to determine
+	// maxStorageNodePerZone value in cluster spec
+	ResourceSpec *TestResourceSpec
 	// TODO: Add TestSetup and TestTearDown phase func when we have more cases
+}
+
+type TestResourceSpec struct {
+	NumAZ                 int32
+	NumNodes              int32
+	MaxStorageNodePerZone int32
 }
 
 // TestReporter prints test results at the end of test runs
