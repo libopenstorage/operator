@@ -66,6 +66,8 @@ const (
 	EssentialsUserIDKey = "px-essen-user-id"
 	// EssentialsOSBEndpointKey is the secret key for Essentials OSB endpoint
 	EssentialsOSBEndpointKey = "px-osb-endpoint"
+	// EnvKeyKubeletDir env var to set custom kubelet directory
+	EnvKeyKubeletDir = "KUBELET_DIR"
 
 	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
@@ -407,6 +409,13 @@ func KubeletPath(cluster *corev1.StorageCluster) string {
 	if IsPKS(cluster) {
 		return "/var/vcap/data/kubelet"
 	}
+
+	for _, env := range cluster.Spec.Env {
+		if env.Name == EnvKeyKubeletDir && len(env.Value) > 0 {
+			return env.Value
+		}
+	}
+
 	return "/var/lib/kubelet"
 }
 
