@@ -3050,6 +3050,8 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 // ValidateTelemetryV2Enabled validates telemetry component is running as expected
 func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
+	opVersion, _ := GetPxOperatorVersion()
+	validateMetricsCollector := opVersion.GreaterThanOrEqual(opVer1_11)
 
 	t := func() (interface{}, bool, error) {
 		// Validate px-telemetry-registration deployment, pods and container images
@@ -3057,9 +3059,12 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 			return nil, true, err
 		}
 
-		// Validate px-telemetry-metrics  deployment, pods and container images
-		if err := validatePxTelemetryMetricsCollectorV2(pxImageList, cluster, timeout, interval); err != nil {
-			return nil, true, err
+		// Validate px-telemetry-metrics deployment, pods and container images on operator 1.11+,
+		// as metrics collector is disabled in 1.10
+		if validateMetricsCollector {
+			if err := validatePxTelemetryMetricsCollectorV2(pxImageList, cluster, timeout, interval); err != nil {
+				return nil, true, err
+			}
 		}
 
 		// Validate px-telemetry-phonehome daemonset, pods and container images
@@ -3088,12 +3093,13 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 		}
 
 		// Verify telemetry configmaps
-		if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace); err != nil {
-			return nil, true, err
-		}
-
-		if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace); err != nil {
-			return nil, true, err
+		if validateMetricsCollector {
+			if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector", cluster.Namespace); err != nil {
+				return nil, true, err
+			}
+			if _, err := coreops.Instance().GetConfigMap("px-telemetry-collector-proxy", cluster.Namespace); err != nil {
+				return nil, true, err
+			}
 		}
 
 		if _, err := coreops.Instance().GetConfigMap("px-telemetry-phonehome", cluster.Namespace); err != nil {
@@ -3500,93 +3506,93 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 // ValidateTelemetryV1Enabled validates telemetry component is running as expected
 func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
-
-	// Wait for the deployment to become online
-	dep := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-metrics-collector",
-			Namespace: cluster.Namespace,
-		},
-	}
+	opVersion, _ := GetPxOperatorVersion()
+	validateMetricsCollector := opVersion.GreaterThanOrEqual(opVer1_11)
 
 	t := func() (interface{}, bool, error) {
-		if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
-			return nil, true, err
-		}
+		if validateMetricsCollector {
+			// Wait for the deployment to become online
+			dep := appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "px-metrics-collector",
+					Namespace: cluster.Namespace,
+				},
+			}
+			if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
+				return nil, true, err
+			}
 
-		/* TODO: We need to make this work for spawn
-		expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
-		*/
+			deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
 
-		deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
-		if err != nil {
-			return nil, true, err
-		}
+			/* TODO: We need to make this work for spawn
+			expectedDeployment := GetExpectedDeployment(&testing.T{}, "metricsCollectorDeployment.yaml")
+			if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
+				return err
+			}
+			*/
 
-		/* TODO: We need to make this work for spawn
-		if equal, err := util.DeploymentDeepEqual(expectedDeployment, deployment); !equal {
-			return err
-		}
-		*/
+			// Verify metrics collector image
+			imageName, ok := pxImageList["metricsCollector"]
+			if !ok {
+				return nil, true, fmt.Errorf("failed to find image for metrics collector")
+			}
+			imageName = util.GetImageURN(cluster, imageName)
 
-		_, err = rbacops.Instance().GetRole("px-metrics-collector", cluster.Namespace)
-		if err != nil {
-			return nil, true, err
-		}
+			if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
+				return nil, true, fmt.Errorf("collector image mismatch, image: %s, expected: %s",
+					deployment.Spec.Template.Spec.Containers[0].Image,
+					imageName)
+			}
 
-		_, err = rbacops.Instance().GetRoleBinding("px-metrics-collector", cluster.Namespace)
-		if err != nil {
-			return nil, true, err
+			// Verify metrics collector proxy image
+			imageName, ok = pxImageList["metricsCollectorProxy"]
+			if !ok {
+				return nil, true, fmt.Errorf("failed to find image for metrics collector proxy")
+			}
+			imageName = util.GetImageURN(cluster, imageName)
+
+			if deployment.Spec.Template.Spec.Containers[1].Image != imageName {
+				return nil, true, fmt.Errorf("collector proxy image mismatch, image: %s, expected: %s",
+					deployment.Spec.Template.Spec.Containers[1].Image,
+					imageName)
+			}
+
+			_, err = rbacops.Instance().GetRole("px-metrics-collector", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+
+			_, err = rbacops.Instance().GetRoleBinding("px-metrics-collector", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+
+			// Verify collector config map
+			_, err = coreops.Instance().GetConfigMap("px-collector-config", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+
+			// Verify collector proxy config map
+			_, err = coreops.Instance().GetConfigMap("px-collector-proxy-config", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+
+			// Verify collector service account
+			_, err = coreops.Instance().GetServiceAccount("px-metrics-collector", cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
 		}
 
 		// Verify telemetry config map
-		_, err = coreops.Instance().GetConfigMap("px-telemetry-config", cluster.Namespace)
+		_, err := coreops.Instance().GetConfigMap("px-telemetry-config", cluster.Namespace)
 		if err != nil {
 			return nil, true, err
-		}
-
-		// Verify collector config map
-		_, err = coreops.Instance().GetConfigMap("px-collector-config", cluster.Namespace)
-		if err != nil {
-			return nil, true, err
-		}
-
-		// Verify collector proxy config map
-		_, err = coreops.Instance().GetConfigMap("px-collector-proxy-config", cluster.Namespace)
-		if err != nil {
-			return nil, true, err
-		}
-
-		// Verify collector service account
-		_, err = coreops.Instance().GetServiceAccount("px-metrics-collector", cluster.Namespace)
-		if err != nil {
-			return nil, true, err
-		}
-
-		// Verify metrics collector image
-		imageName, ok := pxImageList["metricsCollector"]
-		if !ok {
-			return nil, true, fmt.Errorf("failed to find image for metrics collector")
-		}
-		imageName = util.GetImageURN(cluster, imageName)
-
-		if deployment.Spec.Template.Spec.Containers[0].Image != imageName {
-			return nil, true, fmt.Errorf("collector image mismatch, image: %s, expected: %s",
-				deployment.Spec.Template.Spec.Containers[0].Image,
-				imageName)
-		}
-
-		// Verify metrics collector proxy image
-		imageName, ok = pxImageList["metricsCollectorProxy"]
-		if !ok {
-			return nil, true, fmt.Errorf("failed to find image for metrics collector proxy")
-		}
-		imageName = util.GetImageURN(cluster, imageName)
-
-		if deployment.Spec.Template.Spec.Containers[1].Image != imageName {
-			return nil, true, fmt.Errorf("collector proxy image mismatch, image: %s, expected: %s",
-				deployment.Spec.Template.Spec.Containers[1].Image,
-				imageName)
 		}
 
 		return nil, false, nil
