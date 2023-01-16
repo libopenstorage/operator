@@ -437,14 +437,14 @@ func StartPort(cluster *corev1.StorageCluster) int {
 
 // KubeletPath returns the kubelet path
 func KubeletPath(cluster *corev1.StorageCluster) string {
-	if IsPKS(cluster) {
-		return "/var/vcap/data/kubelet"
-	}
-
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyKubeletDir && len(env.Value) > 0 {
 			return env.Value
 		}
+	}
+
+	if IsPKS(cluster) {
+		return "/var/vcap/data/kubelet"
 	}
 
 	return "/var/lib/kubelet"
