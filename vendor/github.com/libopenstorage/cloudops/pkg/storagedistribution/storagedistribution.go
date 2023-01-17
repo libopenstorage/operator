@@ -224,8 +224,12 @@ func ResizeDisk(
 		}
 	}
 
+	var maxSize uint64
 	for _, row := range dm.Rows {
 		printCandidates("ResizeDisk Candidate", []cloudops.StorageDecisionMatrixRow{row}, 0, 0)
+		if maxSize < row.MaxSize {
+			maxSize = row.MaxSize
+		}
 		if request.CurrentDriveSize+deltaCapacityPerDrive > row.MaxSize {
 			continue
 		}
@@ -242,7 +246,10 @@ func ResizeDisk(
 		}
 		return resp, &row, nil
 	}
-	return nil, nil, &cloudops.ErrStorageDistributionCandidateNotFound{}
+	return nil, nil, &cloudops.ErrStorageDistributionCandidateNotFound{
+		Reason: fmt.Sprintf("cannot reach target drive size of %v, max supported drive size for drive type %v: %v",
+			request.CurrentDriveSize+deltaCapacityPerDrive, request.CurrentDriveType, maxSize),
+	}
 }
 
 func calculateDriveCapacity(request *cloudops.StoragePoolUpdateRequest) uint64 {
