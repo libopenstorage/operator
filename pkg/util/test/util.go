@@ -125,7 +125,7 @@ var (
 	opVer1_11, _                      = version.NewVersion("1.11.0-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
-	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2")
+	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 )
 
 // MockDriver creates a mock storage driver
