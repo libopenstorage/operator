@@ -32,14 +32,18 @@ var (
 
 // GetPXOperatorVersion returns the portworx operator version found
 func GetPXOperatorVersion() (*version.Version, error) {
-	pxImageTag, err := getPXOperatorImageTag()
+	imageTag, err := getPXOperatorImageTag()
 	if err != nil {
 		return nil, err
 	}
-
+	// tag is not a valid version, e.g. commit sha in PR automation builds "1a6a788" can be parsed to "1.0.0-a6a788"
+	if !strings.Contains(imageTag, ".") {
+		logrus.Errorf("Operator tag %s is not a valid version tag, assuming its latest and setting it to %s", imageTag, pxOperatorMasterVersion)
+		imageTag = pxOperatorMasterVersion
+	}
 	// We may run the automation on operator installed using private images,
 	// so assume we are testing the latest operator version if failed to parse the tag
-	opVersion, err := version.NewVersion(pxImageTag)
+	opVersion, err := version.NewVersion(imageTag)
 	if err != nil {
 		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", pxOperatorMasterVersion)
 		opVersion, _ = version.NewVersion(pxOperatorMasterVersion)
