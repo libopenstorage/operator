@@ -3360,7 +3360,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), k8sNode3)
 	require.NoError(t, err)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(k8sNode1, k8sNode2, k8sNode3)))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 
 	expectedDriverInfo.CloudProvider = "testcloud"
