@@ -12,6 +12,7 @@ import (
 
 	"github.com/libopenstorage/cloudops"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
@@ -30,7 +31,7 @@ func TestDefaultProviders(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err := InitPreflightChecker()
+	err := InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 
 	c := Instance()
@@ -45,7 +46,7 @@ func TestDefaultProviders(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err = InitPreflightChecker()
+	err = InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 
 	c = Instance()
@@ -60,7 +61,7 @@ func TestDefaultProviders(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err = InitPreflightChecker()
+	err = InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 
 	c = Instance()
@@ -75,7 +76,7 @@ func TestDefaultProviders(t *testing.T) {
 		GitVersion: "v1.21.14-eks-ba74326",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
-	err = InitPreflightChecker()
+	err = InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 	require.True(t, IsEKS())
 

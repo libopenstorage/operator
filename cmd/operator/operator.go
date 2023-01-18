@@ -229,7 +229,7 @@ func run(c *cli.Context) {
 		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
-	if err := preflight.InitPreflightChecker(); err != nil {
+	if err := preflight.InitPreflightChecker(mgr.GetClient()); err != nil {
 		log.Fatalf("Error initializing preflight checker: %v", err)
 	}
 
