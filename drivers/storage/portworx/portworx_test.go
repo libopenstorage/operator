@@ -439,7 +439,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	}
 
 	// TestCase: default cloud provider
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -461,7 +461,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 		GitVersion: "v1.21.14-eks-ba74326",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 	cluster.Spec = corev1.StorageClusterSpec{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -507,7 +507,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 }
 

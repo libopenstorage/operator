@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -18,6 +19,7 @@ var (
 type checker struct {
 	providerName     string
 	distributionName string
+	k8sClient        client.Client
 }
 
 // CheckerOps is a list of APIs to do preflight check
@@ -60,7 +62,7 @@ func SetInstance(i CheckerOps) {
 }
 
 // InitPreflightChecker initialize the preflight check instance
-func InitPreflightChecker() error {
+func InitPreflightChecker(client client.Client) error {
 	providerName, err := getCloudProviderName()
 	if err != nil {
 		return err
@@ -73,6 +75,7 @@ func InitPreflightChecker() error {
 	c := &checker{
 		providerName:     providerName,
 		distributionName: distributionName,
+		k8sClient:        client,
 	}
 	instance = c
 	if IsEKS() {

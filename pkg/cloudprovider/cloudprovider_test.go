@@ -10,6 +10,7 @@ import (
 
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/operator/pkg/preflight"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
@@ -160,7 +161,7 @@ func TestGetProvidersFromPreflightChecker(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err := preflight.InitPreflightChecker()
+	err := preflight.InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 	cp = Get()
 	require.Empty(t, cp.Name())
@@ -172,7 +173,7 @@ func TestGetProvidersFromPreflightChecker(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 	cp = Get()
 	require.Equal(t, cloudops.Azure, cp.Name())
@@ -184,7 +185,7 @@ func TestGetProvidersFromPreflightChecker(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"}},
 	}}
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(testutil.FakeK8sClient(fakeK8sNodes))
 	require.NoError(t, err)
 	cp = Get()
 	require.Equal(t, string(cloudops.AWS), cp.Name())

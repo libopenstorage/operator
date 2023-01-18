@@ -1588,10 +1588,10 @@ func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
 		GitVersion: "v1.21.14-eks-ba74326",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
-	err := preflight.InitPreflightChecker()
+	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
+	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 
-	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
 	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
@@ -1661,7 +1661,7 @@ func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	err = preflight.InitPreflightChecker()
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 }
 
