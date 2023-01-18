@@ -655,7 +655,6 @@ func (c *Controller) createStorkDeployment(
 	var existingCommand []string
 	var existingEnvs []v1.EnvVar
 	var existingMounts []v1.VolumeMount
-	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkContainerName {
 			existingImage = c.Image
@@ -664,7 +663,6 @@ func (c *Controller) createStorkDeployment(
 			sort.Sort(k8sutil.EnvByName(existingEnvs))
 			existingMounts = append([]v1.VolumeMount{}, c.VolumeMounts...)
 			sort.Sort(k8sutil.VolumeMountByName(existingMounts))
-			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
@@ -676,13 +674,16 @@ func (c *Controller) createStorkDeployment(
 		return err
 	}
 
+	deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
+		command, envVars, volumes, volumeMounts, targetCPUQuantity, updatedTopologySpreadConstraints)
+
 	// Check if image, envs, cpu or args are modified
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
 		!reflect.DeepEqual(existingVolumes, volumes) ||
 		!reflect.DeepEqual(existingMounts, volumeMounts) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasResourcesChanged(existingDeployment.Spec.Template.Spec.Containers[0].Resources, deployment.Spec.Template.Spec.Containers[0].Resources) ||
 		existingDeployment.Spec.Template.Spec.HostNetwork != hostNetwork ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
@@ -691,8 +692,6 @@ func (c *Controller) createStorkDeployment(
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isStorkDeploymentCreated || modified {
-		deployment := c.getStorkDeploymentSpec(cluster, ownerRef, imageName,
-			command, envVars, volumes, volumeMounts, targetCPUQuantity, updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -828,6 +827,12 @@ func (c *Controller) getStorkDeploymentSpec(
 		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
 	}
 
+	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/stork-cpu)
+	// will be overwritten.
+	if cluster.Spec.Stork.Resources != nil {
+		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Stork.Resources
+	}
+
 	return deployment
 }
 
@@ -916,12 +921,10 @@ func (c *Controller) createStorkSchedDeployment(
 
 	var existingImage string
 	var existingCommand []string
-	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == storkSchedContainerName {
 			existingImage = c.Image
 			existingCommand = c.Command
-			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 		}
 	}
 
@@ -930,9 +933,18 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
+	deployment := getStorkSchedDeploymentSpec(
+		cluster,
+		ownerRef,
+		imageName,
+		command,
+		targetCPUQuantity,
+		updatedTopologySpreadConstraints,
+		c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
+
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasResourcesChanged(existingDeployment.Spec.Template.Spec.Containers[0].Resources, deployment.Spec.Template.Spec.Containers[0].Resources) ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
@@ -940,14 +952,6 @@ func (c *Controller) createStorkSchedDeployment(
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	if !c.isStorkSchedDeploymentCreated || modified {
-		deployment := getStorkSchedDeploymentSpec(
-			cluster,
-			ownerRef,
-			imageName,
-			command,
-			targetCPUQuantity,
-			updatedTopologySpreadConstraints,
-			c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
 		if err = k8sutil.CreateOrUpdateDeployment(c.client, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -1116,6 +1120,12 @@ func getStorkSchedDeploymentSpec(
 
 	if len(topologySpreadConstraints) != 0 {
 		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
+	}
+
+	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/stork-cpu)
+	// will be overwritten.
+	if cluster.Spec.Stork.Resources != nil {
+		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Stork.Resources
 	}
 
 	return deployment

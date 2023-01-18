@@ -358,7 +358,6 @@ func (c *autopilot) createDeployment(
 	var existingCommand []string
 	var existingEnvs []v1.EnvVar
 	var existingMounts []v1.VolumeMount
-	var existingCPUQuantity resource.Quantity
 	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
 		if c.Name == AutopilotContainerName {
 			existingImage = c.Image
@@ -367,28 +366,27 @@ func (c *autopilot) createDeployment(
 			sort.Sort(k8sutil.EnvByName(existingEnvs))
 			existingMounts = append([]v1.VolumeMount{}, c.VolumeMounts...)
 			sort.Sort(k8sutil.VolumeMountByName(existingMounts))
-			existingCPUQuantity = c.Resources.Requests[v1.ResourceCPU]
 			break
 		}
 	}
 	existingVolumes := append([]v1.Volume{}, existingDeployment.Spec.Template.Spec.Volumes...)
 	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
+	targetDeployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,
+		command, envVars, volumes, volumeMounts, targetCPUQuantity)
 	// Check if the deployment has changed
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
 		!reflect.DeepEqual(existingEnvs, envVars) ||
 		!reflect.DeepEqual(existingVolumes, volumes) ||
 		!reflect.DeepEqual(existingMounts, volumeMounts) ||
-		existingCPUQuantity.Cmp(targetCPUQuantity) != 0 ||
+		util.HasResourcesChanged(existingDeployment.Spec.Template.Spec.Containers[0].Resources, targetDeployment.Spec.Template.Spec.Containers[0].Resources) ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
-		deployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,
-			command, envVars, volumes, volumeMounts, targetCPUQuantity)
-		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
+		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, targetDeployment, ownerRef); err != nil {
 			return err
 		}
 	}
@@ -518,6 +516,12 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 
 	if len(envVars) > 0 {
 		deployment.Spec.Template.Spec.Containers[0].Env = envVars
+	}
+
+	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/autopilot-cpu)
+	// will be overwritten.
+	if cluster.Spec.Autopilot.Resources != nil {
+		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Autopilot.Resources
 	}
 
 	return deployment

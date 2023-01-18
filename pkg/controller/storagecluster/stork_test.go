@@ -1750,6 +1750,104 @@ func TestStorkVolumesChange(t *testing.T) {
 	require.Nil(t, storkDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
 }
 
+func TestStorkAndStorkSchedulerResources(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Stork: &corev1.StorkSpec{
+				Enabled: true,
+				Image:   "osd/stork:test",
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	driverEnvs := map[string]*v1.EnvVar{
+		"PX_NAMESPACE": {
+			Name:  "PX_NAMESPACE",
+			Value: cluster.Namespace,
+		},
+	}
+	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
+	driver.EXPECT().GetStorkEnvMap(cluster).
+		Return(driverEnvs).
+		AnyTimes()
+
+	err := controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	expectedCPUQuantity := resource.MustParse(defaultStorkCPU)
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(deployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Set custom resources
+	cluster.Spec.Stork.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("4Gi"),
+			v1.ResourceCPU:    resource.MustParse("400m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("8Gi"),
+			v1.ResourceCPU:    resource.MustParse("800m"),
+		},
+	}
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.Stork.Resources, deployment.Spec.Template.Spec.Containers[0].Resources)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.Stork.Resources, deployment.Spec.Template.Spec.Containers[0].Resources)
+
+	cluster.Spec.Stork.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("2Gi"),
+			v1.ResourceCPU:    resource.MustParse("200m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("6Gi"),
+			v1.ResourceCPU:    resource.MustParse("600m"),
+		},
+	}
+
+	err = controller.syncStork(cluster)
+	require.NoError(t, err)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.Stork.Resources, deployment.Spec.Template.Spec.Containers[0].Resources)
+
+	deployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.Stork.Resources, deployment.Spec.Template.Spec.Containers[0].Resources)
+}
+
 func TestStorkCPUChange(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
