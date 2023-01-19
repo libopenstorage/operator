@@ -5987,6 +5987,88 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
 }
 
+func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.11.4",
+	}
+	nodeName := "testNode"
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	customKubeletPath := "/data/kubelet"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.1.2",
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyKubeletDir,
+						Value: customKubeletPath,
+					},
+				},
+			},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+
+	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", spec.Volumes)
+
+	// CSI driver path
+	var ok bool
+	for _, v := range spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			ok = true
+		}
+	}
+	require.True(t, ok)
+}
+
 func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
