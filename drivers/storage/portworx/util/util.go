@@ -71,6 +71,8 @@ const (
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
 	// AnnotationIsGKE annotation indicating whether it is a GKE cluster
 	AnnotationIsGKE = pxAnnotationPrefix + "/is-gke"
+	// AnnotationIsOKE annotation indicating whether it is a OKE cluster
+	AnnotationIsOKE = pxAnnotationPrefix + "/is-oke"
 	// AnnotationIsAKS annotation indicating whether it is an AKS cluster
 	AnnotationIsAKS = pxAnnotationPrefix + "/is-aks"
 	// AnnotationIsEKS annotation indicating whether it is an EKS cluster
@@ -266,6 +268,12 @@ func IsPKS(cluster *corev1.StorageCluster) bool {
 // IsGKE returns true if the annotation has a GKE annotation and is true value
 func IsGKE(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsGKE])
+	return err == nil && enabled
+}
+
+// IsOKE returns true if the annotation has a OKE annotation and is true value
+func IsOKE(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOKE])
 	return err == nil && enabled
 }
 

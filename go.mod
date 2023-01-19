@@ -10,10 +10,10 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-version v1.6.0
-	github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
+	github.com/libopenstorage/cloudops v0.0.0-20221223231100-c33708f5e050
 	github.com/libopenstorage/openstorage v8.0.1-0.20211105030910-665c2f474186+incompatible
 	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
-	github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
+	github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20220725231657-5a6a43c6a5b3
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
@@ -27,8 +27,10 @@ require (
 	k8s.io/apimachinery v0.25.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.25.1
+	k8s.io/component-base v0.26.0
 	k8s.io/component-helpers v0.25.1
 	k8s.io/klog v1.0.0
+	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.25.1
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
 	sigs.k8s.io/cluster-api v0.2.11
@@ -46,8 +48,6 @@ require (
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.3.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/OpenPeeDeeP/depguard v1.1.1 // indirect
-	github.com/PuerkitoBio/purell v1.2.0 // indirect
-	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/alexkohler/prealloc v1.0.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
@@ -248,11 +248,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.3.3 // indirect
 	k8s.io/apiserver v0.25.1 // indirect
-	k8s.io/component-base v0.26.0 // indirect
 	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20221207184640-f3cff1453715 // indirect
-	k8s.io/kube-scheduler v0.0.0 // indirect
 	mvdan.cc/gofumpt v0.4.0 // indirect
 	mvdan.cc/interfacer v0.0.0-20180901003855-c20040233aed // indirect
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect
