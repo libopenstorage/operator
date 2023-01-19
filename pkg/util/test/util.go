@@ -125,7 +125,7 @@ var (
 	opVer1_11, _                      = version.NewVersion("1.11.0-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
-	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2")
+	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 )
 
 // MockDriver creates a mock storage driver
@@ -2875,14 +2875,17 @@ func GetPxOperatorVersion() (*version.Version, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	// tag is not a valid version, e.g. commit sha in PR automation builds "1a6a788" can be parsed to "1.0.0-a6a788"
+	if !strings.Contains(imageTag, ".") {
+		logrus.Errorf("Operator tag %s is not a valid version tag, assuming its latest and setting it to %s", imageTag, PxOperatorMasterVersion)
+		imageTag = PxOperatorMasterVersion
+	}
 	// We may run the automation on operator installed using private images,
 	// so assume we are testing the latest operator version if failed to parse the tag
 	opVersion, err := version.NewVersion(imageTag)
 	if err != nil {
-		masterVersionTag := PxOperatorMasterVersion
 		logrus.WithError(err).Warnf("Failed to parse portworx-operator tag to version, assuming its latest and setting it to %s", PxOperatorMasterVersion)
-		opVersion, _ = version.NewVersion(masterVersionTag)
+		opVersion, _ = version.NewVersion(PxOperatorMasterVersion)
 	}
 
 	logrus.Infof("Testing portworx-operator version [%s]", opVersion.String())

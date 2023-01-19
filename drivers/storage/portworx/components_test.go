@@ -4026,6 +4026,81 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
 }
 
+func TestAutopilotResources(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Default Autopilot CPU
+	expectedCPUQuantity := resource.MustParse("0.1")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Set custom resources.
+	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("4Gi"),
+			v1.ResourceCPU:    resource.MustParse("400m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("8Gi"),
+			v1.ResourceCPU:    resource.MustParse("800m"),
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	assert.Equal(t, *cluster.Spec.Autopilot.Resources, autopilotDeployment.Spec.Template.Spec.Containers[0].Resources)
+
+	// Change custom resources.
+	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("2Gi"),
+			v1.ResourceCPU:    resource.MustParse("200m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("6Gi"),
+			v1.ResourceCPU:    resource.MustParse("600m"),
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	assert.Equal(t, *cluster.Spec.Autopilot.Resources, autopilotDeployment.Spec.Template.Spec.Containers[0].Resources)
+}
+
 func TestAutopilotCPUChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
