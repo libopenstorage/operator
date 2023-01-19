@@ -77,16 +77,6 @@ spec:
                       cpu:
                         type: string
                         description: Requested cpu for the storage pod.
-                  limits:
-                    type: object
-                    description: Resource limit for the storage pod.
-                    properties:
-                      memory:
-                        type: string
-                        description: Memory limit for the storage pod.
-                      cpu:
-                        type: string
-                        description: CPU limit for the storage pod.
               image:
                 type: string
                 description: Docker image of the storage driver.
@@ -315,16 +305,6 @@ spec:
                             the taint. By default, it is not set, which means tolerate the taint forever
                             (do not evict). Zero and negative values will be treated as 0 (evict
                             immediately) by the system.
-              pxRepo:
-                type: object
-                description: Details of PX repo service for installing dependency modules.
-                properties:
-                  enabled:
-                    type: boolean
-                    description: Flag indicating whether PX repo needs to be enabled.
-                  image:
-                    type: string
-                    description: Docker image of the PX repo container.
               kvdb:
                 type: object
                 description: Details of KVDB that the storage driver will use.
@@ -643,30 +623,6 @@ spec:
                                               type: string
                                             mode:
                                               type: integer
-                  resources:
-                    type: object
-                    description: Specifies the resource requirements for stork and stork scheduler.
-                    properties:
-                      requests:
-                        type: object
-                        description: Requested resources.
-                        properties:
-                          memory:
-                            type: string
-                            description: Requested memory.
-                          cpu:
-                            type: string
-                            description: Requested cpu.
-                      limits:
-                        type: object
-                        description: Resource limit.
-                        properties:
-                          memory:
-                            type: string
-                            description: Memory limit.
-                          cpu:
-                            type: string
-                            description: CPU limit.
               userInterface:
                 type: object
                 description: Contains spec of a user interface for the storage driver.
@@ -920,43 +876,6 @@ spec:
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                           description: Map of key-value params for the provider.
-                  gitops:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                          description: Unique name of the data provider.
-                        type:
-                          type: string
-                          description: Type of the data provider. For instance - prometheus
-                        params:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                          description: Map of key-value params for the provider.
-                  resources:
-                    type: object
-                    description: Specifies the resource requirements for the autopilot pod.
-                    properties:
-                      requests:
-                        type: object
-                        description: Requested resources.
-                        properties:
-                          memory:
-                            type: string
-                            description: Requested memory.
-                          cpu:
-                            type: string
-                            description: Requested cpu.
-                      limits:
-                        type: object
-                        description: Resource limit.
-                        properties:
-                          memory:
-                            type: string
-                            description: Memory limit.
-                          cpu:
-                            type: string
-                            description: CPU limit.
               monitoring:
                 type: object
                 description: Contains monitoring configuration for the storage cluster.
@@ -969,158 +888,6 @@ spec:
                     type: object
                     description: Contains configuration of Prometheus to monitor the storage cluster.
                     properties:
-                      resources:
-                        type: object
-                        description: Define resources requests and limits for single Pods.
-                        properties:
-                          limits:
-                            additionalProperties:
-                              anyOf:
-                                - type: integer
-                                - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: 'Limits describes the maximum amount of compute resources
-                              allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
-                            type: object
-                          requests:
-                            additionalProperties:
-                              anyOf:
-                                - type: integer
-                                - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: 'Requests describes the minimum amount of compute
-                              resources required. If Requests is omitted for a container,
-                              it defaults to Limits if that is explicitly specified, otherwise
-                              to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
-                            type: object
-                      securityContext:
-                        description: 'Security options the pod should run with. More
-                          info: https://kubernetes.io/docs/concepts/policy/security-context/
-                          More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/'
-                        properties:
-                          allowPrivilegeEscalation:
-                            description: 'AllowPrivilegeEscalation controls whether
-                              a process can gain more privileges than its parent process.
-                              This bool directly controls if the no_new_privs flag will
-                              be set on the container process. AllowPrivilegeEscalation
-                              is true always when the container is: 1) run as Privileged
-                              2) has CAP_SYS_ADMIN'
-                            type: boolean
-                          capabilities:
-                            description: The capabilities to add/drop when running containers.
-                              Defaults to the default set of capabilities granted by
-                              the container runtime.
-                            properties:
-                              add:
-                                description: Added capabilities
-                                items:
-                                  description: Capability represent POSIX capabilities
-                                    type
-                                  type: string
-                                type: array
-                              drop:
-                                description: Removed capabilities
-                                items:
-                                  description: Capability represent POSIX capabilities
-                                    type
-                                  type: string
-                                type: array
-                            type: object
-                          privileged:
-                            description: Run container in privileged mode. Processes
-                              in privileged containers are essentially equivalent to
-                              root on the host. Defaults to false.
-                            type: boolean
-                          procMount:
-                            description: procMount denotes the type of proc mount to
-                              use for the containers. The default is DefaultProcMount
-                              which uses the container runtime defaults for readonly
-                              paths and masked paths. This requires the ProcMountType
-                              feature flag to be enabled.
-                            type: string
-                          readOnlyRootFilesystem:
-                            description: Whether this container has a read-only root
-                              filesystem. Default is false.
-                            type: boolean
-                          runAsGroup:
-                            description: The GID to run the entrypoint of the container
-                              process. Uses runtime default if unset. May also be set
-                              in PodSecurityContext.  If set in both SecurityContext
-                              and PodSecurityContext, the value specified in SecurityContext
-                              takes precedence.
-                            format: int64
-                            type: integer
-                          runAsNonRoot:
-                            description: Indicates that the container must run as a
-                              non-root user. If true, the Kubelet will validate the
-                              image at runtime to ensure that it does not run as UID
-                              0 (root) and fail to start the container if it does. If
-                              unset or false, no such validation will be performed.
-                              May also be set in PodSecurityContext.  If set in both
-                              SecurityContext and PodSecurityContext, the value specified
-                              in SecurityContext takes precedence.
-                            type: boolean
-                          runAsUser:
-                            description: The UID to run the entrypoint of the container
-                              process. Defaults to user specified in image metadata
-                              if unspecified. May also be set in PodSecurityContext.  If
-                              set in both SecurityContext and PodSecurityContext, the
-                              value specified in SecurityContext takes precedence.
-                            format: int64
-                            type: integer
-                          seLinuxOptions:
-                            description: The SELinux context to be applied to the container.
-                              If unspecified, the container runtime will allocate a
-                              random SELinux context for each container.  May also be
-                              set in PodSecurityContext.  If set in both SecurityContext
-                              and PodSecurityContext, the value specified in SecurityContext
-                              takes precedence.
-                            properties:
-                              level:
-                                description: Level is SELinux level label that applies
-                                  to the container.
-                                type: string
-                              role:
-                                description: Role is a SELinux role label that applies
-                                  to the container.
-                                type: string
-                              type:
-                                description: Type is a SELinux type label that applies
-                                  to the container.
-                                type: string
-                              user:
-                                description: User is a SELinux user label that applies
-                                  to the container.
-                                type: string
-                            type: object
-                          windowsOptions:
-                            description: The Windows specific settings applied to all
-                              containers. If unspecified, the options from the PodSecurityContext
-                              will be used. If set in both SecurityContext and PodSecurityContext,
-                              the value specified in SecurityContext takes precedence.
-                            properties:
-                              gmsaCredentialSpec:
-                                description: GMSACredentialSpec is where the GMSA admission
-                                  webhook (https://github.com/kubernetes-sigs/windows-gmsa)
-                                  inlines the contents of the GMSA credential spec named
-                                  by the GMSACredentialSpecName field.
-                                type: string
-                              gmsaCredentialSpecName:
-                                description: GMSACredentialSpecName is the name of the
-                                  GMSA credential spec to use.
-                                type: string
-                              runAsUserName:
-                                description: The UserName in Windows to run the entrypoint
-                                  of the container process. Defaults to the user specified
-                                  in image metadata if unspecified. May also be set
-                                  in PodSecurityContext. If set in both SecurityContext
-                                  and PodSecurityContext, the value specified in SecurityContext
-                                  takes precedence.
-                                type: string
-                            type: object
-                        type: object
                       exportMetrics:
                         type: boolean
                         description: If this flag is enabled it will expose the storage cluster metrics to Prometheus.
@@ -1163,10 +930,6 @@ spec:
                     type: object
                     description: Authorization configurations for a RBAC enabled storage cluster
                     properties:
-                      enabled:
-                        type: boolean
-                        description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage
-                          cluster. If omited take the value of the parent flag (security.enabled)
                       guestAccess:
                         type: string
                         description: Defines the access mode of a guest user
@@ -1184,68 +947,6 @@ spec:
                             type: string
                             description: Shared secret is the name of the Kubernetes secret containing the shared key
                               used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
-                  tls:
-                    type: object
-                    description: Security configurations for a TLS enabled storage cluster
-                    properties:
-                      enabled:
-                        type: boolean
-                        description: Flag indicating whether TLS features need to be enabled for the storage
-                          cluster. Must be supplied and enabled (true) for TLS to be enabled.
-                      rootCA:
-                        type: object
-                        description: The source of the CA certificate.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a certificate file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/ca.crt
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the certificate
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the certificate
-                              secretKey:
-                                type: string
-                                description: The key that contains the certificate
-                      serverCert:
-                        type: object
-                        description: The source of the public key certificate used by the portworx service for TLS.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a certificate file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.crt
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the certificate
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the certificate
-                              secretKey:
-                                type: string
-                                description: The secret key that contains the certificate
-                      serverKey:
-                        type: object
-                        description: Overrides the source of the private key certificate used by the portworx service for TLS.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a private key file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.key
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the private key
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the private key
-                              secretKey:
-                                type: string
-                                description: The secret key that contains the private key
               csi:
                 type: object
                 description: Contains CSI configuration for the storage cluster.
@@ -1618,9 +1319,6 @@ spec:
                 description: Phase of the StorageCluster is a simple, high-level summary of where the
                   StorageCluster is in its lifecycle. The condition array contains more detailed
                   information about the state of the cluster.
-              reason:
-                type: string
-                description: CamelCase messages split with commas indicating details about why the StorageCluster is in this state.
               collisionCount:
                 type: integer
                 format: int32
@@ -1702,32 +1400,22 @@ spec:
                   logUploader:
                     type: string
                     description: Desired image for log uploader.
-                  pxRepo:
-                    type: string
-                    description: Desired image for pxRepo.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.
                 items:
                   type: object
                   properties:
-                    source:
-                      type: string
-                      description: Name of the component.
                     type:
                       type: string
                       description: Type of the condition.
                     status:
                       type: string
                       description: Status of the condition.
-                    message:
+                    reason:
                       type: string
-                      description: Message is human readable message indicating details about the current
+                      description: Reason is human readable message indicating details about the current
                         state of the cluster.
-                    lastTransitionTime:
-                      type: string
-                      format: date-time
-                      description: Time at which the condition changed.
   - name: v1alpha1
     served: false
     storage: false

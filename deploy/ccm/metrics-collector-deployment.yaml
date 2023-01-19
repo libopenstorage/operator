@@ -17,7 +17,7 @@ spec:
       - env:
         - name: CONFIG
           value: config/portworx.yaml
-        image: purestorage/realtime-metrics:1.0.2
+        image: purestorage/realtime-metrics:1.0.4
         imagePullPolicy: Always
         name: collector
         resources:

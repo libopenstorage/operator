@@ -553,6 +553,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setAutopilotDefaults(toUpdate)
+	setTLSDefaults(toUpdate)
 	return nil
 }
 
@@ -1214,27 +1215,75 @@ func setAutopilotDefaults(
 			},
 		}
 	}
+}
 
-	// px-3.0.0 -- add PX_ENABLE_TLS=true env to AutoPilot when Security + TLS are enabled
+func setTLSDefaults(
+	toUpdate *corev1.StorageCluster,
+) {
 	sec := toUpdate.Spec.Security
-	if sec != nil && sec.Enabled && sec.TLS != nil && sec.TLS.Enabled != nil && *sec.TLS.Enabled &&
-		pxutil.GetPortworxVersion(toUpdate).GreaterThanOrEqual(pxutil.MinimumPxVersionAutoTLS) {
-		newEnv := make([]v1.EnvVar, 0, len(toUpdate.Spec.Autopilot.Env)+1)
+	secEnabled := true
+
+	if pxutil.GetPortworxVersion(toUpdate).LessThan(pxutil.MinimumPxVersionAutoTLS) {
+		// px version too low for auto-ssl setup, bail out..
+		return
+	} else if sec == nil || !sec.Enabled || sec.TLS == nil || sec.TLS.Enabled == nil || !*sec.TLS.Enabled {
+		// security/TLS not enabled
+		secEnabled = false
+		// proceed to check env-vars
+	}
+
+	type listOpType struct {
+		list    *[]v1.EnvVar
+		enabled bool
+	}
+	var listOps []listOpType
+
+	if toUpdate.Spec.Autopilot != nil {
+		listOps = append(listOps, listOpType{
+			&toUpdate.Spec.Autopilot.Env,
+			toUpdate.Spec.Autopilot.Enabled && secEnabled,
+		})
+	}
+	if toUpdate.Spec.Stork != nil {
+		listOps = append(listOps, listOpType{
+			&toUpdate.Spec.Stork.Env,
+			toUpdate.Spec.Stork.Enabled && secEnabled,
+		})
+	}
+
+	// update env-lists, set (or remove) PX_ENABLE_TLS=true
+	for _, listOp := range listOps {
+		newEnv := make([]v1.EnvVar, 0, len(*listOp.list)+1)
 		updated := false
-		for _, ev := range toUpdate.Spec.Autopilot.Env {
-			if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
-				ev.Value = "true"
+		if listOp.enabled {
+			// enabled component -- add/update PX_ENABLE_TLS=true
+			for _, ev := range *listOp.list {
+				if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
+					ev.Value = "true"
+					updated = true
+				}
+				newEnv = append(newEnv, ev)
+			}
+			if !updated {
+				newEnv = append(newEnv, v1.EnvVar{
+					Name:  pxutil.EnvKeyPortworxEnableTLS,
+					Value: "true",
+				})
 				updated = true
 			}
-			newEnv = append(newEnv, ev)
+		} else {
+			// disabled component -- remove PX_ENABLE_TLS
+			for _, ev := range *listOp.list {
+				if ev.Name == pxutil.EnvKeyPortworxEnableTLS {
+					updated = true
+					continue
+				}
+				newEnv = append(newEnv, ev)
+			}
 		}
-		if !updated {
-			newEnv = append(newEnv, v1.EnvVar{
-				Name:  pxutil.EnvKeyPortworxEnableTLS,
-				Value: "true",
-			})
+		if updated {
+			*listOp.list = newEnv
 		}
-		toUpdate.Spec.Autopilot.Env = newEnv
 	}
 }
 

@@ -3633,10 +3633,14 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
 			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
 			Version: pxutil.MinimumPxVersionAutoTLS.String(),
 		},
 	}
+
 	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 
 	// validate
@@ -3658,6 +3662,104 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 		},
 	}
 	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: remove PX_ENABLE_TLS=true when TLS disabled
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(false),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxEnableTLS,
+						Value: "true",
+					},
+				},
+			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+
+	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.Empty(t, cluster.Spec.Autopilot.Env)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, autopilotDeployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	expectedEnv = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxNamespace,
+			Value: cluster.Namespace,
+		},
+	}
+	require.ElementsMatch(t, expectedEnv, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+
+	// TestCase: remove PX_ENABLE_TLS=true when AutoPilot disabled.
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					Enabled: boolPtr(false),
+				},
+				TLS: &corev1.TLSSpec{
+					Enabled: boolPtr(true),
+				},
+			},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: false,
+				Image:   "portworx/autopilot:test",
+				Env: []v1.EnvVar{
+					{
+						Name:  pxutil.EnvKeyPortworxEnableTLS,
+						Value: "true",
+					},
+				},
+			},
+			Image:   "portworx/oci-monitor:" + pxutil.MinimumPxVersionAutoTLS.String(),
+			Version: pxutil.MinimumPxVersionAutoTLS.String(),
+		},
+	}
+
+	// test
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Autopilot.Env)
+	err = driver.PreInstall(cluster)
+
+	// validate
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0) // no warnings
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.Error(t, err)
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
@@ -3922,6 +4024,81 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.ElementsMatch(t, expectedEnvs, autopilotDeployment.Spec.Template.Spec.Containers[0].Env)
+}
+
+func TestAutopilotResources(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Default Autopilot CPU
+	expectedCPUQuantity := resource.MustParse("0.1")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Zero(t, expectedCPUQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+
+	// Set custom resources.
+	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("4Gi"),
+			v1.ResourceCPU:    resource.MustParse("400m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("8Gi"),
+			v1.ResourceCPU:    resource.MustParse("800m"),
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	assert.Equal(t, *cluster.Spec.Autopilot.Resources, autopilotDeployment.Spec.Template.Spec.Containers[0].Resources)
+
+	// Change custom resources.
+	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
+		Requests: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("2Gi"),
+			v1.ResourceCPU:    resource.MustParse("200m"),
+		},
+		Limits: map[v1.ResourceName]resource.Quantity{
+			v1.ResourceMemory: resource.MustParse("6Gi"),
+			v1.ResourceCPU:    resource.MustParse("600m"),
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	assert.Equal(t, *cluster.Spec.Autopilot.Resources, autopilotDeployment.Spec.Template.Spec.Containers[0].Resources)
 }
 
 func TestAutopilotCPUChange(t *testing.T) {
@@ -7497,19 +7674,6 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	// Case: Custom registry should be added to the images
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -8385,19 +8549,6 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	// Case: Custom repo-registry should be added to the images
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9237,19 +9388,6 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	// Case: Custom repo-registry should be added to the images
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -9520,19 +9658,6 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      component.AlertManagerConfigSecretName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
 				Namespace: cluster.Namespace,
 			},
 		},
@@ -9964,19 +10089,6 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      component.AlertManagerConfigSecretName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
 				Namespace: cluster.Namespace,
 			},
 		},
@@ -10509,19 +10621,6 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      component.AlertManagerConfigSecretName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
 				Namespace: cluster.Namespace,
 			},
 		},
@@ -12901,19 +13000,6 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 		},
 	}
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -13268,19 +13354,6 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.DeploymentNameTelemetryCollectorV2,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	// Validate default ccm listening port
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -13545,19 +13618,6 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -13747,19 +13807,6 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 		},
 	}
 
-	// PWX-27401 reconcile collector to validate specs
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.DeploymentNameTelemetryCollectorV2,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -13890,174 +13937,6 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-}
-
-// PWX-27401
-func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-	// Deploy px with CCM Java enabled
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/oci-monitor:2.10.1",
-			Monitoring: &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-					Image:   "purestorage/telemetry:1.2.3",
-				},
-			},
-		},
-		Status: corev1.StorageClusterStatus{
-			ClusterUID: "test-clusteruid",
-		},
-	}
-	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	// TestCase: enabling telemetry doesn't create metrics collector
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	serviceAccount := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	clusterRole := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
-	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
-	role := &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	roleBinding := &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	configMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	configMap = &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	// TestCase: deploy metrics collector V1 and restart operator, collector should be reconciled
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	reregisterComponents()
-	driver = portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
-
-	// TestCase: upgrade to ccm go, new collector should be reconciled
-	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// old collector components got deleted
-	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	// new collector components created
-	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
-	require.NoError(t, err)
-
-	// TestCase: disable telemetry, restart operator and re-enable telemetry, collector v2 should not be created
-	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	reregisterComponents()
-	driver = portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-	cluster.Spec.Monitoring.Telemetry.Enabled = true
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 

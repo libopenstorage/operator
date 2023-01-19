@@ -12,6 +12,7 @@ data:
   portworx.yaml: |-
     scrapeConfig:
       interval: 10
+      batchSize: 5
       k8sConfig:
         pods:
         - podSelector:
