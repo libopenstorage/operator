@@ -26,10 +26,6 @@ github.com/Masterminds/semver
 # github.com/OpenPeeDeeP/depguard v1.1.1
 ## explicit; go 1.13
 github.com/OpenPeeDeeP/depguard
-# github.com/PuerkitoBio/purell v1.2.0
-## explicit; go 1.19
-# github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
-## explicit
 # github.com/alexkohler/prealloc v1.0.0
 ## explicit; go 1.15
 github.com/alexkohler/prealloc/pkg
@@ -701,7 +697,7 @@ github.com/sashamelentyev/interfacebloat/pkg/analyzer
 ## explicit; go 1.19
 github.com/sashamelentyev/usestdlibvars/pkg/analyzer
 github.com/sashamelentyev/usestdlibvars/pkg/analyzer/internal/mapping
-# github.com/securego/gosec/v2 v2.13.1
+# github.com/securego/gosec/v2 v2.14.0
 ## explicit; go 1.19
 github.com/securego/gosec/v2
 github.com/securego/gosec/v2/cwe
@@ -836,7 +832,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.1.0
+# golang.org/x/crypto v0.5.0
 ## explicit; go 1.17
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/pbkdf2
@@ -853,7 +849,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.4.0
+# golang.org/x/net v0.5.0
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -873,17 +869,17 @@ golang.org/x/oauth2/internal
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.3.0
+# golang.org/x/sys v0.4.0
 ## explicit; go 1.17
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.3.0
+# golang.org/x/term v0.4.0
 ## explicit; go 1.17
 golang.org/x/term
-# golang.org/x/text v0.5.0
+# golang.org/x/text v0.6.0
 ## explicit; go 1.17
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
@@ -1069,7 +1065,7 @@ gopkg.in/inf.v0
 # gopkg.in/ini.v1 v1.67.0
 ## explicit
 gopkg.in/ini.v1
-# gopkg.in/square/go-jose.v2 v2.5.1
+# gopkg.in/square/go-jose.v2 v2.6.0
 ## explicit
 gopkg.in/square/go-jose.v2
 gopkg.in/square/go-jose.v2/cipher
