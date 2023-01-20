@@ -6016,6 +6016,7 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
 
 	// CSI StatefulSet
 	statefulSetList := &appsv1.StatefulSetList{}
