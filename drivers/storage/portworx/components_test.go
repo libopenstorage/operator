@@ -6017,18 +6017,31 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 
 	err = driver.PreInstall(cluster)
 
+	// CSI StatefulSet
+	statefulSetList := &appsv1.StatefulSetList{}
+	err = testutil.List(k8sClient, statefulSetList)
+	require.NoError(t, err)
+	require.Len(t, statefulSetList.Items, 1)
+
+	var validStatefulSetSocketPath, validCSIDriverPath bool
+	for _, v := range statefulSetList.Items[0].Spec.Template.Spec.Volumes {
+		if v.Name == "socket-dir" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			validStatefulSetSocketPath = true
+		}
+	}
+	require.True(t, validStatefulSetSocketPath)
+
 	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	logrus.Infof("Volumes %+v", spec.Volumes)
 
 	// CSI driver path
-	var ok bool
 	for _, v := range spec.Volumes {
 		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
-			ok = true
+			validCSIDriverPath = true
 		}
 	}
-	require.True(t, ok)
+	require.True(t, validCSIDriverPath)
 }
 
 func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
