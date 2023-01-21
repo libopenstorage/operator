@@ -96,6 +96,84 @@ func TestBasicRuncPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecWithCustomKubeletDir(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	// expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc.yaml")
+	nodeName := "testNode"
+	customKubeletPath := "/data/kubelet"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.0.3.4",
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+			SecretsProvider: stringPtr("k8s"),
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
+					UseAll:        boolPtr(true),
+					ForceUseDisks: boolPtr(true),
+				},
+				Env: []v1.EnvVar{
+					{
+						Name:  "TEST_KEY",
+						Value: "TEST_VALUE",
+					},
+					{
+						Name:  pxutil.EnvKeyKubeletDir,
+						Value: customKubeletPath,
+					},
+				},
+				RuntimeOpts: map[string]string{
+					"op1": "10",
+				},
+			},
+		},
+	}
+
+	driver := portworx{}
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	// CSI driver path
+	var ok bool
+	for _, v := range actual.Volumes {
+		if v.Name == "csi-driver-path" && v.VolumeSource.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			ok = true
+		}
+	}
+	require.True(t, ok)
+
+}
+
 func TestPodSpecWithImagePullSecrets(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
