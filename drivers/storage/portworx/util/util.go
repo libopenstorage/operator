@@ -1201,7 +1201,8 @@ func CountStorageNodes(
 				[]string{node.DataIp, node.MgmtIp, node.Hostname},
 			)
 			if err != nil {
-				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
+				// In Metro-DR setup, this could be expected.
+				logrus.Infof("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
 				continue
 			}
 			node.SchedulerNodeName = k8sNode.Name
@@ -1209,10 +1210,15 @@ func CountStorageNodes(
 		if len(node.Pools) > 0 && node.Pools[0] != nil {
 			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
 				storageNodesCount++
+			} else {
+				logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
 			}
+		} else {
+			logrus.Debugf("node pools is empty, node: %+v", node)
 		}
 	}
 
+	logrus.Debugf("storageNodesCount: %d, k8sNodesStoragePodCouldRun: %d", storageNodesCount, len(k8sNodesStoragePodCouldRun))
 	return storageNodesCount, nil
 }
 
