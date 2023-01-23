@@ -34,6 +34,8 @@ spec:
           readOnly: true
       - args:
         - envoy
+        - "--base-id"
+        - "4"
         - --config-path
         - /config/envoy-config.yaml
         image: purestorage/telemetry-envoy:1.0.0
