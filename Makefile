@@ -74,8 +74,6 @@ PROMETHEUS_OPERATOR_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/promethe
 CSI_SNAPSHOTTER_V3_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v3.0.3/client/config/crd
 CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX ?= https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v4.2.1/client/config/crd
 
-GOLINT = go run github.com/golangci/golangci-lint/cmd/golangci-lint
-
 BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
 RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
 BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d )
@@ -98,22 +96,28 @@ vendor:
 # - please make sure $GOPATH/bin is in your path, also do not use $GOBIN
 
 $(GOPATH)/bin/revive:
-	GO111MODULE=off go get -u github.com/mgechev/revive
-
-$(GOPATH)/bin/gomock:
-	go get -u github.com/golang/mock/gomock
+	env GOFLAGS="" go install github.com/mgechev/revive@latest
 
 $(GOPATH)/bin/mockgen:
-	go get -u github.com/golang/mock/mockgen
+	env GOFLAGS="" go install github.com/golang/mock/mockgen@latest
+
+$(GOPATH)/bin/golangci-lint:
+	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+$(GOPATH)/bin/errcheck:
+	env GOFLAGS="" go install github.com/kisielk/errcheck@latest
+
+$(GOPATH)/bin/staticcheck:
+	env GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
 
 # Static checks
 
 vendor-tidy:
 	go mod tidy
 
-lint:
+lint: $(GOPATH)/bin/golangci-lint
 	# golint check ...
-	$(GOLINT) run --timeout=5m ./...
+	@$(GOPATH)/bin/golangci-lint run --timeout=5m ./...
 
 vet:
 	# go vet check ...
@@ -123,19 +127,17 @@ check-fmt:
 	# gofmt check ...
 	@bash -c "diff -u <(echo -n) <(gofmt -l -d -s -e $(GO_FILES))"
 
-errcheck:
+errcheck: $(GOPATH)/bin/errcheck
 	# errcheck check ...
-	@GO111MODULE=off go get -u github.com/kisielk/errcheck
-	@errcheck -verbose -blank $(PKGS)
+	@$(GOPATH)/bin/errcheck -verbose -blank $(PKGS)
 
-staticcheck:
+staticcheck: $(GOPATH)/bin/staticcheck
 	# staticcheck check ...
-	@GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
-	@staticcheck $(PKGS)
+	@$(GOPATH)/bin/staticcheck $(PKGS)
 
 revive: $(GOPATH)/bin/revive
 	# revive check ...
-	@revive -formatter friendly $(PKGS)
+	@$(GOPATH)/bin/revive -formatter friendly $(PKGS)
 
 pretest: check-fmt lint vet staticcheck
 
@@ -270,13 +272,13 @@ get-release-manifest: clean-release-manifest
 	mkdir -p manifests
 	wget -q --no-check-certificate '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
-mockgen: $(GOPATH)/bin/gomock $(GOPATH)/bin/mockgen
-	mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient
-	mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
-	mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
-	mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
-	mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
-	mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
+mockgen: $(GOPATH)/bin/mockgen
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
 
 clean: clean-release-manifest clean-bundle
 	@echo "Cleaning up binaries"
