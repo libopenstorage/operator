@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	op_v1 "github.com/operator-framework/api/pkg/operators/v1"
@@ -26,7 +27,7 @@ const (
 	defaultPxVsphereSecretName = "px-vsphere-secret"
 
 	getInstallPlanListTimeout       = 10 * time.Minute
-	getInstallPlanListRetryInterval = 5 * time.Second
+	getInstallPlanListRetryInterval = 10 * time.Second
 
 	getPxVsphereSecretTimeout       = 10 * time.Minute
 	getPxVsphereSecretRetryInterval = 5 * time.Second
@@ -34,8 +35,11 @@ const (
 
 // DeployAndValidatePxOperatorViaMarketplace deploys and validates PX Operator via Openshift Marketplace
 func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
+	// Parsing PX Operator tag version
+	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
+
 	// Deploy CatalogSource
-	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, operatorVersion)
+	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
 	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
 	if err != nil {
 		return err
@@ -48,22 +52,61 @@ func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	}
 
 	// Deploy Subscription
-	testSubscription, err := DeploySubscription(defaultSubscriptionName, PxNamespace, operatorVersion, testCatalogSource)
+	testSubscription, err := DeploySubscription(defaultSubscriptionName, PxNamespace, opRegistryTag, testCatalogSource)
 	if err != nil {
 		return err
 	}
 
 	// Approve InstallPlan
-	if err := ApproveInstallPlan(PxNamespace, operatorVersion, testSubscription); err != nil {
+	if err := ApproveInstallPlan(PxNamespace, opRegistryTag, testSubscription); err != nil {
 		return err
 	}
 
 	// Validate PX Operator deployment and version
-	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
+	if err := ValidatePxOperatorDeploymentAndVersion(opRegistryTag, PxNamespace); err != nil {
 		return err
 	}
 
 	logrus.Infof("Successfully deployed PX Operator in namespace [%s]", PxNamespace)
+	return nil
+}
+
+// UpdateAndValidatePxOperatorViaMarketplace updates and validates PX Operator and its resources via Openshift Marketplace
+func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
+	// Parsing PX Operator tag version
+	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
+
+	// Edit CatalogSource with the new PX Operator version
+	updateParamFunc := func(testCatalogSource *v1alpha1.CatalogSource) *v1alpha1.CatalogSource {
+		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
+		return testCatalogSource
+	}
+
+	testCatalogSource := &v1alpha1.CatalogSource{}
+	testCatalogSource.Name = defaultCatalogSourceName
+	testCatalogSource.Namespace = defaultCatalogSourceNamespace
+	if _, err := UpdateCatalogSource(testCatalogSource, updateParamFunc); err != nil {
+		return err
+	}
+
+	// Get subscription
+	testSubscription, err := opmpops.Instance().GetSubscription(defaultSubscriptionName, PxNamespace)
+	if err != nil {
+		return err
+	}
+
+	// Wait for new InstallPlan with that new version in clusterServiceVersionNames and approve it
+	if err := ApproveInstallPlan(PxNamespace, opRegistryTag, testSubscription); err != nil {
+		return err
+	}
+
+	// Validate PX Operator deployment and version
+	// NOTE: In Marketplace PX Operator deployment, we will use opRegistryTag to compare as we do not actually see the -dev tag
+	// and we get image tag from the OPERATOR_CONDITION_NAME value in the portworx-operator deployment, which is same as registry tag
+	if err := ValidatePxOperatorDeploymentAndVersion(opRegistryTag, PxNamespace); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -103,40 +146,6 @@ func DeleteAndValidatePxOperatorViaMarketplace() error {
 	}
 
 	logrus.Infof("Successfully deleted PX Operator deployment in namespace [%s]", PxNamespace)
-	return nil
-}
-
-// UpdateAndValidatePxOperatorViaMarketplace updates and validates PX Operator and its resources via Openshift Marketplace
-func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
-	// Edit CatalogSource with the new PX Operator version
-	updateParamFunc := func(testCatalogSource *v1alpha1.CatalogSource) *v1alpha1.CatalogSource {
-		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, operatorVersion)
-		return testCatalogSource
-	}
-
-	testCatalogSource := &v1alpha1.CatalogSource{}
-	testCatalogSource.Name = defaultCatalogSourceName
-	testCatalogSource.Namespace = defaultCatalogSourceNamespace
-	if _, err := UpdateCatalogSource(testCatalogSource, updateParamFunc); err != nil {
-		return err
-	}
-
-	// Get subscription
-	testSubscription, err := opmpops.Instance().GetSubscription(defaultSubscriptionName, PxNamespace)
-	if err != nil {
-		return err
-	}
-
-	// Wait for new InstallPlan with that new version in clusterServiceVersionNames and approve it
-	if err := ApproveInstallPlan(PxNamespace, operatorVersion, testSubscription); err != nil {
-		return err
-	}
-
-	// Validate PX Operator deployment and version
-	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -316,6 +325,16 @@ func GetCurrentCSV(name, namespace string) (string, error) {
 		return "", fmt.Errorf("got empty currentCSV from Subscription [%s]", testSubscription.Name)
 	}
 	return currentCSV, nil
+}
+
+func parsePxOperatorImageTagForMarketplace(currentOperatorImageTag string) string {
+	// Registry tag doesn't use -dev and -dev is not used in the image tags when deployed via Marketplace, need to remove -dev from tag
+	newOperatorImageTag := currentOperatorImageTag
+	if strings.Contains(currentOperatorImageTag, "-dev") {
+		newOperatorImageTag = strings.Split(currentOperatorImageTag, "-dev")[0]
+		logrus.Infof("Got Dev PX Operator tag [%s], converting it to [%s], as Openshift Marketplace doesn't use this format for image tags", currentOperatorImageTag, newOperatorImageTag)
+	}
+	return newOperatorImageTag
 }
 
 // CreatePxVsphereSecret creates secret for PX to authenticate with vSphere
