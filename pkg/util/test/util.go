@@ -3819,13 +3819,13 @@ func validateStorageClusterInState(cluster *corev1.StorageCluster, state string,
 	return func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
-			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
+			return nil, true, fmt.Errorf("failed to get StorageCluster [%s] in [%s], Err: %v", cluster.Name, cluster.Namespace, err)
 		}
 		if cluster.Status.Phase != state {
 			if cluster.Status.Phase == "" {
 				return nil, true, fmt.Errorf("failed to get cluster status")
 			}
-			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
+			return nil, true, fmt.Errorf("cluster status: [%s], expected status: [%s]", cluster.Status.Phase, state)
 		}
 		for _, condition := range conditions {
 			c := util.GetStorageClusterCondition(cluster, condition.Source, condition.Type)
@@ -3836,6 +3836,7 @@ func validateStorageClusterInState(cluster *corev1.StorageCluster, state string,
 					c.Source, c.Type, c.Status)
 			}
 		}
+		logrus.Infof("StorageCluster [%s] is [%s]", cluster.Name, cluster.Status.Phase)
 		return cluster, false, nil
 	}
 }
