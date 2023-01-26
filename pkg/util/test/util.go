@@ -112,6 +112,9 @@ const (
 	defaultPxAuthValidationTimeout  = 20 * time.Minute
 	defaultPxAuthValidationInterval = 30 * time.Second
 
+	defaultDeleteStorageClusterTimeout  = 3 * time.Minute
+	defaultDeleteStorageClusterInterval = 10 * time.Second
+
 	defaultRunCmdInPxPodTimeout  = 25 * time.Second
 	defaultRunCmdInPxPodInterval = 5 * time.Second
 )
@@ -427,26 +430,41 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
-	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
+
+	t := func() (interface{}, bool, error) {
+		cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil && !errors.IsNotFound(err) {
+			return nil, true, err
+		}
+
+		if cluster.Spec.DeleteStrategy == nil ||
+			(cluster.Spec.DeleteStrategy.Type != corev1.UninstallAndWipeStorageClusterStrategyType &&
+				cluster.Spec.DeleteStrategy.Type != corev1.UninstallStorageClusterStrategyType) {
+			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			}
+
+			if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
+				return nil, true, err
+			}
+
+			if err := validateTelemetrySecret(cluster, defaultTelemetrySecretValidationTimeout, defaultTelemetrySecretValidationInterval, false); err != nil {
+				return nil, true, err
+			}
+		}
+
+		if err := operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace); err != nil {
+			return nil, true, err
+		}
+
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, defaultDeleteStorageClusterTimeout, defaultDeleteStorageClusterInterval); err != nil {
 		return err
 	}
-	if cluster.Spec.DeleteStrategy == nil ||
-		(cluster.Spec.DeleteStrategy.Type != corev1.UninstallAndWipeStorageClusterStrategyType &&
-			cluster.Spec.DeleteStrategy.Type != corev1.UninstallStorageClusterStrategyType) {
-		cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-			Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-		}
-		if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
-			return err
-		}
 
-		if err := validateTelemetrySecret(cluster, defaultTelemetrySecretValidationTimeout, defaultTelemetrySecretValidationInterval, false); err != nil {
-			return err
-		}
-	}
-
-	return operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+	return nil
 }
 
 func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval time.Duration, force bool) error {
@@ -3844,8 +3862,9 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
 	state := string(corev1.ClusterConditionStatusOnline)
 	var conditions []corev1.ClusterCondition
+	masterOpVersion, _ := version.NewVersion(PxOperatorMasterVersion)
 	opVersion, _ := GetPxOperatorVersion()
-	if opVersion.GreaterThanOrEqual(opVer1_11) {
+	if opVersion.GreaterThanOrEqual(masterOpVersion) {
 		state = string(corev1.ClusterStateRunning)
 		conditions = append(conditions, corev1.ClusterCondition{
 			Source: "Portworx",
