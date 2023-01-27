@@ -21,6 +21,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	ocp_secv1 "github.com/openshift/api/security/v1"
+	"github.com/sirupsen/logrus"
 
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -6012,7 +6013,7 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 		},
 	}
 
-	err = driver.SetDefaultsOnStorageCluster(cluster)
+	driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
