@@ -1189,6 +1189,7 @@ func (c *Controller) CreatePodTemplate(
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
 
+	podSpec.NodeName = node.Name
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cluster.Namespace,
