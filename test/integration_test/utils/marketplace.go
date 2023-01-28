@@ -214,19 +214,26 @@ func DeploySubscription(name, namespace, opTag string, testCatalogSource *v1alph
 func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscription) error {
 	logrus.Infof("Looking for InstallPlan and setting Approved to true")
 	t := func() (interface{}, bool, error) {
-		instpl, err := opmpops.Instance().ListInstallPlans(namespace)
+		installPlanList, err := opmpops.Instance().ListInstallPlans(namespace)
 		if err != nil {
 			return nil, true, fmt.Errorf("failed to get list of InstallPlans in namespace [%s], Err: %v", namespace, err)
 		}
 
-		if instpl != nil && len(instpl.Items) > 0 {
+		if installPlanList != nil && len(installPlanList.Items) > 0 {
 			logrus.Infof("Successfully got list of InstallPlans in namespace [%s]", namespace)
-			for _, instp := range instpl.Items {
-				if subscription.Name == instp.OwnerReferences[0].Name {
-					for _, clusterServiceVersions := range instp.Spec.ClusterServiceVersionNames {
+			for _, installPlan := range installPlanList.Items {
+				if subscription.Name == installPlan.OwnerReferences[0].Name {
+					for _, clusterServiceVersions := range installPlan.Spec.ClusterServiceVersionNames {
 						if clusterServiceVersions == fmt.Sprintf("portworx-operator.v%s", opTag) {
-							logrus.Infof("found the correct InstallPlan [%s] in namespace [%s]", instp.Name, instp.Namespace)
-							return instp, false, nil
+							logrus.Infof("Found the correct InstallPlan [%s] in namespace [%s]", installPlan.Name, installPlan.Namespace)
+							logrus.Infof("Update Approved value to true for InstallPlan [%s]", installPlan.Name)
+							installPlan.Spec.Approved = true
+							_, err = opmpops.Instance().UpdateInstallPlan(&installPlan)
+							if err != nil {
+								return nil, true, fmt.Errorf("failed to update InstallPlan [%s], Err: %v", installPlan.Name, err)
+							}
+							logrus.Infof("Successfully Approved InstallPlan [%s]", installPlan.Name)
+							return nil, false, nil
 						}
 					}
 				}
@@ -236,19 +243,10 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 		return nil, true, fmt.Errorf("failed to find any InstallPlans in namespace [%s]", namespace)
 	}
 
-	instPlan, err := task.DoRetryWithTimeout(t, getInstallPlanListTimeout, getInstallPlanListRetryInterval)
+	_, err := task.DoRetryWithTimeout(t, getInstallPlanListTimeout, getInstallPlanListRetryInterval)
 	if err != nil {
 		return err
 	}
-
-	installPlan := instPlan.(v1alpha1.InstallPlan)
-	logrus.Infof("Update Approved to true for InstallPlan [%s]", installPlan.Name)
-	installPlan.Spec.Approved = true
-	_, err = opmpops.Instance().UpdateInstallPlan(&installPlan)
-	if err != nil {
-		return fmt.Errorf("failed to update InstallPlan [%s]", installPlan.Name)
-	}
-	logrus.Infof("Successfully Approved InstallPlan [%s]", installPlan.Name)
 	return nil
 }
 
