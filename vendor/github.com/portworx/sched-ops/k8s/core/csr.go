@@ -17,6 +17,7 @@ type CertificateOps interface {
 	GetCertificateSigningRequest(name string) (*certv1.CertificateSigningRequest, error)
 	DeleteCertificateSigningRequests(name string) error
 	WatchCertificateSigningRequests(csr *certv1.CertificateSigningRequest, fn WatchFunc) error
+	CertificateSigningRequestsUpdateApproval(name string, csr *certv1.CertificateSigningRequest) (*certv1.CertificateSigningRequest, error)
 }
 
 // CreateCertificateSigningRequests creates CSR
@@ -155,4 +156,21 @@ func (c *Client) WatchCertificateSigningRequests(csr *certv1.CertificateSigningR
 	// fire off watch function
 	go c.handleWatch(watchInterface, csr, "", fn, listOptions)
 	return nil
+}
+
+// CertificateSigningRequestsUpdateApproval used to approve or decline the CSR
+func (c *Client) CertificateSigningRequestsUpdateApproval(
+	name string,
+	csr *certv1.CertificateSigningRequest,
+) (*certv1.CertificateSigningRequest, error) {
+	if err := c.initClient(); err != nil {
+		return nil, err
+	}
+
+	return c.kubernetes.CertificatesV1().CertificateSigningRequests().UpdateApproval(
+		context.TODO(),
+		name,
+		csr,
+		metav1.UpdateOptions{},
+	)
 }

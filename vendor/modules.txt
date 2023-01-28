@@ -679,7 +679,7 @@ github.com/portworx/kvdb/etcd/common
 github.com/portworx/kvdb/etcd/v2
 github.com/portworx/kvdb/etcd/v3
 github.com/portworx/kvdb/mem
-# github.com/portworx/sched-ops v1.20.4-rc1.0.20221208153443-c95ed6d757fa
+# github.com/portworx/sched-ops v1.20.4-rc1.0.20230103234348-243afb3bb8aa
 ## explicit; go 1.19
 github.com/portworx/sched-ops/k8s/apiextensions
 github.com/portworx/sched-ops/k8s/apps
