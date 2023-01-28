@@ -16,7 +16,7 @@ require (
 	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 	github.com/pborman/uuid v1.2.0
 	github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
-	github.com/portworx/sched-ops v1.20.4-rc1.0.20221208153443-c95ed6d757fa
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20230103234348-243afb3bb8aa
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0

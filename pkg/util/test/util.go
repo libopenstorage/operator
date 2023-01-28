@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
+	certv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -337,6 +338,14 @@ func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextCon
 	scc, ok := obj.(*ocp_secv1.SecurityContextConstraints)
 	assert.True(t, ok, "Expected SecurityContextConstraints object")
 	return scc
+}
+
+// GetExpectedCSR returns the CSR object from given yaml spec file
+func GetExpectedCSR(t *testing.T, fileName string) *certv1.CertificateSigningRequest {
+	obj := getKubernetesObject(t, fileName)
+	csr, ok := obj.(*certv1.CertificateSigningRequest)
+	assert.True(t, ok, "Expected CertificateSigningRequest object")
+	return csr
 }
 
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
