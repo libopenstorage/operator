@@ -53,7 +53,7 @@ type Controller struct {
 func (c *Controller) Init(mgr manager.Manager) error {
 	if ver, err := k8s.GetVersion(); err != nil {
 		return fmt.Errorf("could not determine K8s version: %s", err)
-	} else if ver.LessThanOrEqual(minSupportedK8sVersion) {
+	} else if ver.LessThan(minSupportedK8sVersion) {
 		logrus.Warnf("CSR auto-approve not supported on K8s version %s", ver)
 		c.ctrl = nil
 		c.client = nil
@@ -147,7 +147,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	// ignore no labels, or missing label name=portworx, or missing label cid
 	var clusterID string
-	if labs := csr.GetLabels(); labs == nil {
+	if labs := csr.GetLabels(); len(labs) == 0 {
 		log.Debugf("Ignoring CSR  (no labels)")
 		return ret, nil
 	} else if labs[labelNameKey] != labelNameVal {

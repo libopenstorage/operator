@@ -721,6 +721,9 @@ func (c *Controller) deleteStorageCluster(
 		msg := fmt.Sprintf("Failed to cleanup Stork. %v", err)
 		k8s.WarningEvent(c.recorder, cluster, util.FailedComponentReason, msg)
 	}
+
+	c.forceUnregisterCSRAutoApproval(cluster)
+
 	return nil
 }
 
@@ -1435,6 +1438,11 @@ func (c *Controller) setSecuritySpecDefaults(clus *corev1.StorageCluster) {
 // registerCSRAutoApproval will set up CSR auto-approval for the given cluster
 func (c *Controller) registerCSRAutoApproval(cluster *corev1.StorageCluster) {
 	csr.RegisterAutoApproval(cluster.GetName(), pxutil.CSRAutoApprovalEnabled(cluster))
+}
+
+// forceUnregisterCSRAutoApproval forces CSR auto-approval de-registration for the given cluster
+func (c *Controller) forceUnregisterCSRAutoApproval(cluster *corev1.StorageCluster) {
+	csr.RegisterAutoApproval(cluster.GetName(), false)
 }
 
 func storagePodsEnabled(
