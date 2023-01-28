@@ -319,12 +319,12 @@ func UpdateAndValidateCSI(cluster *corev1.StorageCluster, f func(*corev1.Storage
 // UninstallAndValidateStorageCluster uninstall and validate the cluster deletion
 func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testing.T) {
 	// Delete cluster
-	logrus.Infof("Delete StorageCluster %s", cluster.Name)
+	logrus.Infof("Delete StorageCluster [%s]", cluster.Name)
 	err := testutil.UninstallStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deletion
-	logrus.Infof("Validate StorageCluster %s deletion", cluster.Name)
+	logrus.Infof("Validate StorageCluster [%s] deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
 }

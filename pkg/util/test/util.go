@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
+	certv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -111,6 +112,9 @@ const (
 
 	defaultPxAuthValidationTimeout  = 20 * time.Minute
 	defaultPxAuthValidationInterval = 30 * time.Second
+
+	defaultDeleteStorageClusterTimeout  = 3 * time.Minute
+	defaultDeleteStorageClusterInterval = 10 * time.Second
 
 	defaultRunCmdInPxPodTimeout  = 25 * time.Second
 	defaultRunCmdInPxPodInterval = 5 * time.Second
@@ -336,6 +340,14 @@ func GetExpectedSCC(t *testing.T, fileName string) *ocp_secv1.SecurityContextCon
 	return scc
 }
 
+// GetExpectedCSR returns the CSR object from given yaml spec file
+func GetExpectedCSR(t *testing.T, fileName string) *certv1.CertificateSigningRequest {
+	obj := getKubernetesObject(t, fileName)
+	csr, ok := obj.(*certv1.CertificateSigningRequest)
+	assert.True(t, ok, "Expected CertificateSigningRequest object")
+	return csr
+}
+
 // getKubernetesObject returns a generic Kubernetes object from given yaml file
 func getKubernetesObject(t *testing.T, fileName string) runtime.Object {
 	json, err := os.ReadFile(path.Join(TestSpecPath, fileName))
@@ -427,26 +439,41 @@ func UninstallStorageCluster(cluster *corev1.StorageCluster, kubeconfig ...strin
 	if len(kubeconfig) != 0 && kubeconfig[0] != "" {
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
-	cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
+
+	t := func() (interface{}, bool, error) {
+		cluster, err = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if err != nil && !errors.IsNotFound(err) {
+			return nil, true, err
+		}
+
+		if cluster.Spec.DeleteStrategy == nil ||
+			(cluster.Spec.DeleteStrategy.Type != corev1.UninstallAndWipeStorageClusterStrategyType &&
+				cluster.Spec.DeleteStrategy.Type != corev1.UninstallStorageClusterStrategyType) {
+			cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			}
+
+			if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
+				return nil, true, err
+			}
+
+			if err := validateTelemetrySecret(cluster, defaultTelemetrySecretValidationTimeout, defaultTelemetrySecretValidationInterval, false); err != nil {
+				return nil, true, err
+			}
+		}
+
+		if err := operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace); err != nil {
+			return nil, true, err
+		}
+
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, defaultDeleteStorageClusterTimeout, defaultDeleteStorageClusterInterval); err != nil {
 		return err
 	}
-	if cluster.Spec.DeleteStrategy == nil ||
-		(cluster.Spec.DeleteStrategy.Type != corev1.UninstallAndWipeStorageClusterStrategyType &&
-			cluster.Spec.DeleteStrategy.Type != corev1.UninstallStorageClusterStrategyType) {
-		cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-			Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-		}
-		if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
-			return err
-		}
 
-		if err := validateTelemetrySecret(cluster, defaultTelemetrySecretValidationTimeout, defaultTelemetrySecretValidationInterval, false); err != nil {
-			return err
-		}
-	}
-
-	return operatorops.Instance().DeleteStorageCluster(cluster.Name, cluster.Namespace)
+	return nil
 }
 
 func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval time.Duration, force bool) error {
@@ -3801,13 +3828,13 @@ func validateStorageClusterInState(cluster *corev1.StorageCluster, state string,
 	return func() (interface{}, bool, error) {
 		cluster, err := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if err != nil {
-			return nil, true, fmt.Errorf("failed to get StorageCluster %s in %s, Err: %v", cluster.Name, cluster.Namespace, err)
+			return nil, true, fmt.Errorf("failed to get StorageCluster [%s] in [%s], Err: %v", cluster.Name, cluster.Namespace, err)
 		}
 		if cluster.Status.Phase != state {
 			if cluster.Status.Phase == "" {
 				return nil, true, fmt.Errorf("failed to get cluster status")
 			}
-			return nil, true, fmt.Errorf("cluster state: %s", cluster.Status.Phase)
+			return nil, true, fmt.Errorf("cluster status: [%s], expected status: [%s]", cluster.Status.Phase, state)
 		}
 		for _, condition := range conditions {
 			c := util.GetStorageClusterCondition(cluster, condition.Source, condition.Type)
@@ -3818,6 +3845,7 @@ func validateStorageClusterInState(cluster *corev1.StorageCluster, state string,
 					c.Source, c.Type, c.Status)
 			}
 		}
+		logrus.Infof("StorageCluster [%s] is [%s]", cluster.Name, cluster.Status.Phase)
 		return cluster, false, nil
 	}
 }
@@ -3844,8 +3872,9 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
 	state := string(corev1.ClusterConditionStatusOnline)
 	var conditions []corev1.ClusterCondition
+	masterOpVersion, _ := version.NewVersion(PxOperatorMasterVersion)
 	opVersion, _ := GetPxOperatorVersion()
-	if opVersion.GreaterThanOrEqual(opVer1_11) {
+	if opVersion.GreaterThanOrEqual(masterOpVersion) {
 		state = string(corev1.ClusterStateRunning)
 		conditions = append(conditions, corev1.ClusterCondition{
 			Source: "Portworx",
