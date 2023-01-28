@@ -138,6 +138,8 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationPreflightCheck do preflight check before installing Portworx
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
+	// AnnotationDisableCSRAutoApprove annotation will disable CSR auto-approval
+	AnnotationDisableCSRAutoApprove = pxAnnotationPrefix + "/disable-csr-approve"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -363,6 +365,12 @@ func PodDisruptionBudgetEnabled(cluster *corev1.StorageCluster) bool {
 func PodSecurityPolicyEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationPodSecurityPolicy])
 	return err == nil && enabled
+}
+
+// CSRAutoApprovalEnabled returns true if CSR auto-approval is not explicitly disabled
+func CSRAutoApprovalEnabled(cluster *corev1.StorageCluster) bool {
+	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableCSRAutoApprove])
+	return err != nil || !disabled
 }
 
 // ServiceType returns the k8s service type from cluster annotations if present

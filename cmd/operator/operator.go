@@ -9,11 +9,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libopenstorage/operator/drivers/storage"
+	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
+	"github.com/libopenstorage/operator/pkg/apis"
+	"github.com/libopenstorage/operator/pkg/controller/csr"
+	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
+	"github.com/libopenstorage/operator/pkg/controller/storagenode"
+	_ "github.com/libopenstorage/operator/pkg/log"
+	"github.com/libopenstorage/operator/pkg/migration"
+	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	appsv1 "k8s.io/api/apps/v1"
+	certv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -26,17 +38,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/libopenstorage/operator/drivers/storage"
-	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
-	"github.com/libopenstorage/operator/pkg/apis"
-	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
-	"github.com/libopenstorage/operator/pkg/controller/storagenode"
-	_ "github.com/libopenstorage/operator/pkg/log"
-	"github.com/libopenstorage/operator/pkg/migration"
-	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
-	"github.com/libopenstorage/operator/pkg/preflight"
-	"github.com/libopenstorage/operator/pkg/version"
 )
 
 const (
@@ -246,12 +247,21 @@ func run(c *cli.Context) {
 		log.Fatalf("Error initializing storage node controller: %v", err)
 	}
 
+	certificateSigningRequestController := csr.Controller{}
+	if err := certificateSigningRequestController.Init(mgr); err != nil {
+		log.Fatalf("Error initializing certificate signing request controller: %v", err)
+	}
+
 	if err := storageClusterController.StartWatch(); err != nil {
 		log.Fatalf("Error start watch on storage cluster controller: %v", err)
 	}
 
 	if err := storageNodeController.StartWatch(); err != nil {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
+	}
+
+	if err := certificateSigningRequestController.StartWatch(); err != nil {
+		log.Fatalf("Error starting watch on certificate signing request controller: %v", err)
 	}
 
 	if c.BoolT(flagMigration) {
@@ -307,6 +317,8 @@ func getObjects(objectKinds string) []client.Object {
 			objs = append(objs, &rbacv1.RoleBinding{})
 		case "StorageClass":
 			objs = append(objs, &storagev1.StorageClass{})
+		case "CertificateSigningRequest":
+			objs = append(objs, &certv1.CertificateSigningRequest{})
 		default:
 			log.Warningf("Do not support disabling %s from cache.", str)
 		}
