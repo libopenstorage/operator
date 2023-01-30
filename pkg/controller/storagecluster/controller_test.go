@@ -299,7 +299,7 @@ func TestRegisterDeprecatedCRD(t *testing.T) {
 func TestKubernetesVersionValidation(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
-		GitVersion: "v1.11.99",
+		GitVersion: "v1.20.99",
 	}
 	coreops.SetInstance(coreops.New(fakeClient))
 
