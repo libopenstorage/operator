@@ -202,7 +202,7 @@ func TestRegisterCRD(t *testing.T) {
 func TestRegisterDeprecatedCRD(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	fakeClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &kversion.Info{
-		GitVersion: "v1.15.99",
+		GitVersion: "v1.20",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
