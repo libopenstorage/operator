@@ -161,6 +161,32 @@ func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
+// DeployStorageCluster creates storage cluster with Portworx defaults
+func DeployStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	// Populate default values to empty fields first
+	k8sVersion, _ := version.NewVersion(K8sVersion)
+	err := portworx.SetPortworxDefaults(cluster, k8sVersion)
+	require.NoError(t, err)
+
+	// Deploy cluster
+	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.True(t, err == nil || errors.IsNotFound(err))
+	if errors.IsNotFound(err) {
+		cluster, err = CreateStorageCluster(cluster)
+		require.NoError(t, err)
+	} else {
+		cluster = existingCluster
+		// Existing cluster from previous install
+		return cluster
+	}
+
+	// Get the latest version of StorageCluster
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	return liveCluster
+}
+
 // DeployAndValidateStorageCluster creates and validates the storage cluster
 func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	// Populate default values to empty fields first
