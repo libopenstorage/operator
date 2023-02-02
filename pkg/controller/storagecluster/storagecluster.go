@@ -80,7 +80,7 @@ const (
 	crdBasePath                         = "/crds"
 	deprecatedCRDBasePath               = "/crds/deprecated"
 	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
-	minSupportedK8sVersion              = "1.12.0"
+	minSupportedK8sVersion              = "1.21.0"
 )
 
 var _ reconcile.Reconciler = &Controller{}

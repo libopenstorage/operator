@@ -341,6 +341,10 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 		schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 		require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
+		minK8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+		if k8sVersion.GreaterThanOrEqual(minK8sVersion) {
+			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = "k8s.gcr.io/kube-scheduler-amd64:v1.21.0"
+		}
 		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
 			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minSupportedK8sVersion, k8sVersionStr, -1)
 		require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
@@ -904,7 +908,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		customRegistry+"/k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -927,7 +931,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		customRegistry+"/k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -949,7 +953,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -974,7 +978,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		customRegistry+"/k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
@@ -1082,7 +1086,7 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		schedDeployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -2019,7 +2023,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -2034,7 +2038,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, storkSchedDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"gcr.io/google_containers/kube-scheduler-amd64:v"+k8sVersion.String(),
+		"k8s.gcr.io/kube-scheduler-amd64:v"+k8sVersion.String(),
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 }
