@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"os"
@@ -105,18 +106,17 @@ func TestEKSCloudPermissionRetry(t *testing.T) {
 }
 
 func TestSetAWSCredentialEnvVars(t *testing.T) {
-	defer func() {
-		os.Setenv(awsAccessKeyEnvName, "")
-		os.Setenv(awsSecretKeyEnvName, "")
-	}()
+	defer unsetAWSCredentialEnvVars()
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	err := InitPreflightChecker(testutil.FakeK8sClient())
 	require.NoError(t, err)
-	SetInstance(&aws{})
+	awsChecker := &aws{}
+	SetInstance(awsChecker)
 
 	expectedAccessKey := "accesskey"
 	expectedSecretKey := "secretkey"
+	expectedHash := fmt.Sprintf("%x", md5.Sum([]byte(expectedAccessKey+expectedSecretKey)))
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -139,13 +139,20 @@ func TestSetAWSCredentialEnvVars(t *testing.T) {
 	}
 
 	// TestCase: both access and secret key are specified in the stc env
-	require.Error(t, Instance().CheckCloudDrivePermission(cluster), "expected error setting up aws client")
+	require.NoError(t, awsChecker.setAWSCredentialEnvVars(cluster))
 	require.Equal(t, expectedAccessKey, os.Getenv(awsAccessKeyEnvName))
 	require.Equal(t, expectedSecretKey, os.Getenv(awsSecretKeyEnvName))
+	require.Equal(t, expectedHash, awsChecker.credentialHash)
 
-	// TestCase: credentials are updated
+	// TestCase: reset env vars on errors
+	require.Error(t, Instance().CheckCloudDrivePermission(cluster), "expected error setting up aws client")
+	require.Empty(t, os.Getenv(awsAccessKeyEnvName))
+	require.Empty(t, os.Getenv(awsSecretKeyEnvName))
+
+	// TestCase: set env vars when credentials are updated
 	newAccessKey := "newaccesskey"
 	newSecretKey := "newsecretkey"
+	newHash := fmt.Sprintf("%x", md5.Sum([]byte(newAccessKey+newSecretKey)))
 	cluster.Spec.Env = []v1.EnvVar{
 		{
 			Name:  awsAccessKeyEnvName,
@@ -156,18 +163,29 @@ func TestSetAWSCredentialEnvVars(t *testing.T) {
 			Value: newSecretKey,
 		},
 	}
-	require.Error(t, Instance().CheckCloudDrivePermission(cluster), "expected error setting up aws client")
+	require.NoError(t, awsChecker.setAWSCredentialEnvVars(cluster))
 	require.Equal(t, newAccessKey, os.Getenv(awsAccessKeyEnvName))
 	require.Equal(t, newSecretKey, os.Getenv(awsSecretKeyEnvName))
+	require.Equal(t, newHash, awsChecker.credentialHash)
+
+	// TestCase: credentials are removed
+	cluster.Spec.Env = nil
+	require.NoError(t, awsChecker.setAWSCredentialEnvVars(cluster))
+	require.Empty(t, os.Getenv(awsAccessKeyEnvName))
+	require.Empty(t, os.Getenv(awsSecretKeyEnvName))
+	require.Empty(t, awsChecker.credentialHash)
 
 	// TestCase: only one key provided in the stc env
 	cluster.Spec.Env = []v1.EnvVar{{
 		Name:  awsAccessKeyEnvName,
 		Value: expectedAccessKey,
 	}}
-	err = Instance().CheckCloudDrivePermission(cluster)
+	err = awsChecker.setAWSCredentialEnvVars(cluster)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "both AWS_ACCESS_KEY_ID and AWS_ACCESS_KEY_ID need to be provided")
+	require.ErrorContains(t, err, "both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY need to be provided")
+	require.Empty(t, os.Getenv(awsAccessKeyEnvName))
+	require.Empty(t, os.Getenv(awsSecretKeyEnvName))
+	require.Empty(t, awsChecker.credentialHash)
 
 	// TestCase: setup env vars from secret
 	cluster.Spec.Env = []v1.EnvVar{
@@ -205,12 +223,11 @@ func TestSetAWSCredentialEnvVars(t *testing.T) {
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(secret)
-	SetInstance(&aws{checker: checker{
-		k8sClient: k8sClient,
-	}})
-	require.Error(t, Instance().CheckCloudDrivePermission(cluster), "expected error setting up aws client")
+	awsChecker.k8sClient = k8sClient
+	require.NoError(t, awsChecker.setAWSCredentialEnvVars(cluster))
 	require.Equal(t, expectedAccessKey, os.Getenv(awsAccessKeyEnvName))
 	require.Equal(t, expectedSecretKey, os.Getenv(awsSecretKeyEnvName))
+	require.Equal(t, expectedHash, awsChecker.credentialHash)
 }
 
 func stringPtr(val string) *string {
