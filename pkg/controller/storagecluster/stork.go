@@ -304,7 +304,7 @@ func (c *Controller) createStorkConfigMap(
 		dataKey = "policy.cfg"
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		c.client,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -318,6 +318,7 @@ func (c *Controller) createStorkConfigMap(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (c *Controller) createStorkSnapshotStorageClass() error {

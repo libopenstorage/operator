@@ -14110,6 +14110,95 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.Empty(t, secret.OwnerReferences)
 }
 
+func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			StartPort: &startPort,
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	// This cert is created by ccm container outside of operator, let's simulate it.
+	err = k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	// Create phonehome configmap to update
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeConfigMap.yaml")
+	oldConfigMap := expectedConfigMap.DeepCopy()
+	oldConfigMap.Data = nil
+	err = k8sClient.Create(
+		context.TODO(),
+		oldConfigMap,
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	// Create existing daemonset
+	expectedDaemonSet := testutil.GetExpectedDaemonSet(t, "ccmGoPhonehomeDaemonSet.yaml")
+	expectedDaemonSet.OwnerReferences = []metav1.OwnerReference{{UID: cluster.UID}}
+	err = k8sClient.Create(
+		context.TODO(),
+		expectedDaemonSet,
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "1", expectedDaemonSet.ResourceVersion)
+
+	// Verify config map is updated and daemonset is recreated
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehome, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	daemonset := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, daemonset, component.DaemonSetNameTelemetryPhonehome, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, daemonset.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, daemonset.OwnerReferences[0].Name)
+	require.Equal(t, expectedDaemonSet.Name, daemonset.Name)
+	require.Equal(t, expectedDaemonSet.Namespace, daemonset.Namespace)
+	require.Equal(t, expectedDaemonSet.Spec, daemonset.Spec)
+	require.Equal(t, "1", expectedDaemonSet.ResourceVersion)
+}
+
 func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
