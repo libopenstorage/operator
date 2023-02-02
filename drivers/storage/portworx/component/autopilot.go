@@ -177,7 +177,7 @@ func (c *autopilot) createConfigMap(
 		}
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err := k8sutil.CreateOrUpdateConfigMap(
 		c.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -191,6 +191,7 @@ func (c *autopilot) createConfigMap(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (c *autopilot) createServiceAccount(

@@ -504,13 +504,13 @@ func DeleteClusterRoleBinding(
 	return k8sClient.Delete(context.TODO(), crb)
 }
 
-// CreateOrUpdateConfigMap creates a config map if not present,
-// else updates it if it has changed
+// CreateOrUpdateConfigMap creates a config map if not present, else updates it if it has changed
+// returns whether data is modified
 func CreateOrUpdateConfigMap(
 	k8sClient client.Client,
 	configMap *v1.ConfigMap,
 	ownerRef *metav1.OwnerReference,
-) error {
+) (bool, error) {
 	existingConfigMap := &v1.ConfigMap{}
 	err := k8sClient.Get(
 		context.TODO(),
@@ -522,14 +522,14 @@ func CreateOrUpdateConfigMap(
 	)
 	if errors.IsNotFound(err) {
 		logrus.Infof("Creating %v ConfigMap", configMap.Name)
-		return k8sClient.Create(context.TODO(), configMap)
+		return false, k8sClient.Create(context.TODO(), configMap)
 	} else if err != nil {
-		return err
+		return false, err
 	}
 
 	enabled, err := strconv.ParseBool(existingConfigMap.Annotations[constants.AnnotationReconcileObject])
 	if err == nil && !enabled {
-		return nil
+		return false, nil
 	}
 
 	modified := !reflect.DeepEqual(configMap.Data, existingConfigMap.Data) ||
@@ -543,9 +543,9 @@ func CreateOrUpdateConfigMap(
 
 	if modified || len(configMap.OwnerReferences) > len(existingConfigMap.OwnerReferences) {
 		logrus.Infof("Updating %v ConfigMap", configMap.Name)
-		return k8sClient.Update(context.TODO(), configMap)
+		return modified, k8sClient.Update(context.TODO(), configMap)
 	}
-	return nil
+	return false, nil
 }
 
 // DeleteConfigMap deletes a config map if present and owned
