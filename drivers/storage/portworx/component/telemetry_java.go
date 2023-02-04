@@ -479,7 +479,8 @@ func (t *telemetry) createCollectorProxyConfigMap(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	configMap := t.getCollectorProxyConfigMap(cluster, ownerRef)
-	return k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
+	_, err := k8sutil.CreateOrUpdateConfigMap(t.k8sClient, configMap, ownerRef)
+	return err
 }
 
 func (t *telemetry) getCollectorProxyConfigMap(
@@ -619,7 +620,7 @@ forwardConfig:
 		CollectorConfigFileName: config,
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err := k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -631,6 +632,7 @@ forwardConfig:
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMJavaConfigMap(
@@ -714,7 +716,7 @@ func (t *telemetry) createCCMJavaConfigMap(
 		TelemetryArcusLocationFilename: getArcusTelemetryLocation(cluster),
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err := k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -726,6 +728,7 @@ func (t *telemetry) createCCMJavaConfigMap(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) reconcileCCMJavaProxyConfigMap(
@@ -738,7 +741,7 @@ func (t *telemetry) reconcileCCMJavaProxyConfigMap(
 		return k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef)
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err := k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -752,4 +755,5 @@ func (t *telemetry) reconcileCCMJavaProxyConfigMap(
 		},
 		ownerRef,
 	)
+	return err
 }
