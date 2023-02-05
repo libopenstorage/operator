@@ -102,7 +102,7 @@ func (h *Handler) backup(configMapName, namespace string, overwrite bool) error 
 		"backup": sb.String(),
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(h.client,
+	_, err = k8sutil.CreateOrUpdateConfigMap(h.client,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configMapName,
@@ -111,6 +111,7 @@ func (h *Handler) backup(configMapName, namespace string, overwrite bool) error 
 			Data: data,
 		},
 		nil)
+	return err
 }
 
 func (h *Handler) addObject(

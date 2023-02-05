@@ -114,7 +114,7 @@ type telemetry struct {
 	isCCMGoSupported                       bool
 	isCollectorDeploymentCreated           bool
 	isDeploymentRegistrationServiceCreated bool
-	isDaemonSetTelemetryPhonehonmeCreated  bool
+	isDaemonSetTelemetryPhonehomeCreated   bool
 	usePxProxy                             bool
 	reconcileMetricsCollector              *bool
 }
@@ -145,7 +145,7 @@ func (t *telemetry) IsEnabled(cluster *corev1.StorageCluster) bool {
 func (t *telemetry) MarkDeleted() {
 	t.isCollectorDeploymentCreated = false
 	t.isDeploymentRegistrationServiceCreated = false
-	t.isDaemonSetTelemetryPhonehonmeCreated = false
+	t.isDaemonSetTelemetryPhonehomeCreated = false
 }
 
 // RegisterTelemetryComponent registers the telemetry  component
@@ -375,7 +375,8 @@ func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	}
 	// Reconcile config maps for log uploader
 	// Create cm for phonehome
-	if err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef); err != nil {
+	restart, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef)
+	if err != nil {
 		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
 		return err
 	}
@@ -385,7 +386,7 @@ func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 		return err
 	}
 	// create daemonset for phonehome
-	if err := t.createDaemonSetTelemetryPhonehome(cluster, ownerRef); err != nil {
+	if err := t.createDaemonSetTelemetryPhonehome(cluster, ownerRef, restart); err != nil {
 		logrus.WithError(err).Errorf("failed to create daemonset %s/%s", cluster.Namespace, DaemonSetNameTelemetryPhonehome)
 		return err
 	}
@@ -616,7 +617,7 @@ func (t *telemetry) createCCMGoConfigMapRegister(
 	if err != nil {
 		return err
 	}
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -630,6 +631,7 @@ func (t *telemetry) createCCMGoConfigMapRegister(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMGoConfigMapRegisterProxy(
@@ -665,7 +667,7 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 		return err
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -679,6 +681,7 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
@@ -713,7 +716,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 		return err
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -727,6 +730,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
@@ -763,7 +767,7 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 		return err
 	}
 
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -777,6 +781,7 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMGoConfigMapTLSCertificate(
@@ -787,7 +792,7 @@ func (t *telemetry) createCCMGoConfigMapTLSCertificate(
 	if err != nil {
 		return err
 	}
-	return k8sutil.CreateOrUpdateConfigMap(
+	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -801,20 +806,22 @@ func (t *telemetry) createCCMGoConfigMapTLSCertificate(
 		},
 		ownerRef,
 	)
+	return err
 }
 
 func (t *telemetry) createCCMGoConfigMapTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
-) error {
+) (bool, error) {
 	cloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	config, err := readConfigMapDataFromFile(configFileNameTelemetryPhonehome, map[string]string{
 		configParameterPortworxPort:         fmt.Sprint(getCCMListeningPort(cluster)),
 		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
+
 	return k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
@@ -885,6 +892,7 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	restart bool,
 ) error {
 	daemonset, err := k8sutil.GetDaemonSetFromFile(daemonsetFileNameTelemetryPhonehome, pxutil.SpecsBaseDir())
 	if err != nil {
@@ -934,15 +942,23 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	daemonset.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonset.Spec.Template.Spec)
 
+	if restart {
+		t.isDaemonSetTelemetryPhonehomeCreated = false
+		logrus.Infof("will restart daemonset %s/%s to load latest configs", daemonset.Namespace, daemonset.Name)
+		if err := k8sutil.DeleteDaemonSet(t.k8sClient, DaemonSetNameTelemetryPhonehome, cluster.Namespace, *ownerRef); err != nil {
+			return err
+		}
+	}
+
 	existingDaemonSet := &appsv1.DaemonSet{}
 	if err := k8sutil.GetDaemonSet(t.k8sClient, daemonset.Name, daemonset.Namespace, existingDaemonSet); err != nil {
 		return err
 	}
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonset.Spec.Template, &existingDaemonSet.Spec.Template)
-	if !t.isDaemonSetTelemetryPhonehonmeCreated || !equal {
+	if !t.isDaemonSetTelemetryPhonehomeCreated || !equal {
 		logrus.WithFields(logrus.Fields{
-			"isCreated": t.isDaemonSetTelemetryPhonehonmeCreated,
+			"isCreated": t.isDaemonSetTelemetryPhonehomeCreated,
 			"equal":     equal,
 		}).Infof("will create/update the daemonset %s/%s", daemonset.Namespace, daemonset.Name)
 		if err := k8sutil.CreateOrUpdateDaemonSet(t.k8sClient, daemonset, ownerRef); err != nil {
@@ -950,7 +966,7 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 		}
 	}
 
-	t.isDaemonSetTelemetryPhonehonmeCreated = true
+	t.isDaemonSetTelemetryPhonehomeCreated = true
 	return nil
 }
 
