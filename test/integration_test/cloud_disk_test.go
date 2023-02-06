@@ -19,6 +19,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	compute "google.golang.org/api/compute/v1"
 )
 
 var (
@@ -229,8 +230,8 @@ func CheckTags(tc *types.TestCase) func(*testing.T) {
 			if len(volumes) > 0 {
 				logrus.Infof("Found %v volumes", len(volumes))
 				for _, vol := range volumes {
-					ec2Vol := vol.(*g.Volume)
-					tags, err := awsClient.Tags(*ec2Vol.VolumeId)
+					gceVol := vol.(*compute.Disk)
+					tags, err := gkeClient.Tags((*gceVol).Name)
 					require.NoError(t, err)
 					if tags["pxtype"] == "data" {
 						require.Equal(t, tags["key"], "val", "Volume Tag did not have the correct value")	
