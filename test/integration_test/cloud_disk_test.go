@@ -240,10 +240,6 @@ func CheckTags(tc *types.TestCase) func(*testing.T) {
 			}
 		}
 
-		// Deploy PX and validate
-		logrus.Infof("Deploy and validate StorageCluster %s ", cluster.Name)
-		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-
 		// Wipe PX and validate
 		logrus.Infof("Uninstall StorageCluster %s", cluster.Name)
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
