@@ -46,6 +46,8 @@ spec:
           readOnly: true
       - args:
         - envoy
+        - "--base-id"
+        - "5"
         - --config-path
         - /config/envoy-config-register.yaml
         image: docker.io/purestorage/envoy:1.2.3
