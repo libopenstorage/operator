@@ -53,7 +53,7 @@ const (
 	// TelemetryArcusLocationFilename is name of the file storing the location of arcus endpoint to use
 	TelemetryArcusLocationFilename = "location"
 	// TelemetryCertName is name of the telemetry cert.
-	TelemetryCertName = "pure-telemetry-certs"
+	TelemetryCertName = pxutil.TelemetryCertName
 
 	defaultCollectorMemoryRequest = "64Mi"
 	defaultCollectorMemoryLimit   = "128Mi"

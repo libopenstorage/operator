@@ -155,7 +155,7 @@ func RegisterTelemetryComponent() {
 
 func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := t.setTelemetryCertOwnerRef(cluster, ownerRef); err != nil {
+	if err := pxutil.SetTelemetryCertOwnerRef(cluster, ownerRef, t.k8sClient); err != nil {
 		return err
 	}
 	if err := t.shouldReconcileMetricsCollector(cluster); err != nil {
@@ -485,57 +485,6 @@ func (t *telemetry) deleteCCMGoMetricsCollectorV2(
 	}
 	t.isCollectorDeploymentCreated = false
 	return nil
-}
-
-// Pure-telemetry-certs is created by ccm container outside of operator, we shall
-// set owner ref to StorageCluster so it gets deleted.
-func (t *telemetry) setTelemetryCertOwnerRef(
-	cluster *corev1.StorageCluster,
-	ownerRef *metav1.OwnerReference,
-) error {
-	secret := &v1.Secret{}
-	err := t.k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      TelemetryCertName,
-			Namespace: cluster.Namespace,
-		},
-		secret,
-	)
-
-	// The cert is created after ccm container starts, so we may not have it for a while.
-	if errors.IsNotFound(err) {
-		logrus.Infof("telemetry cert %s/%s not found", cluster.Namespace, TelemetryCertName)
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	// Only delete the secret when delete strategy is UninstallAndWipe
-	deleteCert := cluster.Spec.DeleteStrategy != nil &&
-		cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType
-
-	referenceMap := make(map[types.UID]*metav1.OwnerReference)
-	for _, ref := range secret.OwnerReferences {
-		referenceMap[ref.UID] = &ref
-	}
-
-	_, ownerSet := referenceMap[ownerRef.UID]
-	if deleteCert && !ownerSet {
-		referenceMap[ownerRef.UID] = ownerRef
-	} else if !deleteCert && ownerSet {
-		delete(referenceMap, ownerRef.UID)
-	} else {
-		return nil
-	}
-
-	var references []metav1.OwnerReference
-	for _, v := range referenceMap {
-		references = append(references, *v)
-	}
-	secret.OwnerReferences = references
-
-	return t.k8sClient.Update(context.TODO(), secret)
 }
 
 func (t *telemetry) createServiceAccountPxTelemetry(
