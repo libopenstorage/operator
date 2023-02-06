@@ -27,7 +27,7 @@ var (
 	disksEncGce    = []string{"type=pd-standard,size=150,kms=invalid"}
 	disksTagsAzure = []string{"type=Premium_LRS,size=65,tags=key:val;"}
 	disksTagsEks   = []string{"type=gp3,size=55,tags=key:val;"}
-	disksTagsGce   = []string{""}
+	disksTagsGce   = []string{"type=pd-standard,size=80,tags=key:val"}
 )
 
 var TestCloudDiskEncryptionCases = []types.TestCase{
