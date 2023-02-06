@@ -183,7 +183,7 @@ var TestDiskTaggingCases = []types.TestCase{
 		},
 		TestFunc: CheckTags,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return !ci_utils.IsEks
+			return !ci_utils.IsEks && !ci_utils.IsGke && !ci_utils.IsAks
 		},
 	},
 }
