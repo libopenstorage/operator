@@ -214,7 +214,7 @@ func CheckTags(tc *types.TestCase) func(*testing.T) {
 					tags, err := awsClient.Tags(*ec2Vol.VolumeId)
 					require.NoError(t, err)
 					if tags["pxtype"] == "data" {
-						require.Equal(t, tags["key"], "val", "Volume Tag did not have the correct value")	
+						require.Equal(t, tags["key"], "val", "Volume Tag did not have the correct value")
 					}
 				}
 			}
@@ -234,7 +234,7 @@ func CheckTags(tc *types.TestCase) func(*testing.T) {
 					tags, err := gkeClient.Tags((*gceVol).Name)
 					require.NoError(t, err)
 					if tags["pxtype"] == "data" {
-						require.Equal(t, tags["key"], "val", "Volume Tag did not have the correct value")	
+						require.Equal(t, tags["key"], "val", "Volume Tag did not have the correct value")
 					}
 				}
 			}
@@ -244,6 +244,10 @@ func CheckTags(tc *types.TestCase) func(*testing.T) {
 
 func TestCloudDisk(t *testing.T) {
 	for _, testCase := range TestCloudDiskEncryptionCases {
+		testCase.RunTest(t)
+	}
+
+	for _, testCase := range TestDiskTaggingCases {
 		testCase.RunTest(t)
 	}
 }
