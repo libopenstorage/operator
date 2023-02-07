@@ -705,16 +705,16 @@ func ValidatePxPodsAreReadyOnGivenNodes(clusterSpec *corev1.StorageCluster, node
 
 			// Validate PX pod is found on node and only 1
 			if len(podList.Items) == 0 {
-				return nil, true, fmt.Errorf("Didn't find any Portworx pods on node [%s]", node.Name)
+				return nil, true, fmt.Errorf("didn't find any Portworx pods on node [%s]", node.Name)
 			} else if len(podList.Items) > 1 {
-				return nil, true, fmt.Errorf("Found [%d] Portworx pods on node [%s], should only have 1 per node", len(podList.Items), node.Name)
+				return nil, true, fmt.Errorf("found [%d] Portworx pods on node [%s], should only have 1 per node", len(podList.Items), node.Name)
 			}
 			pxPod := podList.Items[0]
 
 			// Validate PX pod has right owner
 			for _, owner := range pxPod.OwnerReferences {
 				if owner.UID != cluster.UID {
-					return nil, true, fmt.Errorf("Failed to match pod owner reference UID [%s] to StorageCluster UID [%s]", owner.UID, cluster.UID)
+					return nil, true, fmt.Errorf("failed to match pod owner reference UID [%s] to StorageCluster UID [%s]", owner.UID, cluster.UID)
 				}
 			}
 
@@ -734,7 +734,7 @@ func ValidatePxPodsAreReadyOnGivenNodes(clusterSpec *corev1.StorageCluster, node
 			logrus.Infof("All Portworx pods are ready: %s", podsReady)
 			return nil, false, nil
 		}
-		return nil, true, fmt.Errorf("Some Portworx pods are still not ready: %s. Expected ready pods: %d, Got: %d", podsNotReady, expectedPxPodCount, len(podsReady))
+		return nil, true, fmt.Errorf("some Portworx pods are still not ready: %s. Expected ready pods: %d, Got: %d", podsNotReady, expectedPxPodCount, len(podsReady))
 	}
 
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {

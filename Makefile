@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.10.2
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:1.10.3
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -102,7 +102,7 @@ $(GOPATH)/bin/mockgen:
 	env GOFLAGS="" go install github.com/golang/mock/mockgen@latest
 
 $(GOPATH)/bin/golangci-lint:
-	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.0
 
 $(GOPATH)/bin/errcheck:
 	env GOFLAGS="" go install github.com/kisielk/errcheck@latest
