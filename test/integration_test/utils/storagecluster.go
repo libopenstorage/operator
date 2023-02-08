@@ -171,18 +171,12 @@ func DeployStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[strin
 
 	// Deploy StorageCluster
 	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	if errors.IsNotFound(err) || err == nil {
-		cluster, err = CreateStorageCluster(cluster)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		cluster = existingCluster
-		// Existing cluster from previous install
-		return cluster, nil
+	if errors.IsNotFound(err) {
+		return CreateStorageCluster(cluster)
+	} else if err != nil {
+		return nil, err
 	}
-
-	return cluster, nil
+	return existingCluster, nil
 }
 
 // DeployAndValidateStorageCluster creates and validates StorageCluster
