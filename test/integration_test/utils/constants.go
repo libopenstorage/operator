@@ -72,7 +72,7 @@ const (
 	// DefaultValidateDeployTimeout is a default timeout for deployment validation
 	DefaultValidateDeployTimeout = 15 * time.Minute
 	// DefaultValidateDeployRetryInterval is a default retry interval for deployment validation
-	DefaultValidateDeployRetryInterval = 15 * time.Second
+	DefaultValidateDeployRetryInterval = 30 * time.Second
 	// DefaultValidateUpgradeTimeout is a default timeout for upgrade validation
 	DefaultValidateUpgradeTimeout = 30 * time.Minute
 	// DefaultValidateUpgradeRetryInterval is a default retry interval for upgrade validation
@@ -84,7 +84,7 @@ const (
 	// DefaultValidateUninstallTimeout is a default timeout for uninstall validation
 	DefaultValidateUninstallTimeout = 15 * time.Minute
 	// DefaultValidateUninstallRetryInterval is a default retry interval for uninstall validation
-	DefaultValidateUninstallRetryInterval = 15 * time.Second
+	DefaultValidateUninstallRetryInterval = 30 * time.Second
 
 	// DefaultValidateComponentTimeout is a default timeout for component validation
 	DefaultValidateComponentTimeout = 10 * time.Minute

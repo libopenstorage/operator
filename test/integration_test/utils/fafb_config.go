@@ -141,10 +141,12 @@ func GenerateFleet(t *testing.T, namespace string,
 func PopulateStorageCluster(tc *types.TestCase, cluster *corev1.StorageCluster) error {
 	cluster.Name = MakeDNS1123Compatible(strings.Join(tc.TestrailCaseIDs, "-"))
 
-	names, err := testutil.GetExpectedPxNodeNameList(cluster)
+	nodes, err := testutil.GetExpectedPxNodeList(cluster)
 	if err != nil {
 		return err
 	}
+	names := testutil.ConvertNodeListToNodeNameList(nodes)
+
 	// Sort for consistent order between multiple tests
 	sort.Strings(names)
 
