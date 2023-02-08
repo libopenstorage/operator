@@ -3602,6 +3602,113 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 	}
 }
 
+func TestRollingUpdateWithMinReadySeconds(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds = 5
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	k8sNode := createK8sNode("k8s-node", 10)
+	err := k8sClient.Create(context.TODO(), k8sNode)
+	require.NoError(t, err)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	revisions := &appsv1.ControllerRevisionList{}
+	err = testutil.List(k8sClient, revisions)
+	require.NoError(t, err)
+	require.Len(t, revisions.Items, 1)
+	require.Equal(t, int64(1), revisions.Items[0].Revision)
+
+	require.Len(t, podControl.ControllerRefs, 1)
+	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
+
+	// Verify that the revision hash matches that of the new pod
+	require.Len(t, podControl.Templates, 1)
+	require.Equal(t, revisions.Items[0].Labels[defaultStorageClusterUniqueLabelKey],
+		podControl.Templates[0].Labels[defaultStorageClusterUniqueLabelKey])
+
+	// Test case: Changing the cluster spec -
+	// A new revision should be created for the new cluster spec
+	// Also the pod should be changed with the updated spec
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
+	require.NoError(t, err)
+	oldPod.Name = oldPod.GenerateName + "1"
+	oldPod.Namespace = cluster.Namespace
+	oldPod.Spec.NodeName = k8sNode.Name
+	oldPod.Status.Conditions = append(oldPod.Status.Conditions, v1.PodCondition{
+		Type:               v1.PodReady,
+		Status:             v1.ConditionTrue,
+		LastTransitionTime: metav1.Now(),
+	})
+	err = k8sClient.Create(context.TODO(), oldPod)
+	require.NoError(t, err)
+
+	// Reset the fake pod controller
+	podControl.Templates = nil
+	podControl.ControllerRefs = nil
+	podControl.DeletePodName = nil
+
+	// Reconcile should not start rolling update as the pod was created less than minReadySeconds
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, podControl.DeletePodName, 0)
+
+	time.Sleep(time.Second * time.Duration(cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds+1))
+
+	// Reconcile should start rolling update
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// The old pod should be marked for deletion
+	require.Empty(t, podControl.Templates)
+	require.Empty(t, podControl.ControllerRefs)
+	require.Len(t, podControl.DeletePodName, 1)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+}
+
 func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
