@@ -10,8 +10,6 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/go-version"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
 	consolev1 "github.com/openshift/api/console/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -34,6 +32,9 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 )
 
 // Constants for k8s object kinds
@@ -1225,8 +1226,31 @@ func DeleteDaemonSet(
 	return k8sClient.Update(context.TODO(), ds)
 }
 
-// UpdateStorageClusterStatus updates the status of given StorageCluster object
-// on the latest copy
+// UpdateStorageCluster updates given StorageCluster object on the latest copy
+func UpdateStorageCluster(
+	k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+) error {
+	existingCluster := &corev1.StorageCluster{}
+	if err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		existingCluster,
+	); err != nil {
+		return err
+	}
+
+	cluster.ResourceVersion = existingCluster.ResourceVersion
+	if !reflect.DeepEqual(cluster, existingCluster) {
+		return k8sClient.Update(context.TODO(), cluster)
+	}
+	return nil
+}
+
+// UpdateStorageClusterStatus updates the status of given StorageCluster object on the latest copy
 func UpdateStorageClusterStatus(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
@@ -1245,12 +1269,14 @@ func UpdateStorageClusterStatus(
 	}
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
-	err := k8sClient.Status().Update(context.TODO(), cluster)
-	if err != nil {
-		logrus.WithError(err).Errorf("error updating status for %s/%s", cluster.Namespace, cluster.Name)
-		return err
+	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
+		err := k8sClient.Status().Update(context.TODO(), cluster)
+		if err != nil {
+			logrus.WithError(err).Errorf("error updating status for %s/%s", cluster.Namespace, cluster.Name)
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 // UpdateLiveStorageClusterCB fetches the latest version of StorageCluster object, runs the given update-callback and updates the cluster STATUS
