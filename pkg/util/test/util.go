@@ -126,7 +126,6 @@ var TestSpecPath = "testspec"
 
 var (
 	pxVer2_12, _                      = version.NewVersion("2.12.0-")
-	opVer1_11, _                      = version.NewVersion("1.11.0-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
@@ -3080,8 +3079,7 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 // ValidateTelemetryV2Enabled validates telemetry component is running as expected
 func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
-	opVersion, _ := GetPxOperatorVersion()
-	validateMetricsCollector := opVersion.GreaterThanOrEqual(opVer1_11)
+	validateMetricsCollector := false // TODO: Change this to a specific operator version, once we know in which version metrics-collector will get enabled
 
 	t := func() (interface{}, bool, error) {
 		// Validate px-telemetry-registration deployment, pods and container images
@@ -3537,7 +3535,7 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
 	opVersion, _ := GetPxOperatorVersion()
-	validateMetricsCollector := opVersion.GreaterThanOrEqual(opVer1_11)
+	validateMetricsCollector := opVersion.LessThan(opVer1_10)
 
 	t := func() (interface{}, bool, error) {
 		if validateMetricsCollector {
