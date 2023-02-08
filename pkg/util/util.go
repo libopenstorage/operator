@@ -18,6 +18,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -563,6 +564,31 @@ func UpdateStorageClusterCondition(
 		indexSorted++
 	}
 	cluster.Status.Conditions = sortedConditions
+}
+
+// UpdateLiveStorageClusterLifecycle updates live storage cluster phase only to report cluster lifecycle
+func UpdateLiveStorageClusterLifecycle(
+	k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+	clusterState corev1.ClusterState,
+) error {
+	cluster.Status.Phase = string(clusterState)
+	toUpdate := &corev1.StorageCluster{}
+	if err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		toUpdate,
+	); err != nil {
+		return err
+	} else if toUpdate.Status.Phase == string(clusterState) {
+		return nil
+	}
+
+	toUpdate.Status.Phase = string(clusterState)
+	return k8sClient.Status().Update(context.TODO(), toUpdate)
 }
 
 // GetStorageClusterCondition returns the condition based on source and type

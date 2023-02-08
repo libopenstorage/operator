@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -642,7 +643,11 @@ func (c *Controller) syncStoragePod(
 		pod.Labels[operatorutil.DefaultStorageClusterUniqueLabelKey] = hash
 		if err := c.client.Update(context.TODO(), pod); err != nil {
 			errMsg := fmt.Sprintf("Unable to update storage pod: %v", err)
-			k8s.WarningEvent(c.recorder, cluster, operatorutil.FailedStoragePodReason, errMsg)
+			if strings.Contains(err.Error(), k8s.UpdateRevisionConflictErr) {
+				logrus.Warnf(errMsg)
+			} else {
+				k8s.WarningEvent(c.recorder, cluster, operatorutil.FailedStoragePodReason, errMsg)
+			}
 		}
 	}
 
