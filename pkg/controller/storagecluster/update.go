@@ -466,7 +466,12 @@ func (c *Controller) getUnavailableNumbers(
 			// for the purposes of update we ensure that the pod is
 			// both available and not terminating
 			if podutil.IsPodReady(pod) && pod.DeletionTimestamp == nil {
-				available = true
+				// Wait for MinReadySeconds after pod is ready.
+				if podutil.IsPodAvailable(pod, cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds, metav1.Now()) {
+					available = true
+				} else {
+					logrus.Infof("Pod %s has not been ready for MinReadySeconds (%d), wait to perform rolling updates", pod.Name, cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds)
+				}
 				break
 			}
 		}
