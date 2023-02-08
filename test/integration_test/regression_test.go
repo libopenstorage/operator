@@ -40,13 +40,8 @@ var regressionTestCases = []types.TestCase{
 	},
 }
 
-func shouldSkipRegressionTests(tc *types.TestCase) bool {
-	return false
-}
-
 func TestRegression(t *testing.T) {
 	for _, tc := range regressionTestCases {
-		tc.ShouldSkip = shouldSkipRegressionTests
 		tc.RunTest(t)
 	}
 }
@@ -80,7 +75,8 @@ func NodeOutOfCpu(tc *types.TestCase) func(*testing.T) {
 
 		// Deploy StorageCluster
 		logrus.Infof("Deploying StorageCluster once [%s]", cluster.Name)
-		cluster = ci_utils.DeployStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		cluster, err = ci_utils.DeployStorageCluster(cluster, ci_utils.PxSpecImages)
+		require.NoError(t, err)
 
 		// Validate StorageCluster is failing, using shorter timeout than usual (ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
 		//if err := testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, 5*time.Minute, 30*time.Second, true); err == nil {
