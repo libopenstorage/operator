@@ -161,26 +161,31 @@ func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 	return operator.Instance().CreateStorageCluster(cluster)
 }
 
-// DeployAndValidateStorageCluster creates and validates the storage cluster
-func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+// DeployStorageCluster creates StorageCluster with Portworx defaults
+func DeployStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string) (*corev1.StorageCluster, error) {
 	// Populate default values to empty fields first
 	k8sVersion, _ := version.NewVersion(K8sVersion)
-	err := portworx.SetPortworxDefaults(cluster, k8sVersion)
-	require.NoError(t, err)
-
-	// Deploy cluster
-	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	require.True(t, err == nil || errors.IsNotFound(err))
-	if errors.IsNotFound(err) {
-		cluster, err = CreateStorageCluster(cluster)
-		require.NoError(t, err)
-	} else {
-		cluster = existingCluster
-		// Existing cluster from previous install
-		return cluster
+	if err := portworx.SetPortworxDefaults(cluster, k8sVersion); err != nil {
+		return nil, err
 	}
 
-	// Validate cluster deployment
+	// Deploy StorageCluster
+	existingCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if errors.IsNotFound(err) {
+		return CreateStorageCluster(cluster)
+	} else if err != nil {
+		return nil, err
+	}
+	return existingCluster, nil
+}
+
+// DeployAndValidateStorageCluster creates and validates StorageCluster
+func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	// Create StorageCluster
+	cluster, err := DeployStorageCluster(cluster, pxSpecImages)
+	require.NoError(t, err)
+
+	// Validate StorageCluster deployment
 	logrus.Infof("Validate StorageCluster %s", cluster.Name)
 	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval, true, "")
 	require.NoError(t, err)
