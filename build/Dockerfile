@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8-minimal:8.7-923
+FROM registry.access.redhat.com/ubi8-minimal:8.7-1049
 
 RUN microdnf update
 RUN microdnf --enablerepo=rhel-7-server-rpms \

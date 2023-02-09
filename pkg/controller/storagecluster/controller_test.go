@@ -1677,7 +1677,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	k8sNode2.Labels["node-role.kubernetes.io/master"] = ""
 	k8sNode2.Labels["node-role.kubernetes.io/worker"] = ""
 
-	// This node is labled as master, storage pod will not be scheduled on it.
+	// This node is labeled as master, storage pod will not be scheduled on it.
 	k8sNode3 := createK8sNode("k8s-node-3", 1)
 	k8sNode3.Labels["node-role.kubernetes.io/master"] = ""
 
@@ -1752,15 +1752,23 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 
 	// Verify a pod is created for the given node with correct owner ref
 	require.Len(t, podControl.Templates, 2)
+	podTemplate1 := expectedPodTemplate.DeepCopy()
+	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate2 := expectedPodTemplate.DeepCopy()
+	podTemplate2.Spec.NodeName = "k8s-node-2"
 	expectedPodTemplates := []v1.PodTemplateSpec{
-		*expectedPodTemplate.DeepCopy(),
-		*expectedPodTemplate.DeepCopy(),
+		*podTemplate1, *podTemplate2,
 	}
-	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
-	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
+	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] =
+		"{\"node-role.kubernetes.io/worker\":\"\"}"
+	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] =
+		"{\"node-role.kubernetes.io/master\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
 	require.ElementsMatch(t, expectedPodTemplates, podControl.Templates)
 	require.Len(t, podControl.ControllerRefs, 2)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
+	require.ElementsMatch(t,
+		[]string{"k8s-node-1", "k8s-node-2"},
+		[]string{podControl.Templates[0].Spec.NodeName, podControl.Templates[1].Spec.NodeName})
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[1])
 }
 
@@ -1858,9 +1866,12 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 
 	// Verify a pod is created for the given node with correct owner ref
 	require.Len(t, podControl.Templates, 2)
+	podTemplate1 := expectedPodTemplate.DeepCopy()
+	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate2 := expectedPodTemplate.DeepCopy()
+	podTemplate2.Spec.NodeName = "k8s-node-2"
 	expectedPodTemplates := []v1.PodTemplateSpec{
-		*expectedPodTemplate.DeepCopy(),
-		*expectedPodTemplate.DeepCopy(),
+		*podTemplate1, *podTemplate2,
 	}
 	expectedPodTemplates[0].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/worker\":\"\"}"
 	expectedPodTemplates[1].Annotations["operator.libopenstorage.org/node-labels"] = "{\"node-role.kubernetes.io/control-plane\":\"\",\"node-role.kubernetes.io/worker\":\"\"}"
@@ -2203,10 +2214,14 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		},
 		Spec: expectedPodSpec,
 	}
+	podTemplate1 := expectedPodTemplate.DeepCopy()
+	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate2 := expectedPodTemplate.DeepCopy()
+	podTemplate2.Spec.NodeName = "k8s-node-2"
+	podTemplate3 := expectedPodTemplate.DeepCopy()
+	podTemplate3.Spec.NodeName = "k8s-node-3"
 	expectedPodTemplates := []v1.PodTemplateSpec{
-		*expectedPodTemplate,
-		*expectedPodTemplate.DeepCopy(),
-		*expectedPodTemplate.DeepCopy(),
+		*podTemplate1, *podTemplate2, *podTemplate3,
 	}
 
 	driver.EXPECT().Validate().Return(nil).AnyTimes()
