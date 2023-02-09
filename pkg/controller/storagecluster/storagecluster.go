@@ -697,6 +697,15 @@ func (c *Controller) deleteStorageCluster(
 		}
 
 		if deleteCondition.Status == corev1.ClusterConditionStatusCompleted {
+			// We should update telemetry cert ownerRef here, telemetry cert is created by PX, and the ownerRef
+			// should be updated by telemetry component. However there is race condition that causes telemetry
+			// component not setting it correct, it happens when uninstallStrategy is changed in StorageCluster
+			// spec then uninstall immediately, as component reconcile takes 30 second to trigger.
+			ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+			if err := pxutil.SetTelemetryCertOwnerRef(cluster, ownerRef, c.client); err != nil {
+				return err
+			}
+
 			if err := c.removeMigrationLabels(); err != nil {
 				return fmt.Errorf("failed to remove migration labels from nodes: %v", err)
 			}
