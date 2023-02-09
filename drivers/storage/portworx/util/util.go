@@ -29,6 +29,8 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -216,6 +218,9 @@ const (
 	InternalEtcdConfigMapPrefix = "px-bootstrap-"
 	// CloudDriveConfigMapPrefix is prefix of the cloud drive configmap.
 	CloudDriveConfigMapPrefix = "px-cloud-drive-"
+
+	// TelemetryCertName is name of the telemetry cert.
+	TelemetryCertName = "pure-telemetry-certs"
 )
 
 var (
@@ -1013,4 +1018,54 @@ func CountStorageNodes(
 	}
 
 	return storageNodesCount, nil
+}
+
+func SetTelemetryCertOwnerRef(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	k8sClient client.Client,
+) error {
+	secret := &v1.Secret{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      TelemetryCertName,
+			Namespace: cluster.Namespace,
+		},
+		secret,
+	)
+
+	// The cert is created after ccm container starts, so we may not have it for a while.
+	if errors.IsNotFound(err) {
+		logrus.Infof("telemetry cert %s/%s not found", cluster.Namespace, TelemetryCertName)
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	// Only delete the secret when delete strategy is UninstallAndWipe
+	deleteCert := cluster.Spec.DeleteStrategy != nil &&
+		cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType
+
+	referenceMap := make(map[types.UID]*metav1.OwnerReference)
+	for _, ref := range secret.OwnerReferences {
+		referenceMap[ref.UID] = &ref
+	}
+
+	_, ownerSet := referenceMap[ownerRef.UID]
+	if deleteCert && !ownerSet {
+		referenceMap[ownerRef.UID] = ownerRef
+	} else if !deleteCert && ownerSet {
+		delete(referenceMap, ownerRef.UID)
+	} else {
+		return nil
+	}
+
+	var references []metav1.OwnerReference
+	for _, v := range referenceMap {
+		references = append(references, *v)
+	}
+	secret.OwnerReferences = references
+
+	return k8sClient.Update(context.TODO(), secret)
 }
