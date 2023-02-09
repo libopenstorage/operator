@@ -3707,6 +3707,104 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestDeleteStorageClusterShouldSetTelemetryCertOwnerRef(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
+		Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+	}
+	deletionTimeStamp := metav1.Now()
+	cluster.DeletionTimestamp = &deletionTimeStamp
+
+	driverName := "mock-driver"
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	// Empty delete condition should not remove finalizer
+	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, nil)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+
+	k8sNode := createK8sNode("k8s-node", 10)
+	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
+
+	err := k8sClient.Create(context.TODO(), k8sNode)
+	require.NoError(t, err)
+	err = k8sClient.Create(context.TODO(), storagePod)
+	require.NoError(t, err)
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	require.Empty(t, podControl.Templates)
+	require.ElementsMatch(t, []string{storagePod.Name}, podControl.DeletePodName)
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
+	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
+
+	condition := &corev1.ClusterCondition{
+		Type:   corev1.ClusterConditionTypeDelete,
+		Status: corev1.ClusterOperationCompleted,
+	}
+	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
+
+	telemetryCert := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.TelemetryCertName,
+			Namespace: cluster.Namespace,
+		},
+	}
+	err = k8sClient.Create(context.TODO(), telemetryCert)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, recorder.Events)
+
+	updatedCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	secret := &v1.Secret{}
+	err = testutil.Get(k8sClient, secret, pxutil.TelemetryCertName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, len(secret.OwnerReferences), 1)
+}
+
 func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
