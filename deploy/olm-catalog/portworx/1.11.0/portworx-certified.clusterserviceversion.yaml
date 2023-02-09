@@ -52,7 +52,7 @@ spec:
   version: 1.11.0
   minKubeVersion: "1.12.0"
   maturity: stable
-  replaces: portworx-operator.v1.10.2
+  replaces: portworx-operator.v1.10.4
   maintainers:
   - name: Portworx
     email: support@portworx.com
