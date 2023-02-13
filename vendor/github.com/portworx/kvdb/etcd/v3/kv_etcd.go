@@ -61,6 +61,8 @@ type watchQ struct {
 	watchRet chan error
 	// done is true if watch has finished and no longer active
 	done bool
+	// doneLock protects done boolean
+	doneLock sync.RWMutex
 }
 
 func newWatchQ(o interface{}, cb kvdb.WatchCB, watchRet chan error) *watchQ {
@@ -72,7 +74,10 @@ func newWatchQ(o interface{}, cb kvdb.WatchCB, watchRet chan error) *watchQ {
 
 func (w *watchQ) enqueue(key string, kvp *kvdb.KVPair, err error) bool {
 	w.q.Enqueue(key, kvp, err)
-	return !w.done
+	w.doneLock.RLock()
+	notDone := !w.done
+	w.doneLock.RUnlock()
+	return notDone
 }
 
 func isWatchClosedError(err error) bool {
@@ -84,7 +89,9 @@ func (w *watchQ) start() {
 		key, kvp, err := w.q.Dequeue()
 		err = w.cb(key, w.opaque, kvp, err)
 		if err != nil {
+			w.doneLock.Lock()
 			w.done = true
+			w.doneLock.Unlock()
 			logrus.Infof("Watch cb for key %v returned err: %v", key, err)
 			if !isWatchClosedError(err) {
 				// The caller returned an error. Indicate the caller

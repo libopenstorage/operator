@@ -3530,6 +3530,61 @@ rows:
   priority: 0
   thin_provisioning: false
   drive_type: gp2
+- min_iops: 3000
+  max_iops: 4000
+  instance_type: '*'
+  instance_max_drives: 8
+  instance_min_drives: 1
+  region: '*'
+  min_size: 0
+  max_size: 8
+  priority: 0
+  thin_provisioning: false
+  drive_type: gp3
+- min_iops: 3000
+  max_iops: 8000
+  instance_type: '*'
+  instance_max_drives: 8
+  instance_min_drives: 1
+  region: '*'
+  min_size: 8
+  max_size: 16
+  priority: 0
+  thin_provisioning: false
+  drive_type: gp3
+- min_iops: 3000
+  max_iops: 12000
+  instance_type: '*'
+  instance_max_drives: 8
+  instance_min_drives: 1
+  region: '*'
+  min_size: 16
+  max_size: 24
+  priority: 0
+  thin_provisioning: false
+  drive_type: gp3
+- min_iops: 3000
+  max_iops: 16000
+  instance_type: '*'
+  instance_max_drives: 8
+  instance_min_drives: 1
+  region: '*'
+  min_size: 24
+  max_size: 32
+  priority: 0
+  thin_provisioning: false
+  drive_type: gp3
+- min_iops: 3000
+  max_iops: 16000
+  instance_type: '*'
+  instance_max_drives: 8
+  instance_min_drives: 1
+  region: '*'
+  min_size: 32
+  max_size: 16000
+  priority: 0
+  thin_provisioning: false
+  drive_type: gp3
 - min_iops: 400
   max_iops: 2500
   instance_type: '*'
