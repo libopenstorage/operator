@@ -26,10 +26,6 @@ github.com/Masterminds/semver
 # github.com/OpenPeeDeeP/depguard v1.1.1
 ## explicit; go 1.13
 github.com/OpenPeeDeeP/depguard
-# github.com/PuerkitoBio/purell v1.2.0
-## explicit; go 1.19
-# github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
-## explicit
 # github.com/alexkohler/prealloc v1.0.0
 ## explicit; go 1.15
 github.com/alexkohler/prealloc/pkg
@@ -457,7 +453,7 @@ github.com/leonklingele/grouper/pkg/analyzer/globals
 github.com/leonklingele/grouper/pkg/analyzer/imports
 github.com/leonklingele/grouper/pkg/analyzer/types
 github.com/leonklingele/grouper/pkg/analyzer/vars
-# github.com/libopenstorage/cloudops v0.0.0-20200604165016-9cc0977d745e
+# github.com/libopenstorage/cloudops v0.0.0-20230210030221-d6ee60e37063
 ## explicit; go 1.13
 github.com/libopenstorage/cloudops
 github.com/libopenstorage/cloudops/azure/storagemanager
@@ -596,7 +592,7 @@ github.com/pmezard/go-difflib/difflib
 # github.com/polyfloyd/go-errorlint v1.0.5
 ## explicit; go 1.13
 github.com/polyfloyd/go-errorlint/errorlint
-# github.com/portworx/kvdb v0.0.0-20200723230726-2734b7f40194
+# github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
 ## explicit
 github.com/portworx/kvdb
 github.com/portworx/kvdb/api/bootstrap
