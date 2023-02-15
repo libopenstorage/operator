@@ -424,7 +424,7 @@ func TestUpdateStorageClusterCondition(t *testing.T) {
 	// TestCase: add second condition
 	expectedCondition2 := &corev1.ClusterCondition{
 		Source: portworxComponentName,
-		Type:   corev1.ClusterConditionTypeUpgrade,
+		Type:   corev1.ClusterConditionTypeUpdate,
 		Status: corev1.ClusterConditionStatusInProgress,
 	}
 	UpdateStorageClusterCondition(cluster, expectedCondition2)
@@ -438,7 +438,7 @@ func TestUpdateStorageClusterCondition(t *testing.T) {
 	timestamp = metav1.NewTime(time.Now().Truncate(time.Second))
 	expectedCondition2 = &corev1.ClusterCondition{
 		Source:  portworxComponentName,
-		Type:    corev1.ClusterConditionTypeUpgrade,
+		Type:    corev1.ClusterConditionTypeUpdate,
 		Status:  corev1.ClusterConditionStatusFailed,
 		Message: "upgrade failed",
 	}
@@ -454,7 +454,7 @@ func TestUpdateStorageClusterCondition(t *testing.T) {
 	timestamp = metav1.NewTime(time.Now().Add(time.Second).Truncate(time.Second))
 	expectedCondition2 = &corev1.ClusterCondition{
 		Source:             portworxComponentName,
-		Type:               corev1.ClusterConditionTypeUpgrade,
+		Type:               corev1.ClusterConditionTypeUpdate,
 		Status:             corev1.ClusterConditionStatusCompleted,
 		LastTransitionTime: timestamp,
 	}

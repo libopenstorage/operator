@@ -383,6 +383,7 @@ func (c *Controller) syncStorage(
 			}
 
 			if updateNeeded {
+				// TODO: get latest pod to update
 				if err := c.client.Update(context.TODO(), podCopy); err != nil {
 					return err
 				}

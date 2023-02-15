@@ -12,6 +12,15 @@ import (
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
 	ocp_secv1 "github.com/openshift/api/security/v1"
+	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/api/bootstrap/k8s"
+	"github.com/portworx/kvdb/consul"
+	e2 "github.com/portworx/kvdb/etcd/v2"
+	e3 "github.com/portworx/kvdb/etcd/v3"
+	"github.com/portworx/kvdb/mem"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -22,6 +31,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,15 +52,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/kvdb"
-	"github.com/portworx/kvdb/api/bootstrap/k8s"
-	"github.com/portworx/kvdb/consul"
-	e2 "github.com/portworx/kvdb/etcd/v2"
-	e3 "github.com/portworx/kvdb/etcd/v3"
-	"github.com/portworx/kvdb/mem"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func TestString(t *testing.T) {
@@ -2599,7 +2600,7 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 		},
 	}
 
-	err := driver.UpdateStorageClusterStatus(cluster)
+	err := driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	// Status should be set to initializing if not set
@@ -2609,7 +2610,11 @@ func TestUpdateClusterStatusFirstTime(t *testing.T) {
 }
 
 func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2621,7 +2626,7 @@ func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 		},
 	}
 
-	err := driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
@@ -2629,12 +2634,69 @@ func TestUpdateClusterStatusWithPortworxDisabled(t *testing.T) {
 	require.Empty(t, cluster.Status.Conditions)
 
 	// If portworx is disabled, change status as online
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, cluster.Name, cluster.Status.ClusterName)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+}
+
+func TestUpdateClusterStatusMarkMigrationCompleted(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				constants.AnnotationDisableStorage: "True",
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusInProgress,
+			}},
+		},
+	}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.PortworxDaemonSetName,
+			Namespace: "kube-test",
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(ds)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	// Migration is still in progress, PX is online
+	err = driver.UpdateStorageClusterStatus(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+
+	// Daemonset deleted
+	err = k8sClient.Delete(context.TODO(), ds)
+	require.NoError(t, err)
+
+	err = driver.UpdateStorageClusterStatus(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
 	require.NotNil(t, condition)
 	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 }
@@ -2713,7 +2775,7 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 	cluster.Status = corev1.StorageClusterStatus{
 		Phase: string(corev1.ClusterConditionStatusOnline),
 	}
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
@@ -2730,7 +2792,7 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 	cluster.Status = corev1.StorageClusterStatus{
 		Phase: string(corev1.ClusterConditionStatusOffline),
 	}
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
@@ -2815,7 +2877,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Type:   corev1.ClusterConditionTypeMigration,
 		Status: corev1.ClusterConditionStatusPending,
 	})
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, "cluster-name", cluster.Status.ClusterName)
 	require.Equal(t, "cluster-id", cluster.Status.ClusterUID)
@@ -2833,7 +2895,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Type:   corev1.ClusterConditionTypeMigration,
 		Status: corev1.ClusterConditionStatusCompleted,
 	})
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, "cluster-name", cluster.Status.ClusterName)
 	require.Equal(t, "cluster-id", cluster.Status.ClusterUID)
@@ -2849,7 +2911,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2863,7 +2925,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2877,7 +2939,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2891,7 +2953,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2905,7 +2967,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2919,7 +2981,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2933,7 +2995,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2947,7 +3009,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2961,7 +3023,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2975,7 +3037,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -2989,7 +3051,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -3003,7 +3065,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -3017,7 +3079,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Return(expectedClusterResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -3030,7 +3092,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(2)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
@@ -3042,12 +3104,566 @@ func TestUpdateClusterStatus(t *testing.T) {
 		Type:   corev1.ClusterConditionTypeDelete,
 		Status: corev1.ClusterConditionStatusInProgress,
 	})
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, string(corev1.ClusterStateUninstall), cluster.Status.Phase)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
 	require.NotNil(t, condition)
 	require.Equal(t, corev1.ClusterConditionStatusUnknown, condition.Status)
+}
+
+func TestPortworxInstallCondition(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer restoreEtcHosts(t)
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+		},
+	}
+	hash := "latest-hash"
+
+	// Add Portworx Install InProgress condition
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Id:     "cluster-id",
+			Name:   "cluster-name",
+			Status: api.Status_STATUS_INIT,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	node1 := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: "node-one",
+		Status:            api.Status_STATUS_INIT,
+	}
+	node2 := &api.StorageNode{
+		Id:                "node-2",
+		SchedulerNodeName: "node-two",
+		Status:            api.Status_STATUS_INIT,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Portworx installation completed on 0/2 nodes, 2 nodes remaining", condition.Message)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.Empty(t, condition)
+
+	nodeStatusList := &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode := &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-one", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNode.Status.Phase)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNode.Status.Phase)
+
+	// One node becomes ready
+	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	node1.Status = api.Status_STATUS_OK
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateInit), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.NotEmpty(t, condition)
+	require.Equal(t, "Portworx installation completed on 1/2 nodes, 1 nodes remaining", condition.Message)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusNotInQuorum, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.Empty(t, condition)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-one", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeInitStatus), storageNode.Status.Phase)
+
+	// All nodes become ready
+	expectedClusterResp.Cluster.Status = api.Status_STATUS_OK
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	node2.Status = api.Status_STATUS_OK
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, "Portworx installation completed on 2 nodes", condition.Message)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.Empty(t, condition)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-one", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, "node-two", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+
+	// Init a 3rd node, install condition should not be updated
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedClusterResp, nil).
+		Times(1)
+	node3 := &api.StorageNode{
+		Id:                "node-3",
+		SchedulerNodeName: "node-three",
+		Status:            api.Status_STATUS_INIT,
+	}
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2, node3},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, "Portworx installation completed on 2 nodes", condition.Message)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.Empty(t, condition)
+}
+
+func TestPortworxUpdateCondition(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// Create the mock servers that can be used to mock SDK calls
+	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+
+	// Start a sdk server that implements the mock servers
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Cluster: mockClusterServer,
+		Node:    mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer restoreEtcHosts(t)
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+			Conditions: []corev1.ClusterCondition{{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeRuntimeState,
+				Status: corev1.ClusterConditionStatusOnline,
+			}},
+		},
+	}
+	hash := "v1"
+
+	// Create fake k8s nodes and pods
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
+	labels := driver.GetSelectorLabels()
+	labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+	pod1 := createStoragePod(cluster, "px-pod-1", k8sNode1.Name, labels)
+	pod1.Status = v1.PodStatus{
+		Conditions: []v1.PodCondition{{
+			Type:   v1.PodReady,
+			Status: "True",
+		}},
+	}
+	pod2 := createStoragePod(cluster, "px-pod-2", k8sNode2.Name, labels)
+	pod2.Status = pod1.Status
+	err = k8sClient.Create(context.TODO(), k8sNode1)
+	require.NoError(t, err)
+	err = k8sClient.Create(context.TODO(), k8sNode2)
+	require.NoError(t, err)
+	err = k8sClient.Create(context.TODO(), pod1)
+	require.NoError(t, err)
+	err = k8sClient.Create(context.TODO(), pod2)
+	require.NoError(t, err)
+
+	// Upgrade not triggered
+	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
+		Cluster: &api.StorageCluster{
+			Id:     "cluster-id",
+			Name:   "cluster-name",
+			Status: api.Status_STATUS_OK,
+		},
+	}
+	mockClusterServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedClusterResp, nil).
+		Times(5)
+	node1 := &api.StorageNode{
+		Id:                "node-1",
+		SchedulerNodeName: k8sNode1.Name,
+		Status:            api.Status_STATUS_OK,
+	}
+	node2 := &api.StorageNode{
+		Id:                "node-2",
+		SchedulerNodeName: k8sNode2.Name,
+		Status:            api.Status_STATUS_OK,
+	}
+	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.Empty(t, condition)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.Empty(t, condition)
+
+	nodeStatusList := &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode := &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode1.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, hash, storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode2.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, hash, storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	// Upgrade hash to v2, bounce pod1:
+	// pod1 v2 not ready, storageNode1 v1 Upgrading, node1 Online
+	// pod2 v1 ready, storageNode2 v1 Online, node2 Online
+	hash = "v2"
+	pod1.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+	pod1.Status.Conditions[0].Status = "False"
+	err = testutil.Update(k8sClient, pod1)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.Empty(t, condition)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Portworx update in progress, 2 nodes remaining", condition.Message)
+
+	nodeStatusList = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode1.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeUpdateStatus), storageNode.Status.Phase)
+	require.Equal(t, "v1", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode2.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v1", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	// Upgrade hash to v3, pod1 v2 is ready, bounce pod2, node2 is unavailable from sdk server
+	// pod1 v2 ready, storageNode1 v2 Online, node1 Online
+	// pod2 v3 not ready, storageNode2 v1 Upgrading, node2 unavailable
+	hash = "v3"
+	pod1.Status.Conditions[0].Status = "True"
+	err = testutil.Update(k8sClient, pod1)
+	require.NoError(t, err)
+	pod2.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+	pod2.Status.Conditions[0].Status = "False"
+	err = testutil.Update(k8sClient, pod2)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.Empty(t, condition)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Portworx update in progress, 2 nodes remaining", condition.Message)
+
+	nodeStatusList = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode1.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v2", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode2.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeUpdateStatus), storageNode.Status.Phase)
+	require.Equal(t, "v1", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	// pod2 v3 is ready
+	// pod1 v2 ready, storageNode1 v2 Online, node1 Online
+	// pod2 v3 ready, storageNode2 v3 Online, node2 Online
+	pod2.Status.Conditions[0].Status = "True"
+	err = testutil.Update(k8sClient, pod2)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.Empty(t, condition)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, "Portworx update in progress, 1 nodes remaining", condition.Message)
+
+	nodeStatusList = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode1.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v2", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode2.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v3", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	// all pods upgraded to v3 and ready, upgrade completed
+	// pod1 v3 ready, storageNode1 v3 Online, node1 Online
+	// pod2 v3 ready, storageNode2 v3 Online, node2 Online
+	pod1.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+	err = testutil.Update(k8sClient, pod1)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*api.StorageNode{node1, node2},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	err = driver.UpdateStorageClusterStatus(cluster, hash)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	require.Empty(t, condition)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	require.NotEmpty(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, "Portworx update completed", condition.Message)
+
+	nodeStatusList = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, nodeStatusList)
+	require.NoError(t, err)
+	require.Len(t, nodeStatusList.Items, 2)
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode1.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v3", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
+
+	storageNode = &corev1.StorageNode{}
+	err = testutil.Get(k8sClient, storageNode, k8sNode2.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.NodeOnlineStatus), storageNode.Status.Phase)
+	require.Equal(t, "v3", storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey])
 }
 
 func TestUpdateClusterStatusForNodes(t *testing.T) {
@@ -3151,7 +3767,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Times(1)
 
 	// Status None
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -3215,7 +3831,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3231,7 +3847,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3247,7 +3863,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3263,7 +3879,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3279,7 +3895,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3295,7 +3911,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3311,7 +3927,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3327,7 +3943,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3343,7 +3959,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3359,7 +3975,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3375,7 +3991,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3391,7 +4007,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3407,7 +4023,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3423,7 +4039,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3518,7 +4134,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 		AnyTimes()
 
 	// Status None
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -3539,7 +4155,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	// If the PX image does not have a tag then don't update the version
 	cluster.Spec.Image = "test/image"
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3551,7 +4167,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	err = k8sClient.Delete(context.TODO(), nodeStatus)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatus = &corev1.StorageNode{}
@@ -3579,7 +4195,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	}
 
 	// TestCase: No storage nodes and portworx pods exist
-	err := driver.UpdateStorageClusterStatus(cluster)
+	err := driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
 
@@ -3604,7 +4220,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), pod1)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Contains(t, err.Error(), "not found")
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -3630,7 +4246,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), storageNode2)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Contains(t, err.Error(), "not found")
 
 	// Delete extra nodes that do not have corresponding pods
@@ -3668,7 +4284,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	}
 
 	// TestCase: No storage nodes and portworx pods exist
-	err := driver.UpdateStorageClusterStatus(cluster)
+	err := driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get endpoint")
 
@@ -3701,7 +4317,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Contains(t, err.Error(), "failed to get endpoint")
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -3759,7 +4375,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error connecting to GRPC server")
 
@@ -3773,7 +4389,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	// grpc connection timeout
 	cluster.Status.Phase = string(corev1.ClusterStateInit)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -3862,7 +4478,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		Return(nil, fmt.Errorf("InspectCurrent error")).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "InspectCurrent error")
 
@@ -3884,7 +4500,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	err = k8sClient.Status().Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to inspect cluster")
 
@@ -3909,7 +4525,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	err = k8sClient.Status().Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty ClusterInspect response")
 
@@ -4009,7 +4625,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Return(nil, fmt.Errorf("node Enumerate error")).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "node Enumerate error")
 
@@ -4031,7 +4647,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = k8sClient.Status().Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to enumerate nodes")
 
@@ -4056,7 +4672,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = k8sClient.Status().Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4078,7 +4694,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = k8sClient.Status().Update(context.TODO(), storageNode)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4099,7 +4715,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	err = k8sClient.Delete(context.TODO(), pod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -4114,7 +4730,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4200,7 +4816,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, string(corev1.ClusterStateDegraded), cluster.Status.Phase)
@@ -4229,7 +4845,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	require.Equal(t, string(corev1.ClusterStateRunning), cluster.Status.Phase)
@@ -4323,7 +4939,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes := &corev1.StorageNodeList{}
@@ -4351,7 +4967,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Status().Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4377,7 +4993,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Status().Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4394,7 +5010,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Times(1)
 
 	time.Sleep(time.Second)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4428,7 +5044,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Create(context.TODO(), pod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4447,7 +5063,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4467,7 +5083,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4486,7 +5102,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4500,7 +5116,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4514,7 +5130,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	err = k8sClient.Update(context.TODO(), &storageNodes.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodes = &corev1.StorageNodeList{}
@@ -4611,7 +5227,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		),
 	)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -4638,7 +5254,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		),
 	)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4668,7 +5284,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		),
 	)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4698,7 +5314,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		),
 	)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4723,7 +5339,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		),
 	)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4813,7 +5429,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -4835,7 +5451,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -4926,7 +5542,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList := &corev1.StorageNodeList{}
@@ -4964,7 +5580,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Create(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -4985,7 +5601,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5011,7 +5627,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5031,7 +5647,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5049,7 +5665,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5065,7 +5681,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5083,7 +5699,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5099,7 +5715,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5116,7 +5732,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5133,7 +5749,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Create(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5225,7 +5841,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList := &corev1.StorageNodeList{}
@@ -5250,7 +5866,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -5273,7 +5889,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	nodeStatusList = &corev1.StorageNodeList{}
@@ -5367,7 +5983,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList := &corev1.StorageNodeList{}
@@ -5408,7 +6024,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Create(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5429,7 +6045,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5455,7 +6071,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), &storageNodeList.Items[0])
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5475,7 +6091,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5493,7 +6109,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5509,7 +6125,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5527,7 +6143,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5543,7 +6159,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Update(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5560,7 +6176,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -5577,7 +6193,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Create(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	storageNodeList = &corev1.StorageNodeList{}
@@ -7850,7 +8466,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(3)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	// check if both storage nodes exist and have the KVDB condition
@@ -7877,7 +8493,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
 	err = driver.k8sClient.Update(context.TODO(), cm)
 	require.NoError(t, err)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 	// check if both storage nodes exist and DONT have the KVDB condition
 	for _, n := range []string{"node-one", "node-two"} {
@@ -7949,7 +8565,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			kvdbNodeStateTest.state, kvdbNodeStateTest.nodeType)
 		err = driver.k8sClient.Update(context.TODO(), cm)
 		require.NoError(t, err)
-		err = driver.UpdateStorageClusterStatus(cluster)
+		err = driver.UpdateStorageClusterStatus(cluster, "")
 		require.NoError(t, err)
 
 		var (
@@ -7981,7 +8597,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	// TEST 5: config map not found
 	err = driver.k8sClient.Delete(context.TODO(), cm)
 	require.NoError(t, err)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 }
 
@@ -8093,7 +8709,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
-	err = driver.UpdateStorageClusterStatus(cluster)
+	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
 
 	// check if both storage nodes exist and have the KVDB condition
@@ -8595,6 +9211,45 @@ func TestGetStorageNodesWithConnectionErrors(t *testing.T) {
 	nodes, err = driver.GetStorageNodes(cluster)
 	require.Error(t, err)
 	require.Empty(t, nodes)
+}
+
+func createK8sNode(nodeName string, allowedPods int) *v1.Node {
+	return &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   nodeName,
+			Labels: make(map[string]string),
+		},
+		Status: v1.NodeStatus{
+			Allocatable: map[v1.ResourceName]resource.Quantity{
+				v1.ResourcePods: resource.MustParse(strconv.Itoa(allowedPods)),
+			},
+		},
+	}
+}
+
+func createStoragePod(
+	cluster *corev1.StorageCluster,
+	podName, nodeName string,
+	labels map[string]string,
+) *v1.Pod {
+	clusterRef := metav1.NewControllerRef(cluster, corev1.SchemeGroupVersion.WithKind("StorageCluster"))
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            podName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+			Containers: []v1.Container{{
+				Name: "portworx",
+				Args: []string{
+					"-c", "px-cluster",
+				},
+			}},
+		},
+	}
 }
 
 func manifestSetup() {
