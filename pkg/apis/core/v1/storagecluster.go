@@ -705,8 +705,8 @@ const (
 	ClusterConditionTypePreflight ClusterConditionType = "Preflight"
 	// ClusterConditionTypeInstall indicates the phase for a component install operation on the cluster
 	ClusterConditionTypeInstall ClusterConditionType = "Install"
-	// ClusterConditionTypeUpgrade indicates the phase for a component upgrade operation on the cluster
-	ClusterConditionTypeUpgrade ClusterConditionType = "Upgrade"
+	// ClusterConditionTypeUpdate indicates the phase for a component update operation on the cluster
+	ClusterConditionTypeUpdate ClusterConditionType = "Update"
 	// ClusterConditionTypeDelete indicates the phase for a component delete operation on the cluster
 	ClusterConditionTypeDelete ClusterConditionType = "Delete"
 	// ClusterConditionTypeMigration indicates the phase for a component migration operation on the cluster

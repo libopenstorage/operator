@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,6 +69,8 @@ const (
 	StoragelessNodeValue = "storageless"
 	// StoragePartitioningEnvKey is the storage spec environment variable used to set storage/storageless node type
 	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
+	// DefaultStorageClusterUniqueLabelKey is the controller revision hash of storage cluster
+	DefaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
 )
 
 var (

@@ -11,6 +11,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/assert"
@@ -217,6 +218,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 			Phase: string(corev1.ClusterStateInit),
 		},
 	}
+	latestHash := "latest-hash"
 
 	testCases := []struct {
 		name          string
@@ -397,6 +399,71 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 			},
 			expectedPhase: "Failed",
 		},
+		{
+			name: "with-old-hash-should-mark-as-upgrading-in-existing-nodes",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_OK,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+					Labels: map[string]string{
+						util.DefaultStorageClusterUniqueLabelKey: "old-hash",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "Updating",
+		},
+		{
+			name:   "with-old-hash-should-mark-as-upgrading-in-remaining-nodes",
+			pxNode: nil,
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+					Labels: map[string]string{
+						util.DefaultStorageClusterUniqueLabelKey: "old-hash",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "Updating",
+		},
+		{
+			name: "with-latest-hash-and-validate-status-phase",
+			pxNode: &api.StorageNode{
+				Id:                "id",
+				SchedulerNodeName: "k8s-node",
+				Status:            api.Status_STATUS_OK,
+			},
+			storageNode: &corev1.StorageNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "k8s-node",
+					Namespace: cluster.Namespace,
+					Labels: map[string]string{
+						util.DefaultStorageClusterUniqueLabelKey: latestHash,
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						// NodeState condition will be automatically added
+					},
+				},
+			},
+			expectedPhase: "Online",
+		},
 	}
 
 	// Create fake k8s client with fake service that will point the client
@@ -427,9 +494,16 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 		},
 		Spec: v1.PodSpec{
 			NodeName: "k8s-node",
+			Containers: []v1.Container{{
+				Name: "portworx",
+				Args: []string{
+					"-c", "px-cluster",
+				},
+			}},
 		},
 	}
-	err = k8sClient.Create(context.TODO(), pxPod)
+	pxPod.Labels[util.DefaultStorageClusterUniqueLabelKey] = latestHash
+	err = k8sClient.Create(context.TODO(), pxPod.DeepCopy())
 	require.NoError(t, err)
 
 	expectedClusterResp := &api.SdkClusterInspectCurrentResponse{
@@ -456,7 +530,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 				Return(expectedNodeEnumerateResp, nil).
 				Times(1)
 
-			err = driver.UpdateStorageClusterStatus(cluster)
+			err = driver.UpdateStorageClusterStatus(cluster, latestHash)
 			require.NoError(t, err)
 
 			storageNode := &corev1.StorageNode{}
