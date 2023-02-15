@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/libopenstorage/openstorage/api"
@@ -34,6 +35,7 @@ const (
 
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
+	clusterHash string,
 ) error {
 	if cluster.Status.Phase == "" {
 		cluster.Status.ClusterName = cluster.Name
@@ -42,11 +44,26 @@ func (p *portworx) UpdateStorageClusterStatus(
 	}
 
 	convertDeprecatedClusterStatus(cluster)
+	// Update runtime status and StorageNodes from SDK server
+	if err := p.updatePortworxRuntimeStatus(cluster); err != nil {
+		return err
+	}
+
+	// Update migration status
 	p.updatePortworxMigrationStatus(cluster)
-	err := p.updatePortworxRuntimeStatus(cluster)
+
+	// Update install and update status
+	storageNodes := &corev1.StorageNodeList{}
+	if err := p.k8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
+		logrus.Warnf("failed to get a list of StorageNode: %v", err)
+	}
+	p.updatePortworxInstallStatus(cluster, storageNodes.Items)
+	p.updatePortworxUpdateStatus(cluster, storageNodes.Items, clusterHash)
+
+	// Iterate all status conditions to conclude the storage cluster state
 	newState := getStorageClusterState(cluster)
 	cluster.Status.Phase = string(newState)
-	return err
+	return nil
 }
 
 func convertDeprecatedClusterStatus(
@@ -195,6 +212,109 @@ func (p *portworx) updatePortworxMigrationStatus(
 	}
 }
 
+// updatePortworxInstallStatus updates portworx install status, expected status: InProgress, Completed
+// If there's 1 node that has Initializing status and portworx is not initialized, mark as PortworxInstallInProgress
+// If all nodes status are updated according to SDK server response and portworx is installing, mark as PortworxInstallCompleted
+func (p *portworx) updatePortworxInstallStatus(
+	cluster *corev1.StorageCluster,
+	storageNodes []corev1.StorageNode,
+) {
+	if len(storageNodes) == 0 {
+		logrus.Debugf("no storage nodes provided to update portworx install status")
+		return
+	}
+	installCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeInstall)
+	// Install only happens once on fresh install
+	if installCondition != nil && installCondition.Status == corev1.ClusterConditionStatusCompleted {
+		return
+	}
+
+	initializingCount := 0
+	for _, storageNode := range storageNodes {
+		if storageNode.Status.Phase == string(corev1.NodeInitStatus) {
+			initializingCount += 1
+		}
+	}
+
+	if initializingCount == 0 && installCondition != nil && installCondition.Status == corev1.ClusterConditionStatusInProgress {
+		msg := fmt.Sprintf("Portworx installation completed on %v nodes", len(storageNodes))
+		logrus.Info(msg)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeInstall,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: msg,
+		})
+	} else if initializingCount != 0 {
+		msg := fmt.Sprintf("Portworx installation completed on %v/%v nodes, %v nodes remaining", len(storageNodes)-initializingCount, len(storageNodes), initializingCount)
+		logrus.Info(msg)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeInstall,
+			Status:  corev1.ClusterConditionStatusInProgress,
+			Message: msg,
+		})
+	}
+}
+
+// updatePortworxUpdateStatus updates portworx update status, expected status: InProgress, Completed
+// If there's 1 node that has NodeUpdateInProgress status, mark as PortworxUpdateInProgress
+// If all nodes status are updated according to SDK server response and portworx is updating, mark as PortworxUpdateCompleted
+func (p *portworx) updatePortworxUpdateStatus(
+	cluster *corev1.StorageCluster,
+	storageNodes []corev1.StorageNode,
+	clusterHash string,
+) {
+	if len(storageNodes) == 0 {
+		logrus.Debugf("no storage nodes provided to update portworx update status")
+		return
+	}
+	nodesToPods, err := p.getNodesToPortworxPods(cluster)
+	if err != nil {
+		return
+	}
+
+	updatingCount := 0
+	for _, storageNode := range storageNodes {
+		if storageNode.Status.Phase == string(corev1.NodeUpdateStatus) {
+			updatingCount += 1
+			continue
+		}
+		portworxPods := nodesToPods[storageNode.Name]
+		if len(portworxPods) != 1 {
+			logrus.Warnf("failed to get px pod associated with StorageNode %v/%v, found %v portworx pods",
+				storageNode.Namespace, storageNode.Name, len(nodesToPods[storageNode.Name]))
+			return
+		}
+		if p.needsStorageNodeUpdate(cluster, &storageNode, portworxPods[0], clusterHash) {
+			updatingCount += 1
+			continue
+		}
+	}
+
+	updateCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeUpdate)
+	if updatingCount == 0 && updateCondition != nil && updateCondition.Status == corev1.ClusterConditionStatusInProgress {
+		// TODO: PWX-29455 calculate the upgrade time duration
+		msg := "Portworx update completed"
+		logrus.Info(msg)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeUpdate,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: msg,
+		})
+	} else if updatingCount != 0 {
+		msg := fmt.Sprintf("Portworx update in progress, %v nodes remaining", updatingCount)
+		logrus.Info(msg)
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeUpdate,
+			Status:  corev1.ClusterConditionStatusInProgress,
+			Message: msg,
+		})
+	}
+}
+
 // getPortworxConditions returns a map of portworx conditions with type as keys
 func getPortworxConditions(
 	cluster *corev1.StorageCluster,
@@ -233,6 +353,13 @@ func getStorageClusterState(
 	// Pending, InProgress, Completed
 	migrationCondition := pxConditions[corev1.ClusterConditionTypeMigration]
 	if migrationCondition != nil && migrationCondition.Status != corev1.ClusterConditionStatusCompleted {
+		return corev1.ClusterStateInit
+	}
+
+	// Portworx install conditions:
+	// InProgress, Completed
+	installCondition := pxConditions[corev1.ClusterConditionTypeInstall]
+	if installCondition != nil && installCondition.Status == corev1.ClusterConditionStatusInProgress {
 		return corev1.ClusterStateInit
 	}
 
@@ -301,6 +428,10 @@ func (p *portworx) updateStorageNodes(
 	}
 
 	kvdbNodeMap := p.getKvdbMap(cluster)
+	nodesToPods, err := p.getNodesToPortworxPods(cluster)
+	if err != nil {
+		return err
+	}
 
 	// Find all k8s nodes where Portworx is actually running
 	currentPxNodes := make(map[string]bool)
@@ -318,14 +449,24 @@ func (p *portworx) updateStorageNodes(
 
 		currentPxNodes[node.SchedulerNodeName] = true
 
-		storageNode, err := p.createOrUpdateStorageNode(cluster, node)
+		portworxPods := nodesToPods[node.SchedulerNodeName]
+		portworxPod := &v1.Pod{}
+		if len(portworxPods) != 1 {
+			logrus.Warnf("failed to get px pod associated with node %v, found %v portworx pods",
+				node.SchedulerNodeName, len(portworxPods))
+		} else {
+			portworxPod = portworxPods[0]
+		}
+
+		storageNode, err := p.createOrUpdateStorageNode(cluster, node, portworxPod)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update StorageNode for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, util.FailedSyncReason, msg)
 			continue
 		}
 
-		err = p.updateStorageNodeStatus(storageNode, node, kvdbNodeMap)
+		updateStorageNode := p.needsStorageNodeUpdate(cluster, storageNode, portworxPod, "")
+		err = p.updateStorageNodeStatus(storageNode, node, kvdbNodeMap, updateStorageNode)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to update StorageNode status for nodeID %v: %v", node.Id, err)
 			p.warningEvent(cluster, util.FailedSyncReason, msg)
@@ -348,27 +489,9 @@ func (p *portworx) updateRemainingStorageNodes(
 	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) error {
-	// Find all k8s nodes where Portworx pods are running
-	pxLabels := p.GetSelectorLabels()
-	portworxPodList := &v1.PodList{}
-	err := p.k8sClient.List(
-		context.TODO(),
-		portworxPodList,
-		&client.ListOptions{
-			Namespace:     cluster.Namespace,
-			LabelSelector: labels.SelectorFromSet(pxLabels),
-		},
-	)
+	nodesToPods, err := p.getNodesToPortworxPods(cluster)
 	if err != nil {
-		return fmt.Errorf("failed to get list of portworx pods. %v", err)
-	}
-
-	currentPxPodNodes := make(map[string]bool)
-	for _, pod := range portworxPodList.Items {
-		controllerRef := metav1.GetControllerOf(&pod)
-		if controllerRef != nil && controllerRef.UID == cluster.UID && len(pod.Spec.NodeName) != 0 {
-			currentPxPodNodes[pod.Spec.NodeName] = true
-		}
+		return err
 	}
 
 	storageNodes := &corev1.StorageNodeList{}
@@ -378,7 +501,7 @@ func (p *portworx) updateRemainingStorageNodes(
 
 	for _, storageNode := range storageNodes.Items {
 		pxNodeExists := currentPxNodes[storageNode.Name]
-		pxPodExists := currentPxPodNodes[storageNode.Name]
+		pxPods, pxPodExists := nodesToPods[storageNode.Name]
 		if !pxNodeExists && !pxPodExists {
 			logrus.Infof("Deleting orphan StorageNode %v/%v",
 				storageNode.Namespace, storageNode.Name)
@@ -391,10 +514,23 @@ func (p *portworx) updateRemainingStorageNodes(
 			}
 		} else if !pxNodeExists && pxPodExists {
 			// If the portworx pod exists, but corresponding portworx node is missing in
-			// enumerate, then it's either still initializing, failed or removed from cluster.
-			// If it's not initializing or failed, then change the node phase to Unknown.
+			// enumerate, then it's either still initializing, upgrading, failed or removed from cluster.
+			// If it's not initializing, upgrading or failed, then change the node phase to Unknown.
+			if len(pxPods) != 1 {
+				logrus.Warnf("failed to get px pod associated with StorageNode %v/%v, found %v portworx pods",
+					storageNode.Namespace, storageNode.Name, len(pxPods))
+				continue
+			} else if p.needsStorageNodeUpdate(cluster, &storageNode, pxPods[0], "") {
+				// Update the NodeState to Updating
+				nodeStateCondition := &corev1.NodeCondition{
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeUpdateStatus,
+				}
+				operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
+			}
 			newPhase := getStorageNodePhase(&storageNode.Status)
 			if newPhase != string(corev1.NodeInitStatus) &&
+				newPhase != string(corev1.NodeUpdateStatus) &&
 				newPhase != string(corev1.NodeFailedStatus) {
 				newPhase = string(corev1.NodeUnknownStatus)
 			}
@@ -415,9 +551,65 @@ func (p *portworx) updateRemainingStorageNodes(
 	return nil
 }
 
+// getNodesToPortworxPods find all k8s nodes where Portworx pods are running
+func (p *portworx) getNodesToPortworxPods(
+	cluster *corev1.StorageCluster,
+) (map[string][]*v1.Pod, error) {
+	pxLabels := p.GetSelectorLabels()
+	portworxPodList := &v1.PodList{}
+	err := p.k8sClient.List(
+		context.TODO(),
+		portworxPodList,
+		&client.ListOptions{
+			Namespace:     cluster.Namespace,
+			LabelSelector: labels.SelectorFromSet(pxLabels),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list of portworx pods. %v", err)
+	}
+
+	// Create a map of node name to px pod list
+	nodesToPods := make(map[string][]*v1.Pod)
+	for _, pod := range portworxPodList.Items {
+		controllerRef := metav1.GetControllerOf(&pod)
+		if controllerRef != nil && controllerRef.UID == cluster.UID && len(pod.Spec.NodeName) != 0 {
+			nodesToPods[pod.Spec.NodeName] = append(nodesToPods[pod.Spec.NodeName], pod.DeepCopy())
+		}
+	}
+	return nodesToPods, nil
+}
+
+// needsStorageNodeUpdate checks if a storage node needs update, there are 3 cases:
+// 1. check if storage node is updated according to px pod hash
+// 2. check if storage node is updated according to StorageCluster hash
+// 3. hash is updated but still needs node update
+func (p *portworx) needsStorageNodeUpdate(
+	cluster *corev1.StorageCluster,
+	storageNode *corev1.StorageNode,
+	portworxPod *v1.Pod,
+	clusterHash string,
+) bool {
+	// storage cluster hash will override pod hash to check overall update progress
+	expectedHash := portworxPod.Labels[util.DefaultStorageClusterUniqueLabelKey]
+	if clusterHash != "" {
+		// checking cluster level if update is needed
+		if !p.IsPodUpdated(cluster, portworxPod) {
+			return true
+		}
+		expectedHash = clusterHash
+	}
+	if expectedHash == "" {
+		return false
+	}
+	storageNodeHash := storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey]
+	return storageNodeHash != "" && storageNodeHash != expectedHash
+}
+
 func (p *portworx) createOrUpdateStorageNode(
 	cluster *corev1.StorageCluster,
 	node *api.StorageNode,
+	pod *v1.Pod,
 ) (*corev1.StorageNode, error) {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	storageNode := &corev1.StorageNode{}
@@ -434,10 +626,17 @@ func (p *portworx) createOrUpdateStorageNode(
 	}
 
 	originalStorageNode := storageNode.DeepCopy()
+	originalHash := originalStorageNode.Labels[util.DefaultStorageClusterUniqueLabelKey]
 	storageNode.Name = node.SchedulerNodeName
 	storageNode.Namespace = cluster.Namespace
 	storageNode.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	storageNode.Labels = p.GetSelectorLabels()
+	// If px pod is ready, update storage node hash, otherwise preserve the old hash
+	if podutil.IsPodReady(pod) {
+		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = pod.Labels[util.DefaultStorageClusterUniqueLabelKey]
+	} else if originalHash != "" {
+		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = originalHash
+	}
 
 	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
 		storageNode.Spec.Version = version
@@ -463,6 +662,7 @@ func (p *portworx) updateStorageNodeStatus(
 	storageNode *corev1.StorageNode,
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
+	updateStorageNode bool,
 ) error {
 	originalTotalSize := storageNode.Status.Storage.TotalSize
 	storageNode.Status.Storage.TotalSize = *resource.NewQuantity(0, resource.BinarySI)
@@ -478,6 +678,9 @@ func (p *portworx) updateStorageNodeStatus(
 	nodeStateCondition := &corev1.NodeCondition{
 		Type:   corev1.NodeStateCondition,
 		Status: mapNodeStatus(node.Status),
+	}
+	if updateStorageNode {
+		nodeStateCondition.Status = corev1.NodeUpdateStatus
 	}
 
 	var (
