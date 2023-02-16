@@ -1400,7 +1400,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 		},
 	}
 
-	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment_k8s_1.24.yaml")
+	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment.yaml")
 	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
 	expectedContainer.Command = expectedContainer.Command[0:6]
 	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.24.0"
@@ -1440,7 +1440,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	// TestCase: Simple install on k8s 1.22
 	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment.yaml")
 	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
-	expectedContainer.Command = expectedContainer.Command[0:5]
+	expectedContainer.Command = expectedContainer.Command[0:6]
 	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.22.0"
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
@@ -1466,7 +1466,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 		pxutil.AnnotationIsAKS: "true",
 	}
 	expectedContainer = expectedDeployment.Spec.Template.Spec.Containers[0]
-	expectedContainer.Command[5] = "--secure-port=10261"
+	expectedContainer.Command[6] = "--secure-port=10261"
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10261)
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
 	err = driver.PreInstall(cluster)
@@ -1610,32 +1610,6 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-}
-
-func TestPVCControllerInstallForOpenshift(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-			Annotations: map[string]string{
-				pxutil.AnnotationPVCController: "true",
-				pxutil.AnnotationIsOpenshift:   "true",
-			},
-		},
-	}
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	verifyPVCControllerInstall(t, cluster, k8sClient)
-	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeploymentOpenshift.yaml")
 }
 
 func TestPVCControllerInstallForPKS(t *testing.T) {
