@@ -101,9 +101,7 @@ func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	}
 
 	// Validate PX Operator deployment and version
-	// NOTE: In Marketplace PX Operator deployment, we will use opRegistryTag to compare as we do not actually see the -dev tag
-	// and we get image tag from the OPERATOR_CONDITION_NAME value in the portworx-operator deployment, which is same as registry tag
-	if err := ValidatePxOperatorDeploymentAndVersion(opRegistryTag, PxNamespace); err != nil {
+	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
 		return err
 	}
 
@@ -212,7 +210,8 @@ func DeploySubscription(name, namespace, opTag string, testCatalogSource *v1alph
 
 // ApproveInstallPlan finds correct install plan and approves it
 func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscription) error {
-	logrus.Infof("Looking for InstallPlan and setting Approved to true")
+	expectedClusterServiceVersion := fmt.Sprintf("portworx-operator.v%s", opTag)
+	logrus.Infof("Looking for InstallPlan with CSV [%s] and setting Approved to true", expectedClusterServiceVersion)
 	t := func() (interface{}, bool, error) {
 		installPlanList, err := opmpops.Instance().ListInstallPlans(namespace)
 		if err != nil {
@@ -223,9 +222,10 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 			logrus.Infof("Successfully got list of InstallPlans in namespace [%s]", namespace)
 			for _, installPlan := range installPlanList.Items {
 				if subscription.Name == installPlan.OwnerReferences[0].Name {
+					logrus.Infof("Found InstallPlan [%s] in the list", installPlan.Name)
 					for _, clusterServiceVersions := range installPlan.Spec.ClusterServiceVersionNames {
-						if clusterServiceVersions == fmt.Sprintf("portworx-operator.v%s", opTag) {
-							logrus.Infof("Found the correct InstallPlan [%s] in namespace [%s]", installPlan.Name, installPlan.Namespace)
+						if clusterServiceVersions == expectedClusterServiceVersion {
+							logrus.Infof("Found the correct InstallPlan [%s] with expected CSV [%s] in namespace [%s]", installPlan.Name, expectedClusterServiceVersion, installPlan.Namespace)
 							logrus.Infof("Update Approved value to true for InstallPlan [%s]", installPlan.Name)
 							installPlan.Spec.Approved = true
 							_, err = opmpops.Instance().UpdateInstallPlan(&installPlan)
@@ -238,7 +238,7 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 					}
 				}
 			}
-			return nil, true, fmt.Errorf("failed to find the correct InstallPlan with OwnerReference for Subscription [%s] and/or PX Operator version [%s]", subscription.Name, opTag)
+			return nil, true, fmt.Errorf("failed to find the correct InstallPlan with OwnerReference for Subscription [%s] and/or CSV [%s]", subscription.Name, expectedClusterServiceVersion)
 		}
 		return nil, true, fmt.Errorf("failed to find any InstallPlans in namespace [%s]", namespace)
 	}
