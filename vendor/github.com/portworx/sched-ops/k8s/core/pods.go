@@ -69,6 +69,8 @@ type PodOps interface {
 	WaitForPodDeletion(uid types.UID, namespace string, timeout time.Duration) error
 	// RunCommandInPod runs given command in the given pod
 	RunCommandInPod(cmds []string, podName, containerName, namespace string) (string, error)
+	// RunCommandInPodEx is extended version of RunCommandInPod
+	RunCommandInPodEx(cmds []string, podName, containerName, namespace string, useTTY bool, stdin io.Reader, stdout, stderr io.Writer) error
 	// ValidatePod validates the given pod if it's ready
 	ValidatePod(pod *corev1.Pod, timeout, retryInterval time.Duration) error
 	// WatchPods sets up a watcher that listens for the changes to pods in given namespace
@@ -435,26 +437,21 @@ func (c *Client) WaitForPodDeletion(uid types.UID, namespace string, timeout tim
 	return nil
 }
 
-// RunCommandInPod runs given command in the given pod
-func (c *Client) RunCommandInPod(cmds []string, podName, containerName, namespace string) (string, error) {
+// RunCommandInPodEx runs given command in the given pod  (extended syntax)
+func (c *Client) RunCommandInPodEx(cmds []string, podName, containerName, namespace string, useTTY bool, stdin io.Reader, stdout, stderr io.Writer) error {
 	err := c.initClient()
 	if err != nil {
-		return "", err
-	}
-
-	var (
-		execOut bytes.Buffer
-		execErr bytes.Buffer
-	)
-
-	pod, err := c.kubernetes.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
-	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(containerName) == 0 {
+		pod, err := c.kubernetes.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
 		if len(pod.Spec.Containers) != 1 {
-			return "", fmt.Errorf("could not determine which container to use")
+			return fmt.Errorf("could not determine which container to use")
 		}
 
 		containerName = pod.Spec.Containers[0].Name
@@ -469,21 +466,31 @@ func (c *Client) RunCommandInPod(cmds []string, podName, containerName, namespac
 	req.VersionedParams(&corev1.PodExecOptions{
 		Container: containerName,
 		Command:   cmds,
-		Stdout:    true,
-		Stderr:    true,
+		Stdin:     (stdin != nil),
+		Stdout:    (stdout != nil),
+		Stderr:    (stderr != nil),
 	}, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(c.config, "POST", req.URL())
 	if err != nil {
-		return "", fmt.Errorf("failed to init executor: %v", err)
+		return fmt.Errorf("failed to init executor: %v", err)
 	}
 
 	err = exec.Stream(remotecommand.StreamOptions{
-		Stdout: &execOut,
-		Stderr: &execErr,
-		Tty:    false,
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+		Tty:    useTTY,
 	})
 
+	return err
+}
+
+// RunCommandInPod runs given command in the given pod  (simplified syntax)
+func (c *Client) RunCommandInPod(cmds []string, podName, containerName, namespace string) (string, error) {
+	var execOut, execErr bytes.Buffer
+
+	err := c.RunCommandInPodEx(cmds, podName, containerName, namespace, false, nil, &execOut, &execErr)
 	if err != nil {
 		return execErr.String(), fmt.Errorf("could not execute: %v: %v %v", err, execErr.String(), execOut.String())
 	}
