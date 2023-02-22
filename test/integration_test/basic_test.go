@@ -32,7 +32,8 @@ const (
 )
 
 var (
-	pxVer2_9, _ = version.NewVersion("2.9")
+	pxVer2_9, _  = version.NewVersion("2.9")
+	pxVer2_12, _ = version.NewVersion("2.12")
 )
 
 var testStorageClusterBasicCases = []types.TestCase{
@@ -474,31 +475,39 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		require.True(t, ok)
 
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		telemetryEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled
 
-		// Validate Telemetry is not enabled by default
-		logrus.Info("Validate Telemetry is not enabled by default")
-		if cluster.Spec.Monitoring != nil {
-			if cluster.Spec.Monitoring.Telemetry != nil {
-				require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled, "failed to validate default Telemetry status: expected: false, actual: %v", cluster.Spec.Monitoring.Telemetry.Enabled)
-			}
-		}
+		// Validate Telemetry is enabled by default with PX 2.12+ and Operator 1.11+
+		pxVersion := testutil.GetPortworxVersion(cluster)
+		opVersion, _ := testutil.GetPxOperatorVersion()
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer1_11) {
+			logrus.Infof("Validate Telemetry is enabled by default, PX version [%s], operator version [%s]", pxVersion, opVersion)
+			require.True(t, telemetryEnabled, "failed to validate default Telemetry status: expected enabled [true], actual enabled [%v]", telemetryEnabled)
 
-		// Enable Telemetry
-		logrus.Info("Enable Telemetry and validate")
-		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-				Telemetry: &corev1.TelemetrySpec{
-					Enabled: true,
-				},
+			err = testutil.ValidateMonitoring(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
+			require.NoError(t, err)
+		} else {
+			// Validate Telemetry is not enabled by default
+			logrus.Infof("Validate Telemetry is not enabled by default, PX version [%s], operator version [%s]", pxVersion, opVersion)
+			require.False(t, telemetryEnabled, "failed to validate default Telemetry status: expected enabled [false], actual enabled [%v]", telemetryEnabled)
+
+			// Enable Telemetry
+			logrus.Info("Enable Telemetry and validate")
+			updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+				cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+					Telemetry: &corev1.TelemetrySpec{
+						Enabled: true,
+					},
+				}
+				return cluster
 			}
-			return cluster
+			cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+			require.NoError(t, err)
 		}
-		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
-		require.NoError(t, err)
 
 		// Disable Telemetry and validate
 		logrus.Info("Disable Telemetry and validate")
-		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			cluster.Spec.Monitoring.Telemetry.Enabled = false
 			return cluster
 		}
