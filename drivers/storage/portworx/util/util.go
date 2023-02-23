@@ -206,7 +206,7 @@ const (
 	// ErrMsgGrpcConnection error message if failed to connect to GRPC server
 	ErrMsgGrpcConnection = "error connecting to GRPC server"
 	// ImageNamePause is the container image to use for the pause container
-	ImageNamePause = "k8s.gcr.io/pause:3.1"
+	ImageNamePause = k8sutil.DefaultK8SRegistryPath + "/pause:3.1"
 
 	// userVolumeNamePrefix prefix used for user volume names to avoid name conflicts with existing volumes
 	userVolumeNamePrefix = "user-"

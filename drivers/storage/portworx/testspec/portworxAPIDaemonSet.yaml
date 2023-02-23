@@ -31,7 +31,7 @@ spec:
       hostPID: false
       containers:
         - name: portworx-api
-          image: k8s.gcr.io/pause:3.1
+          image: registry.k8s.io/pause:3.1
           imagePullPolicy: Always
           readinessProbe:
             periodSeconds: 10

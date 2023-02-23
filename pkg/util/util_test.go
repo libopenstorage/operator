@@ -88,26 +88,26 @@ func TestImageURN(t *testing.T) {
 	out = getImageURN("", "registry.io//", "test/this/image")
 	require.Equal(t, "registry.io/image", out)
 
-	out = getImageURN("k8s.gcr.io", "registry.io//", "k8s.gcr.io/pause:3.1")
+	out = getImageURN("registry.k8s.io", "registry.io//", "registry.k8s.io/pause:3.1")
 	require.Equal(t, "registry.io/pause:3.1", out)
 
-	// Update it again, now k8s.gcr.io should be deleted from common registries.
-	out = getImageURN("gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
-	require.Equal(t, "registry.io/k8s.gcr.io/pause:3.1", out)
+	// Update it again, now registry.k8s.io should be deleted from common registries.
+	out = getImageURN("gcr.io", "registry.io", "registry.k8s.io/pause:3.1")
+	require.Equal(t, "registry.io/pause:3.1", out)
 
-	out = getImageURN("", "registry.io//", "k8s.gcr.io/pause:3.1")
+	out = getImageURN("", "registry.io//", "registry.k8s.io/pause:3.1")
 	require.Equal(t, "registry.io/pause:3.1", out)
 
 	out = getImageURN("", "registry.io//", "gcr.io/pause:3.1")
 	require.Equal(t, "registry.io/pause:3.1", out)
 
-	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "gcr.io/pause:3.1")
+	out = getImageURN("gcr.io,registry.k8s.io", "registry.io", "gcr.io/pause:3.1")
 	require.Equal(t, "registry.io/pause:3.1", out)
 
-	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "k8s.gcr.io/pause:3.1")
+	out = getImageURN("gcr.io,registry.k8s.io", "registry.io", "registry.k8s.io/pause:3.1")
 	require.Equal(t, "registry.io/pause:3.1", out)
 
-	out = getImageURN("gcr.io,k8s.gcr.io", "registry.io", "testrepo/pause:3.1")
+	out = getImageURN("gcr.io,registry.k8s.io", "registry.io", "testrepo/pause:3.1")
 	require.Equal(t, "registry.io/testrepo/pause:3.1", out)
 
 	out = getImageURN("", "customRegistry.io", "registry.k8s.io/pause:3.1")
