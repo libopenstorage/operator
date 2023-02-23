@@ -20,6 +20,7 @@ import (
 var (
 	disksEncAzure = []string{"type=Premium_LRS,size=100,diskEncryptionSetID=invalid"}
 	disksEncGce   = []string{"type=pd-standard,size=150,kms=invalid"}
+	disksEncOke   = []string{"type=pd-standard,size=150,kms=invalid"}
 )
 
 var TestCloudDiskEncryptionCases = []types.TestCase{
@@ -45,12 +46,19 @@ var TestCloudDiskEncryptionCases = []types.TestCase{
 					},
 				}
 			}
+			if ci_utils.IsOke {
+				cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+					CloudStorageCommon: corev1.CloudStorageCommon{
+						DeviceSpecs: &disksEncOke,
+					},
+				}
+			}
 
 			return cluster
 		},
 		TestFunc: EncryptedDiskInstallFail,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return !ci_utils.IsAks && !ci_utils.IsGke
+			return !ci_utils.IsAks && !ci_utils.IsGke && !ci_utils.IsOke
 
 		},
 	},
@@ -116,6 +124,12 @@ func EncryptedDiskInstallPass(tc *types.TestCase) func(*testing.T) {
 						break
 					}
 					if ci_utils.IsGke &&
+						strings.Contains(s, "kms=") {
+						encryptedDiskParam = true
+						logrus.Infof("Param kms is present in deviceSpec")
+						break
+					}
+					if ci_utils.IsOke &&
 						strings.Contains(s, "kms=") {
 						encryptedDiskParam = true
 						logrus.Infof("Param kms is present in deviceSpec")
