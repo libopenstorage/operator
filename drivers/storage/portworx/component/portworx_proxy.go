@@ -227,7 +227,7 @@ func (c *portworxProxy) createDaemonSet(
 		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
 	}
 
-	imageName := util.GetImageURN(cluster, "k8s.gcr.io/pause:3.1")
+	imageName := util.GetImageURN(cluster, k8sutil.DefaultK8SRegistryPath+"/pause:3.1")
 
 	modified := existingImageName != imageName ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||

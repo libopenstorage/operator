@@ -48,7 +48,7 @@ func TestParseCustomImageRegistry(t *testing.T) {
 		"portworx/stork:tag",
 		"a/autopilot:tag",
 		"docker.io/b/csi-provisioner:tag",
-		"k8s.gcr.io/c/snapshot-controller:tag",
+		"registry.k8s.io/c/snapshot-controller:tag",
 		"",
 	}
 	customRegistry, preserved := parseCustomImageRegistry(pxImage, desiredImages)
@@ -74,7 +74,7 @@ func TestParseCustomImageRegistry(t *testing.T) {
 	desiredImages = []string{
 		"registry.io/public:123/a/stork:tag",
 		"registry.io/public:123/portworx/autopilot:tag",
-		"registry.io/public:123/k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"registry.io/public:123/registry.k8s.io/openstorage/csi-provisioner:tag",
 		"registry.io/public:123/sig-storage/snapshot-controller:tag",
 		"",
 	}
@@ -87,7 +87,7 @@ func TestParseCustomImageRegistry(t *testing.T) {
 	desiredImages = []string{
 		"registry.io/stork:tag",
 		"registry.io/autopilot:tag",
-		"k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"registry.k8s.io/openstorage/csi-provisioner:tag",
 		"sig-storage/snapshot-controller:tag",
 		"",
 	}
@@ -99,7 +99,7 @@ func TestParseCustomImageRegistry(t *testing.T) {
 	desiredImages = []string{
 		"registry.io/public:123/a/stork:tag",
 		"registry.io/public:123/portworx/autopilot:tag",
-		"k8s.gcr.io/openstorage/csi-provisioner:tag",
+		"registry.k8s.io/openstorage/csi-provisioner:tag",
 		"sig-storage/snapshot-controller:tag",
 		"",
 	}

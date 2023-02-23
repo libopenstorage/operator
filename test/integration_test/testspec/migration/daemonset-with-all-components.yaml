@@ -132,7 +132,7 @@ spec:
             - name: dbusmount
               mountPath: /var/run/dbus
         - name: csi-node-driver-registrar
-          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.6.2
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
           imagePullPolicy: Always
           args:
             - "--v=5"
@@ -334,7 +334,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-snapshotter
-          image: k8s.gcr.io/sig-storage/csi-snapshotter:v4.0.0
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v4.0.0
           imagePullPolicy: Always
           args:
             - "--v=3"
@@ -349,7 +349,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-snapshot-controller
-          image: k8s.gcr.io/sig-storage/snapshot-controller:v4.0.0
+          image: registry.k8s.io/sig-storage/snapshot-controller:v4.0.0
           imagePullPolicy: Always
           args:
             - "--v=3"
@@ -363,7 +363,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-resizer
-          image: k8s.gcr.io/sig-storage/csi-resizer:v1.6.0
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.6.0
           imagePullPolicy: Always
           args:
             - "--v=3"
@@ -444,7 +444,7 @@ spec:
       hostPID: false
       containers:
         - name: portworx-api
-          image: k8s.gcr.io/pause:3.1
+          image: registry.k8s.io/pause:3.1
           imagePullPolicy: Always
           readinessProbe:
             periodSeconds: 10
@@ -1805,7 +1805,7 @@ spec:
           - --policy-configmap=stork-config
           - --policy-configmap-namespace=kube-system
           - --lock-object-name=stork-scheduler
-          image: k8s.gcr.io/kube-scheduler-amd64:v1.21.0
+          image: registry.k8s.io/kube-scheduler-amd64:v1.21.0
           imagePullPolicy: Always
           livenessProbe:
             httpGet:
@@ -1968,7 +1968,7 @@ spec:
         - --use-service-account-credentials=true
         - --leader-elect-resource-lock=configmaps
         - --leader-elect-resource-name=portworx-pvc-controller
-        image: k8s.gcr.io/kube-controller-manager-amd64:v1.21.0
+        image: registry.k8s.io/kube-controller-manager-amd64:v1.21.0
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 8
