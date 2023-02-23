@@ -851,7 +851,7 @@ func (c *Controller) createStorkSchedDeployment(
 
 	kubeSchedImage := "gcr.io/google_containers/kube-scheduler-amd64"
 	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
-		kubeSchedImage = "k8s.gcr.io/kube-scheduler-amd64"
+		kubeSchedImage = k8sutil.DefaultK8SRegistryPath + "/kube-scheduler-amd64"
 	}
 
 	k8sMinVersionForPinnedStorkScheduler, err := version.NewVersion(minK8sVersionForPinnedStorkScheduler)

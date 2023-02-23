@@ -673,7 +673,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	ds = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "k8s.gcr.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
 
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
@@ -1578,7 +1578,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment.yaml")
 	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
 	expectedContainer.Command = expectedContainer.Command[0:6]
-	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.24.0"
+	expectedContainer.Image = "registry.k8s.io/kube-controller-manager-amd64:v1.24.0"
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
@@ -1616,7 +1616,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	expectedDeployment := testutil.GetExpectedDeployment(t, "pvcControllerDeployment.yaml")
 	expectedContainer := expectedDeployment.Spec.Template.Spec.Containers[0]
 	expectedContainer.Command = expectedContainer.Command[0:6]
-	expectedContainer.Image = "k8s.gcr.io/kube-controller-manager-amd64:v1.22.0"
+	expectedContainer.Image = "registry.k8s.io/kube-controller-manager-amd64:v1.22.0"
 	expectedContainer.LivenessProbe.HTTPGet.Port = intstr.FromInt(10257)
 	expectedContainer.LivenessProbe.HTTPGet.Scheme = v1.URISchemeHTTPS
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
@@ -2356,7 +2356,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"k8s.gcr.io/kube-controller-manager-amd64:v1.18.7",
+		"registry.k8s.io/kube-controller-manager-amd64:v1.18.7",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -2393,7 +2393,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"k8s.gcr.io/kube-controller-manager-amd64:v1.17.10",
+		"registry.k8s.io/kube-controller-manager-amd64:v1.17.10",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -2429,7 +2429,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		"k8s.gcr.io/kube-controller-manager-amd64:v1.16.14",
+		"registry.k8s.io/kube-controller-manager-amd64:v1.16.14",
 		deployment.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7752,7 +7752,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7760,7 +7760,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7883,7 +7883,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -7891,7 +7891,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8012,12 +8012,12 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	pxAPIDaemonSet = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "k8s.gcr.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "registry.k8s.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pxProxyDaemonSet = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
-	require.Equal(t, "k8s.gcr.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "registry.k8s.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -8138,7 +8138,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -8146,7 +8146,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
 	require.Equal(t,
-		customRegistry+"/k8s.gcr.io/pause:3.1",
+		customRegistry+"/pause:3.1",
 		pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image,
 	)
 
@@ -9000,12 +9000,12 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	pxAPIDaemonSet = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxAPIDaemonSet, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "k8s.gcr.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "registry.k8s.io/pause:3.1", pxAPIDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pxProxyDaemonSet = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxProxyDaemonSet, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
-	require.Equal(t, "k8s.gcr.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
+	require.Equal(t, "registry.k8s.io/pause:3.1", pxProxyDaemonSet.Spec.Template.Spec.Containers[0].Image)
 
 	pvcDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, pvcDeployment, component.PVCDeploymentName, cluster.Namespace)
@@ -15039,7 +15039,7 @@ func TestCSISnapController(t *testing.T) {
 			Containers: []v1.Container{
 				{
 					Name:  "snapshot-controller",
-					Image: "k8s.gcr.io/sig-storage/snapshot-controller:v3.0.3",
+					Image: "registry.k8s.io/sig-storage/snapshot-controller:v3.0.3",
 				},
 			},
 		},
@@ -15085,7 +15085,7 @@ func TestCSISnapController(t *testing.T) {
 			Containers: []v1.Container{
 				{
 					Name:  "snapshot-controller",
-					Image: "k8s.gcr.io/sig-storage/snapshot-controller:v3.0.3",
+					Image: "registry.k8s.io/sig-storage/snapshot-controller:v3.0.3",
 				},
 			},
 		},

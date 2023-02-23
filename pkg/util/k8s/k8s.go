@@ -44,9 +44,9 @@ const (
 	NodeRoleLabelControlPlane = "node-role.kubernetes.io/control-plane"
 	NodeRoleLabelInfra        = "node-role.kubernetes.io/infra"
 	NodeRoleLabelWorker       = "node-role.kubernetes.io/worker"
-
 	// UpdateRevisionConflictErr contains controller-runtime update error message when updating stale objects
 	UpdateRevisionConflictErr = "the object has been modified; please apply your changes to the latest version and try again"
+	DefaultK8SRegistryPath    = "registry.k8s.io"
 )
 
 var (
