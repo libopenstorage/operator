@@ -274,7 +274,8 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 
 				// Set defaults
 				k8sVersion, _ := version.NewVersion(ci_utils.K8sVersion)
-				portworx.SetPortworxDefaults(cluster, k8sVersion)
+				err = portworx.SetPortworxDefaults(cluster, k8sVersion)
+				require.NoError(t, err)
 
 				// Update live StorageCluster
 				cluster, err = ci_utils.UpdateStorageCluster(cluster)

@@ -211,7 +211,8 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Use default image from release manifest when spec.image is not set
 	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
@@ -226,14 +227,16 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	// Use default image from release manifest when spec.image has empty string
 	cluster.Spec.Image = "  "
 	cluster.Spec.Version = "  "
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 
 	// Don't use default image when spec.image has a value
 	cluster.Spec.Image = "foo/image:1.0.0"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "foo/image:1.0.0", cluster.Spec.Image)
 	require.Equal(t, "1.0.0", cluster.Spec.Version)
 	require.Equal(t, "1.0.0", cluster.Status.Version)
@@ -241,21 +244,24 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	// Populate version and image tag even if not present
 	cluster.Spec.Image = "test/image"
 	cluster.Spec.Version = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "test/image:2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 
 	// Empty kvdb spec should still set internal kvdb as default
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 
 	// Should not overwrite complete kvdb spec if endpoints are empty
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		AuthSecret: "test-secret",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, "test-secret", cluster.Spec.Kvdb.AuthSecret)
 
@@ -263,35 +269,41 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		Endpoints: []string{"endpoint1"},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Kvdb.Internal)
 
 	// Don't overwrite secrets provider if already set
 	cluster.Spec.SecretsProvider = stringPtr("aws-kms")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "aws-kms", *cluster.Spec.SecretsProvider)
 
 	// Don't overwrite secrets provider if set to empty
 	cluster.Spec.SecretsProvider = stringPtr("")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "", *cluster.Spec.SecretsProvider)
 
 	// Don't overwrite start port if already set
 	startPort := uint32(10001)
 	cluster.Spec.StartPort = &startPort
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, uint32(10001), *cluster.Spec.StartPort)
 
 	// Do not use default storage config if cloud storage config present
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 	cluster.Spec.Storage = nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Storage)
 
 	// Add default storage config if cloud storage and storage config are both present
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
 	cluster.Spec.Storage = &corev1.StorageSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, *cluster.Spec.Storage.UseAll)
 
 	// Do no use default storage config if devices is not nil
@@ -299,37 +311,43 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		Devices: &devices,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Storage.UseAll)
 
 	devices = append(devices, "/dev/sda")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Storage.UseAll)
 
 	// Do not set useAll if useAllWithPartitions is true
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAllWithPartitions: boolPtr(true),
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Storage.UseAll)
 
 	// Should set useAll if useAllWithPartitions is false
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAllWithPartitions: boolPtr(false),
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, *cluster.Spec.Storage.UseAll)
 
 	// Do not change useAll if already has a value
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: boolPtr(false),
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, *cluster.Spec.Storage.UseAll)
 
 	// Add default placement if node placement is nil
 	cluster.Spec.Placement = &corev1.PlacementSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
 	// By default monitoring is not enabled
@@ -340,7 +358,8 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		EnableMetrics: boolPtr(true),
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
 	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
 
@@ -352,7 +371,8 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 			Enabled: true,
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
 	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
 }
@@ -416,7 +436,8 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
 	// TestCase: placement above k8s 1.24
@@ -484,7 +505,8 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 		GitVersion: "v1.24.0",
 	}
 	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 }
 
@@ -502,7 +524,8 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	}
 
 	// No defaults should be set
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, corev1.StorageClusterSpec{}, cluster.Spec)
 
 	// Use default component versions if components are enabled
@@ -515,7 +538,8 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
@@ -538,7 +562,8 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	}
 
 	// Don't enable lighthouse if nothing specified in the user interface spec
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface)
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 
@@ -548,7 +573,8 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 		Enabled:   false,
 		LockImage: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.False(t, cluster.Spec.UserInterface.LockImage)
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
@@ -557,7 +583,8 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
@@ -566,32 +593,37 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 		Enabled: true,
 		Image:   "custom/lighthouse-image:1.2.3",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "custom/lighthouse-image:1.2.3", cluster.Spec.UserInterface.Image)
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 	require.False(t, cluster.Spec.UserInterface.LockImage)
 
 	// Reset lockImage flag even when spec image is set as it is deprecated
 	cluster.Spec.UserInterface.LockImage = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.UserInterface.LockImage)
 	require.Equal(t, "custom/lighthouse-image:1.2.3", cluster.Spec.UserInterface.Image)
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 
 	// Use image from release manifest if spec image is reset
 	cluster.Spec.UserInterface.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.UserInterface = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
 
 	// Do not overwrite desired lighthouse image even if
@@ -599,21 +631,24 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
@@ -621,7 +656,8 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
@@ -629,7 +665,8 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
@@ -637,13 +674,15 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.UserInterface = "portworx/px-lighthouse:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
 
 	// Don't change desired image if auto update of components is not set
 	cluster.Spec.AutoUpdateComponents = nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:old", cluster.Status.DesiredImages.UserInterface)
 
@@ -653,13 +692,15 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	// Resetting status.version to simulate first run by the operator
 	cluster.Status.Version = ""
 	cluster.Spec.UserInterface.Image = "portworx/px-lighthouse:existing"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.UserInterface.Image)
 	require.Equal(t, "portworx/px-lighthouse:"+newCompVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Reset desired image if lighthouse has been disabled
 	cluster.Spec.UserInterface.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.UserInterface)
 }
 
@@ -677,7 +718,8 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	}
 
 	// Don't enable autopilot if nothing specified in the autopilot spec
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 
@@ -687,7 +729,8 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 		Enabled:   false,
 		LockImage: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.False(t, cluster.Spec.Autopilot.LockImage)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
@@ -696,7 +739,8 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	cluster.Spec.Autopilot = &corev1.AutopilotSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
@@ -705,32 +749,37 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 		Enabled: true,
 		Image:   "custom/autopilot-image:1.2.3",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "custom/autopilot-image:1.2.3", cluster.Spec.Autopilot.Image)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 	require.False(t, cluster.Spec.Autopilot.LockImage)
 
 	// Reset lockImage flag even when spec image is set as it is deprecated
 	cluster.Spec.Autopilot.LockImage = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Autopilot.LockImage)
 	require.Equal(t, "custom/autopilot-image:1.2.3", cluster.Spec.Autopilot.Image)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 
 	// Use image from release manifest if spec image is reset
 	cluster.Spec.Autopilot.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.Autopilot = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
 
 	// Do not overwrite desired autopilot image even if
@@ -738,21 +787,24 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
@@ -760,7 +812,8 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+compVersion(), cluster.Status.DesiredImages.Autopilot)
 
@@ -768,7 +821,8 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
@@ -776,13 +830,15 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Autopilot = "portworx/autopilot:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
 
 	// Don't change desired image if auto update of components is not set
 	cluster.Spec.AutoUpdateComponents = nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:old", cluster.Status.DesiredImages.Autopilot)
 
@@ -792,17 +848,20 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	// Resetting status.version to simulate first run by the operator
 	cluster.Status.Version = ""
 	cluster.Spec.Autopilot.Image = "portworx/autopilot:existing"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Image)
 	require.Equal(t, "portworx/autopilot:"+newCompVersion(), cluster.Status.DesiredImages.Autopilot)
 
 	// Reset desired image if autopilot has been disabled
 	cluster.Spec.Autopilot.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 
 	// Check default autopilot provider is set if not specified
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	providers := cluster.Spec.Autopilot.Providers
 	require.Equal(t, 1, len(providers))
 	require.Equal(t, "prometheus", providers[0].Type)
@@ -823,7 +882,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	}
 
 	// Stork should be enabled by default
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, cluster.Spec.Stork.Enabled)
 
 	// Don't use default Stork image if disabled
@@ -832,7 +892,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 		Enabled:   false,
 		LockImage: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.False(t, cluster.Spec.Stork.LockImage)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
@@ -841,7 +902,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
@@ -850,32 +912,37 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 		Enabled: true,
 		Image:   "custom/stork-image:1.2.3",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "custom/stork-image:1.2.3", cluster.Spec.Stork.Image)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
 	require.False(t, cluster.Spec.Stork.LockImage)
 
 	// Reset lockImage flag even when spec image is set as it is deprecated
 	cluster.Spec.Stork.LockImage = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Stork.LockImage)
 	require.Equal(t, "custom/stork-image:1.2.3", cluster.Spec.Stork.Image)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
 
 	// Use image from release manifest if spec image is reset
 	cluster.Spec.Stork.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Use image from release manifest if desired was reset
 	cluster.Status.DesiredImages.Stork = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
 
 	// Do not overwrite desired stork image even if
@@ -883,21 +950,24 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Change desired image if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Change desired image if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
@@ -905,7 +975,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
 
@@ -913,7 +984,8 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
@@ -921,13 +993,15 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Stork = "openstorage/stork:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
 
 	// Don't change desired image if auto update of components is not set
 	cluster.Spec.AutoUpdateComponents = nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:old", cluster.Status.DesiredImages.Stork)
 
@@ -937,13 +1011,15 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	// Resetting status.version to simulate first run by the operator
 	cluster.Status.Version = ""
 	cluster.Spec.Stork.Image = "openstorage/stork:existing"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+newCompVersion(), cluster.Status.DesiredImages.Stork)
 
 	// Reset desired image if stork has been disabled
 	cluster.Spec.Stork.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
 }
 
@@ -970,7 +1046,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	}
 
 	// Simulate DesiredImages.CSISnapshotController being empty for old operator version w/o this image
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// SnapshotController image should be empty
 	require.Empty(t, cluster.Status.DesiredImages.CSISnapshotController)
@@ -979,7 +1056,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	// Enable Snapshot controller, desired image should be set
 	trueBool := true
 	cluster.Spec.CSI.InstallSnapshotController = &trueBool
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSISnapshotController)
@@ -990,7 +1068,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	// Don't enable CSI by default for existing cluster
 	cluster.Spec.FeatureGates = nil
 	cluster.Spec.CSI = nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, pxutil.IsCSIEnabled(cluster))
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
@@ -998,7 +1077,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.18.4+k3s",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSIProvisioner)
 
@@ -1010,7 +1090,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 		string(pxutil.FeatureCSI): "true",
 	}
 	cluster.Spec.CSI.InstallSnapshotController = boolPtr(true)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)
 	require.Equal(t, "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
@@ -1028,13 +1109,15 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 
 	// Use images from release manifest if desired was reset
 	cluster.Status.DesiredImages.CSIProvisioner = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Do not overwrite desired images if nothing has changed
 	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "k8scsi/csi-provisioner:old",
 		cluster.Status.DesiredImages.CSIProvisioner)
 
@@ -1043,7 +1126,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "k8scsi/csi-provisioner:old",
 		cluster.Status.DesiredImages.CSIProvisioner)
 	require.Equal(t, "portworx/px-lighthouse:2.3.4",
@@ -1052,20 +1136,23 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	// Change desired images if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Change desired images if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.CSIProvisioner = "k8scsi/csi-provisioner:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		cluster.Status.DesiredImages.CSIProvisioner)
 
 	// Reset desired images if CSI has been disabled
 	cluster.Spec.CSI.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.CSIProvisioner)
 	require.Empty(t, cluster.Status.DesiredImages.CSIAttacher)
 	require.Empty(t, cluster.Status.DesiredImages.CSIDriverRegistrar)
@@ -1078,7 +1165,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	cluster.Spec.FeatureGates = map[string]string{
 		string(pxutil.FeatureCSI): "true",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.True(t, cluster.Spec.CSI.Enabled)
 	require.NotContains(t, cluster.Spec.FeatureGates, pxutil.FeatureCSI)
@@ -1088,7 +1176,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	cluster.Spec.FeatureGates = map[string]string{
 		string(pxutil.FeatureCSI): "false",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, pxutil.IsCSIEnabled(cluster))
 	require.False(t, cluster.Spec.CSI.Enabled)
 	require.NotContains(t, cluster.Spec.FeatureGates, pxutil.FeatureCSI)
@@ -1098,7 +1187,8 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 	cluster.Spec.FeatureGates = map[string]string{
 		string(pxutil.FeatureCSI): "true",
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, pxutil.IsCSIEnabled(cluster))
 	require.True(t, cluster.Spec.CSI.Enabled)
 	require.Nil(t, cluster.Spec.FeatureGates)
@@ -1118,24 +1208,28 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	}
 
 	// Don't enable prometheus if monitoring spec is nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if prometheus spec is nil
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if nothing specified in prometheus spec
 	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Use images from release manifest if enabled
 	cluster.Spec.Monitoring.Prometheus.Enabled = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/prometheus/prometheus:v1.2.3",
 		cluster.Status.DesiredImages.Prometheus)
 	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
@@ -1147,13 +1241,15 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 
 	// Use images from release manifest if desired was reset
 	cluster.Status.DesiredImages.PrometheusOperator = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
 		cluster.Status.DesiredImages.PrometheusOperator)
 
 	// Do not overwrite desired images if nothing has changed
 	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "coreos/prometheus-operator:old",
 		cluster.Status.DesiredImages.PrometheusOperator)
 
@@ -1162,7 +1258,8 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "coreos/prometheus-operator:old",
 		cluster.Status.DesiredImages.PrometheusOperator)
 	require.Equal(t, "portworx/px-lighthouse:2.3.4",
@@ -1171,20 +1268,23 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	// Change desired images if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
 		cluster.Status.DesiredImages.PrometheusOperator)
 
 	// Change desired images if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.PrometheusOperator = "coreos/prometheus-operator:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/coreos/prometheus-operator:v1.2.3",
 		cluster.Status.DesiredImages.PrometheusOperator)
 
 	// Reset desired images if prometheus has been disabled
 	cluster.Spec.Monitoring.Prometheus.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusOperator)
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigReloader)
@@ -1205,43 +1305,50 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	}
 
 	// Don't enable alert manager if monitoring spec is nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 
 	// Don't enable alert manager if prometheus spec is nil
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 
 	// Don't enable alert manager if alert manager spec is nil
 	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus.AlertManager)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 
 	// Don't enable alert manager if nothing specified in alert manager spec
 	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus.AlertManager)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 
 	// Use images from release manifest if enabled
 	cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
 		cluster.Status.DesiredImages.AlertManager)
 
 	// Use images from release manifest if desired was reset
 	cluster.Status.DesiredImages.AlertManager = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
 		cluster.Status.DesiredImages.AlertManager)
 
 	// Do not overwrite desired images if nothing has changed
 	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "prometheus/alertmanager:old",
 		cluster.Status.DesiredImages.AlertManager)
 
@@ -1250,7 +1357,8 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "prometheus/alertmanager:old",
 		cluster.Status.DesiredImages.AlertManager)
 	require.Equal(t, "portworx/px-lighthouse:2.3.4",
@@ -1259,20 +1367,23 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	// Change desired images if px image is not set (new cluster)
 	cluster.Spec.Image = ""
 	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
 		cluster.Status.DesiredImages.AlertManager)
 
 	// Change desired images if px image has changed
 	cluster.Spec.Image = "px/image:4.0.0"
 	cluster.Status.DesiredImages.AlertManager = "prometheus/alertmanager:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "quay.io/prometheus/alertmanager:v1.2.3",
 		cluster.Status.DesiredImages.AlertManager)
 
 	// Reset desired images if alert manager has been disabled
 	cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 }
 
@@ -1290,18 +1401,21 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	}
 
 	// Node specs should be nil if already nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes)
 
 	// Node specs should be empty if already empty
 	cluster.Spec.Nodes = make([]corev1.NodeSpec, 0)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Len(t, cluster.Spec.Nodes, 0)
 
 	// Empty storage spec at node level should copy spec from cluster level
 	// - If cluster level config is empty, we should use the default storage config
 	cluster.Spec.Nodes = []corev1.NodeSpec{{}}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, &corev1.StorageSpec{UseAll: boolPtr(true)}, cluster.Spec.Nodes[0].Storage)
 
 	// - If cluster level config is not empty, use it as is
@@ -1310,7 +1424,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 		UseAllWithPartitions: boolPtr(true),
 	}
 	cluster.Spec.Storage = clusterStorageSpec.DeepCopy()
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, clusterStorageSpec, cluster.Spec.Nodes[0].Storage)
 
 	// Do not set node spec storage fields if not set at the cluster level
@@ -1322,7 +1437,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1351,7 +1467,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1376,7 +1493,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1397,7 +1515,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAll)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1417,7 +1536,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1436,7 +1556,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.UseAll)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.True(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1448,7 +1569,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		CacheDevices: &cacheDevices,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.ElementsMatch(t, cacheDevices, *cluster.Spec.Nodes[0].Storage.CacheDevices)
 
 	// Should not overwrite storage spec from cluster level, if present at node level
@@ -1462,7 +1584,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 		SystemMdDevice:       stringPtr("node-metadata"),
 		KvdbDevice:           stringPtr("node-kvdb"),
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAll)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.UseAllWithPartitions)
 	require.False(t, *cluster.Spec.Nodes[0].Storage.ForceUseDisks)
@@ -1486,12 +1609,14 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	}
 
 	// Node specs should be nil if already nil
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes)
 
 	// Node specs should be empty if already empty
 	cluster.Spec.Nodes = make([]corev1.NodeSpec, 0)
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Len(t, cluster.Spec.Nodes, 0)
 
 	// Empty cloudstorage spec at node level should copy spec from cluster level
@@ -1502,7 +1627,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 		},
 	}
 	cluster.Spec.CloudStorage = clusterStorageSpec.DeepCopy()
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, clusterStorageSpec.CloudStorageCommon, cluster.Spec.Nodes[0].CloudStorage.CloudStorageCommon)
 
 	// Do not set node spec cloudstorage fields if not set at the cluster level
@@ -1512,7 +1638,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 			CloudStorage: &corev1.CloudStorageNodeSpec{},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
 	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
 	require.Nil(t, cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
@@ -1526,7 +1653,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 			CloudStorage: &corev1.CloudStorageNodeSpec{},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Storage)
 	require.Nil(t, cluster.Spec.Nodes[0].Storage)
 
@@ -1547,7 +1675,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 			CloudStorage: &corev1.CloudStorageNodeSpec{},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.ElementsMatch(t, clusterDeviceSpecs, *cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
 	require.Equal(t, "type=journal", *cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
 	require.Equal(t, "type=metadata", *cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
@@ -1566,7 +1695,8 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 			MaxStorageNodesPerZonePerNodeGroup: &maxStorageNodesForNodeGroup,
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.ElementsMatch(t, nodeDeviceSpecs, *cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs)
 	require.Equal(t, "type=node-journal", *cluster.Spec.Nodes[0].CloudStorage.JournalDeviceSpec)
 	require.Equal(t, "type=node-metadata", *cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
@@ -1599,21 +1729,24 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 	}
 
 	// Security spec should be nil, as it's disabled by default
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Security)
 
 	// when security.enabled is false, no security fields should be populated.
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: false,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Security.Auth)
 
 	// Check for default values when only enabled=true
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	// Check for default values when only enabled=true and fields non-nil but empty
@@ -1621,14 +1754,16 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 		Enabled: true,
 		Auth:    &corev1.AuthSpec{},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth:    &corev1.AuthSpec{},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
@@ -1637,7 +1772,8 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 			SelfSigned: &corev1.SelfSignedSpec{},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
@@ -1648,7 +1784,8 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 			},
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	cluster.Spec.Security = &corev1.SecuritySpec{
@@ -1657,31 +1794,36 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 			GuestAccess: guestAccessTypePtr(corev1.GuestAccessType("")),
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	cluster.Spec.Security = &corev1.SecuritySpec{
 		Enabled: true,
 		Auth: &corev1.AuthSpec{
 			GuestAccess: nil,
 		},
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	assertDefaultSecuritySpec(t, cluster)
 
 	// issuer, when manually set, is not overwritten.
 	cluster.Spec.Security.Auth.SelfSigned.Issuer = stringPtr("myissuer.io")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "myissuer.io", *cluster.Spec.Security.Auth.SelfSigned.Issuer)
 
 	// token lifetime, when manually set, is not overwritten.
 	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1h")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, 1*time.Hour, duration)
 
 	// support for extended token durations
 	cluster.Spec.Security.Auth.SelfSigned.TokenLifetime = stringPtr("1y")
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	duration, err = pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, time.Hour*24*365, duration)
@@ -1747,7 +1889,8 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	require.True(t, cluster.Spec.Kvdb.Internal)
 	require.Equal(t, defaultSecretsProvider, *cluster.Spec.SecretsProvider)
@@ -7317,14 +7460,16 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	}
 
 	// Disable telemetry for px version < 2.8.0
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 
 	// Allow telemetry to be enabled for 2.8.0
 	cluster.Spec.Image = "px/image:2.8.0"
 	cluster.Spec.Monitoring.Telemetry.Enabled = true
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.NotEmpty(t, cluster.Spec.Monitoring) // telemetry is under monitoring
 	require.NotEmpty(t, cluster.Spec.Monitoring.Telemetry)
 	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
@@ -7337,26 +7482,30 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 		},
 	}
 
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 
 	// enabled
 	cluster.Spec.Monitoring.Telemetry.Enabled = true
 	cluster.Spec.Monitoring.Telemetry.Image = "portworx/px-telemetry:" + compVersion()
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Spec.Monitoring.Telemetry.Image)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 
 	// Use image from release manifest if spec image is reset
 	cluster.Spec.Monitoring.Telemetry.Image = ""
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Status.DesiredImages.Telemetry)
 
 	// Do not overwrite desired image if nothing has changed
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
 
 	// Do not overwrite desired autopilot image even if
@@ -7364,14 +7513,16 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
 		Enabled: true,
 	}
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
 	require.Equal(t, "portworx/px-lighthouse:"+compVersion(), cluster.Status.DesiredImages.UserInterface)
 
 	// Overwrite telemetry image and upgrade PX to 2.12, old image should be reset and use new one from manifest
 	cluster.Spec.Image = "px/image: 2.12.0"
 	cluster.Spec.Monitoring.Telemetry.Image = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
 	require.Equal(t, "purestorage/realtime-metrics:latest", cluster.Status.DesiredImages.MetricsCollector)
@@ -7382,7 +7533,8 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	// Set telemetry images explicitly
 	cluster.Spec.Monitoring.Telemetry.Image = "portworx/ccm-go:1.2.3"
 	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = "portworx/log-upload:1.2.3"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 	require.Equal(t, "purestorage/envoy:1.2.3", cluster.Status.DesiredImages.TelemetryProxy)
@@ -7392,7 +7544,8 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	cluster.Spec.Monitoring.Telemetry.Image = ""
 	cluster.Spec.Monitoring.Telemetry.LogUploaderImage = ""
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
 
@@ -7400,7 +7553,8 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	updateStrategy := corev1.AlwaysAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+compVersion(), cluster.Status.DesiredImages.Telemetry)
 
@@ -7408,7 +7562,8 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	updateStrategy = corev1.OnceAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:"+newCompVersion(), cluster.Status.DesiredImages.Telemetry)
 
@@ -7416,13 +7571,15 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	updateStrategy = corev1.NeverAutoUpdate
 	cluster.Spec.AutoUpdateComponents = &updateStrategy
 	cluster.Status.DesiredImages.Telemetry = "portworx/px-telemetry:old"
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
 	require.Equal(t, "portworx/px-telemetry:old", cluster.Status.DesiredImages.Telemetry)
 
 	// Reset desired image if telemetry has been disabled
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)
 }
 
