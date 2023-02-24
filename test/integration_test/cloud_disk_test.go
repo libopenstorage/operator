@@ -20,7 +20,7 @@ import (
 var (
 	disksEncAzure = []string{"type=Premium_LRS,size=100,diskEncryptionSetID=invalid"}
 	disksEncGce   = []string{"type=pd-standard,size=150,kms=invalid"}
-	disksEncOke   = []string{"type=pd-standard,size=150,kms=invalid"}
+	disksEncOke   = []string{"type=pv-10,size=150,kms=invalid"}
 )
 
 var TestCloudDiskEncryptionCases = []types.TestCase{
