@@ -150,7 +150,7 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 	return pxutil.SelectorLabels()
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) {
+func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
 	}
@@ -163,7 +163,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
-		SetPortworxDefaults(toUpdate, p.k8sVersion)
+		if err := SetPortworxDefaults(toUpdate, p.k8sVersion); err != nil {
+			return err
+		}
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -350,6 +352,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
+	return nil
 }
 
 func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
@@ -640,13 +643,13 @@ func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cl
 }
 
 // SetPortworxDefaults populates default storage cluster spec values
-func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) {
+func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Version) error {
 	if k8sVersion == nil {
 		k8sVersion = pxutil.MinimumSupportedK8sVersion
 	}
 	t, err := newTemplate(toUpdate, "")
 	if err != nil {
-		return
+		return err
 	}
 
 	if toUpdate.Spec.Kvdb == nil {
@@ -774,6 +777,7 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 	}
 
 	setSecuritySpecDefaults(toUpdate)
+	return nil
 }
 
 func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {

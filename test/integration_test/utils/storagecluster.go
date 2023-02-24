@@ -77,9 +77,10 @@ func CreateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	// Populate default values to empty fields first
 	k8sVersion, _ := version.NewVersion(K8sVersion)
-	portworx.SetPortworxDefaults(cluster, k8sVersion)
+	err := portworx.SetPortworxDefaults(cluster, k8sVersion)
+	require.NoError(t, err)
 	// Deploy cluster
-	cluster, err := CreateStorageCluster(cluster)
+	cluster, err = CreateStorageCluster(cluster)
 	require.NoError(t, err)
 
 	// Validate cluster deployment

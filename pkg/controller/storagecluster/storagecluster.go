@@ -1436,7 +1436,9 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		}
 	}
 
-	c.Driver.SetDefaultsOnStorageCluster(toUpdate)
+	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
+		return err
+	}
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
