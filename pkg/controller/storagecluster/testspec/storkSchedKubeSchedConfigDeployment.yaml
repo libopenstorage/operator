@@ -32,7 +32,7 @@ spec:
         - /usr/local/bin/kube-scheduler
         - --bind-address=0.0.0.0
         - --config=/etc/kubernetes/stork-config.yaml
-        image: k8s.gcr.io/kube-scheduler-amd64:v1.23.0
+        image: registry.k8s.io/kube-scheduler-amd64:v1.23.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

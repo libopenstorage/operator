@@ -44,6 +44,9 @@ const (
 	NodeRoleLabelControlPlane = "node-role.kubernetes.io/control-plane"
 	NodeRoleLabelInfra        = "node-role.kubernetes.io/infra"
 	NodeRoleLabelWorker       = "node-role.kubernetes.io/worker"
+	// UpdateRevisionConflictErr contains controller-runtime update error message when updating stale objects
+	UpdateRevisionConflictErr = "the object has been modified; please apply your changes to the latest version and try again"
+	DefaultK8SRegistryPath    = "registry.k8s.io"
 )
 
 var (
@@ -1220,8 +1223,31 @@ func DeleteDaemonSet(
 	return k8sClient.Update(context.TODO(), ds)
 }
 
-// UpdateStorageClusterStatus updates the status of given StorageCluster object
-// on the latest copy
+// UpdateStorageCluster updates given StorageCluster object on the latest copy
+func UpdateStorageCluster(
+	k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+) error {
+	existingCluster := &corev1.StorageCluster{}
+	if err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		existingCluster,
+	); err != nil {
+		return err
+	}
+
+	cluster.ResourceVersion = existingCluster.ResourceVersion
+	if !reflect.DeepEqual(cluster, existingCluster) {
+		return k8sClient.Update(context.TODO(), cluster)
+	}
+	return nil
+}
+
+// UpdateStorageClusterStatus updates the status of given StorageCluster object on the latest copy
 func UpdateStorageClusterStatus(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
@@ -1239,7 +1265,10 @@ func UpdateStorageClusterStatus(
 	}
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
-	return k8sClient.Status().Update(context.TODO(), cluster)
+	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
+		return k8sClient.Status().Update(context.TODO(), cluster)
+	}
+	return nil
 }
 
 // CreateOrUpdateStorageNode creates a StorageNode if not present, else updates it

@@ -26,6 +26,8 @@ var (
 	PxOperatorVer1_8, _ = version.NewVersion("1.8-")
 	// PxOperatorVer1_8_1 portworx-operator 1.8.1 minimum version
 	PxOperatorVer1_8_1, _ = version.NewVersion("1.8.1-")
+	// PxOperatorVer1_11 portworx-operator 1.11 minimum version
+	PxOperatorVer1_11, _ = version.NewVersion("1.11-")
 )
 
 // TODO: Install portworx-operator in test automation
