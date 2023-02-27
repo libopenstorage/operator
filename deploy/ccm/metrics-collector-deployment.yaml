@@ -8,6 +8,8 @@ spec:
   selector:
     matchLabels:
       role: realtime-metrics-collector
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

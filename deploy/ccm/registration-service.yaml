@@ -7,6 +7,8 @@ spec:
   selector:
     matchLabels:
       role: px-telemetry-registration
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
