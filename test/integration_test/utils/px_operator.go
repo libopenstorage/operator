@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	pxOperatorMasterVersion  = "9.9.9.9"
+	pxOperatorMasterVersion  = "99.9.9"
 	pxOperatorDeploymentName = "portworx-operator"
 )
 
@@ -26,8 +26,8 @@ var (
 	PxOperatorVer1_8, _ = version.NewVersion("1.8-")
 	// PxOperatorVer1_8_1 portworx-operator 1.8.1 minimum version
 	PxOperatorVer1_8_1, _ = version.NewVersion("1.8.1-")
-	// PxOperatorVer1_11 portworx-operator 1.11 minimum version
-	PxOperatorVer1_11, _ = version.NewVersion("1.11-")
+	// PxOperatorVer23_3 portworx-operator 23.3 minimum version
+	PxOperatorVer23_3, _ = version.NewVersion("23.3-")
 )
 
 // TODO: Install portworx-operator in test automation
