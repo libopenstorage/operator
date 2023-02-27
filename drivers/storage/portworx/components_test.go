@@ -7408,6 +7408,54 @@ func TestPrometheusInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, prometheus.Spec.Resources.Requests, cluster.Spec.Monitoring.Prometheus.Resources.Requests)
 	require.Equal(t, prometheus.Spec.SecurityContext, cluster.Spec.Monitoring.Prometheus.SecurityContext)
+
+	// Modify replicas, retention, retentionSize, storage, volumes, volumeMounts
+	replicas := int32(2)
+	fakeSCName := "fake-test-sc"
+	cluster.Spec.Monitoring.Prometheus.Replicas = &replicas
+	cluster.Spec.Monitoring.Prometheus.Retention = "10h"
+	cluster.Spec.Monitoring.Prometheus.RetentionSize = "1048MB"
+	cluster.Spec.Monitoring.Prometheus.Storage = &monitoringv1.StorageSpec{
+		VolumeClaimTemplate: monitoringv1.EmbeddedPersistentVolumeClaim{
+			Spec: v1.PersistentVolumeClaimSpec{
+				StorageClassName: &fakeSCName,
+				Resources: v1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		},
+	}
+	cluster.Spec.Monitoring.Prometheus.VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      "testVlm",
+			MountPath: "/prometheus/",
+		},
+	}
+	cluster.Spec.Monitoring.Prometheus.Volumes = []v1.Volume{
+		{
+			Name: "testVlm",
+			VolumeSource: v1.VolumeSource{
+				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+					ClaimName: "testPxPvc",
+					ReadOnly:  false,
+				},
+			},
+		},
+	}
+	cluster.Spec.Monitoring.Prometheus.SecurityContext = nil
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	prometheus = &monitoringv1.Prometheus{}
+	err = testutil.Get(k8sClient, prometheus, component.PrometheusInstanceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, prometheus.Spec.Replicas, cluster.Spec.Monitoring.Prometheus.Replicas)
+	require.Equal(t, prometheus.Spec.Retention, cluster.Spec.Monitoring.Prometheus.Retention)
+	require.Equal(t, prometheus.Spec.RetentionSize, cluster.Spec.Monitoring.Prometheus.RetentionSize)
+	require.Equal(t, prometheus.Spec.Storage, cluster.Spec.Monitoring.Prometheus.Storage)
+	require.Equal(t, prometheus.Spec.VolumeMounts, cluster.Spec.Monitoring.Prometheus.VolumeMounts)
+	require.Equal(t, prometheus.Spec.Volumes, cluster.Spec.Monitoring.Prometheus.Volumes)
 }
 
 func TestCompleteInstallDuringMigration(t *testing.T) {
