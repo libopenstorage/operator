@@ -477,10 +477,10 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 		telemetryEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled
 
-		// Validate Telemetry is enabled by default with PX 2.12+ and Operator 1.11+
+		// Validate Telemetry is enabled by default with PX 2.12+ and Operator 23.3.0+
 		pxVersion := testutil.GetPortworxVersion(cluster)
 		opVersion, _ := testutil.GetPxOperatorVersion()
-		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer1_11) {
+		if pxVersion.GreaterThanOrEqual(pxVer2_12) && opVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer23_3) {
 			logrus.Infof("Validate Telemetry is enabled by default, PX version [%s], operator version [%s]", pxVersion, opVersion)
 			require.True(t, telemetryEnabled, "failed to validate default Telemetry status: expected enabled [true], actual enabled [%v]", telemetryEnabled)
 

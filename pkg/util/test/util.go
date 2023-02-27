@@ -97,7 +97,7 @@ const (
 	PxMasterVersion = "3.0.0.0"
 
 	// PxOperatorMasterVersion is a tag for PX Operator master version
-	PxOperatorMasterVersion = "9.9.9.9"
+	PxOperatorMasterVersion = "99.9.9"
 
 	// AksPVCControllerSecurePort is the PVC controller secure port.
 	AksPVCControllerSecurePort = "10261"
