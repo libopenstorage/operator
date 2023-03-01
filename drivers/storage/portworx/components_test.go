@@ -4944,7 +4944,6 @@ func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
 
 	// update content
 	bb := bytes.NewBuffer(content)
-	bb.WriteRune('\n')
 	bb.WriteString(tempEtcHostsMarker)
 	bb.WriteRune('\n')
 	for _, hn := range hostnames {
