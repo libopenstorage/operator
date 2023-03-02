@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"strings"
 	"testing"
 
@@ -1650,6 +1651,50 @@ func TestPrometheusRuleChangeSpec(t *testing.T) {
 	err = CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
 	require.NoError(t, err)
 
+	actualRule = &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "group-2", actualRule.Spec.Groups[0].Name)
+}
+
+func TestPrometheusRuleChangeSpecWithReconcilationConfigured(t *testing.T) {
+	// Test Case: Annotations contain reconcile TRUE flag -- will reconcil
+	k8sClient := testutil.FakeK8sClient()
+	expectedRule := &monitoringv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				constants.AnnotationReconcileObject: "true",
+			},
+		},
+		Spec: monitoringv1.PrometheusRuleSpec{
+			Groups: []monitoringv1.RuleGroup{
+				{
+					Name: "group-1",
+				},
+			},
+		},
+	}
+	require.NoError(t, k8sClient.Create(context.TODO(), expectedRule))
+
+	expectedRule.Spec.Groups[0].Name = "group-2"
+	err := CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
+	require.NoError(t, err)
+	actualRule := &monitoringv1.PrometheusRule{}
+	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
+	require.NoError(t, err)
+	require.Equal(t, "group-2", actualRule.Spec.Groups[0].Name)
+
+	// Test Case: Annotations contain reconcile FALSE flag -- will not reconcile
+	expectedRule.ObjectMeta.Annotations = map[string]string{
+		constants.AnnotationReconcileObject: "false",
+	}
+	require.NoError(t, k8sClient.Update(context.TODO(), expectedRule))
+
+	expectedRule.Spec.Groups[0].Name = "group-1"
+	err = CreateOrUpdatePrometheusRule(k8sClient, expectedRule, nil)
+	require.NoError(t, err)
 	actualRule = &monitoringv1.PrometheusRule{}
 	err = testutil.Get(k8sClient, actualRule, "test", "test-ns")
 	require.NoError(t, err)
