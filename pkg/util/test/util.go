@@ -2862,12 +2862,12 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	logrus.Info("Validate Telemetry components")
 	logrus.Info("Check PX and PX Operator versions to determine which telemetry to validate against..")
 	pxVersion := GetPortworxVersion(cluster)
-	fmt.Printf("PX Version: %v", pxVersion)
+	logrus.Infof("PX Version: [%s]", pxVersion.String())
 	opVersion, err := GetPxOperatorVersion()
 	if err != nil {
 		return err
 	}
-	logrus.Infof("PX Operator version: %v", opVersion)
+	logrus.Infof("PX Operator version: [%s]", opVersion.String())
 
 	if cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Telemetry != nil &&
