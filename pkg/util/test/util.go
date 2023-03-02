@@ -1075,23 +1075,13 @@ func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
 	cmd := "cat /etc/pwx/config.json | grep dmthin"
 
-	if cluster.Annotations != nil {
-		if !strings.Contains(cluster.Annotations["portworx.io/misc-args"], "-T dmthin") {
-			logrus.Debugf("Dmthin is not enabled on PX cluster [%s]", cluster.Name)
-			return nil
-		}
-		logrus.Infof("Dmthin is enabled on PX cluster [%s]", cluster.Name)
+	if !strings.Contains(cluster.Annotations["portworx.io/misc-args"], "-T dmthin") {
+		logrus.Debugf("Dmthin is not enabled on PX cluster [%s]", cluster.Name)
+		return nil
 	}
+	logrus.Infof("Dmthin is enabled on PX cluster [%s]", cluster.Name)
 
 	logrus.Infof("Will check that storage is type dmthin on all PX pods")
-	if cluster.Spec.Security != nil && cluster.Spec.Security.Enabled {
-		token, err := getSecurityAdminToken(cluster.Namespace)
-		if err != nil {
-			return err
-		}
-		cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s %s", token, cmd)
-	}
-
 	t := func() (interface{}, bool, error) {
 		// Get Portworx pods
 		pxPods, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
@@ -1107,12 +1097,9 @@ func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 			if dmthinEnabled {
 				continue
 			}
-			return nil, false, fmt.Errorf("dmthin is not enabled on PX pod [%s]", pxPod.Name)
+			return nil, true, fmt.Errorf("dmthin is not enabled on PX pod [%s]", pxPod.Name)
 		}
-
-		logrus.Info("Validated dmthin is enabled on all PX pods")
 		return nil, false, nil
-
 	}
 
 	_, err := task.DoRetryWithTimeout(t, defaultDmthinValidationTimeout, defaultDmthinValidationInterval)
@@ -1120,6 +1107,7 @@ func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	logrus.Info("Validated dmthin is enabled on all PX pods")
 	return nil
 }
 
