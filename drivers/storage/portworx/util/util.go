@@ -1100,6 +1100,29 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
 }
 
+// ValidateTelemetry validates if telemetry is enabled correctly
+func ValidateTelemetry(cluster *corev1.StorageCluster) error {
+	if !IsTelemetryEnabled(cluster.Spec) {
+		return nil
+	}
+
+	pxVersion := GetPortworxVersion(cluster)
+	if pxVersion.LessThan(MinimumPxVersionCCM) {
+		// PX version is lower than 2.8
+		return fmt.Errorf("telemetry is not supported on Portworx version: %s", pxVersion)
+	} else if IsCCMGoSupported(pxVersion) {
+		if proxy := GetPxProxyEnvVarValue(cluster); proxy != "" {
+			// CCM Go is supported but custom proxy is enabled
+			// TODO: remove when custom proxy is supported
+			return fmt.Errorf("telemetry is not supported with custom proxy: %s", proxy)
+		}
+	}
+
+	// NOTE: don't check if air-gapped here when telemetry is specified enabled or disabled explicitly,
+	// as it will ping the registration endpoint periodically
+	return nil
+}
+
 // IsPxRepoEnabled returns true is pxRepo is enabled
 func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.PxRepo != nil &&
