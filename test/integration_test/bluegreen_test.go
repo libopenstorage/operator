@@ -56,6 +56,14 @@ var (
 			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
 				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
 			},
+			// turn off sub-components, to speed up the test
+			Autopilot: &corev1.AutopilotSpec{Enabled: false},
+			CSI:       &corev1.CSISpec{Enabled: false},
+			Stork:     &corev1.StorkSpec{Enabled: false},
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{Enabled: false},
+				Telemetry:  &corev1.TelemetrySpec{Enabled: false},
+			},
 		},
 	})
 )
@@ -292,7 +300,8 @@ var bgTestCases = []types.TestCase{
 				err = runInPortworxPod(&pl.Items[0], bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
 				require.Equal(t, "", stderr.String())
-				require.Contains(t, stdout.String(), "error validating license: please reduce number of nodes")
+				require.Contains(t, strings.ToLower(stdout.String()),
+					"error validating license: please reduce number of nodes")
 				require.Error(t, err)
 			}
 		},
@@ -495,7 +504,9 @@ func runInPortworxPod(pod *v1.Pod, in io.Reader, out, err io.Writer, command ...
 		logrus.Debugf("run on %s via %s: `%s`", pod.Spec.NodeName, pod.Name, strings.Join(command, " "))
 	}
 
-	return coreops.Instance().RunCommandInPodEx(command, pod.Name, "portworx", pod.Namespace, false, in, out, err)
+	return coreops.Instance().RunCommandInPodEx(&coreops.RunCommandInPodExRequest{
+		command, pod.Name, "portworx", pod.Namespace, false, in, out, err,
+	})
 }
 
 func wipeNodeRunningPod(pod *v1.Pod) error {

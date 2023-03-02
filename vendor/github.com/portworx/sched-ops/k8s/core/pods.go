@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/portworx/sched-ops/k8s/common"
@@ -70,13 +71,25 @@ type PodOps interface {
 	// RunCommandInPod runs given command in the given pod
 	RunCommandInPod(cmds []string, podName, containerName, namespace string) (string, error)
 	// RunCommandInPodEx is extended version of RunCommandInPod
-	RunCommandInPodEx(cmds []string, podName, containerName, namespace string, useTTY bool, stdin io.Reader, stdout, stderr io.Writer) error
+	RunCommandInPodEx(*RunCommandInPodExRequest) error
 	// ValidatePod validates the given pod if it's ready
 	ValidatePod(pod *corev1.Pod, timeout, retryInterval time.Duration) error
 	// WatchPods sets up a watcher that listens for the changes to pods in given namespace
 	WatchPods(namespace string, fn WatchFunc, listOptions metav1.ListOptions) error
 	// GetPodLogs returns the logs of a POD as a string
 	GetPodLog(podName string, namespace string, podLogOptions *corev1.PodLogOptions) (string, error)
+}
+
+// RunCommandInPodExRequest is a request structure for the RunCommandInPodEx func
+type RunCommandInPodExRequest struct {
+	Command       []string
+	PODName       string
+	ContainerName string
+	Namespace string
+	UseTTY bool
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // CreatePod creates the given pod.
@@ -438,14 +451,18 @@ func (c *Client) WaitForPodDeletion(uid types.UID, namespace string, timeout tim
 }
 
 // RunCommandInPodEx runs given command in the given pod  (extended syntax)
-func (c *Client) RunCommandInPodEx(cmds []string, podName, containerName, namespace string, useTTY bool, stdin io.Reader, stdout, stderr io.Writer) error {
+func (c *Client) RunCommandInPodEx(req *RunCommandInPodExRequest) error {
+	if c == nil || req == nil {
+		return os.ErrInvalid
+	}
+
 	err := c.initClient()
 	if err != nil {
 		return err
 	}
 
-	if len(containerName) == 0 {
-		pod, err := c.kubernetes.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	if len(req.ContainerName) == 0 {
+		pod, err := c.kubernetes.CoreV1().Pods(req.Namespace).Get(context.TODO(), req.PODName, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -454,33 +471,33 @@ func (c *Client) RunCommandInPodEx(cmds []string, podName, containerName, namesp
 			return fmt.Errorf("could not determine which container to use")
 		}
 
-		containerName = pod.Spec.Containers[0].Name
+		req.ContainerName = pod.Spec.Containers[0].Name
 	}
 
-	req := c.kubernetes.CoreV1().RESTClient().Post().
+	post := c.kubernetes.CoreV1().RESTClient().Post().
 		Resource("pods").
-		Name(podName).
-		Namespace(namespace).
+		Name(req.PODName).
+		Namespace(req.Namespace).
 		SubResource("exec")
 
-	req.VersionedParams(&corev1.PodExecOptions{
-		Container: containerName,
-		Command:   cmds,
-		Stdin:     (stdin != nil),
-		Stdout:    (stdout != nil),
-		Stderr:    (stderr != nil),
+	post.VersionedParams(&corev1.PodExecOptions{
+		Container: req.ContainerName,
+		Command:   req.Command,
+		Stdin:     (req.Stdin != nil),
+		Stdout:    (req.Stdout != nil),
+		Stderr:    (req.Stderr != nil),
 	}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(c.config, "POST", req.URL())
+	exec, err := remotecommand.NewSPDYExecutor(c.config, "POST", post.URL())
 	if err != nil {
 		return fmt.Errorf("failed to init executor: %v", err)
 	}
 
 	err = exec.Stream(remotecommand.StreamOptions{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-		Tty:    useTTY,
+		Stdin:  req.Stdin,
+		Stdout: req.Stdout,
+		Stderr: req.Stderr,
+		Tty:    req.UseTTY,
 	})
 
 	return err
@@ -490,7 +507,9 @@ func (c *Client) RunCommandInPodEx(cmds []string, podName, containerName, namesp
 func (c *Client) RunCommandInPod(cmds []string, podName, containerName, namespace string) (string, error) {
 	var execOut, execErr bytes.Buffer
 
-	err := c.RunCommandInPodEx(cmds, podName, containerName, namespace, false, nil, &execOut, &execErr)
+	err := c.RunCommandInPodEx(&RunCommandInPodExRequest{
+		cmds, podName, containerName, namespace, false, nil, &execOut, &execErr,
+	})
 	if err != nil {
 		return execErr.String(), fmt.Errorf("could not execute: %v: %v %v", err, execErr.String(), execOut.String())
 	}
