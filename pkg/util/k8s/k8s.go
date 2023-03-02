@@ -1386,6 +1386,11 @@ func CreateOrUpdatePrometheusRule(
 		return err
 	}
 
+	enabled, err := strconv.ParseBool(existingRule.ObjectMeta.Annotations[constants.AnnotationReconcileObject])
+	if err == nil && !enabled {
+		return nil
+	}
+
 	modified := !reflect.DeepEqual(rule.Spec, existingRule.Spec)
 
 	for _, o := range existingRule.OwnerReferences {
