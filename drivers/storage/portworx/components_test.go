@@ -13754,11 +13754,11 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Monitoring)
 
-	// TestCase: telemetry should be disabled if using custom proxy on ccm-go
+	// TestCase: telemetry should not be disabled if using http proxy on ccm-go
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
 	cluster.Spec.Env = []v1.EnvVar{{
-		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
-		Value: "test-proxy",
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:port",
 	}}
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{
@@ -13769,14 +13769,51 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cluster.Spec.Monitoring)
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should not be disabled if using http proxy url in https env var on ccm-go
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "http://host:port",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should be disabled if using secure proxy on ccm-go
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "test-proxy",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
-	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+
+	// TestCase: telemetry should be disabled if using invalid http proxy format
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "test-proxy",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 
 	// TestCase: telemetry should not be enabled by default if proxy is configured
 	cluster.Spec.Monitoring = nil
 	cluster.Spec.Env = []v1.EnvVar{{
 		Name:  pxutil.EnvKeyPortworxHTTPProxy,
-		Value: "test-proxy",
+		Value: "host:port",
 	}}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)

@@ -637,16 +637,26 @@ func GetClusterEnvVarValue(ctx context.Context, cluster *corev1.StorageCluster, 
 
 // GetPxProxyEnvVarValue returns the PX_HTTP(S)_PROXY environment variable value for a cluster.
 // Note: we only expect one proxy for the telemetry CCM container but we prefer https over http if both are specified
-func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) string {
+func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	httpProxy := ""
 	for _, env := range cluster.Spec.Env {
-		if env.Name == EnvKeyPortworxHTTPSProxy {
-			return env.Value
-		} else if env.Name == EnvKeyPortworxHTTPProxy {
-			httpProxy = env.Value
+		key, val := env.Name, env.Value
+		if key == EnvKeyPortworxHTTPSProxy {
+			// If http proxy is specified in https env var, treat it as a http proxy endpoint
+			if strings.HasPrefix(val, "http://") {
+				logrus.Warnf("using endpoint %s from environment variable %s as a http proxy endpoint instead",
+					val, EnvKeyPortworxHTTPSProxy)
+				return EnvKeyPortworxHTTPProxy, val
+			}
+			return EnvKeyPortworxHTTPSProxy, val
+		} else if key == EnvKeyPortworxHTTPProxy {
+			httpProxy = val
 		}
 	}
-	return httpProxy
+	if httpProxy != "" {
+		return EnvKeyPortworxHTTPProxy, httpProxy
+	}
+	return "", ""
 }
 
 // SplitPxProxyHostPort trims protocol prefix then splits the proxy address of the form "host:port"
@@ -1111,10 +1121,18 @@ func ValidateTelemetry(cluster *corev1.StorageCluster) error {
 		// PX version is lower than 2.8
 		return fmt.Errorf("telemetry is not supported on Portworx version: %s", pxVersion)
 	} else if IsCCMGoSupported(pxVersion) {
-		if proxy := GetPxProxyEnvVarValue(cluster); proxy != "" {
-			// CCM Go is supported but custom proxy is enabled
+		proxyType, proxy := GetPxProxyEnvVarValue(cluster)
+		if proxy == "" {
+			return nil
+		} else if proxyType == EnvKeyPortworxHTTPProxy {
+			// CCM Go is enabled with http proxy, but it cannot be split into host and port
+			if _, _, err := SplitPxProxyHostPort(proxy); err != nil {
+				return fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
+			}
+		} else if proxyType == EnvKeyPortworxHTTPSProxy {
+			// CCM Go is enabled with https proxy
 			// TODO: remove when custom proxy is supported
-			return fmt.Errorf("telemetry is not supported with custom proxy: %s", proxy)
+			return fmt.Errorf("telemetry is not supported with secure proxy: %s", proxy)
 		}
 	}
 

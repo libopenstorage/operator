@@ -9263,7 +9263,7 @@ func TestStorageClusterValidateTelemetry(t *testing.T) {
 		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported on Portworx version",
 			v1.EventTypeWarning, util.FailedValidationReason))
 
-	// TestCase: raise warning when telemetry is enabled with custom proxy and ccm-go
+	// TestCase: raise warning when telemetry is enabled with secure proxy and ccm-go
 	currentCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -9281,8 +9281,62 @@ func TestStorageClusterValidateTelemetry(t *testing.T) {
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with custom proxy",
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with secure proxy",
 			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// TestCase: raise warning when telemetry is enabled with invalid proxy format and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://user:pass@host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with proxy",
+			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// TestCase: telemetry is enabled with http proxy and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 0)
+
+	// TestCase: telemetry is enabled with http proxy specified in https env var and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "http://host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 0)
 }
 
 func replaceOldPod(

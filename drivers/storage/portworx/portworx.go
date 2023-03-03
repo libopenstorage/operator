@@ -1307,8 +1307,11 @@ func setTelemetryDefaults(
 	// TODO: pwx-29521 uuid is checked here to avoid unit tests sending requests to arcus endpoint
 	if !pxutil.IsCCMGoSupported(pxVersion) ||
 		(toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Telemetry != nil) ||
-		toUpdate.Status.ClusterUID == "" ||
-		pxutil.GetPxProxyEnvVarValue(toUpdate) != "" {
+		toUpdate.Status.ClusterUID == "" {
+		return nil
+	}
+	if _, proxy := pxutil.GetPxProxyEnvVarValue(toUpdate); proxy != "" {
+		// Don't enable telemetry if either of http or https proxy is specified
 		return nil
 	}
 	canAccess, err := component.CanAccessArcusRegisterEndpoint(toUpdate)
