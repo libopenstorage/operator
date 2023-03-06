@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ var bgTestCases = []types.TestCase{
 	},
 	{
 		TestName:        "InstallLicense",
-		TestrailCaseIDs: []string{"XXX", "XXX"},
+		TestrailCaseIDs: []string{"C54322"},
 		TestSpec:        bgTestSpec,
 		TestFunc: func(tc *types.TestCase) func(*testing.T) {
 			return func(t *testing.T) {
@@ -127,8 +128,14 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.Equal(t, numLicensedNodes, len(pl.Items))
 
-				// install license via 1st POD
+				logrus.Infof("Attempt license extend on Trial via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
+				err = runInPortworxPod(&pl.Items[0],
+					nil, &stdout, &stderr,
+					"/bin/sh", "-c", "/opt/pwx/bin/pxctl license trial; exec /opt/pwx/bin/pxctl license extend --start")
+				require.Contains(t, stdout.String(), "license extension not supported for Trial licenses")
+
+				logrus.Infof("Installing license via node %s", pl.Items[0].Spec.NodeName)
 				err = runInPortworxPod(&pl.Items[0],
 					bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
@@ -136,7 +143,7 @@ var bgTestCases = []types.TestCase{
 				require.Contains(t, stdout.String(), "Successfully updated licenses.")
 				require.NoError(t, err)
 
-				// reinstall the license from a different node
+				logrus.Infof("Renstalling license via node %s", pl.Items[2].Spec.NodeName)
 				stdout.Reset()
 				err = runInPortworxPod(&pl.Items[2],
 					bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
@@ -145,7 +152,7 @@ var bgTestCases = []types.TestCase{
 				require.Contains(t, stdout.String(), "Successfully updated licenses.")
 				require.NoError(t, err)
 
-				// check all nodes, make sure they report same license
+				logrus.Infof("Checking reported license on all nodes")
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
@@ -178,7 +185,7 @@ var bgTestCases = []types.TestCase{
 				}
 				require.NotEmpty(t, disabledNodes)
 
-				// enable PX on one of the disabled nodes
+				logrus.Infof("Enabling PX on node %s", disabledNodes[0])
 				err := coreops.Instance().RemoveLabelOnNode(disabledNodes[0], pxEnabledLabel)
 				require.NoError(t, err)
 
@@ -192,7 +199,7 @@ var bgTestCases = []types.TestCase{
 				pod, isa := podRaw.(*v1.Pod)
 				require.True(t, isa)
 
-				// cleanup POD -- stop service, wipe node
+				logrus.Infof("Stopping PX on node %s", disabledNodes[0])
 				err = coreops.Instance().AddLabelOnNode(disabledNodes[0], pxServiceLabel, "stop")
 				require.NoError(t, err)
 
@@ -209,12 +216,12 @@ var bgTestCases = []types.TestCase{
 				)
 				require.NoError(t, err)
 
+				logrus.Infof("Disabling PX on node %s", disabledNodes[0])
 				err = coreops.Instance().AddLabelOnNode(disabledNodes[0], pxEnabledLabel, "false")
 				require.NoError(t, err)
 				err = coreops.Instance().RemoveLabelOnNode(disabledNodes[0], pxServiceLabel)
 				require.NoError(t, err)
 
-				// wait until PX pod is "down"
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						_, err := coreops.Instance().GetPodByUID(pod.UID, pod.Namespace)
@@ -233,7 +240,7 @@ var bgTestCases = []types.TestCase{
 	},
 	{
 		TestName:        "ExtendLicenseAddNode",
-		TestrailCaseIDs: []string{"XXX", "XXX"},
+		TestrailCaseIDs: []string{"C54298", "C54300", "C54307", "C54320"},
 		TestSpec:        bgTestSpec,
 		TestFunc: func(tc *types.TestCase) func(*testing.T) {
 			return func(t *testing.T) {
@@ -252,13 +259,14 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.NotEmpty(t, pl.Items)
 
+				logrus.Infof("Extending license via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "license", "extend", "--start")
 				require.NoError(t, err)
 				require.Contains(t, stdout.String(), "Successfully initiated license extension")
 
-				// check all PODs, they should "see" the same license extension
+				logrus.Infof("Checking license on all nodes")
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
@@ -270,17 +278,127 @@ var bgTestCases = []types.TestCase{
 						"unexpected error @%s", p.Spec.NodeName)
 				}
 
-				// enable PX on one of the disabled nodes
+				logrus.Infof("Enabling PX on %s", disabledNodes[0])
 				err = coreops.Instance().RemoveLabelOnNode(disabledNodes[0], pxEnabledLabel)
 				require.NoError(t, err)
 
-				// verify node installed OK
 				_, err = task.DoRetryWithTimeout(
 					taskWaitPxctlStatus(t, disabledNodes[0], "portworx", "Status: PX is operational\n"),
 					ci_utils.DefaultValidateDeployTimeout,
 					ci_utils.DefaultValidateDeployRetryInterval,
 				)
 				require.NoError(t, err)
+
+				pl, err = coreops.Instance().ListPods(map[string]string{"name": "portworx"})
+				require.NoError(t, err)
+				require.NotEmpty(t, pl.Items)
+				sort.Slice(pl.Items, func(i, j int) bool {
+					return pl.Items[i].Spec.NodeName < pl.Items[j].Spec.NodeName
+				})
+
+				lastPOD := pl.Items[len(pl.Items)-1]
+				assert.Equal(t, disabledNodes[0], lastPOD.Spec.NodeName)
+
+				tmpSuffix := strconv.FormatInt(time.Now().Unix(), 10)
+				tmpVolName := "testVol" + tmpSuffix
+
+				logrus.Infof("Attempt volume creation on %s", lastPOD.Spec.NodeName)
+				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+					"/opt/pwx/bin/pxctl", "volume", "create", "--repl", "1", "--size", "3", tmpVolName)
+				require.NoError(t, err)
+				require.Contains(t, stdout.String(), "Volume successfully created")
+
+				logrus.Infof("Attempt volume snapshot on %s", lastPOD.Spec.NodeName)
+				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+					"/opt/pwx/bin/pxctl", "volume", "snapshot", "create", "--name", "snap"+tmpSuffix, tmpVolName)
+				require.NoError(t, err)
+				require.Contains(t, stdout.String(), "Volume snap successful")
+			}
+		},
+		// ShouldSkip: func(tc *types.TestCase) bool { return true },
+	},
+	{
+		TestName:        "RestartClusterWhileExtended",
+		TestrailCaseIDs: []string{"C54302"},
+		TestSpec:        bgTestSpec,
+		TestFunc: func(tc *types.TestCase) func(*testing.T) {
+			return func(t *testing.T) {
+				pl, err := coreops.Instance().ListPods(map[string]string{"name": "portworx"})
+				require.NoError(t, err)
+				require.NotEmpty(t, pl.Items)
+
+				logrus.Infof("Restarting PX on all nodes")
+				for _, p := range pl.Items {
+					err = coreops.Instance().AddLabelOnNode(p.Spec.NodeName, pxServiceLabel, "restart")
+					require.NoError(t, err, "could not label node %s", p.Spec.NodeName)
+				}
+
+				logrus.Infof("Waiting until node-labels are cleared  (PX has restarted)")
+				_, err = task.DoRetryWithTimeout(
+					func() (interface{}, bool, error) {
+						cntWithLabel := 0
+						for _, p := range pl.Items {
+							labs, err := coreops.Instance().GetLabelsOnNode(p.Spec.NodeName)
+							require.NoError(t, err, "got error retrieving labels for node %s", p.Spec.NodeName)
+							if _, has := labs[pxServiceLabel]; has {
+								cntWithLabel++
+							}
+						}
+						if cntWithLabel > 0 {
+							return nil, true, fmt.Errorf("waiting for %d/%d nodes to clear %s label",
+								cntWithLabel, len(pl.Items), pxServiceLabel)
+						}
+						return nil, false, nil
+					},
+					ci_utils.DefaultValidateDeployTimeout,
+					ci_utils.DefaultValidateDeployRetryInterval,
+				)
+				require.NoError(t, err)
+
+				sleep4 := 30 * time.Second
+				logrus.Infof("sleeping for %s before checking px-services started...", sleep4)
+				time.Sleep(sleep4)
+
+				logrus.Infof("Waiting until all PODs are ready")
+				_, err = task.DoRetryWithTimeout(
+					func() (interface{}, bool, error) {
+						pl, err = coreops.Instance().ListPods(map[string]string{"name": "portworx"})
+						require.NoError(t, err)
+						require.NotEmpty(t, pl.Items)
+
+						cntReady, cntNotReady := 0, 0
+						for _, p := range pl.Items {
+							for _, st := range p.Status.ContainerStatuses {
+								if st.Ready {
+									cntReady++
+								} else {
+									cntNotReady++
+								}
+							}
+						}
+						if cntNotReady > 0 {
+							return nil, true, fmt.Errorf("waiting for px-containers: %d/%d ready",
+								cntReady, cntReady+cntNotReady)
+						}
+						return nil, false, nil
+					},
+					ci_utils.DefaultValidateDeployTimeout,
+					ci_utils.DefaultValidateDeployRetryInterval,
+				)
+				require.NoError(t, err)
+
+				logrus.Infof("Check status of all PX nodes")
+				var stdout, stderr bytes.Buffer
+				for _, p := range pl.Items {
+					stdout.Reset()
+					stderr.Reset()
+					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
+					assert.Empty(t, stderr.String())
+					assert.Contains(t, stdout.String(), "NOTICE: License extension expires in ",
+						"unexpected STDOUT @%s", p.Spec.NodeName)
+					require.NoError(t, err,
+						"unexpected error @%s", p.Spec.NodeName)
+				}
 			}
 		},
 		// ShouldSkip: func(tc *types.TestCase) bool { return true },
@@ -295,7 +413,7 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.NotEmpty(t, pl.Items)
 
-				// attempt license reinstall  (should error out)
+				logrus.Infof("Attempt license reinstall")
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0], bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
@@ -309,7 +427,7 @@ var bgTestCases = []types.TestCase{
 	},
 	{
 		TestName:        "EndExtensionWhileOverloaded",
-		TestrailCaseIDs: []string{"XXX", "XXX"},
+		TestrailCaseIDs: []string{"C54315"},
 		TestSpec:        bgTestSpec,
 		TestFunc: func(tc *types.TestCase) func(*testing.T) {
 			return func(t *testing.T) {
@@ -317,7 +435,7 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.NotEmpty(t, pl.Items)
 
-				// end license extension  (note, cluster is over-allocated at this point)
+				logrus.Infof("End license extension while cluster over-allocated")
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "license", "extend", "--end")
@@ -325,7 +443,7 @@ var bgTestCases = []types.TestCase{
 				assert.Contains(t, stdout.String(), "Successfully turned off license extension")
 				require.NoError(t, err)
 
-				// all nodes should switch to INVALID LICENSE
+				logrus.Infof("Check all nodes on INVAlID license")
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
@@ -351,13 +469,13 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.NotEmpty(t, pl.Items)
 
-				// restart PX on all
+				logrus.Infof("Restarting all PX service while on INVAlID license")
 				for _, p := range pl.Items {
 					err = coreops.Instance().AddLabelOnNode(p.Spec.NodeName, pxServiceLabel, "restart")
 					require.NoError(t, err, "could not label node %s", p.Spec.NodeName)
 				}
 
-				// wait until labels are cleared
+				logrus.Infof("Waiting until labels cleared")
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						cntWithLabel := 0
@@ -380,10 +498,10 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 
 				sleep4 := 30 * time.Second
-				logrus.Debugf("sleeping for %s before checking px-services started...", sleep4)
+				logrus.Infof("sleeping for %s before checking px-services started...", sleep4)
 				time.Sleep(sleep4)
 
-				// wait until PODs are ready
+				logrus.Infof("Waiting until PODs ready")
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						pl, err = coreops.Instance().ListPods(map[string]string{"name": "portworx"})
@@ -416,7 +534,7 @@ var bgTestCases = []types.TestCase{
 	},
 	{
 		TestName:        "NodeDecommissionEndsOverloadedState",
-		TestrailCaseIDs: []string{"XXX", "XXX"},
+		TestrailCaseIDs: []string{"C54316", "C54317"},
 		TestSpec:        bgTestSpec,
 		TestFunc: func(tc *types.TestCase) func(*testing.T) {
 			return func(t *testing.T) {
@@ -429,20 +547,21 @@ var bgTestCases = []types.TestCase{
 				})
 				lastNode := pl.Items[len(pl.Items)-1].Spec.NodeName
 
+				logrus.Infof("Stopping PX on node %s", lastNode)
 				err = coreops.Instance().AddLabelOnNode(lastNode, pxServiceLabel, "stop")
 				require.NoError(t, err, "could not label node %s", lastNode)
 
 				sleep4 := 30 * time.Second
-				logrus.Debugf("Sleeping for %s to allow portworx.service @%s to stop", sleep4, lastNode)
+				logrus.Infof("Sleeping for %s to allow portworx.service @%s to stop", sleep4, lastNode)
 				time.Sleep(sleep4)
 
-				// turn off POD...
+				logrus.Infof("Disabling POD on node %s", lastNode)
 				err = coreops.Instance().AddLabelOnNode(lastNode, pxEnabledLabel, "false")
 				require.NoError(t, err)
 				err = coreops.Instance().RemoveLabelOnNode(lastNode, pxServiceLabel)
 				require.NoError(t, err)
 
-				// wipe last node
+				logrus.Infof("Wiping node %s", lastNode)
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						if err = wipeNodeRunningPod(&pl.Items[len(pl.Items)-1]); err != nil {
@@ -463,7 +582,7 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.NotEmpty(t, lastNodeID)
 
-				// remove wiped node from the px cluster
+				logrus.Infof("Decomissioning wiped PX NodeID %s via node %s", lastNodeID, pl.Items[0].Spec.NodeName)
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						var stdout, stderr bytes.Buffer
@@ -482,6 +601,7 @@ var bgTestCases = []types.TestCase{
 
 				// recheck licenses on all the nodes (except the last/wiped one)
 				// note, we're recovering from `License: PX-Enterprise Torpedo_TEST_license (ERROR: too many nodes in the cluster)`
+				logrus.Infof("Checking PX status on all nodes")
 				for _, p := range pl.Items[:len(pl.Items)-1] {
 					var stdout, stderr bytes.Buffer
 					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
