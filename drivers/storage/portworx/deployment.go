@@ -1423,7 +1423,7 @@ func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
 			configVolume,
 		}
 
-		if pxutil.GetPxProxyEnvVarValue(t.cluster) != "" {
+		if _, proxy := pxutil.GetPxProxyEnvVarValue(t.cluster); proxy != "" {
 			volumeInfoList = append(volumeInfoList, volumeInfo{
 				name:      "ccm-proxy-config",
 				mountPath: component.TelemetryCCMProxyFilePath,

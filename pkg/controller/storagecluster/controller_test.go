@@ -9202,6 +9202,139 @@ func TestDoesTelemetryMatch(t *testing.T) {
 
 }
 
+func TestStorageClusterValidateTelemetry(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.7.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	// TestCase: raise warning when telemetry is enabled but px version is too low
+	_, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported on Portworx version",
+			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// TestCase: raise warning when telemetry is enabled with secure proxy and ccm-go
+	currentCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Image = "portworx/oci-monitor:2.12.0"
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "test-proxy",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with secure proxy",
+			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// TestCase: raise warning when telemetry is enabled with invalid proxy format and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://user:pass@host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with proxy",
+			v1.EventTypeWarning, util.FailedValidationReason))
+
+	// TestCase: telemetry is enabled with http proxy and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 0)
+
+	// TestCase: telemetry is enabled with http proxy specified in https env var and ccm-go
+	currentCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, currentCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	currentCluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "http://host:port",
+	}}
+	err = testutil.Update(k8sClient, currentCluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 0)
+}
+
 func replaceOldPod(
 	oldPod *v1.Pod,
 	cluster *corev1.StorageCluster,

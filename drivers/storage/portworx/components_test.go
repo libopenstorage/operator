@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -12673,18 +12675,67 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Monitoring)
 
-	// TestCase: telemetry should not be enabled by default if cluster UUID is not ready
+	// TestCase: telemetry should not be disabled if using http proxy on ccm-go
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:port",
+	}}
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Nil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 
-	// TestCase: telemetry should not be enabled by default if proxy is configured
+	// TestCase: telemetry should not be disabled if using http proxy url in https env var on ccm-go
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "http://host:port",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should be disabled if using secure proxy on ccm-go
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+		Value: "test-proxy",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should be disabled if using invalid http proxy format
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
 	cluster.Spec.Env = []v1.EnvVar{{
 		Name:  pxutil.EnvKeyPortworxHTTPProxy,
 		Value: "test-proxy",
 	}}
-	cluster.Status.ClusterUID = "test-uuid"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+
+	// TestCase: telemetry should not be enabled by default if proxy is configured
+	cluster.Spec.Monitoring = nil
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "host:port",
+	}}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Monitoring)
@@ -12702,13 +12753,20 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 
-	// TestCase: telemetry should not be enabled by default if prod register endpoint is unreachable
-	setupEtcHosts(t, "1.2.3.4", "register.cloud-support.purestorage.com")
+	// TestCase: telemetry should not be enabled by default if uuid is not ready
 	cluster.Spec.Monitoring = nil
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Monitoring)
-	restoreEtcHosts(t)
+
+	// TestCase: telemetry should not be enabled by default if prod register endpoint is unreachable
+	cluster.Status.ClusterUID = "cluster-uid"
+	setupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
+	defer restoreEtcHosts(t)
+	cluster.Spec.Monitoring = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Spec.Monitoring)
 
 	// TestCase: telemetry should be enabled by default if staging register endpoint is reachable
 	cluster.Spec.Env = nil
@@ -14400,6 +14458,24 @@ func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
 	require.NoError(t, err)
 	assert.Equal(t, bb.Len(), n, "short write")
 	fd.Close()
+
+	// waiting for dns can be resolved
+	for i := 0; i < 60; i++ {
+		var ips []net.IP
+		ips, err = net.LookupIP(hostnames[0])
+		if err != nil || !strings.Contains(fmt.Sprintf("%v", ips), ip) {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+				"ips":   ips,
+				"ip":    ip,
+				"hosts": hostnames,
+			}).Warnf("failed to set /etc/hosts, retrying")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+	require.NoError(t, err)
 }
 
 func restoreEtcHosts(t *testing.T) {
