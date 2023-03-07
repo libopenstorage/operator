@@ -600,7 +600,7 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 		configParameterRegisterCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	}
 
-	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
 		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
 		if err != nil {
@@ -649,7 +649,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	}
 
-	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
 		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
 		if err != nil {
@@ -700,7 +700,7 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 		configParameterComponentSN:          "portworx-metrics-node",
 	}
 
-	proxy := pxutil.GetPxProxyEnvVarValue(cluster)
+	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
 		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
 		if err != nil {
