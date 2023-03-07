@@ -110,6 +110,9 @@ const (
 	defaultTelemetryInPxctlValidationTimeout  = 20 * time.Minute
 	defaultTelemetryInPxctlValidationInterval = 30 * time.Second
 
+	defaultDmthinValidationTimeout  = 20 * time.Minute
+	defaultDmthinValidationInterval = 10 * time.Second
+
 	defaultPxAuthValidationTimeout  = 20 * time.Minute
 	defaultPxAuthValidationInterval = 30 * time.Second
 
@@ -673,6 +676,11 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate dmthin
+	if err = validateDmthinOnPxNodes(liveCluster); err != nil {
+		return err
+	}
+
 	if err = validateComponents(pxImageList, liveCluster, timeout, interval); err != nil {
 		return err
 	}
@@ -1059,6 +1067,62 @@ func validateStorageClusterPods(
 	}
 
 	return nil
+}
+
+// validateDmthinOnPxNodes greps for dmthin in the /etc/pwx/config.json on each PX pods
+// and makes sure its there, if dmthin misc-args annotation is found
+func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
+	listOptions := map[string]string{"name": "portworx"}
+	cmd := "cat /etc/pwx/config.json | grep dmthin"
+
+	if !strings.Contains(cluster.Annotations["portworx.io/misc-args"], "-T dmthin") {
+		logrus.Debugf("Dmthin is not enabled on PX cluster [%s]", cluster.Name)
+		return nil
+	}
+	logrus.Infof("Dmthin is enabled on PX cluster [%s]", cluster.Name)
+
+	logrus.Infof("Will check that storage is type dmthin on all PX pods")
+	t := func() (interface{}, bool, error) {
+		// Get Portworx pods
+		pxPods, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get PX pods, Err: %v", err)
+		}
+
+		for _, pxPod := range pxPods.Items {
+			dmthinEnabled, err := validateDmthinViaPodCmd(&pxPod, cmd, cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+			if dmthinEnabled {
+				continue
+			}
+			return nil, true, fmt.Errorf("dmthin is not enabled on PX pod [%s]", pxPod.Name)
+		}
+		return nil, false, nil
+	}
+
+	_, err := task.DoRetryWithTimeout(t, defaultDmthinValidationTimeout, defaultDmthinValidationInterval)
+	if err != nil {
+		return err
+	}
+
+	logrus.Info("Validated dmthin is enabled on all PX pods")
+	return nil
+}
+
+// validateDmthinViaPodCmd runs command on PX pod and returns true if dmthin is enabled on that PX node
+func validateDmthinViaPodCmd(pxPod *v1.Pod, cmd string, namespace string) (bool, error) {
+	output, err := runCmdInsidePxPod(pxPod, cmd, namespace, false)
+	if err != nil {
+		return false, err
+	}
+
+	if len(output) > 0 {
+		logrus.Infof("Validated dmthin is enabled on pod [%s], output from the command [%s] is [%s]", pxPod.Name, cmd, strings.TrimSpace(strings.TrimSuffix(output, "\n")))
+		return true, nil
+	}
+	return false, fmt.Errorf("failed to find [dmthin] in the putput from [%s]", cmd)
 }
 
 // Set default Node Affinity rules as Portworx Operator would when deploying StorageCluster
