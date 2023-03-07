@@ -366,6 +366,9 @@ func TestSplitPxProxyHostPort(t *testing.T) {
 
 	_, _, err = SplitPxProxyHostPort(":1234")
 	require.Error(t, err)
+
+	_, _, err = SplitPxProxyHostPort("user:password@host:1234")
+	require.Error(t, err)
 }
 
 func createClusterWithAuth() *corev1.StorageCluster {
