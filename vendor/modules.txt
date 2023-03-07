@@ -568,8 +568,6 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.15
 github.com/openshift/api/config/v1
 github.com/openshift/api/security/v1
-# github.com/operator-framework/api v0.17.1
-## explicit; go 1.18
 # github.com/pborman/uuid v1.2.0
 ## explicit
 github.com/pborman/uuid
