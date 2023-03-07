@@ -935,23 +935,28 @@ func setTelemetryDefaults(
 	toUpdate *corev1.StorageCluster,
 	pxVersion *version.Version,
 ) error {
-	// Disable telemetry if it's not supported but enabled explicitly
-	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
-		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
+	// Check if telemetry is enabled correctly, disable it if not
+	if err := pxutil.ValidateTelemetry(toUpdate); err != nil {
+		toUpdate.Spec.Monitoring.Telemetry.Enabled = false
 		toUpdate.Spec.Monitoring.Telemetry.Image = ""
 		toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
+		logrus.Warnf("telemetry is disabled: %v", err)
 		return nil
 	}
 
 	// Only enable telemetry by default under conditions:
 	// 1. CCM Go is supported
-	// 2. Portworx initialized (cluster UUID ready)
-	// 3. telemetry is not specified explicitly
+	// 2. telemetry is not specified explicitly
+	// 3. Portworx initialized (cluster UUID ready)
 	// 4. no air-gapped or custom proxy
+	// TODO: pwx-29521 uuid is checked here to avoid unit tests sending requests to arcus endpoint
 	if !pxutil.IsCCMGoSupported(pxVersion) ||
-		toUpdate.Status.ClusterUID == "" ||
 		(toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Telemetry != nil) ||
-		pxutil.GetPxProxyEnvVarValue(toUpdate) != "" {
+		toUpdate.Status.ClusterUID == "" {
+		return nil
+	}
+	if _, proxy := pxutil.GetPxProxyEnvVarValue(toUpdate); proxy != "" {
+		// Don't enable telemetry if either of http or https proxy is specified
 		return nil
 	}
 	canAccess, err := component.CanAccessArcusRegisterEndpoint(toUpdate)

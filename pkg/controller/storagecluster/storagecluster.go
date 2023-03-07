@@ -291,6 +291,11 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.Driver.Validate(); err != nil {
 		return err
 	}
+	if err := pxutil.ValidateTelemetry(cluster); err != nil {
+		// Raise warning only and don't block anything
+		msg := fmt.Sprintf("telemetry will be disabled: %v", err)
+		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, msg)
+	}
 
 	return nil
 }
