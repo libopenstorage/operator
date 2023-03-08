@@ -12836,6 +12836,15 @@ func TestSCC(t *testing.T) {
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedSCC, scc)
+
+	// Update SCC
+	scc.AllowHostNetwork = false
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
 }
 
 func TestPodSecurityPoliciesEnabled(t *testing.T) {

@@ -1276,6 +1276,18 @@ func CountStorageNodes(
 	return storageNodesCount, nil
 }
 
+func CleanupObject(obj client.Object) {
+	obj.SetGenerateName("")
+	obj.SetUID("")
+	obj.SetResourceVersion("")
+	obj.SetGeneration(0)
+	obj.SetSelfLink("")
+	obj.SetCreationTimestamp(metav1.Time{})
+	obj.SetFinalizers(nil)
+	obj.SetOwnerReferences(nil)
+	obj.SetManagedFields(nil)
+}
+
 // IsFreshInstall checks whether it's a fresh Portworx install
 func IsFreshInstall(cluster *corev1.StorageCluster) bool {
 	// To handle failures during fresh install e.g. validation falures,
