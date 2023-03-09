@@ -405,7 +405,7 @@ func (d *DryRun) simulateK8sNode() error {
 		}
 
 		for _, node := range nodeList.Items {
-			d.cleanupObject(&node)
+			pxutil.CleanupObject(&node)
 			err = d.mockClient.Create(context.TODO(), &node)
 			if err != nil {
 				return err
@@ -414,18 +414,6 @@ func (d *DryRun) simulateK8sNode() error {
 	}
 
 	return nil
-}
-
-func (d *DryRun) cleanupObject(obj client.Object) {
-	obj.SetGenerateName("")
-	obj.SetUID("")
-	obj.SetResourceVersion("")
-	obj.SetGeneration(0)
-	obj.SetSelfLink("")
-	obj.SetCreationTimestamp(metav1.Time{})
-	obj.SetFinalizers(nil)
-	obj.SetOwnerReferences(nil)
-	obj.SetManagedFields(nil)
 }
 
 func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migration.Handler) error {
@@ -584,7 +572,7 @@ func (d *DryRun) getStorageCluster(storageClusterFile string) (*corev1.StorageCl
 		}
 		if len(clusterList.Items) > 0 {
 			cluster := &clusterList.Items[0]
-			d.cleanupObject(cluster)
+			pxutil.CleanupObject(cluster)
 			return cluster, nil
 		}
 	}
