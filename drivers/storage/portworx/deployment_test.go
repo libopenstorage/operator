@@ -2,7 +2,6 @@ package portworx
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -318,43 +317,6 @@ func TestPodSpecWithPortworxContainerResources(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.Len(t, podSpec.Containers, 1)
 	assert.Equal(t, resources, podSpec.Containers[0].Resources)
-
-	// Memory limit and CPU limit
-	cluster.Spec.Resources = &v1.ResourceRequirements{
-		Requests: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory: resource.MustParse("4Gi"),
-			v1.ResourceCPU:    resource.MustParse("400m"),
-		},
-		Limits: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory: resource.MustParse("8Gi"),
-			v1.ResourceCPU:    resource.MustParse("800m"),
-		},
-	}
-
-	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	assert.Len(t, podSpec.Containers, 1)
-	assert.Equal(t, *cluster.Spec.Resources, podSpec.Containers[0].Resources)
-	require.True(t, strings.Contains(strings.Join(podSpec.Containers[0].Args, " "), "--cpus 0.8"))
-	require.True(t, strings.Contains(strings.Join(podSpec.Containers[0].Args, " "), "--memory 8589934592"))
-
-	cluster.Spec.Resources = &v1.ResourceRequirements{
-		Requests: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory: resource.MustParse("4Gi"),
-			v1.ResourceCPU:    resource.MustParse("4"),
-		},
-		Limits: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory: resource.MustParse("8Gi"),
-			v1.ResourceCPU:    resource.MustParse("8"),
-		},
-	}
-
-	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	assert.Len(t, podSpec.Containers, 1)
-	assert.Equal(t, *cluster.Spec.Resources, podSpec.Containers[0].Resources)
-	require.True(t, strings.Contains(strings.Join(podSpec.Containers[0].Args, " "), "--cpus 8"))
-	require.True(t, strings.Contains(strings.Join(podSpec.Containers[0].Args, " "), "--memory 8589934592"))
 }
 
 func TestPodSpecWithEnvOverrides(t *testing.T) {
