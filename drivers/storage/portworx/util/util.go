@@ -1056,6 +1056,18 @@ func CountStorageNodes(
 	return storageNodesCount, nil
 }
 
+func CleanupObject(obj client.Object) {
+	obj.SetGenerateName("")
+	obj.SetUID("")
+	obj.SetResourceVersion("")
+	obj.SetGeneration(0)
+	obj.SetSelfLink("")
+	obj.SetCreationTimestamp(metav1.Time{})
+	obj.SetFinalizers(nil)
+	obj.SetOwnerReferences(nil)
+	obj.SetManagedFields(nil)
+}
+
 func SetTelemetryCertOwnerRef(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,

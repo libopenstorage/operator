@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-
 	"github.com/hashicorp/go-version"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	"github.com/sirupsen/logrus"
@@ -14,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -85,18 +85,32 @@ func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 	// Note SCC does not belong to namespace hence we don't set owner reference to StorageCluster.
 	// By design cross-namespace owner reference is invalid.
 	for _, scc := range s.getSCCs(cluster) {
+		existingScc := ocp_secv1.SecurityContextConstraints{}
 		err := s.k8sClient.Get(context.TODO(),
 			types.NamespacedName{
 				Name: scc.Name,
 			},
-			&ocp_secv1.SecurityContextConstraints{})
+			&existingScc)
 
 		if errors.IsNotFound(err) {
 			err = s.k8sClient.Create(context.TODO(), &scc)
-		}
-
-		if err != nil {
-			return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
+			if err != nil {
+				return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
+			}
+		} else if err == nil {
+			resourceVersion := existingScc.ResourceVersion
+			pxutil.CleanupObject(&scc)
+			pxutil.CleanupObject(&existingScc)
+			logrus.Infof("Updating %s security context constraints", scc.Name)
+			if !reflect.DeepEqual(scc, existingScc) {
+				scc.ResourceVersion = resourceVersion
+				err = s.k8sClient.Update(context.TODO(), &scc)
+				if err != nil {
+					return fmt.Errorf("failed to update %s security context constraints: %s", scc.Name, err)
+				}
+			}
+		} else {
+			return fmt.Errorf("failed to get %s security context constraints: %s", scc.Name, err)
 		}
 	}
 	return nil
@@ -170,6 +184,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"),
 			},
 		},
 	}
