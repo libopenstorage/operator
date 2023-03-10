@@ -418,17 +418,19 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Empty(t, rel.Components.CSIAttacher)
 
 	// TestCase: No components at all, use all default components
+	expected.PortworxVersion = "2.13.0"
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	err = k8sClient.Update(context.TODO(), versionsConfigMap)
 	require.NoError(t, err)
 
+	k8sVersion, _ = version.NewSemver("1.21.0")
 	m.Init(k8sClient, nil, k8sVersion)
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
-	require.Equal(t, "docker.io/openstorage/csi-provisioner:v1.6.1-1", rel.Components.CSIProvisioner)
+	require.Equal(t, "registry.k8s.io/sig-storage/csi-provisioner:v3.3.0", rel.Components.CSIProvisioner)
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
