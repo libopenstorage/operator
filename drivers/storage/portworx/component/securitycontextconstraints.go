@@ -12,9 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -144,6 +144,18 @@ func (s *scc) MarkDeleted() {
 }
 
 func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityContextConstraints {
+	var sccPriority *int32
+
+	if str, exists := cluster.Annotations[pxutil.AnnotationSCCPriority]; exists {
+		n, err := strconv.ParseInt(str, 10, 32)
+		if err == nil {
+			t := int32(n)
+			sccPriority = &t
+		} else {
+			logrus.WithError(err).Errorf("Invalid scc priority")
+		}
+	}
+
 	return []ocp_secv1.SecurityContextConstraints{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -163,7 +175,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			FSGroup: ocp_secv1.FSGroupStrategyOptions{
 				Type: ocp_secv1.FSGroupStrategyRunAsAny,
 			},
-			Priority:               pointer.Int32Ptr(2),
+			Priority:               sccPriority,
 			ReadOnlyRootFilesystem: false,
 			RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
 				Type: ocp_secv1.RunAsUserStrategyRunAsAny,
