@@ -133,6 +133,8 @@ const (
 	AnnotationDNSPolicy = pxAnnotationPrefix + "/dns-policy"
 	// AnnotationClusterID overwrites portworx cluster ID, which is the storage cluster name by default
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
+	// AnnotationDisableCSRAutoApprove annotation to set priority for SCCs.
+	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
