@@ -305,14 +305,22 @@ var bgTestCases = []types.TestCase{
 				logrus.Infof("Attempt volume creation on %s", lastPOD.Spec.NodeName)
 				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "volume", "create", "--repl", "1", "--size", "3", tmpVolName)
-				require.NoError(t, err)
 				require.Contains(t, stdout.String(), "Volume successfully created")
+				require.NoError(t, err)
 
 				logrus.Infof("Attempt volume snapshot on %s", lastPOD.Spec.NodeName)
 				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "volume", "snapshot", "create", "--name", "snap"+tmpSuffix, tmpVolName)
-				require.NoError(t, err)
 				require.Contains(t, stdout.String(), "Volume snap successful")
+				require.NoError(t, err)
+
+				logrus.Infof("Cleaning up volume / snapshot on %s", lastPOD.Spec.NodeName)
+				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+					"/bin/sh", "-c", "/opt/pwx/bin/pxctl v delete --force snap"+tmpSuffix+
+						"; /opt/pwx/bin/pxctl v delete --force "+tmpVolName)
+				require.Contains(t, stdout.String(), "Volume snap"+tmpSuffix+" successfully deleted")
+				require.Contains(t, stdout.String(), "Volume "+tmpVolName+" successfully deleted")
+				require.NoError(t, err)
 			}
 		},
 		// ShouldSkip: func(tc *types.TestCase) bool { return true },
