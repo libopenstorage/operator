@@ -17,7 +17,6 @@ kind: SecurityContextConstraints
 metadata:
   name: portworx
   resourceVersion: "1"
-priority: 2
 readOnlyRootFilesystem: false
 requiredDropCapabilities: null
 runAsUser:
