@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
@@ -75,6 +76,7 @@ var (
 type autopilot struct {
 	isCreated bool
 	k8sClient client.Client
+	k8sVersion version.Version
 }
 
 func (c *autopilot) Name() string {
@@ -252,19 +254,37 @@ func (c *autopilot) createServiceAccount(
 }
 
 func (c *autopilot) createClusterRole() error {
+	var rules []rbacv1.PolicyRule
+	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_26) {
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+				Verbs:     []string{"*"},
+			},
+	    } 
+	} else {
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+				Verbs:     []string{"*"},
+			},
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{constants.RestrictedPSPName},
+				Verbs:         []string{"use"},
+			},
+	    }
+    }
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: AutopilotClusterRoleName,
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"*"},
-					Resources: []string{"*"},
-					Verbs:     []string{"*"},
-				},
-			},
+			Rules: rules,
 		},
 	)
 }
