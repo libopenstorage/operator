@@ -81,6 +81,35 @@ func (s *scc) crdExists(cluster *opcorev1.StorageCluster) bool {
 	}
 }
 
+func deepEqualScc(scc, existingScc *ocp_secv1.SecurityContextConstraints) bool {
+	if !(scc.Priority == nil && existingScc.Priority == nil ||
+		scc.Priority != nil && existingScc.Priority != nil && *scc.Priority == *existingScc.Priority) ||
+		!(scc.AllowPrivilegeEscalation == nil && existingScc.AllowPrivilegeEscalation == nil ||
+			scc.AllowPrivilegeEscalation != nil && existingScc.AllowPrivilegeEscalation != nil &&
+				*scc.AllowPrivilegeEscalation == *existingScc.AllowPrivilegeEscalation) {
+		return false
+	}
+
+	// Skip comparing auto-generated fields
+	sccCopy := scc.DeepCopy()
+	sccCopy.ResourceVersion = existingScc.ResourceVersion
+	sccCopy.ObjectMeta.UID = existingScc.ObjectMeta.UID
+	sccCopy.ObjectMeta.Generation = existingScc.ObjectMeta.Generation
+	sccCopy.ObjectMeta.CreationTimestamp = existingScc.ObjectMeta.CreationTimestamp
+	sccCopy.ObjectMeta.ManagedFields = existingScc.ObjectMeta.ManagedFields
+	sccCopy.ObjectMeta.GenerateName = existingScc.ObjectMeta.GenerateName
+	sccCopy.ObjectMeta.Finalizers = existingScc.ObjectMeta.Finalizers
+	sccCopy.ObjectMeta.OwnerReferences = existingScc.ObjectMeta.OwnerReferences
+	sccCopy.TypeMeta.Kind = existingScc.TypeMeta.Kind
+	sccCopy.TypeMeta.APIVersion = existingScc.TypeMeta.APIVersion
+	sccCopy.Priority = existingScc.Priority
+	sccCopy.AllowPrivilegeEscalation = existingScc.AllowPrivilegeEscalation
+	if scc.Groups == nil {
+		sccCopy.Groups = make([]string, 0)
+	}
+	return reflect.DeepEqual(sccCopy, existingScc)
+}
+
 func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 	// Note SCC does not belong to namespace hence we don't set owner reference to StorageCluster.
 	// By design cross-namespace owner reference is invalid.
@@ -98,12 +127,9 @@ func (s *scc) Reconcile(cluster *opcorev1.StorageCluster) error {
 				return fmt.Errorf("failed to create %s security context constraints: %s", scc.Name, err)
 			}
 		} else if err == nil {
-			resourceVersion := existingScc.ResourceVersion
-			pxutil.CleanupObject(&scc)
-			pxutil.CleanupObject(&existingScc)
-			logrus.Infof("Updating %s security context constraints", scc.Name)
-			if !reflect.DeepEqual(scc, existingScc) {
-				scc.ResourceVersion = resourceVersion
+			if !deepEqualScc(&scc, &existingScc) {
+				scc.ResourceVersion = existingScc.ResourceVersion
+				logrus.Infof("Updating %s security context constraints", scc.Name)
 				err = s.k8sClient.Update(context.TODO(), &scc)
 				if err != nil {
 					return fmt.Errorf("failed to update %s security context constraints: %s", scc.Name, err)
