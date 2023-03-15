@@ -142,6 +142,8 @@ const (
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
 	// AnnotationDisableCSRAutoApprove annotation will disable CSR auto-approval
 	AnnotationDisableCSRAutoApprove = pxAnnotationPrefix + "/disable-csr-approve"
+	// AnnotationDisableCSRAutoApprove annotation to set priority for SCCs.
+	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"

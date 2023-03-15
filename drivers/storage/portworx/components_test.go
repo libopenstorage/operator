@@ -12877,6 +12877,16 @@ func TestSCC(t *testing.T) {
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
 	require.NoError(t, err)
+
+	// Update SCC priority
+	cluster.Annotations[pxutil.AnnotationSCCPriority] = "2"
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, *scc.Priority, int32(2))
 }
 
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
