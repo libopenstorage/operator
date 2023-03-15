@@ -4179,7 +4179,6 @@ func TestAutopilotSecurityContext(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)

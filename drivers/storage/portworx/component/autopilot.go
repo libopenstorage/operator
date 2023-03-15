@@ -74,8 +74,8 @@ var (
 )
 
 type autopilot struct {
-	isCreated bool
-	k8sClient client.Client
+	isCreated  bool
+	k8sClient  client.Client
 	k8sVersion version.Version
 }
 
@@ -262,7 +262,7 @@ func (c *autopilot) createClusterRole() error {
 				Resources: []string{"*"},
 				Verbs:     []string{"*"},
 			},
-	    } 
+		}
 	} else {
 		rules = []rbacv1.PolicyRule{
 			{
@@ -276,8 +276,8 @@ func (c *autopilot) createClusterRole() error {
 				ResourceNames: []string{constants.RestrictedPSPName},
 				Verbs:         []string{"use"},
 			},
-	    }
-    }
+		}
+	}
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
