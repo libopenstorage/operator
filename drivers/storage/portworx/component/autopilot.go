@@ -89,11 +89,12 @@ func (c *autopilot) Priority() int32 {
 
 func (c *autopilot) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	_ *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.k8sVersion = k8sVersion
 }
 
 func (c *autopilot) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
