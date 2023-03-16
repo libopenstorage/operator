@@ -255,29 +255,21 @@ func (c *autopilot) createServiceAccount(
 }
 
 func (c *autopilot) createClusterRole() error {
-	var rules []rbacv1.PolicyRule
-	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_26) {
-		rules = []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"*"},
-				Resources: []string{"*"},
-				Verbs:     []string{"*"},
-			},
-		}
-	} else {
-		rules = []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"*"},
-				Resources: []string{"*"},
-				Verbs:     []string{"*"},
-			},
-			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				ResourceNames: []string{constants.RestrictedPSPName},
-				Verbs:         []string{"use"},
-			},
-		}
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"*"},
+			Resources: []string{"*"},
+			Verbs:     []string{"*"},
+		},
+	}
+	if c.k8sVersion.LessThan(k8sutil.K8sVer1_25) {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			ResourceNames: []string{constants.RestrictedPSPName},
+			Verbs:         []string{"use"},
+		},
+		)
 	}
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
