@@ -3163,7 +3163,7 @@ func TestAutopilotInstall(t *testing.T) {
 		},
 	}
 
-	cluster := stcSpec
+	cluster := stcSpec.DeepCopy()
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -3235,7 +3235,7 @@ func TestAutopilotInstall(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	cluster = stcSpec
+	cluster = stcSpec.DeepCopy()
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
