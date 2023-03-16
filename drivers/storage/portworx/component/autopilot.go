@@ -74,8 +74,9 @@ var (
 )
 
 type autopilot struct {
-	isCreated bool
-	k8sClient client.Client
+	isCreated  bool
+	k8sClient  client.Client
+	k8sVersion version.Version
 }
 
 func (c *autopilot) Name() string {
@@ -88,11 +89,12 @@ func (c *autopilot) Priority() int32 {
 
 func (c *autopilot) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	_ *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.k8sVersion = k8sVersion
 }
 
 func (c *autopilot) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -253,25 +255,29 @@ func (c *autopilot) createServiceAccount(
 }
 
 func (c *autopilot) createClusterRole() error {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"*"},
+			Resources: []string{"*"},
+			Verbs:     []string{"*"},
+		},
+	}
+	if c.k8sVersion.LessThan(k8sutil.K8sVer1_25) {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			ResourceNames: []string{constants.RestrictedPSPName},
+			Verbs:         []string{"use"},
+		},
+		)
+	}
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: AutopilotClusterRoleName,
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"*"},
-					Resources: []string{"*"},
-					Verbs:     []string{"*"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{constants.RestrictedPSPName},
-					Verbs:         []string{"use"},
-				},
-			},
+			Rules: rules,
 		},
 	)
 }
@@ -502,6 +508,10 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 								},
 							},
 							VolumeMounts: volumeMounts,
+							SecurityContext: &v1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								Privileged:               boolPtr(false),
+							},
 						},
 					},
 					Volumes: volumes,
