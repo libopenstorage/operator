@@ -474,7 +474,23 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		// Since the Telemetry only enabled by PX Operator by default once the cluster has UUID
+		// we need to first deploy StorageCluster, then check that cluster is online, get new cluster object and only then validate all components
+		// to make sure that cluster has UUID and PX Operator enabled Telemetry in the StorageCluster by default
+		cluster, err = ci_utils.DeployStorageCluster(cluster, ci_utils.PxSpecImages)
+		require.NoError(t, err)
+
+		cluster, err = testutil.ValidateStorageClusterIsOnline(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
+		require.NoError(t, err)
+
+		time.Sleep(30 * time.Second) // NOTE: We need this timeout or PX Operator might not yet set Telemetry to enabled, might be resolved by PWX-29521
+
+		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
+
 		telemetryEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled
 
 		// Validate Telemetry is enabled by default with PX 2.12+ and Operator 23.3.0+
@@ -869,7 +885,7 @@ func BasicAlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Validate AlertManager is not enabled by default
-		logrus.Info("Validate ALertManager is not enabled by default")
+		logrus.Info("Validate AlertManager is not enabled by default")
 		if cluster.Spec.Monitoring != nil {
 			if cluster.Spec.Monitoring.Prometheus != nil {
 				if cluster.Spec.Monitoring.Prometheus.AlertManager != nil {
@@ -890,17 +906,21 @@ func BasicAlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 
 		// Enable AlertManager without Prometheus and validate it does't get deployed
 		logrus.Info("Enable AlertManager without Prometheus and validate it doesn't get deployed")
-		var monitoring *corev1.MonitoringSpec
 		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			if cluster.Spec.Monitoring == nil {
-				monitoring = &corev1.MonitoringSpec{
+				cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 					Prometheus: &corev1.PrometheusSpec{
 						AlertManager: &corev1.AlertManagerSpec{
 							Enabled: true,
 						},
 					},
 				}
-				cluster.Spec.Monitoring = monitoring
+			} else { // Only update Prometheus object, if Monitoring object is not nil
+				cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{
+					AlertManager: &corev1.AlertManagerSpec{
+						Enabled: true,
+					},
+				}
 			}
 			return cluster
 		}
@@ -910,13 +930,11 @@ func BasicAlertManagerRegression(tc *types.TestCase) func(*testing.T) {
 		// Enable AlertManager with Prometheus and validate it gets deployed
 		logrus.Info("Enable AlertManager with Prometheus and validate it gets deployed")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
-			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-				Prometheus: &corev1.PrometheusSpec{
-					AlertManager: &corev1.AlertManagerSpec{
-						Enabled: true,
-					},
+			cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{
+				AlertManager: &corev1.AlertManagerSpec{
 					Enabled: true,
 				},
+				Enabled: true,
 			}
 			return cluster
 		}
