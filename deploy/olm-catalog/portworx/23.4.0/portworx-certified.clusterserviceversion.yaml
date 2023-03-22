@@ -1,13 +1,13 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v23.3.0
+  name: portworx-operator.v23.4.0
   namespace: placeholder
   annotations:
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: registry.connect.redhat.com/portworx/openstorage-operator@sha256:940aa21c19c3a4961c64988aab0e87d8c5de0cebc1d1f45e3adc68a6fab9c1a7
+    containerImage: portworx/px-operator:23.4.0-dev
     repository: https://github.com/libopenstorage/operator
     createdAt: 2023-03-21T21:29:41Z
     support: Portworx, Inc
@@ -49,10 +49,10 @@ metadata:
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 23.3.0
+  version: 23.4.0
   minKubeVersion: "1.21.0"
   maturity: stable
-  replaces: portworx-operator.v1.10.5
+  replaces: portworx-operator.v23.3.0
   maintainers:
   - name: Portworx
     email: support@portworx.com
@@ -215,7 +215,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:940aa21c19c3a4961c64988aab0e87d8c5de0cebc1d1f45e3adc68a6fab9c1a7
+                image: portworx/px-operator:23.4.0-dev
                 imagePullPolicy: Always
                 command:
                 - /operator
