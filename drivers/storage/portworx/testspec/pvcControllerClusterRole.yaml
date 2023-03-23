@@ -44,7 +44,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "update"]
 - apiGroups: ["security.openshift.io"]
   resources: ["securitycontextconstraints"]
-  resourceNames: ["portworx"]
+  resourceNames: ["portworx-restricted"]
   verbs: ["use"]
 - apiGroups: ["policy"]
   resources: ["podsecuritypolicies"]

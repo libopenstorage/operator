@@ -220,6 +220,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			Users: []string{
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, ServiceAccountNameTelemetry),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"),
 			},
@@ -228,9 +229,9 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			ObjectMeta: metav1.ObjectMeta{
 				Name: PxRestrictedSCCName,
 			},
-			AllowHostDirVolumePlugin: false,
+			AllowHostDirVolumePlugin: true,
 			AllowHostIPC:             false,
-			AllowHostNetwork:         false,
+			AllowHostNetwork:         true,
 			AllowHostPID:             false,
 			AllowHostPorts:           false,
 			AllowPrivilegeEscalation: boolPtr(true),
@@ -258,10 +259,12 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				ocp_secv1.FSTypeConfigMap,
 				ocp_secv1.FSTypeDownwardAPI,
 				ocp_secv1.FSTypeEmptyDir,
+				ocp_secv1.FSTypeHostPath,
 				ocp_secv1.FSTypePersistentVolumeClaim,
 				ocp_secv1.FSProjected,
 				ocp_secv1.FSTypeSecret,
 			},
+			Groups: nil,
 			Users: []string{
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),

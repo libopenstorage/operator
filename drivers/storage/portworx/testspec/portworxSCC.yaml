@@ -30,6 +30,7 @@ supplementalGroups:
 users:
 - system:serviceaccount:kube-test:portworx
 - system:serviceaccount:kube-test:px-metrics-collector
+- system:serviceaccount:kube-test:px-telemetry
 - system:serviceaccount:kube-test:px-node-wiper
 - system:serviceaccount:kube-test:px-prometheus
 volumes:
