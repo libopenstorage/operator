@@ -29,10 +29,8 @@ supplementalGroups:
   type: RunAsAny
 users:
 - system:serviceaccount:kube-test:portworx
-- system:serviceaccount:kube-test:px-csi
-- system:serviceaccount:kube-test:px-lighthouse
-- system:serviceaccount:kube-test:portworx-pvc-controller
 - system:serviceaccount:kube-test:px-metrics-collector
+- system:serviceaccount:kube-test:px-telemetry
 - system:serviceaccount:kube-test:px-node-wiper
 - system:serviceaccount:kube-test:px-prometheus
 - system:serviceaccount:kube-test:stork-scheduler
