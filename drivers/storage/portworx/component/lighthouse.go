@@ -204,7 +204,7 @@ func (c *lighthouse) createClusterRole() error {
 				{
 					APIGroups:     []string{"security.openshift.io"},
 					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{PxSCCName, "anyuid"},
+					ResourceNames: []string{PxRestrictedSCCName, "anyuid"},
 					Verbs:         []string{"use"},
 				},
 				{
