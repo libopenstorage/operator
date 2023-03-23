@@ -133,6 +133,21 @@ spec:
                       type: string
                       format: date-time
                       description: Time at which the condition changed.
+              checks:
+                type: array
+                description: Contains list of pre or post flight checks that are performed by the Operator
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      description: Type of the check.
+                    reason:
+                      type: string
+                      description: Reason for success or failure of the check
+                    success:
+                      type: boolean
+                      description: If true, the check was successful
               geography:
                 type: object
                 description: Contains topology information for the storage node.
