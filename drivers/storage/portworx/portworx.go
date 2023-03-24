@@ -166,6 +166,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		if err := SetPortworxDefaults(toUpdate, p.k8sVersion); err != nil {
 			return err
 		}
+
+		if err := p.setTelemetryDefaults(toUpdate); err != nil {
+			return err
+		}
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -686,10 +690,6 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		}
 	}
 
-	if err := setTelemetryDefaults(toUpdate, t.pxVersion); err != nil {
-		return err
-	}
-
 	setNodeSpecDefaults(toUpdate)
 
 	if toUpdate.Spec.Placement == nil {
@@ -931,48 +931,96 @@ func setDefaultAutopilotProviders(
 	}
 }
 
-func setTelemetryDefaults(
+// setTelemetryDefaults validates and sets telemetry values
+// Telemetry will be disabled if:
+// 1. It's disabled explicitly
+// 2. HTTPS proxy is configured
+// 3. HTTP proxy url is not in a format of hostname:port
+// 4. PX version incompatible
+// 5. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
+// Otherwise it will be enabled by default
+func (p *portworx) setTelemetryDefaults(
 	toUpdate *corev1.StorageCluster,
-	pxVersion *version.Version,
 ) error {
-	// Check if telemetry is enabled correctly, disable it if not
-	if err := pxutil.ValidateTelemetry(toUpdate); err != nil {
-		toUpdate.Spec.Monitoring.Telemetry.Enabled = false
-		toUpdate.Spec.Monitoring.Telemetry.Image = ""
-		toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
-		logrus.Warnf("telemetry is disabled: %v", err)
+	// Telemetry is disabled explicitly then leave it as is
+	if toUpdate.Spec.Monitoring != nil &&
+		toUpdate.Spec.Monitoring.Telemetry != nil &&
+		!toUpdate.Spec.Monitoring.Telemetry.Enabled {
 		return nil
 	}
 
-	// Only enable telemetry by default under conditions:
-	// 1. CCM Go is supported
-	// 2. telemetry is not specified explicitly
-	// 3. Portworx initialized (cluster UUID ready)
-	// 4. no air-gapped or custom proxy
-	// TODO: pwx-29521 uuid is checked here to avoid unit tests sending requests to arcus endpoint
-	if !pxutil.IsCCMGoSupported(pxVersion) ||
-		(toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Telemetry != nil) ||
-		toUpdate.Status.ClusterUID == "" {
-		return nil
-	}
-	if _, proxy := pxutil.GetPxProxyEnvVarValue(toUpdate); proxy != "" {
-		// Don't enable telemetry if either of http or https proxy is specified
-		return nil
-	}
-	canAccess, err := component.CanAccessArcusRegisterEndpoint(toUpdate)
-	if err != nil || !canAccess {
-		return err
-	}
+	pxVersion := pxutil.GetPortworxVersion(toUpdate)
+	proxyType, proxy := pxutil.GetPxProxyEnvVarValue(toUpdate)
 
+	// Telemetry is not supported in those cases, set to disabled
+	var err error
+	if pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
+		// PX version is lower than 2.8
+		err = fmt.Errorf("telemetry is not supported on Portworx version: %s", pxVersion)
+	} else if !pxutil.IsCCMGoSupported(pxVersion) {
+		// CCM Java case, PX version is between 2.8 and 2.12, don't set any default values
+		return nil
+	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy {
+		// CCM Go is supported, but HTTP proxy cannot be split into host and port
+		if _, _, proxyFormatErr := pxutil.SplitPxProxyHostPort(proxy); proxyFormatErr != nil {
+			err = fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
+		}
+	} else if proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
+		// CCM Go is not supported with https proxy
+		// TODO: remove when HTTPS proxy is supported
+		err = fmt.Errorf("telemetry is not supported with secure proxy: %s", proxy)
+	}
 	if toUpdate.Spec.Monitoring == nil {
 		toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
 	}
 	if toUpdate.Spec.Monitoring.Telemetry == nil {
-		toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{
-			Enabled: true,
-		}
+		toUpdate.Spec.Monitoring.Telemetry = &corev1.TelemetrySpec{}
 	}
-	logrus.Infof("telemetry is enabled by default")
+	if err != nil {
+		if pxutil.IsTelemetryEnabled(toUpdate.Spec) {
+			msg := fmt.Sprintf("telemetry will be disabled: %v", err)
+			k8sutil.WarningEvent(p.recorder, toUpdate, util.TelemetryDisabledReason, msg)
+		}
+		toUpdate.Spec.Monitoring.Telemetry.Enabled = false
+		toUpdate.Spec.Monitoring.Telemetry.Image = ""
+		toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
+		return nil
+	}
+
+	// Telemetry CCM Go is supported, at this point telemetry is enabled or can be enabled potentially
+	// If the secret exists, means telemetry was enabled before and registered already, enable telemetry directly
+	// If the telemetry secret doesn't exist, check if Arcus is reachable first before enabling telemetry:
+	// * If Arcus is not reachable, registration will fail anyway, or it's an air-gapped cluster, disable telemetry
+	// * If Arcus is reachable, enable telemetry by default
+	secret := &v1.Secret{}
+	err = p.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      pxutil.TelemetryCertName,
+			Namespace: toUpdate.Namespace,
+		},
+		secret,
+	)
+	if errors.IsNotFound(err) {
+		// If telemetry secret is not created yet, set telemetry as disabled if the registration endpoint is not reachable
+		// Only ping Arcus when telemetry secret is not found, otherwise the cluster was already registered before
+		if canAccess := component.CanAccessArcusRegisterEndpoint(toUpdate, proxy); !canAccess {
+			toUpdate.Spec.Monitoring.Telemetry.Enabled = false
+			toUpdate.Spec.Monitoring.Telemetry.Image = ""
+			toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
+			msg := "telemetry will be disabled: cannot reach to Pure1"
+			k8sutil.WarningEvent(p.recorder, toUpdate, util.TelemetryDisabledReason, msg)
+			return nil
+		}
+	} else if err != nil {
+		return err
+	}
+
+	// Set telemetry as enabled if telemetry secret exists or the registration endpoint is reachable
+	if !pxutil.IsTelemetryEnabled(toUpdate.Spec) {
+		k8sutil.InfoEvent(p.recorder, toUpdate, util.TelemetryEnabledReason, "telemetry will be enabled by default")
+		toUpdate.Spec.Monitoring.Telemetry.Enabled = true
+	}
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -109,6 +110,9 @@ const (
 	defaultCollectorPort    = 10000
 	defaultRegisterPort     = 12001
 	defaultPhonehomePort    = 12002
+
+	arcusPingInterval = 6 * time.Second
+	arcusPingRetry    = 5
 )
 
 type telemetry struct {
@@ -1000,41 +1004,66 @@ func getArcusRegisterProxyURL(cluster *corev1.StorageCluster) string {
 }
 
 // CanAccessArcusRegisterEndpoint checks if telemetry registration endpoint is reachable
-func CanAccessArcusRegisterEndpoint(cluster *corev1.StorageCluster) (bool, error) {
+// return true immediately if it can reach to Arcus
+// return false after failing 5 times in a row
+func CanAccessArcusRegisterEndpoint(
+	cluster *corev1.StorageCluster,
+	httpProxy string,
+) bool {
 	endpoint := getArcusRegisterProxyURL(cluster)
 	logrus.Debugf("checking whether telemetry registration endpoint %s is accessible on cluster %s",
 		endpoint, cluster.Name)
 
-	url, err := url.Parse(fmt.Sprintf("https://%s:443/auth/1.0/ping", endpoint))
-	if err != nil {
-		return false, err
-	}
-
+	url, _ := url.Parse(fmt.Sprintf("https://%s:443/auth/1.0/ping", endpoint))
 	request := &http.Request{
 		Method: "GET",
 		URL:    url,
 		Header: map[string][]string{
+			// 3 headers are required here by the API, but can use dummy values here.
+			// cluster UUID can be empty, so not using it for appliance-id here.
 			"product-name": {"portworx"},
-			"appliance-id": {cluster.Status.ClusterUID},
+			"appliance-id": {"portworx"},
 			"component-sn": {cluster.Name},
 		},
 	}
 	client := &http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		logrus.WithError(err).Warnf("failed to access telemetry registration endpoint %s", endpoint)
-		return false, nil
-	} else if response.StatusCode != 200 {
-		defer response.Body.Close()
-		body, _ := io.ReadAll(response.Body)
-		logrus.WithFields(logrus.Fields{
-			"code": response.StatusCode,
-			"body": string(body),
-		}).Warnf("failed to access telemetry registration endpoint %s", endpoint)
-		return false, nil
+	if httpProxy != "" {
+		if !strings.HasPrefix(strings.ToLower(httpProxy), "http://") {
+			httpProxy = "http://" + httpProxy
+		}
+		proxyURL, err := url.Parse(httpProxy)
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to parse http proxy %s for checking Pure1 connectivity", httpProxy)
+			return false
+		}
+		client.Transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		}
 	}
-
-	return true, nil
+	for i := 1; i <= arcusPingRetry; i++ {
+		response, err := client.Do(request)
+		warnMsg := fmt.Sprintf("failed to access telemetry registration endpoint %s", endpoint)
+		if err != nil {
+			logrus.WithError(err).Warnf(warnMsg)
+		} else if response.StatusCode != 200 {
+			// Only consider 200 as a successful ping with a properly constructed request.
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			logrus.WithFields(logrus.Fields{
+				"code": response.StatusCode,
+				"body": string(body),
+			}).Warnf(warnMsg)
+		} else {
+			logrus.Infof("telemetry registration endpoint %s is accessible on cluster %s",
+				endpoint, cluster.Name)
+			return true
+		}
+		if i != arcusPingRetry {
+			logrus.Debugf("failed to ping Pure1, retrying...")
+			time.Sleep(arcusPingInterval)
+		}
+	}
+	return false
 }
 
 // GetDesiredTelemetryImage returns desired telemetry container image
