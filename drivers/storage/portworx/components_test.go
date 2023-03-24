@@ -115,7 +115,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 	startPort := uint32(10001)
 
@@ -152,6 +152,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 			},
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -2942,6 +2943,7 @@ func TestAutopilotInstall(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:1.1.1",
@@ -3573,6 +3575,7 @@ func TestAutopilotVolumesChange(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:test",
@@ -3721,6 +3724,7 @@ func TestSecurityInstall(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{
@@ -3948,6 +3952,7 @@ func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{
@@ -4052,6 +4057,7 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{
@@ -4419,6 +4425,7 @@ func TestCSIInstallDisable(t *testing.T) {
 					},
 				},
 			},
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 		},
 	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -4441,7 +4448,7 @@ func TestCSIInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -4475,6 +4482,7 @@ func TestCSIInstall(t *testing.T) {
 					},
 				},
 			},
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 		},
 	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -5405,6 +5413,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
@@ -6204,6 +6213,7 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 		Status: corev1.StorageClusterStatus{
@@ -6336,6 +6346,7 @@ func TestPrometheusInstall(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
@@ -6559,7 +6570,7 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -8802,6 +8813,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
@@ -10457,6 +10469,7 @@ func TestDisableCSI_0_3(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			FeatureGates: map[string]string{
 				string(pxutil.FeatureCSI): "true",
 			},
@@ -10679,6 +10692,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					ExportMetrics: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 			Kvdb: &corev1.KvdbSpec{
 				Internal: false,
@@ -10837,6 +10851,7 @@ func TestRemovePrometheus(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
@@ -10941,6 +10956,7 @@ func TestDisablePrometheus(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
@@ -11752,6 +11768,9 @@ func TestSCC(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
 	}
 
 	driver := portworx{}
@@ -11822,6 +11841,7 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 			FeatureGates: map[string]string{
 				"CSI": "T",
@@ -11939,6 +11959,7 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 			FeatureGates: map[string]string{
 				"CSI": "T",
@@ -12026,6 +12047,7 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 				Prometheus: &corev1.PrometheusSpec{
 					Enabled: true,
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 			FeatureGates: map[string]string{
 				"CSI": "T",
@@ -12135,17 +12157,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// without location
 	delete(cluster.Annotations, "portworx.io/arcus-location")
@@ -12370,6 +12382,7 @@ func TestTelemetryCCMProxy(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -12454,17 +12467,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// PWX-27401 reconcile collector to validate specs
 	err = k8sClient.Create(
@@ -12704,12 +12707,13 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 }
 
-func TestSetTelemetryDefaults(t *testing.T) {
+func TestValidateTelemetryEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -12735,6 +12739,10 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Empty(t, cluster.Spec.Monitoring.Telemetry.Image)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported on Portworx version",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
 	// TestCase: telemetry should not be enabled by default if CCM Go is not supported
 	cluster.Spec.Image = "portworx/oci-monitor:2.11.0"
@@ -12742,36 +12750,15 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Nil(t, cluster.Spec.Monitoring)
-
-	// TestCase: telemetry should not be disabled if using http proxy on ccm-go
-	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
-	cluster.Spec.Env = []v1.EnvVar{{
-		Name:  pxutil.EnvKeyPortworxHTTPProxy,
-		Value: "http://host:port",
-	}}
-	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-		Telemetry: &corev1.TelemetrySpec{
-			Enabled: true,
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	require.NotNil(t, cluster.Spec.Monitoring)
-	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
-	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
-
-	// TestCase: telemetry should not be disabled if using http proxy url in https env var on ccm-go
-	cluster.Spec.Env = []v1.EnvVar{{
-		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
-		Value: "http://host:port",
-	}}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	require.NotNil(t, cluster.Spec.Monitoring)
-	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
-	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
 
 	// TestCase: telemetry should be disabled if using secure proxy on ccm-go
+	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+		Telemetry: &corev1.TelemetrySpec{
+			Enabled: true,
+		},
+	}
 	cluster.Spec.Env = []v1.EnvVar{{
 		Name:  pxutil.EnvKeyPortworxHTTPSProxy,
 		Value: "test-proxy",
@@ -12781,13 +12768,13 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NotNil(t, cluster.Spec.Monitoring)
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with secure proxy",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
 	// TestCase: telemetry should be disabled if using invalid http proxy format
-	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
-		Telemetry: &corev1.TelemetrySpec{
-			Enabled: true,
-		},
-	}
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
 	cluster.Spec.Env = []v1.EnvVar{{
 		Name:  pxutil.EnvKeyPortworxHTTPProxy,
 		Value: "test-proxy",
@@ -12797,16 +12784,10 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NotNil(t, cluster.Spec.Monitoring)
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
-
-	// TestCase: telemetry should not be enabled by default if proxy is configured
-	cluster.Spec.Monitoring = nil
-	cluster.Spec.Env = []v1.EnvVar{{
-		Name:  pxutil.EnvKeyPortworxHTTPProxy,
-		Value: "host:port",
-	}}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	require.Nil(t, cluster.Spec.Monitoring)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with proxy in a format of",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
 	// TestCase: telemetry should not be enabled by default if it's disabled
 	cluster.Spec.Env = nil
@@ -12820,33 +12801,216 @@ func TestSetTelemetryDefaults(t *testing.T) {
 	require.NotNil(t, cluster.Spec.Monitoring)
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
+}
 
-	// TestCase: telemetry should not be enabled by default if uuid is not ready
-	cluster.Spec.Monitoring = nil
-	err = driver.SetDefaultsOnStorageCluster(cluster)
+func TestSetTelemetryDefaultWithoutCertCreated(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
-	require.Nil(t, cluster.Spec.Monitoring)
 
-	// TestCase: telemetry should not be enabled by default if prod register endpoint is unreachable
-	cluster.Status.ClusterUID = "cluster-uid"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+		},
+	}
+
+	// Handles both fresh install and upgrade, parameters:
+	// registration endpoint reachable: yes/no
+	// HTTP proxy provided: yes/no
+	// telemetry spec: empty/enabled
 	setupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
 	defer restoreEtcHosts(t)
-	cluster.Spec.Monitoring = nil
+
+	// TestCase: cannot ping, no proxy, telemetry empty
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Nil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: cannot reach to Pure1",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
-	// TestCase: telemetry should be enabled by default if staging register endpoint is reachable
+	// TestCase: cannot ping, proxy, telemetry empty
+	cluster.Spec.Monitoring = nil
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:1234",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: cannot reach to Pure1",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
+
+	// TestCase: cannot ping, proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: cannot reach to Pure1",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
+
+	// TestCase: cannot ping, no proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
 	cluster.Spec.Env = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be disabled: cannot reach to Pure1",
+			v1.EventTypeWarning, util.TelemetryDisabledReason))
+
+	// TestCase: can ping, no proxy, telemetry empty
+	cluster.Spec.Monitoring = nil
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationTelemetryArcusLocation: "internal",
 	}
-
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.NotNil(t, cluster.Spec.Monitoring)
 	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
 	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be enabled by default",
+			v1.EventTypeNormal, util.TelemetryEnabledReason))
+
+	// TestCase: can ping, no proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster.Spec.Env = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
+
+	// Tests below are not enabled, to manually run the test remove this check and
+	// set httpProxy below to a working proxy.
+	if true {
+		return
+	}
+	httpProxy := "http://hostname:1234"
+
+	// TestCase: can ping, proxy, telemetry empty
+	cluster.Spec.Monitoring = nil
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: httpProxy,
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be enabled by default",
+			v1.EventTypeNormal, util.TelemetryEnabledReason))
+
+	// TestCase: can ping, proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
+}
+
+func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+
+	// Parameters:
+	// HTTP proxy provided: yes/no
+	// telemetry spec: empty/enabled
+	setupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
+	defer restoreEtcHosts(t)
+
+	// TestCase: no proxy, telemetry empty
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be enabled by default",
+			v1.EventTypeNormal, util.TelemetryEnabledReason))
+
+	// TestCase: proxy, telemetry empty
+	cluster.Spec.Monitoring = nil
+	cluster.Spec.Env = []v1.EnvVar{{
+		Name:  pxutil.EnvKeyPortworxHTTPProxy,
+		Value: "http://host:port",
+	}}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v telemetry will be enabled by default",
+			v1.EventTypeNormal, util.TelemetryEnabledReason))
+
+	// TestCase: proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
+
+	// TestCase: no proxy, telemetry enabled
+	cluster.Spec.Monitoring.Telemetry.Enabled = true
+	cluster.Spec.Env = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.Monitoring)
+	require.NotNil(t, cluster.Spec.Monitoring.Telemetry)
+	require.True(t, cluster.Spec.Monitoring.Telemetry.Enabled)
+	require.Len(t, recorder.Events, 0)
 }
 
 func TestTelemetryCCMGoUpgrade(t *testing.T) {
@@ -12876,17 +13040,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		},
 	}
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// PWX-27401 reconcile collector to validate specs
 	err = k8sClient.Create(
@@ -13089,6 +13243,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// PWX-27401 reconcile collector to validate specs
 	err = k8sClient.Create(
@@ -13427,17 +13582,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// TestCase: Don't set secret owner reference when delete strategy is not set
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -13507,17 +13652,7 @@ func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	err = k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// Create phonehome configmap to update
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeConfigMap.yaml")
@@ -13582,7 +13717,8 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			StartPort: &startPort,
+			StartPort:  &startPort,
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 		},
 	}
 
@@ -13795,7 +13931,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
-			StartPort: &startPort,
+			StartPort:  &startPort,
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -13972,7 +14109,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Spec: corev1.StorageClusterSpec{
-			StartPort: &startPort,
+			StartPort:  &startPort,
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
 			},
@@ -14622,6 +14760,22 @@ func expectedVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v
 		expectedVolumeSpecs[i] = *vCopy
 	}
 	return util.ExtractVolumesAndMounts(expectedVolumeSpecs)
+}
+
+// createTelemetrySecret creates a telemetry secret, so when calling SetDefaultsOnStorageCluster
+// in tests that are unrelated to telemetry it doesn't need to ping Arcus registration endpoint
+func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace string) {
+	err := k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.TelemetryCertName,
+				Namespace: namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
 }
 
 func reregisterComponents() {

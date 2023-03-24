@@ -211,6 +211,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 		},
 	}
 
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -351,7 +352,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
 
 	// By default monitoring is not enabled
-	require.Nil(t, cluster.Spec.Monitoring)
+	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
 
 	// If metrics was enabled previosly, enable it in prometheus spec
 	// and remove the enableMetrics config
@@ -396,6 +397,7 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 			Namespace: "kube-test",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// TestCase: placement spec below k8s 1.24
 	expectedPlacement := &corev1.PlacementSpec{
@@ -1044,6 +1046,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 			Image: "px/image:2.9.0.1",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// Simulate DesiredImages.CSISnapshotController being empty for old operator version w/o this image
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -1210,6 +1213,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	// Don't enable prometheus if monitoring spec is nil
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
 
 	// Don't enable prometheus if prometheus spec is nil
@@ -1293,7 +1297,10 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 
 func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1303,9 +1310,10 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 			Image: "px/image:2.8.0",
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// Don't enable alert manager if monitoring spec is nil
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
@@ -1831,7 +1839,10 @@ func TestStorageClusterDefaultsForSecurity(t *testing.T) {
 
 func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1841,6 +1852,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 			},
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	expectedPlacement := &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
@@ -1889,7 +1901,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 		},
 	}
 
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
 	require.True(t, cluster.Spec.Kvdb.Internal)
@@ -7443,7 +7455,10 @@ func TestIsPodUpdatedWithEssentialsArgs(t *testing.T) {
 
 func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -7458,9 +7473,10 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 			},
 		},
 	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
 	// Disable telemetry for px version < 2.8.0
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Empty(t, cluster.Status.DesiredImages.Telemetry)

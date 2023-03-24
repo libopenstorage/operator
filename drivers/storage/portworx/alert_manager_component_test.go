@@ -42,6 +42,7 @@ func TestAlertManagerInstall(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
@@ -119,6 +120,7 @@ func TestRemoveAlertManager(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
@@ -181,6 +183,7 @@ func TestDisableAlertManager(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				Telemetry: &corev1.TelemetrySpec{},
 			},
 		},
 	}
