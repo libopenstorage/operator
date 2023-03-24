@@ -474,23 +474,7 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		// Since the Telemetry only enabled by PX Operator by default once the cluster has UUID
-		// we need to first deploy StorageCluster, then check that cluster is online, get new cluster object and only then validate all components
-		// to make sure that cluster has UUID and PX Operator enabled Telemetry in the StorageCluster by default
-		cluster, err = ci_utils.DeployStorageCluster(cluster, ci_utils.PxSpecImages)
-		require.NoError(t, err)
-
-		cluster, err = testutil.ValidateStorageClusterIsOnline(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
-		require.NoError(t, err)
-
-		time.Sleep(30 * time.Second) // NOTE: We need this timeout or PX Operator might not yet set Telemetry to enabled, might be resolved by PWX-29521
-
-		cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		require.NoError(t, err)
-
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
-		require.NoError(t, err)
-
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 		telemetryEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled
 
 		// Validate Telemetry is enabled by default with PX 2.12+ and Operator 23.3.0+
