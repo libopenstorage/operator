@@ -27,6 +27,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -9472,4 +9473,37 @@ func latestRevision(revs *appsv1.ControllerRevisionList) *appsv1.ControllerRevis
 		}
 	}
 	return latestRev
+}
+
+func TestGetZoneMap(t *testing.T) {
+	var nodeList v1.NodeList
+	zoneMap, err := getZoneMap(&nodeList, "", "")
+	assert.Equal(t, map[string]uint64(map[string]uint64(nil)), zoneMap)
+	assert.Equal(t, fmt.Errorf("node list is empty"), err)
+
+	nodeList.Items = []v1.Node{
+		v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				v1.LabelTopologyZone:        "bar-pxzone1",
+				v1.LabelTopologyRegion:      "bar",},
+		},
+		Spec: v1.NodeSpec{
+			ProviderID: "azure://",
+		}},
+		v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node2",
+			Labels: map[string]string{
+				v1.LabelTopologyZone:        "foo-pxzone2",
+				v1.LabelTopologyRegion:      "foo",},
+		},
+		Spec: v1.NodeSpec{
+			ProviderID: "azure://",
+		}},
+	}
+	zoneMap, err = getZoneMap(&nodeList, "", "")
+	assert.Equal(t, map[string]uint64{"bar-pxzone1":1,"foo-pxzone2":1}, zoneMap)
+	assert.Equal(t, nil, err)
 }
