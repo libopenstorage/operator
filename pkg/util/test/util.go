@@ -4172,6 +4172,7 @@ func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName 
 			Namespace: "kube-system",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
 			Security: &corev1.SecuritySpec{
 				Enabled: true,
 				Auth: &corev1.AuthSpec{

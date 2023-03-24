@@ -303,11 +303,6 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.Driver.Validate(); err != nil {
 		return err
 	}
-	if err := pxutil.ValidateTelemetry(cluster); err != nil {
-		// Raise warning only and don't block anything
-		msg := fmt.Sprintf("telemetry will be disabled: %v", err)
-		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, msg)
-	}
 
 	return nil
 }
@@ -1288,7 +1283,6 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 	}
 
 	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
-		// TODO: investigate update failure
 		return err
 	}
 
