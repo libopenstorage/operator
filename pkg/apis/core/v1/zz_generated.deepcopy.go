@@ -22,6 +22,7 @@ limitations under the License.
 package v1
 
 import (
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -668,6 +669,30 @@ func (in *PrometheusSpec) DeepCopyInto(out *PrometheusSpec) {
 		in, out := &in.SecurityContext, &out.SecurityContext
 		*out = new(corev1.PodSecurityContext)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
+		*out = new(int32)
+		**out = **in
+	}
+	if in.Storage != nil {
+		in, out := &in.Storage, &out.Storage
+		*out = new(monitoringv1.StorageSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Volumes != nil {
+		in, out := &in.Volumes, &out.Volumes
+		*out = make([]corev1.Volume, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.VolumeMounts != nil {
+		in, out := &in.VolumeMounts, &out.VolumeMounts
+		*out = make([]corev1.VolumeMount, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	return
 }

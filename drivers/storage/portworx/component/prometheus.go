@@ -528,6 +528,8 @@ func getPrometheusOperatorDeploymentSpec(
 					SecurityContext: &v1.PodSecurityContext{
 						RunAsNonRoot: &runAsNonRoot,
 						RunAsUser:    &runAsUser,
+						RunAsGroup:   &runAsUser,
+						FSGroup:      &runAsUser,
 					},
 				},
 			},
@@ -609,7 +611,6 @@ func (c *prometheus) createPrometheusInstance(
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			Image:              &prometheusImageName,
-			Replicas:           &replicas,
 			LogLevel:           "debug",
 			ServiceAccountName: PrometheusServiceAccountName,
 			ServiceMonitorSelector: &metav1.LabelSelector{
@@ -656,7 +657,35 @@ func (c *prometheus) createPrometheusInstance(
 		prometheusInst.Spec.SecurityContext = &v1.PodSecurityContext{
 			RunAsNonRoot: &runAsNonRoot,
 			RunAsUser:    &runAsUser,
+			RunAsGroup:   &runAsUser,
+			FSGroup:      &runAsUser,
 		}
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Replicas != nil {
+		prometheusInst.Spec.Replicas = cluster.Spec.Monitoring.Prometheus.Replicas
+	} else {
+		prometheusInst.Spec.Replicas = &replicas
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Retention != "" {
+		prometheusInst.Spec.Retention = cluster.Spec.Monitoring.Prometheus.Retention
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.RetentionSize != "" {
+		prometheusInst.Spec.RetentionSize = cluster.Spec.Monitoring.Prometheus.RetentionSize
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Storage != nil {
+		prometheusInst.Spec.Storage = cluster.Spec.Monitoring.Prometheus.Storage
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.Volumes != nil {
+		prometheusInst.Spec.Volumes = cluster.Spec.Monitoring.Prometheus.Volumes
+	}
+
+	if cluster.Spec.Monitoring.Prometheus.VolumeMounts != nil {
+		prometheusInst.Spec.VolumeMounts = cluster.Spec.Monitoring.Prometheus.VolumeMounts
 	}
 
 	if cluster.Spec.Monitoring.Prometheus.AlertManager != nil &&
