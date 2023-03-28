@@ -11,8 +11,9 @@ func IsEKS() bool {
 
 // RequiresCheck returns whether a preflight check is needed based on the platform
 func RequiresCheck() bool {
+	return true
 	// TODO: add other scenarios here
-	return IsEKS()
+	//return IsEKS()
 }
 
 // RunningOnCloud checks whether portworx is running on cloud

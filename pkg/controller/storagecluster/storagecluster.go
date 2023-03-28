@@ -300,7 +300,7 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
-	if err := c.Driver.Validate(); err != nil {
+	if err := c.Driver.Validate(cluster); err != nil {
 		return err
 	}
 
@@ -441,8 +441,12 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
 		}
 	}
-
 	// TODO: validate cloud permission for other providers as well
+
+	// Run driver specific pre-flights
+	if err := c.Driver.Validate(toUpdate); err != nil {
+		return err
+	}
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,

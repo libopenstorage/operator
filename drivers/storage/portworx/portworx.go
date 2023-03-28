@@ -88,7 +88,21 @@ func (p *portworx) Init(
 	return nil
 }
 
-func (p *portworx) Validate() error {
+func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
+	/* TODO  PWX-28826 Run DMThin pre-flight checks
+
+	Operator starts a daemonset with oci-monitor pods in pre-flight mode (--preflight)
+	Operator waits for all daemonset pods to be 1/1 (for this the oci-monitor in preflight mode must not exit).
+		oci-monitor pod has to declare it’s done
+	Operator deletes the preflight daemonset
+	Operator reads Checks in the StorageNode for each node
+	If Checks in any of the nodes
+		fail: Operator sets backend to btrfs
+			// Log, raise event and do nothing. Default already at btrfs
+		all success: Operator sets backend to dmthin
+			// Append dmthin backend use MiscArgs()
+			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T dmthin"
+	*/
 	return nil
 }
 func (p *portworx) initializeComponents() {
