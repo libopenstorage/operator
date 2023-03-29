@@ -9482,28 +9482,28 @@ func TestGetZoneMap(t *testing.T) {
 	assert.Equal(t, fmt.Errorf("node list is empty"), err)
 
 	nodeList.Items = []v1.Node{
-		v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node1",
-			Labels: map[string]string{
-				v1.LabelTopologyZone:        "bar-pxzone1",
-				v1.LabelTopologyRegion:      "bar",},
-		},
-		Spec: v1.NodeSpec{
-			ProviderID: "azure://",
-		}},
-		v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node2",
-			Labels: map[string]string{
-				v1.LabelTopologyZone:        "foo-pxzone2",
-				v1.LabelTopologyRegion:      "foo",},
-		},
-		Spec: v1.NodeSpec{
-			ProviderID: "azure://",
-		}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node1",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "bar-pxzone1",
+					v1.LabelTopologyRegion: "bar"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node2",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "foo-pxzone2",
+					v1.LabelTopologyRegion: "foo"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
 	}
 	zoneMap, err = getZoneMap(&nodeList, "", "")
-	assert.Equal(t, map[string]uint64{"bar-pxzone1":1,"foo-pxzone2":1}, zoneMap)
+	assert.Equal(t, map[string]uint64{"bar-pxzone1": 1, "foo-pxzone2": 1}, zoneMap)
 	assert.Equal(t, nil, err)
 }

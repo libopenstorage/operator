@@ -1316,8 +1316,8 @@ func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue s
 			return nil, err
 		}
 	}
-	if len(nodeList.Items) == 0{
-		return nil, fmt.Errorf("node list is empty") 
+	if len(nodeList.Items) == 0 {
+		return nil, fmt.Errorf("node list is empty")
 	}
 	return zoneMap, nil
 }
