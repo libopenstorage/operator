@@ -25,6 +25,8 @@ import (
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -238,6 +240,14 @@ var testStorageClusterBasicCases = []types.TestCase{
 		ShouldSkip: func(tc *types.TestCase) bool {
 			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_8)
 		},
+	},
+	{
+		TestName:        "InatallWithCustomPrometheusSpecParams",
+		TestrailCaseIDs: []string{"C85740"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
+		}),
+		TestFunc: InatallWithCustomPrometheusSpecParams,
 	},
 }
 
@@ -807,6 +817,73 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 		}
 		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller"], "failed to validate portworx.io/pvc-controller annotation, it shouldn't be here, because it was deleted")
+	}
+}
+
+// InatallWithCustomPrometheusSpecParams test includes the following steps:
+// 1. Deploy PX
+// 2. Modify PrometheusSpec params in StorageCluster and validate it's deployed
+func InatallWithCustomPrometheusSpecParams(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		var err error
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		// Update PrometheusSpec Params and validate it's deployed successfully
+		logrus.Info("Update PrometheusSpec params")
+		replicas := int32(2)
+		fakeSCName := "fake-test-sc"
+		runAsNonRoot := false
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{
+				Replicas:      &replicas,
+				Retention:     "10h",
+				RetentionSize: "1048MB",
+				Resources: v1.ResourceRequirements{
+					Requests: map[v1.ResourceName]resource.Quantity{
+						v1.ResourceMemory: resource.MustParse("4Gi"),
+						v1.ResourceCPU:    resource.MustParse("4"),
+					},
+				},
+				SecurityContext: &v1.PodSecurityContext{
+					RunAsNonRoot: &runAsNonRoot,
+				},
+				Storage: &monitoringv1.StorageSpec{
+					VolumeClaimTemplate: monitoringv1.EmbeddedPersistentVolumeClaim{
+						Spec: v1.PersistentVolumeClaimSpec{
+							StorageClassName: &fakeSCName,
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceStorage: resource.MustParse("1G"),
+								},
+							},
+						},
+					},
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "testVlm",
+						MountPath: "/prometheus/",
+					},
+				},
+				Volumes: []v1.Volume{
+					{
+						Name: "testVlm",
+						VolumeSource: v1.VolumeSource{
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "testPxPvc",
+								ReadOnly:  false,
+							},
+						},
+					},
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateMonitoring(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NoError(t, err)
 	}
 }
 
