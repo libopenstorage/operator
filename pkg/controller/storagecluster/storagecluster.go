@@ -1280,7 +1280,7 @@ func (c *Controller) getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
-	if numZones == 0 {
+	if numZones <= 0 {
 		return 0, fmt.Errorf("node list is empty and no MaxStorageNodesPerZone can be obtained")
 	}
 	storageNodes = uint64(len(filteredList.Items) / numZones)
