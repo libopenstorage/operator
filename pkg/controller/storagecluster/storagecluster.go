@@ -1280,6 +1280,9 @@ func (c *Controller) getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
+	if numZones == 0 {
+		return 0, fmt.Errorf("node list is empty and no MaxStorageNodesPerZone can be obtained")
+	}
 	storageNodes = uint64(len(filteredList.Items) / numZones)
 	return uint32(storageNodes), nil
 }
@@ -1315,9 +1318,6 @@ func getZoneMap(nodeList *v1.NodeList, filterLabelKey string, filterLabelValue s
 			logrus.Errorf("count not find zone information: %v", err)
 			return nil, err
 		}
-	}
-	if len(nodeList.Items) == 0 {
-		return nil, fmt.Errorf("node list is empty")
 	}
 	return zoneMap, nil
 }

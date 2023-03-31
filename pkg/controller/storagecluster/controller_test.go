@@ -27,7 +27,6 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -9475,11 +9474,37 @@ func latestRevision(revs *appsv1.ControllerRevisionList) *appsv1.ControllerRevis
 	return latestRev
 }
 
-func TestGetZoneMap(t *testing.T) {
+func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	fakeClient := fakek8sclient.NewSimpleClientset()
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakeClient))
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driverName := "mock-driver"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mock-cluster",
+			Namespace: "mock-ns",
+		},
+	}
+
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+
+	controller := Controller{
+		client:   k8sClient,
+		Driver:   driver,
+		recorder: recorder,
+	}
+
 	var nodeList v1.NodeList
-	zoneMap, err := getZoneMap(&nodeList, "", "")
-	assert.Equal(t, map[string]uint64(map[string]uint64(nil)), zoneMap)
-	assert.Equal(t, fmt.Errorf("node list is empty"), err)
+	storageNodes, err := controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
+	require.Equal(t, uint32(0), storageNodes)
+	require.Equal(t, nil, err)
 
 	nodeList.Items = []v1.Node{
 		{
@@ -9503,7 +9528,40 @@ func TestGetZoneMap(t *testing.T) {
 				ProviderID: "azure://",
 			}},
 	}
-	zoneMap, err = getZoneMap(&nodeList, "", "")
-	assert.Equal(t, map[string]uint64{"bar-pxzone1": 1, "foo-pxzone2": 1}, zoneMap)
-	assert.Equal(t, nil, err)
+	storageNodes, err = controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
+	require.Equal(t, uint32(1), storageNodes)
+	require.NoError(t, err)
+
+	cluster = &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "mock-cluster",
+			Namespace:   "mock-ns",
+			Annotations: map[string]string{"operator.libopenstorage.org/disable-storage": "true"},
+		},
+	}
+	nodeList.Items = []v1.Node{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				// Name: "node1",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "bar-pxzone1",
+					v1.LabelTopologyRegion: "bar"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				// Name: "node2",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "foo-pxzone2",
+					v1.LabelTopologyRegion: "foo"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+	}
+	storageNodes, err = controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
+	require.Equal(t, uint32(0), storageNodes)
+	require.Equal(t, fmt.Errorf("node list is empty and no MaxStorageNodesPerZone can be obtained"), err)
 }
