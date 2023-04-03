@@ -20,6 +20,7 @@ package storagecluster
 import (
 	"context"
 	"encoding/json"
+	errorsgo "errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -89,6 +90,7 @@ var (
 	controllerKind       = corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	crdBaseDir           = getCRDBasePath
 	deprecatedCRDBaseDir = getDeprecatedCRDBasePath
+	ErrNodeListEmpty     = errorsgo.New("no nodes were available for px installation")
 )
 
 // Controller reconciles a StorageCluster object
@@ -1280,6 +1282,9 @@ func (c *Controller) getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
+	if numZones <= 0 {
+		return 0, ErrNodeListEmpty
+	}
 	storageNodes = uint64(len(filteredList.Items) / numZones)
 	return uint32(storageNodes), nil
 }
