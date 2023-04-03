@@ -102,7 +102,7 @@ func AddDefaultRegistryToImage(image string) string {
 	}
 
 	for k := range commonDockerRegistries {
-		if strings.HasPrefix(image, k) || strings.HasPrefix(image, "gcr.io") || strings.HasPrefix(image, "k8s.gcr.io") {
+		if strings.HasPrefix(image, k) || strings.HasPrefix(image, "gcr.io") || strings.HasPrefix(image, "k8s.gcr.io") || strings.HasPrefix(image, "registry.k8s.io") {
 			return image
 		}
 	}
