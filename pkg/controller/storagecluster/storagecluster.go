@@ -300,10 +300,6 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
-	if err := c.Driver.Validate(cluster); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -443,15 +439,31 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	}
 	// TODO: validate cloud permission for other providers as well
 
+	// Create StorageNodes to return pre-flight checks from oci-mon
+	k8sNodeList := &v1.NodeList{}
+	err = c.client.List(context.TODO(), k8sNodeList)
+	if err == nil {
+		for _, node := range k8sNodeList.Items {
+			logrus.Infof("Create storage node entry for node: %s", node.Name)
+			c.createStorageNode(cluster, node.Name)
+		}
+	} else {
+		logrus.WithError(err).Errorf("Failed to get cluster nodes")
+	}
+
 	// Run driver specific pre-flights
-	if err := c.Driver.Validate(toUpdate); err != nil {
-		return err
+	if err = c.Driver.Validate(toUpdate); err != nil {
+		logrus.WithError(err).Errorf("pre-flight validate failed")
 	}
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypePreflight,
 	}
+
+	// XXX - test
+	//err = fmt.Errorf("pre-flighr check force failure")
+
 	if err != nil {
 		logrus.Infof("storage cluster preflight check failed")
 		condition.Status = corev1.ClusterConditionStatusFailed
@@ -468,6 +480,9 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
 			return err
 		}
+
+		// XXX - Sleep to avoid race cond check NOTE: in setStorageClusterDefaults()
+		time.Sleep(60 * time.Second)
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {

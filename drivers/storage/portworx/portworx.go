@@ -6,6 +6,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -89,10 +90,133 @@ func (p *portworx) Init(
 }
 
 func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
-	preFlighter := NewPreFlighter(cluster, p.k8sClient)
-	preFlighter.RunPreFlight()
-	preFlighter.GetPreFlightStatus()
-	preFlighter.DeletePreFlight()
+	podSpec, err := p.GetStoragePodSpec(cluster, "")
+	if err != nil {
+		return err
+	}
+
+	preFlighter := NewPreFlighter(cluster, p.k8sClient, podSpec)
+
+	err = preFlighter.RunPreFlight()
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			err = preFlighter.DeletePreFlight() // XXX - Need to defer
+			if err != nil {
+				logrus.Infof("pre-flight: error deleting pre-flight: %v", err)
+			}
+		}
+		logrus.Infof("pre-flight: error Running pre-flight: %v", err)
+		return err
+	}
+
+	for {
+		time.Sleep(1 * time.Second) // Pause before status check
+		completed, inProgress, total, err := preFlighter.GetPreFlightStatus()
+		if err != nil {
+			logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
+			return err
+		}
+		logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+
+		if total != 0 && completed == total {
+			logrus.Infof("pre-flight: startup completed...")
+			break
+		}
+	}
+
+	// Remove storageNodes with no pods
+	if pods, err := preFlighter.GetPreFlightPods(); err == nil {
+		if storageNodes, nerr := p.storageNodesList(cluster); nerr == nil {
+			for _, storageNode := range storageNodes {
+				found := false
+				for _, pod := range pods {
+					if storageNode.Name == pod.Spec.NodeName {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					logrus.Infof("Deleting storageNode with no pre-flight pod: %v", storageNode.Name)
+					err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
+					if err != nil {
+						logrus.WithError(err).Errorf("failed to delete pre-flight storage node entry %s: %v", storageNode.Name, err)
+					}
+					// Wait for StorageNode to be removed.
+					for {
+						time.Sleep(2 * time.Second)
+						storageNodes, nerr = p.storageNodesList(cluster)
+						if nerr != nil {
+							break
+						}
+						found = false
+						for _, node := range storageNodes {
+							if storageNode.Name == node.Name {
+								found = true
+								break
+							}
+						}
+						if !found {
+							break
+						}
+					}
+					break
+				}
+			}
+		} else {
+			logrus.Errorf("pre-flight: Error getting storage node list: %v", err)
+			return nerr
+		}
+	} else {
+		logrus.Errorf("pre-flight: error failed to get  pre-flight pods: %v", err)
+	}
+
+	var storageNodes []*corev1.StorageNode
+
+	// Wait for StorageNode check to complete.
+	for {
+		time.Sleep(5 * time.Second)
+		storageNodes, err = p.storageNodesList(cluster)
+		if err != nil {
+			logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
+			break
+		}
+
+		done := true
+		for _, node := range storageNodes {
+			if len(node.Status.Checks) == 0 {
+				done = false
+				break
+			}
+		}
+		if done {
+			break
+		}
+		logrus.Infof("pre-flight: running...")
+	}
+
+	defer func() {
+		logrus.Infof("pre-flight: cleaning pre-flight ds...")
+		err = preFlighter.DeletePreFlight()
+		if err != nil {
+			logrus.Errorf("pre-flight: error deleting pre-flight: %v", err)
+		}
+	}()
+
+	err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
+	if err != nil {
+		logrus.Errorf("pre-flight: Error processing results: %v", err)
+	}
+
+	// Delete pre-flight StorageNodes
+	for _, node := range storageNodes {
+		logrus.Infof("Deleting pre-flight storageNode %v", node.Name)
+		err = p.k8sClient.Delete(context.TODO(), node.DeepCopy())
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to delete pre-flight storage node entry %s: %v", node.Name, err)
+		}
+	}
+
 	return nil
 }
 func (p *portworx) initializeComponents() {

@@ -86,8 +86,19 @@ func TestInit(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
 
-	err := driver.Validate()
+	err := driver.Validate(cluster)
 	require.NoError(t, err)
 }
 
