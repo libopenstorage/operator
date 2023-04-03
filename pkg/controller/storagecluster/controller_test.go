@@ -9504,7 +9504,7 @@ func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
 	var nodeList v1.NodeList
 	storageNodes, err := controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
 	require.Equal(t, uint32(0), storageNodes)
-	require.Equal(t, nil, err)
+	require.NoError(t, err)
 
 	nodeList.Items = []v1.Node{
 		{
@@ -9563,5 +9563,5 @@ func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
 	}
 	storageNodes, err = controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
 	require.Equal(t, uint32(0), storageNodes)
-	require.Equal(t, fmt.Errorf("node list is empty and no MaxStorageNodesPerZone can be obtained"), err)
+	require.Equal(t, ErrNodeListEmpty, err)
 }
