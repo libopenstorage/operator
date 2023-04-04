@@ -221,7 +221,8 @@ func (p *portworx) getDefaultStorageNodesDisaggregatedMode(
 	prevValue := uint64(math.MaxUint64)
 	for key, value := range nodeTypeZoneMap {
 		totalNodes += value
-		if value < minValue {
+		// Let's not count zones with no nodes
+		if value < minValue && value != 0 {
 			minValue = value
 		}
 		if prevValue != math.MaxUint64 && prevValue != value {
