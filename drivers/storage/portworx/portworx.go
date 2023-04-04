@@ -174,11 +174,9 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	var storageNodes []*corev1.StorageNode
 
-	/*
-		Wait for pre-flight checks to complete.  All the pre-flight pods are running.
-		However the checks being performed may not have completed.  Keep checking the
-		updated StorageNodes for completion check below
-	*/
+	//	Wait for pre-flight checks to complete.  All the pre-flight pods are running.
+	//	However the checks being performed may not have completed.  Keep checking the
+	//	updated StorageNodes for completion check below
 	for {
 		time.Sleep(5 * time.Second)
 		storageNodes, err = p.storageNodesList(cluster)
@@ -189,10 +187,8 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 		done := true
 		for _, node := range storageNodes {
-			/*
-				We add a check entry to signal when the pre-check is done.
-				So if length of checks > 0 the checks are all done.
-			*/
+			//	We add a check entry to signal when the pre-check is done.
+			//	So if length of checks > 0 the checks are all done.
 			if len(node.Status.Checks) == 0 {
 				done = false
 				break
