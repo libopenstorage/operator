@@ -226,12 +226,12 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 				if check.Type != "status" {
 					msg := fmt.Sprintf("%s pre-flight check ", check.Type)
 					if check.Success {
-						msg = msg + "passed: "
+						msg = msg + "passed: " + check.Reason
+						k8sutil.InfoEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 					} else {
-						msg = msg + "failed: "
+						msg = msg + "failed: " + check.Reason
+						k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 					}
-					msg = msg + check.Reason
-					k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 				}
 			}
 			passed = false
