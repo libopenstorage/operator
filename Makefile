@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.3.0
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.3.1
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -80,9 +80,10 @@ BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d
 
 LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VERSION)"
 BUILD_OPTIONS := -ldflags=$(LDFLAGS)
+CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 
 .DEFAULT_GOAL=all
-.PHONY: operator deploy clean vendor vendor-update test
+.PHONY: operator deploy clean vendor vendor-update test generate manifests
 
 all: operator pretest downloads
 
@@ -166,9 +167,19 @@ integration-test-deploy:
 	@echo "Pushing operator test container $(OPERATOR_TEST_IMG)"
 	docker push $(OPERATOR_TEST_IMG)
 
-codegen:
+codegen: generate manifests
 	@echo "Generating CRD"
 	(GOFLAGS="" hack/update-codegen.sh)
+
+# This generates the deepcopy functions only for the portworx.io APIs. We should change
+# the path to "./..." to start generating the deepcopy functions for the core APIs too.
+generate:
+	$(CONTROLLER_GEN) object paths="./pkg/apis/portworx/..."
+
+# This generates the CRD schema only for the portworx.io APIs. We should change
+# the path to "./..." to start generating the schemas for the core APIs too.
+manifests:
+	$(CONTROLLER_GEN) crd:generateEmbeddedObjectMeta=true paths="./pkg/apis/portworx/..." output:crd:artifacts:config=deploy/crds
 
 operator:
 	@echo "Building the cluster operator binary"

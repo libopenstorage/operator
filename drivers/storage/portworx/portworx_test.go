@@ -9261,13 +9261,13 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZoneDisaggregatedMode(t *testin
 	testStoragelessNodesDisaggregatedMode(t, 7, 5, 0)
 	testStoragelessNodesDisaggregatedMode(t, 1, 5, 7, 5)
 	testStoragelessNodesDisaggregatedMode(t, 3, 5, 5, 5)
-	testStoragelessNodesDisaggregatedMode(t, 0, 5, 8, 8)
-	testStoragelessNodesDisaggregatedMode(t, 0, 7, 8, 8)
-	testStoragelessNodesDisaggregatedMode(t, 0, 7, 0, 8)
+	testStoragelessNodesDisaggregatedMode(t, 3, 5, 8, 8)
+	testStoragelessNodesDisaggregatedMode(t, 1, 7, 8, 8)
+	testStoragelessNodesDisaggregatedMode(t, 1, 7, 0, 8)
 	testStoragelessNodesDisaggregatedMode(t, 7, 1, 0, 0)
 	testStoragelessNodesDisaggregatedMode(t, 0, 8, 8, 8)
 	testStoragelessNodesDisaggregatedMode(t, 0, 6, 6, 6, 6)
-	testStoragelessNodesDisaggregatedMode(t, 0, 6, 5, 6, 6)
+	testStoragelessNodesDisaggregatedMode(t, 1, 6, 5, 6, 6)
 	testStoragelessNodesDisaggregatedMode(t, 5, 1, 1, 1, 1)
 	testStoragelessNodesDisaggregatedMode(t, 5, 1, 1, 1, 0)
 	testStoragelessNodesDisaggregatedMode(t, 5, 1, 0, 0, 0)
@@ -9315,6 +9315,51 @@ func testStoragelessNodesDisaggregatedMode(t *testing.T, expectedValue uint32, s
 	} else {
 		require.Equal(t, expectedValue, *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 	}
+}
+
+func TestDisaggregatedMissingLabels(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+
+	totalNodes := uint32(6)
+	zones := uint32(1)
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage.MaxStorageNodesPerZone = nil
+	k8sClient := getK8sClientWithNodesDisaggregated(t, totalNodes, zones, cluster, 0)
+	// Create a node without any of the node-type or topology labels
+	k8sNode := createK8sNode("Extra-node", 10)
+	err := k8sClient.Create(context.TODO(), k8sNode)
+	require.NoError(t, err)
+	recorder := record.NewFakeRecorder(10)
+
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, cluster.Spec.CloudStorage)
+	require.NotNil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 }
 
 func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
