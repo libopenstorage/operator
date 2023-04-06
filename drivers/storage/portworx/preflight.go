@@ -227,7 +227,7 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 					msg := fmt.Sprintf("%s pre-flight check ", check.Type)
 					if check.Success {
 						msg = msg + "passed: " + check.Reason
-						k8sutil.InfoEvent(recorder, u.cluster, util.FailedPreFlight, msg)
+						k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
 					} else {
 						msg = msg + "failed: " + check.Reason
 						k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
@@ -241,6 +241,8 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	if passed {
 		// Enable DMthin via misc args
 		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
+		logrus.Infof("pre-flight: Enabling DMthin")
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling DMthin")
 	}
 
 	return nil
