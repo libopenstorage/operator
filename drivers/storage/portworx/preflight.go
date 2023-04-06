@@ -95,8 +95,12 @@ func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
 	totalPods := ds.Status.DesiredNumberScheduled
 	completedPods := 0
 	for _, pod := range pods {
-		if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].Ready {
-			completedPods++
+		if len(pod.Status.ContainerStatuses) > 0 {
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.Name == "portworx" && containerStatus.Ready {
+					completedPods++
+				}
+			}
 		}
 	}
 	logrus.Infof("Pre-flight Status: Completed [%v] InProgress [%v] Total Pods [%v]", completedPods, totalPods-int32(completedPods), totalPods)

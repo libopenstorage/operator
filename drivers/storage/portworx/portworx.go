@@ -106,9 +106,9 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	//  Wait for all the pre-flight pods to start
+	//  Wait for all the pre-flight pods to finish
 	for {
-		time.Sleep(1 * time.Second) // Pause before status check
+		time.Sleep(3 * time.Second) // Pause before status check
 		completed, inProgress, total, err := preFlighter.GetPreFlightStatus()
 		if err != nil {
 			logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
@@ -117,87 +117,9 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
 
 		if total != 0 && completed == total {
-			logrus.Infof("pre-flight: startup completed...")
+			logrus.Infof("pre-flight: completed...")
 			break
 		}
-	}
-
-	// Remove storageNodes with no pods, we usually don't run on the master
-	if pods, err := preFlighter.GetPreFlightPods(); err == nil {
-		if storageNodes, nerr := p.storageNodesList(cluster); nerr == nil {
-			for _, storageNode := range storageNodes {
-
-				// Find the StorageNode entry which does not have a pod running on it.
-				found := false
-				for _, pod := range pods {
-					if storageNode.Name == pod.Spec.NodeName {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					// Remove the storage node object with no pod
-					logrus.Infof("Deleting storageNode with no pre-flight pod: %v", storageNode.Name)
-					err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
-					if err != nil {
-						logrus.WithError(err).Errorf("failed to delete pre-flight storage node entry %s: %v", storageNode.Name, err)
-					}
-					// Wait for StorageNode to be removed.
-					for {
-						time.Sleep(2 * time.Second)
-						storageNodes, nerr = p.storageNodesList(cluster)
-						if nerr != nil {
-							break
-						}
-						found = false
-						for _, node := range storageNodes {
-							if storageNode.Name == node.Name {
-								found = true
-								break
-							}
-						}
-						if !found {
-							break
-						}
-					}
-					break
-				}
-			}
-		} else {
-			logrus.Errorf("pre-flight: Error getting storage node list: %v", err)
-			return nerr
-		}
-	} else {
-		logrus.Errorf("pre-flight: error failed to get  pre-flight pods: %v", err)
-	}
-
-	var storageNodes []*corev1.StorageNode
-
-	//	Wait for pre-flight checks to complete.  All the pre-flight pods are running.
-	//	However the checks being performed may not have completed.  Keep checking the
-	//	updated StorageNodes for completion check below
-	for {
-		time.Sleep(5 * time.Second)
-		storageNodes, err = p.storageNodesList(cluster)
-		if err != nil {
-			logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
-			break
-		}
-
-		done := true
-		for _, node := range storageNodes {
-			//	We add a check entry to signal when the pre-check is done.
-			//	So if length of checks > 0 the checks are all done.
-			if len(node.Status.Checks) == 0 {
-				done = false
-				break
-			}
-		}
-		if done {
-			break
-		}
-		logrus.Infof("pre-flight: running...")
 	}
 
 	defer func() {
@@ -210,9 +132,13 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	}()
 
 	// Process all the StorageNode.Status.Checks
-	err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
-	if err != nil {
-		logrus.Errorf("pre-flight: Error processing results: %v", err)
+	if storageNodes, err := p.storageNodesList(cluster); err == nil {
+		err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
+		if err != nil {
+			logrus.Errorf("pre-flight: Error processing results: %v", err)
+		}
+	} else {
+		logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
 	}
 
 	return nil
