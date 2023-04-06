@@ -88,17 +88,29 @@ func TestValidate(t *testing.T) {
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
+			Name:      "px-cluster-driver-validate-test",
 			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Security: &corev1.SecuritySpec{
-				Enabled: true,
-			},
 		},
 	}
 
-	err := driver.Validate(cluster)
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient()
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
 	require.NoError(t, err)
 }
 
