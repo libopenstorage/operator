@@ -32,8 +32,6 @@ const (
 	PxRestrictedSCCName = "portworx-restricted"
 	// PxNodeWiperServiceAccountName name of portworx node wiper service account
 	PxNodeWiperServiceAccountName = "px-node-wiper"
-	// PxPreFlightServiceAccountName name of portworx pre flight service account
-	PxPreFlightServiceAccountName = "px-pre-flight"
 )
 
 type scc struct {

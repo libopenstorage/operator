@@ -27,6 +27,8 @@ const (
 	pxPreFlightClusterRoleName        = "px-pre-flight"
 	pxPreFlightClusterRoleBindingName = "px-pre-flight"
 	pxPreFlightDaemonSetName          = "px-pre-flight"
+	// PxPreFlightServiceAccountName name of portworx pre flight service account
+	PxPreFlightServiceAccountName = "px-pre-flight"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -195,7 +197,7 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		)
 	}
 
-	preflightDS.Spec.Template.Spec.ServiceAccountName = component.PxPreFlightServiceAccountName
+	preflightDS.Spec.Template.Spec.ServiceAccountName = PxPreFlightServiceAccountName
 
 	if u.cluster.Spec.Placement != nil {
 		if u.cluster.Spec.Placement.NodeAffinity != nil {
@@ -258,7 +260,7 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 
 func (u *preFlightPortworx) DeletePreFlight() error {
 	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
-	if err := k8sutil.DeleteServiceAccount(u.k8sClient, component.PxPreFlightServiceAccountName, u.cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteServiceAccount(u.k8sClient, PxPreFlightServiceAccountName, u.cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteClusterRole(u.k8sClient, pxPreFlightClusterRoleName); err != nil {
@@ -280,7 +282,7 @@ func (u *preFlightPortworx) createServiceAccount(
 		u.k8sClient,
 		&v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            component.PxPreFlightServiceAccountName,
+				Name:            PxPreFlightServiceAccountName,
 				Namespace:       u.cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -406,7 +408,7 @@ func (u *preFlightPortworx) createClusterRoleBinding() error {
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      component.PxPreFlightServiceAccountName,
+					Name:      PxPreFlightServiceAccountName,
 					Namespace: u.cluster.Namespace,
 				},
 			},

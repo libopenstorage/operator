@@ -250,7 +250,7 @@ func (m *MockDriver) Validate(arg0 *v1.StorageCluster) error {
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *MockDriverMockRecorder) Validate() *gomock.Call {
+func (mr *MockDriverMockRecorder) Validate(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockDriver)(nil).Validate))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockDriver)(nil).Validate), arg0)
 }

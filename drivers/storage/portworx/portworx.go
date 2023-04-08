@@ -101,7 +101,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	err = preFlighter.RunPreFlight()
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			logrus.Infof("pre-flight: pre-flight container already running...")
+			logrus.Debugf("pre-flight: pre-flight container already running...")
 		}
 		return err
 	}
