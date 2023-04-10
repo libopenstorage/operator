@@ -254,6 +254,12 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	}
 
 	if passed {
+		// XXX - CBT runs for operator do not have require images - remove when images are published
+		if u.cluster.Namespace == "custom-namespace" {
+			logrus.Infof("pre-flight: CBT test skipping automatic enabling of DMthin")
+			return nil
+		}
+
 		// Enable DMthin via misc args
 		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
 		logrus.Infof("pre-flight: Enabling DMthin")
