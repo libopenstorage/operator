@@ -106,6 +106,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	cnt := 0
 	//  Wait for all the pre-flight pods to finish
 	for {
 		time.Sleep(3 * time.Second) // Pause before status check
@@ -119,6 +120,14 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		if total != 0 && completed == total {
 			logrus.Infof("pre-flight: completed...")
 			break
+		}
+
+		// Add five minute timeout.  If we do reconcile loop check we will need a different way.
+		cnt++
+		if cnt == 100 { // 3s * 100 = 300s (5 mins)
+			err = fmt.Errorf("pre-flight: pre-flight status check timed out")
+			logrus.Errorf("%v", err)
+			return err
 		}
 	}
 
