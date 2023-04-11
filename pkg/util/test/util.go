@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -143,7 +144,7 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	if err := corev1.AddToScheme(s); err != nil {
+	if err := apis.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	if err := monitoringv1.AddToScheme(s); err != nil {
