@@ -13,6 +13,7 @@ import (
 	_ "github.com/libopenstorage/operator/drivers/storage/portworx"
 	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/libopenstorage/operator/pkg/controller/csr"
+	"github.com/libopenstorage/operator/pkg/controller/portworxdiag"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/controller/storagenode"
 	_ "github.com/libopenstorage/operator/pkg/log"
@@ -49,6 +50,7 @@ const (
 	flagRateLimiterQPS           = "rate-limiter-qps"
 	flagRateLimiterBurst         = "rate-limiter-burst"
 	flagEnableProfiling          = "pprof"
+	flagEnableDiagController     = "diag-controller"
 	flagDisableCacheFor          = "disable-cache-for"
 	defaultLockObjectName        = "openstorage-operator"
 	defaultResyncPeriod          = 30 * time.Second
@@ -109,6 +111,10 @@ func main() {
 			Name:  flagEnableProfiling,
 			Usage: "Enable Portworx Operator profiling using pprof (default: false)",
 		},
+		cli.BoolFlag{
+			Name:  flagEnableDiagController,
+			Usage: "Enable Portworx Diag Controller (default: false)",
+		},
 		cli.StringFlag{
 			Name:  flagDisableCacheFor,
 			Usage: "Comma separated object types to disable from cache to reduce memory usage, for example \"Pod,ConfigMap,Deployment,PersistentVolume\"",
@@ -145,6 +151,8 @@ func run(c *cli.Context) {
 		}()
 	}
 
+	diagControllerEnabled := c.Bool(flagEnableDiagController)
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("Error getting cluster config: %v", err)
@@ -173,13 +181,22 @@ func run(c *cli.Context) {
 	storageClusterController := storagecluster.Controller{Driver: d}
 	err = storageClusterController.RegisterCRD()
 	if err != nil {
-		log.Fatalf("Error registering CRD's for StorageCluster controller: %v", err)
+		log.Fatalf("Error registering CRDs for StorageCluster controller: %v", err)
 	}
 
 	storageNodeController := storagenode.Controller{Driver: d}
 	err = storageNodeController.RegisterCRD()
 	if err != nil {
-		log.Fatalf("Error registering CRD's for StorageNode controller: %v", err)
+		log.Fatalf("Error registering CRDs for StorageNode controller: %v", err)
+	}
+
+	var diagController portworxdiag.Controller
+	if diagControllerEnabled {
+		diagController = portworxdiag.Controller{Driver: d}
+		err = diagController.RegisterCRD()
+		if err != nil {
+			log.Fatalf("Error registering CRDs for PortworxDiag controller: %v", err)
+		}
 	}
 
 	// TODO: Don't move createManager above register CRD section. This part will be refactored because of a bug,
@@ -252,6 +269,12 @@ func run(c *cli.Context) {
 		log.Fatalf("Error initializing certificate signing request controller: %v", err)
 	}
 
+	if diagControllerEnabled {
+		if err := diagController.Init(mgr); err != nil {
+			log.Fatalf("Error initializing portworx diag controller: %v", err)
+		}
+	}
+
 	if err := storageClusterController.StartWatch(); err != nil {
 		log.Fatalf("Error start watch on storage cluster controller: %v", err)
 	}
@@ -262,6 +285,12 @@ func run(c *cli.Context) {
 
 	if err := certificateSigningRequestController.StartWatch(); err != nil {
 		log.Fatalf("Error starting watch on certificate signing request controller: %v", err)
+	}
+
+	if diagControllerEnabled {
+		if err := diagController.StartWatch(); err != nil {
+			log.Fatalf("Error starting watch on portworx diag controller: %v", err)
+		}
 	}
 
 	if c.BoolT(flagMigration) {
