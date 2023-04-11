@@ -498,9 +498,6 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			return err
 		}
 
-		// XXX - Sleep to avoid race cond check NOTE: in setStorageClusterDefaults()
-		time.Sleep(30 * time.Second)
-
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 			return err

@@ -94,11 +94,6 @@ func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
 		return 1, 0, 1, nil // testing
 	}
 
-	// XXX - CBT runs for operator do not have require images - remove when images are published
-	if u.cluster.Namespace == "custom-namespace" {
-		return 1, 0, 1, nil // testing
-	}
-
 	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	if err != nil {
 		return -1, -1, -1, err
@@ -254,12 +249,6 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	}
 
 	if passed {
-		// XXX - CBT runs for operator do not have require images - remove when images are published
-		if u.cluster.Namespace == "custom-namespace" {
-			logrus.Infof("pre-flight: CBT test skipping automatic enabling of DMthin")
-			return nil
-		}
-
 		// Enable DMthin via misc args
 		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
 		logrus.Infof("pre-flight: Enabling DMthin")
