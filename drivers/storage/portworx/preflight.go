@@ -90,10 +90,6 @@ func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
 }
 
 func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
-	if u.cluster.Name == "px-cluster-driver-validate-test" {
-		return 1, 0, 1, nil // testing
-	}
-
 	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	if err != nil {
 		return -1, -1, -1, err
@@ -251,7 +247,6 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	if passed {
 		// Enable DMthin via misc args
 		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
-		logrus.Infof("pre-flight: Enabling DMthin")
 		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling DMthin")
 	}
 

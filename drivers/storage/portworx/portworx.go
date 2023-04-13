@@ -100,10 +100,10 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	// Start the pre-flight container. The pre-flight checks at this time are specific to enabling DMthin
 	err = preFlighter.RunPreFlight()
 	if err != nil {
-		if errors.IsAlreadyExists(err) {
-			logrus.Debugf("pre-flight: pre-flight container already running...")
+		if !errors.IsAlreadyExists(err) {
+			return err
 		}
-		return err
+		logrus.Debugf("pre-flight: container already running...")
 	}
 
 	cnt := 0
