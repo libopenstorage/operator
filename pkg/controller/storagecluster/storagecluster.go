@@ -420,7 +420,11 @@ func bringUpStorageCluster(cluster *corev1.StorageCluster) (bool, error) {
 		return true, nil
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		if condition != nil && condition.Status == corev1.ClusterConditionStatusCompleted {
+		if condition != nil {
+			if condition.Status == corev1.ClusterConditionStatusCompleted {
+				return true, nil
+			}
+		} else {
 			return true, nil
 		}
 	}
