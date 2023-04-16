@@ -137,15 +137,9 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
-	err := k8sClient.Create(context.TODO(), preFlightPod1)
-	require.NoError(t, err)
-
-	preflightDS.Status.DesiredNumberScheduled = int32(1)
-	err = k8sClient.Status().Update(context.TODO(), preflightDS)
-	require.NoError(t, err)
 
 	recorder := record.NewFakeRecorder(100)
-	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -154,13 +148,31 @@ func TestValidate(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), storageNode)
 	require.NoError(t, err)
 
+	err = k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	// Validate timeout
+	preflightDS.Status.DesiredNumberScheduled = int32(2)
+	preflightDS.CreationTimestamp = metav1.NewTime(time.Now().Add(-16 * time.Minute))
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "check timed out")
+
+	// Validate
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
 	err = driver.Validate(cluster)
 	require.NoError(t, err)
 	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin")
 	require.NotEmpty(t, recorder.Events)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling DMthin"))
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 }
 
 func TestGetSelectorLabels(t *testing.T) {

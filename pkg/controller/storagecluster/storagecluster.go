@@ -412,6 +412,72 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
+func bringUpStorageCluster(cluster *corev1.StorageCluster) (bool, error) {
+	// Check pre-check status
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if !ok || check == "skip" {
+		return true, nil
+	} else if check == "false" {
+		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition != nil && condition.Status == corev1.ClusterConditionStatusCompleted {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
+	storageNodes := &corev1.StorageNodeList{}
+	serr := c.client.List(context.TODO(), storageNodes,
+		&client.ListOptions{Namespace: toUpdate.Namespace})
+	if serr == nil && len(storageNodes.Items) == 0 { // Only do if storageNodes don't exist
+		k8sNodeList := &v1.NodeList{}
+		err := c.client.List(context.TODO(), k8sNodeList)
+		if err == nil {
+			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
+			for _, node := range k8sNodeList.Items {
+				logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+				c.createStorageNode(toUpdate, node.Name)
+			}
+		} else {
+			logrus.WithError(err).Errorf("Failed to get cluster nodes")
+		}
+	}
+
+	// Run driver specific pre-flights
+	err := c.Driver.Validate(toUpdate)
+	if err == nil {
+		condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition != nil && condition.Status == corev1.ClusterConditionStatusCompleted {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		}
+	} else {
+		logrus.WithError(err).Errorf("pre-flight validate failed")
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	}
+
+	if toUpdate.Annotations[pxutil.AnnotationPreflightCheck] == "false" {
+		// Delete StorageNodes created for c.Driver.Validate() checks.
+		storageNodes = &corev1.StorageNodeList{}
+		serr = c.client.List(context.TODO(), storageNodes,
+			&client.ListOptions{Namespace: toUpdate.Namespace})
+		if serr == nil {
+			for _, storageNode := range storageNodes.Items {
+				logrus.Infof("Delete validate() storage node entry for node: %s", storageNode.Name)
+				serr = c.client.Delete(context.TODO(), storageNode.DeepCopy())
+				if serr != nil {
+					logrus.WithError(serr).Errorf("failed to delete storage node entry %s: %v", storageNode.Name, serr)
+				}
+			}
+		} else {
+			logrus.WithError(err).Errorf("Failed to get StorageNodes used for validate.")
+		}
+	}
+
+	return err
+}
+
 func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
@@ -429,7 +495,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Only do the preflight check on demand once a time
 	toUpdate := cluster.DeepCopy()
-	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	//	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	var err error
 
 	// Do the preflight check for eks only for now to check the cloud drive permission
@@ -438,42 +504,14 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
 		}
 	}
+
 	// TODO: validate cloud permission for other providers as well
 
 	// Skip of over driver Validate() if an error has occurred
 	if err == nil {
-		// Create StorageNodes to return pre-flight checks used by c.Driver.Validate()
-		k8sNodeList := &v1.NodeList{}
-		err = c.client.List(context.TODO(), k8sNodeList)
-		if err == nil {
-			for _, node := range k8sNodeList.Items {
-				logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-				c.createStorageNode(cluster, node.Name)
-			}
-		} else {
-			logrus.WithError(err).Errorf("Failed to get cluster nodes")
-		}
-
-		// Run driver specific pre-flights
-		if err = c.Driver.Validate(toUpdate); err != nil {
-			logrus.WithError(err).Errorf("pre-flight validate failed")
-		}
-
-		// Delete StorageNodes created for c.Driver.Validate() checks.
-		storageNodes := &corev1.StorageNodeList{}
-		serr := c.client.List(context.TODO(), storageNodes,
-			&client.ListOptions{Namespace: toUpdate.Namespace})
-		if serr == nil {
-			for _, storageNode := range storageNodes.Items {
-				logrus.Infof("Delete validate() storage node entry for node: %s", storageNode.Name)
-				serr = c.client.Delete(context.TODO(), storageNode.DeepCopy())
-				if serr != nil {
-					logrus.WithError(serr).Errorf("failed to delete storage node entry %s: %v", storageNode.Name, serr)
-				}
-			}
-		} else {
-			logrus.WithError(err).Errorf("Failed to get StorageNodes used for validate.")
-		}
+		err = c.driverValidate(toUpdate)
+	} else {
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
 	condition := &corev1.ClusterCondition{
@@ -486,7 +524,9 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		condition.Status = corev1.ClusterConditionStatusFailed
 		condition.Message = err.Error()
 	} else {
-		logrus.Infof("storage cluster preflight check passed")
+		if toUpdate.Annotations[pxutil.AnnotationPreflightCheck] != "false" { // In progress
+			logrus.Infof("storage cluster preflight in progress...")
+		}
 		condition.Status = corev1.ClusterConditionStatusCompleted
 	}
 	util.UpdateStorageClusterCondition(toUpdate, condition)
@@ -642,6 +682,15 @@ func (c *Controller) syncStorageCluster(
 	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 	if err := c.runPreflightCheck(cluster); err != nil {
 		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
+	}
+
+	if startOk, err := bringUpStorageCluster(cluster); err == nil {
+		if !startOk {
+			return nil // not ready yet, continue
+		}
+	} else {
+		return fmt.Errorf("unable to check if StorageCluster %v/%v can be started: %v", cluster.Namespace, cluster.Name, err)
+
 	}
 
 	// Ensure Stork is deployed with right configuration

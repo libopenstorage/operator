@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,7 +38,7 @@ type PreFlightPortworx interface {
 	RunPreFlight() error
 	// GetPreFlightStatus returns the status of the pre-flight daemonset
 	// returns the no. of completed, in progress and total pods
-	GetPreFlightStatus() (int32, int32, int32, error)
+	GetPreFlightStatus() (int32, int32, int32, time.Duration, error)
 	// GetPreFlightPods returns the pods of the pre-flight daemonset
 	GetPreFlightPods() ([]*v1.Pod, error)
 	// ProcessPreFlightResults process StorageNode status checks
@@ -89,10 +90,10 @@ func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
 	return pods, err
 }
 
-func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
+func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, time.Duration, error) {
 	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	if err != nil {
-		return -1, -1, -1, err
+		return -1, -1, -1, 0, err
 	}
 	totalPods := ds.Status.DesiredNumberScheduled
 	completedPods := 0
@@ -105,8 +106,11 @@ func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
 			}
 		}
 	}
+
+	statusAge := time.Since(ds.CreationTimestamp.Time)
+	logrus.Infof("Pre-flight status running time: %v", statusAge)
 	logrus.Infof("Pre-flight Status: Completed [%v] InProgress [%v] Total Pods [%v]", completedPods, totalPods-int32(completedPods), totalPods)
-	return int32(completedPods), totalPods - int32(completedPods), totalPods, nil
+	return int32(completedPods), totalPods - int32(completedPods), totalPods, statusAge, nil
 }
 
 func (u *preFlightPortworx) RunPreFlight() error {
@@ -215,15 +219,17 @@ func (u *preFlightPortworx) RunPreFlight() error {
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
-		logrus.Errorf("RunPreFlight: error creating: %v", err)
+		if errors.IsAlreadyExists(err) {
+			logrus.Infof("runPreFlight: daemonset already exists")
+		} else {
+			logrus.Errorf("RunPreFlight: error creating: %v", err)
+		}
 	}
 
 	return err
 }
 
 func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error {
-	logrus.Infof("pre-flight: process pre-flight results...")
-
 	passed := true
 	for _, node := range storageNodes {
 		logrus.Infof("storageNode[%s]: %#v ", node.Name, node.Status.Checks)
@@ -247,7 +253,9 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	if passed {
 		// Enable DMthin via misc args
 		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
-		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling DMthin")
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
+	} else {
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
 	}
 
 	return nil

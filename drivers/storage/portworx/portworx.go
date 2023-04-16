@@ -106,29 +106,38 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Debugf("pre-flight: container already running...")
 	}
 
-	cnt := 0
-	//  Wait for all the pre-flight pods to finish
-	for {
-		time.Sleep(3 * time.Second) // Pause before status check
-		completed, inProgress, total, err := preFlighter.GetPreFlightStatus()
-		if err != nil {
-			logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
-			return err
-		}
-		logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypePreflight,
+	}
 
-		if total != 0 && completed == total {
-			logrus.Infof("pre-flight: completed...")
-			break
+	completed, inProgress, total, age, err := preFlighter.GetPreFlightStatus()
+	if err != nil {
+		if errors.IsNotFound(err) {
+			condition.Status = corev1.ClusterConditionStatusInProgress
+			condition.Message = "pre-flight: in progress..."
+			logrus.Infof(condition.Message)
+			util.UpdateStorageClusterCondition(cluster, condition)
+			return nil
 		}
+		logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
+		return err
+	}
 
-		// Add five minute timeout.  If we do reconcile loop check we will need a different way.
-		cnt++
-		if cnt == 200 { // 3s * 100 = 300s (10 mins)
-			err = fmt.Errorf("pre-flight: pre-flight status check timed out")
+	logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+	if total != 0 && completed == total {
+		logrus.Infof("pre-flight: checks completed...")
+	} else {
+		if age >= 15*time.Minute {
+			err = fmt.Errorf("pre-flight: pre-flight check timed out")
 			logrus.Errorf("%v", err)
 			return err
 		}
+		condition.Status = corev1.ClusterConditionStatusInProgress
+		condition.Message = "pre-flight: in progress..."
+		logrus.Infof(condition.Message)
+		util.UpdateStorageClusterCondition(cluster, condition)
+		return nil
 	}
 
 	defer func() {
@@ -141,16 +150,25 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	}()
 
 	// Process all the StorageNode.Status.Checks
-	if storageNodes, err := p.storageNodesList(cluster); err == nil {
-		err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
-		if err != nil {
-			logrus.Errorf("pre-flight: Error processing results: %v", err)
-		}
-	} else {
+	var storageNodes []*corev1.StorageNode
+
+	storageNodes, err = p.storageNodesList(cluster)
+	if err != nil {
 		logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
+		return err
 	}
 
-	return nil
+	logrus.Infof("pre-flight: process pre-flight results...")
+	err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
+	if err == nil {
+		condition.Status = corev1.ClusterConditionStatusCompleted
+		condition.Message = "pre-flight: done..."
+		util.UpdateStorageClusterCondition(cluster, condition)
+	} else {
+		logrus.Errorf("pre-flight: Error processing results: %v", err)
+	}
+
+	return err
 }
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
