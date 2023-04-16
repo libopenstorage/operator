@@ -4,13 +4,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// PortworxDiagResourceName is name for "portworxdiag" resource.
-	PortworxDiagResourceName = "portworxdiag"
-	// PortworxDiagResourcePlural is plural for "portworxdiag" resource.
-	PortworxDiagResourcePlural = "portworxdiags"
-)
-
 // PortworxDiagSpec is the spec used to define a portworx diag.
 type PortworxDiagSpec struct {
 	// Configuration for diags collection of the main Portworx component.
