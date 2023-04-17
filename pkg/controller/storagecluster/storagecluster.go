@@ -291,10 +291,6 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
-	if err := c.Driver.Validate(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -418,6 +414,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
 		}
 		// preflight passed or not required
+		logrus.Infof("preflight check not required")
 		return nil
 	}
 
@@ -432,15 +429,51 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
 		}
 	}
-
 	// TODO: validate cloud permission for other providers as well
+
+	// Skip of over driver Validate() if an error has occurred
+	if err == nil {
+		// Create StorageNodes to return pre-flight checks used by c.Driver.Validate()
+		k8sNodeList := &v1.NodeList{}
+		err = c.client.List(context.TODO(), k8sNodeList)
+		if err == nil {
+			for _, node := range k8sNodeList.Items {
+				logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+				c.createStorageNode(cluster, node.Name)
+			}
+		} else {
+			logrus.WithError(err).Errorf("Failed to get cluster nodes")
+		}
+
+		// Run driver specific pre-flights
+		if err = c.Driver.Validate(toUpdate); err != nil {
+			logrus.WithError(err).Errorf("pre-flight validate failed")
+		}
+
+		// Delete StorageNodes created for c.Driver.Validate() checks.
+		storageNodes := &corev1.StorageNodeList{}
+		serr := c.client.List(context.TODO(), storageNodes,
+			&client.ListOptions{Namespace: toUpdate.Namespace})
+		if serr == nil {
+			for _, storageNode := range storageNodes.Items {
+				logrus.Infof("Delete validate() storage node entry for node: %s", storageNode.Name)
+				serr = c.client.Delete(context.TODO(), storageNode.DeepCopy())
+				if serr != nil {
+					logrus.WithError(serr).Errorf("failed to delete storage node entry %s: %v", storageNode.Name, serr)
+				}
+			}
+		} else {
+			logrus.WithError(err).Errorf("Failed to get StorageNodes used for validate.")
+		}
+	}
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypePreflight,
 	}
+
 	if err != nil {
-		logrus.Infof("storage cluster preflight check failed")
+		logrus.Errorf("storage cluster preflight check failed")
 		condition.Status = corev1.ClusterConditionStatusFailed
 		condition.Message = err.Error()
 	} else {
