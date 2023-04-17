@@ -72,6 +72,12 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		}
 	}
 
+	// XXX - Skip preflight for now when executing integration tests.  Cause automatically setting DMthin required meta-data device.
+	if cluster.Annotations == nil {
+		cluster.Annotations = make(map[string]string)
+	}
+	cluster.Annotations["portworx.io/preflight-check"] = "false"
+
 	// Add EKS annotation
 	if IsEks {
 		if cluster.Annotations == nil {
