@@ -520,7 +520,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	_, ok := cluster.Annotations[pxutil.AnnotationIsEKS]
 	require.False(t, ok)
 	_, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
-	require.True(t, ok)
+	require.False(t, ok)
 	require.NotNil(t, cluster.Spec.Storage)
 	require.Nil(t, cluster.Spec.CloudStorage)
 
