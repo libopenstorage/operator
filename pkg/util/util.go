@@ -53,6 +53,10 @@ const (
 	TelemetryEnabledReason = "TelemetryEnabled"
 	// TelemetryDisabledReason is added to an event when the telemetry is disabled by operator
 	TelemetryDisabledReason = "TelemetryDisabled"
+	// FailedPreFlight is added to denote pre-flight failure.
+	FailedPreFlight = "FailedPreFlight"
+	// PassedPreFlight is added to denote pre-flight Passed.
+	PassPreFlight = "PassedPreFlight"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"

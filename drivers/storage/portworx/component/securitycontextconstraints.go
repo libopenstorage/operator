@@ -3,6 +3,9 @@ package component
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/hashicorp/go-version"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	"github.com/sirupsen/logrus"
@@ -12,9 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 

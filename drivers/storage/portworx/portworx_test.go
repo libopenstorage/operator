@@ -86,9 +86,81 @@ func TestInit(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
 
-	err := driver.Validate()
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-1",
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
 	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin")
+	require.NotEmpty(t, recorder.Events)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling DMthin"))
 }
 
 func TestGetSelectorLabels(t *testing.T) {
