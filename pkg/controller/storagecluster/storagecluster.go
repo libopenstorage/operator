@@ -455,7 +455,8 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		}
 
 		// Run driver specific pre-flights
-		if err = c.Driver.Validate(toUpdate); err != nil {
+		err = c.Driver.Validate(toUpdate)
+		if err != nil {
 			logrus.WithError(err).Errorf("pre-flight validate failed")
 		}
 
@@ -472,7 +473,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 				}
 			}
 		} else {
-			logrus.WithError(err).Errorf("Failed to get StorageNodes used for validate.")
+			logrus.WithError(serr).Errorf("Failed to get StorageNodes used for validate.")
 		}
 	}
 
