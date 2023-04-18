@@ -275,20 +275,20 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	if passed {
 		if !u.hardFail { // Enable DMthin via misc args if not enabled already
 			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
-			// Only set if CloudStorage is nil
-			if u.cluster.Spec.CloudStorage == nil {
-				u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
-			}
-
-			if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
-				cmetaData := DefCmetaData
-				u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData // Add 64G metadata drive.
-			}
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
 		} else {
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
 		}
 
+		// Add 64G metadata drive.
+		if u.cluster.Spec.CloudStorage == nil {
+			u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+
+		if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
+			cmetaData := DefCmetaData
+			u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
+		}
 	} else {
 		if !u.hardFail { // Enable DMthin via misc args if not enabled already
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
