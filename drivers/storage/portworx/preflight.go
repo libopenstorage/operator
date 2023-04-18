@@ -30,6 +30,8 @@ const (
 	pxPreFlightDaemonSetName          = "px-pre-flight"
 	// PxPreFlightServiceAccountName name of portworx pre flight service account
 	PxPreFlightServiceAccountName = "px-pre-flight"
+	// DefCmetaData default metadata cloud device for DMthin
+	DefCmetaData = "type=gp3,size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -195,13 +197,6 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		}
 	}
 
-	// Check for pre-existing DMthin in misc-args
-	if mArgs, err := pxutil.MiscArgs(u.cluster); err == nil {
-		checkArgs(mArgs)
-	} else {
-		logrus.Warnf("runPreFlight: error parsing misc args, skipping existing PX-StoreV2 param check: %v", err)
-	}
-
 	// Check for pre-existing DMthin in container args
 	checkArgs(u.podSpec.Containers[0].Args)
 
@@ -282,13 +277,12 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
 			// Only set if CloudStorage is nil
 			if u.cluster.Spec.CloudStorage == nil {
-				// Add 64G metadata drive.
-				cmetadata := "type=gp2,size=64"
-				u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
-					CloudStorageCommon: corev1.CloudStorageCommon{
-						SystemMdDeviceSpec: &cmetadata,
-					},
-				}
+				u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+			}
+
+			if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
+				cmetaData := DefCmetaData
+				u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData // Add 64G metadata drive.
 			}
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
 		} else {
