@@ -131,14 +131,16 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	defer func() {
 		// Clean up the pre-flight pods
 		logrus.Infof("pre-flight: cleaning pre-flight ds...")
-		err = preFlighter.DeletePreFlight()
-		if err != nil {
-			logrus.Errorf("pre-flight: error deleting pre-flight: %v", err)
+		if derr := preFlighter.DeletePreFlight(); derr != nil {
+			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
 		}
 	}()
 
 	// Process all the StorageNode.Status.Checks
-	if storageNodes, err := p.storageNodesList(cluster); err == nil {
+	var storageNodes []*corev1.StorageNode
+
+	storageNodes, err = p.storageNodesList(cluster)
+	if err == nil {
 		err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
 		if err != nil {
 			logrus.Errorf("pre-flight: Error processing results: %v", err)
@@ -147,7 +149,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
 	}
 
-	return nil
+	return err
 }
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
