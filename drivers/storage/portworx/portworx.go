@@ -143,9 +143,8 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	defer func() {
 		// Clean up the pre-flight pods
 		logrus.Infof("pre-flight: cleaning pre-flight ds...")
-		err = preFlighter.DeletePreFlight()
-		if err != nil {
-			logrus.Errorf("pre-flight: error deleting pre-flight: %v", err)
+		if derr := preFlighter.DeletePreFlight(); derr != nil {
+			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
 		}
 	}()
 

@@ -3,6 +3,7 @@ package portworx
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ const (
 	pxPreFlightDaemonSetName          = "px-pre-flight"
 	// PxPreFlightServiceAccountName name of portworx pre flight service account
 	PxPreFlightServiceAccountName = "px-pre-flight"
+	// DefCmetaData default metadata cloud device for DMthin
+	DefCmetaData = "type=gp3,size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -51,7 +54,11 @@ type preFlightPortworx struct {
 	cluster   *corev1.StorageCluster
 	k8sClient client.Client
 	podSpec   v1.PodSpec
+	hardFail  bool
 }
+
+// Existing dmThin strings
+var dmthinRegex = regexp.MustCompile("(?i)(dmthin|PX-StoreV2|px-store-v2)")
 
 // NewPreFlighter returns an implementation of PreFlightPortworx interface
 func NewPreFlighter(
@@ -184,8 +191,29 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
 	*/
 
-	// Add --pre-flight check for DMthin
-	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight", "-T", "dmthin"},
+	checkArgs := func(args []string) {
+		for i, arg := range args {
+			if arg == "-T" {
+				if dmthinRegex.Match([]byte(args[i+1])) {
+					u.hardFail = true
+				}
+			}
+		}
+	}
+
+	// Check for pre-existing DMthin in container args
+	checkArgs(u.podSpec.Containers[0].Args)
+
+	if !u.hardFail {
+		// If Dmthin param does not exist add it
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "dmthin"},
+			preflightDS.Spec.Template.Spec.Containers[0].Args...)
+	} else {
+		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
+	}
+
+	// Add pre-flight param
+	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
 		preflightDS.Spec.Template.Spec.Containers[0].Args...)
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
@@ -251,11 +279,30 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 	}
 
 	if passed {
-		// Enable DMthin via misc args
-		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
-		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
+		if !u.hardFail { // Enable DMthin via misc args if not enabled already
+			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
+			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
+		} else {
+			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
+		}
+
+		// Add 64G metadata drive.
+		if u.cluster.Spec.CloudStorage == nil {
+			u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+
+		if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
+			cmetaData := DefCmetaData
+			u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
+		}
 	} else {
-		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
+		if !u.hardFail { // Enable DMthin via misc args if not enabled already
+			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
+		} else { // hardFail is enabled, fail if any pre-flight check fails.
+			err := fmt.Errorf("PX-StoreV2 pre-check failed")
+			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, err.Error())
+			return err
+		}
 	}
 
 	return nil

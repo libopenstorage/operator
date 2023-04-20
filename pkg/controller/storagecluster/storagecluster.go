@@ -475,7 +475,7 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 				}
 			}
 		} else {
-			logrus.WithError(err).Errorf("Failed to get StorageNodes used for validate.")
+			logrus.WithError(serr).Errorf("Failed to get StorageNodes used for validate.")
 		}
 	}
 
@@ -511,7 +511,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// TODO: validate cloud permission for other providers as well
 
-	// Skip of over driver Validate() if an error has occurred
+	// Skip over driver Validate() if an error has occurred
 	if err == nil {
 		err = c.driverValidate(toUpdate)
 	} else {
