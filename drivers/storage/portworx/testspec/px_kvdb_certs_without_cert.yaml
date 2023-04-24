@@ -69,6 +69,8 @@ spec:
               mountPath: /etc/crictl.yaml
             - name: containerddir
               mountPath: /run/containerd
+            - name: containerdvardir
+              mountPath: /var/lib/containerd
             - name: etcpwx
               mountPath: /etc/pwx
             - name: optpwx
@@ -97,6 +99,9 @@ spec:
         - name: containerddir
           hostPath:
             path: /run/containerd
+        - name: containerdvardir
+          hostPath:
+            path: /var/lib/containerd
         - name: criosock
           hostPath:
             path: /var/run/crio
