@@ -632,6 +632,8 @@ const (
 	ClusterConditionTypeDelete ClusterConditionType = "Delete"
 	// ClusterConditionTypeInstall indicates the status for an install operation on the cluster
 	ClusterConditionTypeInstall ClusterConditionType = "Install"
+	// ClusterConditionTypePreflight indicates the status for preflight check on the cluster
+	ClusterConditionTypePreflight ClusterConditionType = "Preflight"
 )
 
 // ClusterConditionStatus is the enum type for cluster condition statuses

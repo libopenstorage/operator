@@ -60,6 +60,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	preflight "github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -406,6 +407,55 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
+func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if !ok || check == "skip" {
+		return nil
+	} else if check == "false" {
+		if cluster.Status.Phase == string(corev1.ClusterConditionTypePreflight)+string(corev1.ClusterOperationFailed) {
+			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
+		}
+		return nil
+	}
+
+	// Only do the preflight check on demand once a time
+	toUpdate := cluster.DeepCopy()
+	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	var err error
+
+	// Do the preflight check for eks only for now to check the cloud drive permission
+	if preflight.IsEKS() {
+		if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
+			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
+		}
+	}
+
+	// TODO: validate cloud permission for other providers as well
+
+	if err != nil {
+		logrus.Infof("storage cluster preflight check failed")
+		toUpdate.Status.Phase = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationFailed)
+	} else {
+		logrus.Infof("storage cluster preflight check passed")
+		toUpdate.Status.Phase = string(corev1.ClusterConditionTypePreflight) + string(corev1.ClusterOperationCompleted)
+	}
+
+	// Update the cluster only if anything has changed
+	if !reflect.DeepEqual(cluster, toUpdate) {
+		toUpdate.DeepCopyInto(cluster)
+		if err := c.client.Update(context.TODO(), cluster); err != nil {
+			return err
+		}
+
+		cluster.Status = *toUpdate.Status.DeepCopy()
+		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
 func (c *Controller) getCloudStorageLabelKey(cluster *corev1.StorageCluster) (string, error) {
 	if len(cluster.Spec.Nodes) == 0 {
 		return "", nil
@@ -533,6 +583,10 @@ func (c *Controller) syncStorageCluster(
 	if err := c.setStorageClusterDefaults(cluster); err != nil {
 		return fmt.Errorf("failed to update StorageCluster %v/%v with default values: %v",
 			cluster.Namespace, cluster.Name, err)
+	}
+
+	if err := c.runPreflightCheck(cluster); err != nil {
+		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}
 
 	// Ensure Stork is deployed with right configuration
@@ -1399,8 +1453,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			toUpdate, err)
 	}
 
-	cloudProviderName := getCloudProviderName(nodeList)
-	cloudProvider := cloudprovider.New(cloudProviderName)
+	cloudProvider := cloudprovider.Get()
 	zoneMap, err := getZoneMap(nodeList, "", "")
 	if err != nil {
 		return err
@@ -1408,7 +1461,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 	if err := c.Driver.UpdateDriver(&storage.UpdateDriverInfo{
 		ZoneToInstancesMap: zoneMap,
-		CloudProvider:      cloudProviderName,
+		CloudProvider:      cloudProvider.Name(),
 	}); err != nil {
 		logrus.Debugf("Failed to update driver: %v", err)
 	}

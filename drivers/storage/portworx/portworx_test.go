@@ -11,24 +11,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
-	"github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/mock"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/portworx/kvdb"
-	"github.com/portworx/kvdb/api/bootstrap/k8s"
-	"github.com/portworx/kvdb/consul"
-	e2 "github.com/portworx/kvdb/etcd/v2"
-	e3 "github.com/portworx/kvdb/etcd/v3"
-	"github.com/portworx/kvdb/mem"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -47,6 +29,26 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/api/bootstrap/k8s"
+	"github.com/portworx/kvdb/consul"
+	e2 "github.com/portworx/kvdb/etcd/v2"
+	e3 "github.com/portworx/kvdb/etcd/v3"
+	"github.com/portworx/kvdb/mem"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func TestString(t *testing.T) {
@@ -376,6 +378,56 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, cluster.Spec.Monitoring.Prometheus.ExportMetrics)
 	require.Nil(t, cluster.Spec.Monitoring.EnableMetrics)
+}
+
+func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
+	k8sClient := testutil.FakeK8sClient()
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	// TestCase: default cloud provider
+	err = preflight.InitPreflightChecker()
+	require.NoError(t, err)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	_, ok := cluster.Annotations[pxutil.AnnotationIsEKS]
+	require.False(t, ok)
+	_, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.False(t, ok)
+
+	// TestCase: test eks
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"}},
+	}}
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.14-eks-ba74326",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	err = preflight.InitPreflightChecker()
+	require.NoError(t, err)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	_, ok = cluster.Annotations[pxutil.AnnotationIsEKS]
+	require.True(t, ok)
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "true", check)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker()
+	require.NoError(t, err)
 }
 
 func TestStorageClusterPlacementDefaults(t *testing.T) {

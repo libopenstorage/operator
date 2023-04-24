@@ -135,6 +135,8 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationDisableCSRAutoApprove annotation to set priority for SCCs.
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
+	// AnnotationPreflightCheck do preflight check before installing Portworx
+	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -294,6 +296,7 @@ func IsAKS(cluster *corev1.StorageCluster) bool {
 
 // IsEKS returns true if the annotation has an EKS annotation and is true value
 func IsEKS(cluster *corev1.StorageCluster) bool {
+	// TODO: use cloud provider to determine EKS
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsEKS])
 	return err == nil && enabled
 }
