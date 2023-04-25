@@ -3513,6 +3513,7 @@ func TestGarbageCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
 		Status: corev1.ClusterConditionStatusCompleted,
 	}
@@ -3886,6 +3887,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	require.NoError(t, err)
 
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
 		Status: corev1.ClusterConditionStatusCompleted,
 	}
@@ -3954,6 +3956,7 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
 		Status: corev1.ClusterConditionStatusCompleted,
 	}
@@ -9126,6 +9129,7 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 		condition := &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
 			Type:   corev1.ClusterConditionTypeDelete,
 			Status: corev1.ClusterConditionStatusCompleted,
 		}
