@@ -757,11 +757,6 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 
 	setCSIDefaults(toUpdate, t, k8sVersion)
 
-	if pxutil.IsTelemetryEnabled(toUpdate.Spec) && t.pxVersion.LessThan(pxutil.MinimumPxVersionCCM) {
-		toUpdate.Spec.Monitoring.Telemetry.Enabled = false // telemetry not supported for < 2.8
-		toUpdate.Spec.Monitoring.Telemetry.Image = ""
-	}
-
 	setSecuritySpecDefaults(toUpdate)
 
 	return nil

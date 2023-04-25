@@ -3782,15 +3782,6 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
-	telemetryCert := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.TelemetryCertName,
-			Namespace: cluster.Namespace,
-		},
-	}
-	err = k8sClient.Create(context.TODO(), telemetryCert)
-	require.NoError(t, err)
-
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
@@ -3799,12 +3790,6 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	updatedCluster = &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-
-	secret := &v1.Secret{}
-	err = testutil.Get(k8sClient, secret, pxutil.TelemetryCertName, cluster.Namespace)
-	require.NoError(t, err)
-
-	require.Equal(t, len(secret.OwnerReferences), 1)
 }
 
 func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
