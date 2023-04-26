@@ -1,7 +1,7 @@
 packageName: portworx-certified
 channels:
 - name: alpha
-  currentCSV: portworx-operator.v23.4.0
+  currentCSV: portworx-operator.v23.5.0
 - name: stable
-  currentCSV: portworx-operator.v23.4.0
+  currentCSV: portworx-operator.v23.5.0
 defaultChannel: stable
