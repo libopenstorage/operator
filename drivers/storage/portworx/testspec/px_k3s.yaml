@@ -100,6 +100,8 @@ spec:
               mountPath: /var/run/dbus
             - name: containerd-k3s
               mountPath: /run/containerd/containerd.sock
+            - name: containerddir-rke2
+              mountPath: /var/lib/rancher/rke2/agent/containerd
         - name: csi-node-driver-registrar
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.3
           imagePullPolicy: Always
@@ -176,3 +178,6 @@ spec:
         - name: containerd-k3s
           hostPath:
             path: /run/k3s/containerd/containerd.sock
+        - name: containerddir-rke2
+          hostPath:
+            path: /var/lib/rancher/rke2/agent/containerd
