@@ -178,6 +178,6 @@ spec:
         - name: containerd-k3s
           hostPath:
             path: /run/k3s/containerd/containerd.sock
-        - name: containerddir-rke2
+        - name: containerddir-k3s
           hostPath:
-            path: /var/lib/rancher/rke2/agent/containerd
+            path: /var/lib/rancher
