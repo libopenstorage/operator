@@ -10,15 +10,15 @@ import (
 	"sync"
 	"time"
 
-	e "github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/clientv3/concurrency"
-	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
-	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/common"
 	ec "github.com/portworx/kvdb/etcd/common"
 	"github.com/portworx/kvdb/mem"
 	"github.com/sirupsen/logrus"
+	e "go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"go.etcd.io/etcd/mvcc/mvccpb"
 	"golang.org/x/net/context"
 )
 
@@ -32,19 +32,20 @@ const (
 	defaultDefragTimeout = 30
 	// defaultSessionTimeout in seconds is used for etcd watch
 	// to detect connectivity issues
-	defaultSessionTimeout = 120
+	defaultSessionTimeout = 50
 	// All the below timeouts are similar to the ones set in etcdctl
 	// and are mainly used for etcd client's load balancing.
 	defaultDialTimeout      = 2 * time.Second
 	defaultKeepAliveTime    = 2 * time.Second
 	defaultKeepAliveTimeout = 6 * time.Second
 	urlPrefix               = "http://"
+	urlSecPrefix            = "https://"
 	// timeoutMaxRetry is maximum retries before faulting
 	timeoutMaxRetry = 30
 )
 
 var (
-	defaultMachines = []string{"http://127.0.0.1:2379"}
+	defaultMachines = []string{"http://127.0.0.1:2379", "http://[::1]:2379"}
 	// mLock is a lock over the maintenanceClient
 	mLock sync.Mutex
 )
@@ -156,7 +157,7 @@ func New(
 	}
 	kvClient, err := e.New(cfg)
 	if err != nil {
-		if len(tls.CAFile) > 0 || len(tls.CertFile) > 0 {
+		if len(tls.CertFile) > 0 {
 			// With secure etcd cluster, etcd client has a bug
 			// where it fails to connect to the etcd cluster if
 			// first endpoint in the list is down.
@@ -193,7 +194,7 @@ func New(
 		domain = domain + "/"
 	}
 	return &etcdKV{
-		common.BaseKvdb{FatalCb: fatalErrorCb},
+		common.BaseKvdb{FatalCb: fatalErrorCb, LockTryDuration: kvdb.DefaultLockTryDuration},
 		kvClient,
 		e.NewAuth(kvClient),
 		mClient,
@@ -310,13 +311,14 @@ func (et *etcdKV) Create(
 	if txnErr != nil {
 		return nil, txnErr
 	}
-	if txnResponse.Succeeded == true {
+	if txnResponse.Succeeded {
 		// The key did exist before
 		return nil, kvdb.ErrExist
 	}
 
 	rangeResponse := txnResponse.Responses[1].GetResponseRange()
 	kvPair := et.resultToKv(rangeResponse.Kvs[0], "create")
+	kvPair.KVDBIndex = uint64(txnResponse.Header.Revision)
 	return kvPair, nil
 }
 
@@ -354,7 +356,7 @@ func (et *etcdKV) Update(
 	if txnErr != nil {
 		return nil, txnErr
 	}
-	if txnResponse.Succeeded == false {
+	if !txnResponse.Succeeded {
 		// The key did not exist before
 		return nil, kvdb.ErrNotFound
 	}
@@ -411,7 +413,7 @@ func (et *etcdKV) Delete(key string) (*kvdb.KVPair, error) {
 		if result.Deleted == 0 {
 			return nil, kvdb.ErrNotFound
 		} else if result.Deleted > 1 {
-			return nil, fmt.Errorf("Incorrect number of keys: %v deleted, result: %v",
+			return nil, fmt.Errorf("incorrect number of keys: %v deleted, result: %v",
 				key, result)
 		}
 		kvp.Action = kvdb.KVDelete
@@ -444,10 +446,13 @@ func (et *etcdKV) DeleteTree(prefix string) error {
 
 func (et *etcdKV) Keys(prefix, sep string) ([]string, error) {
 	var (
-		err    error
-		result *e.GetResponse
+		retList = make([]string, 0, 10)
+		seen    = make(map[string]bool)
+		err     error
+		result  *e.GetResponse
+		retry   bool
 	)
-	if "" == sep {
+	if sep == "" {
 		sep = "/"
 	}
 	lenPrefix := len(prefix)
@@ -456,52 +461,46 @@ func (et *etcdKV) Keys(prefix, sep string) ([]string, error) {
 		prefix += sep
 		lenPrefix += lenSep
 	}
-	retList := make([]string, 0, 10)
-	nextKey := et.domain + prefix
 	for i := 0; i < et.GetRetryCount(); i++ {
-		for {
-			ctx, cancel := et.Context()
-			// looking for the first key immediately after "nextKey"
-			result, err = et.kvClient.Get(ctx, nextKey, e.WithFromKey(), e.WithLimit(1), e.WithKeysOnly())
-			if err == nil && result != nil {
-				kvs := et.handleGetResponse(result, false)
-				if len(kvs) == 0 {
-					// no more keys, break out
-					break
-				}
-				key := kvs[0].Key
+		ctx, cancel := et.Context()
+		result, err = et.kvClient.Get(
+			ctx,
+			et.domain+prefix,
+			e.WithPrefix(),
+			e.WithKeysOnly(),
+			e.WithSort(e.SortByKey, e.SortAscend),
+		)
+		cancel()
+		if err == nil && result != nil {
+			kvs := et.handleGetResponse(result, false)
+			for _, kv := range kvs {
+				key := kv.Key
 				if lenPrefix > 0 {
 					if strings.HasPrefix(key, prefix) {
-						// strip prefix (if used)
+						// strip prefix
 						key = key[lenPrefix:]
-					} else {
-						// .. no longer our prefix, stop the scan
-						break
 					}
 				}
 				if idx := strings.Index(key, sep); idx > 0 {
 					// extract key's first "directory"
 					key = key[:idx]
 				}
-				retList = append(retList, key)
-				// reset nextKey to "prefix/<last_found>~" (note: "~" is at the end of printable ascii(7))
-				nextKey = et.domain + prefix + key + "~"
-				continue
+				if !seen[key] {
+					// add unique "first level" keys/dirs
+					retList = append(retList, key)
+					seen[key] = true
+				}
 			}
-
-			cancel()
-			retry, err := isRetryNeeded(err, "keys", prefix, i)
-			if retry {
-				continue
-			}
-			if err == kvdb.ErrNotFound {
-				break
-			}
-			return nil, err
+			return retList, nil
 		}
-		return retList, nil
+
+		retry, err = isRetryNeeded(err, "keys", prefix, i)
+		if retry {
+			continue
+		}
+		return retList, err
 	}
-	return nil, err
+	return retList, nil
 }
 
 func (et *etcdKV) CompareAndSet(
@@ -557,13 +556,13 @@ func (et *etcdKV) CompareAndSet(
 					return nil, txnErr
 				}
 				continue
-			} else if bytes.Compare(kvp.Value, kvPair.Value) == 0 {
+			} else if bytes.Equal(kvp.Value, kvPair.Value) {
 				return kvPair, nil
 			}
 			// else someone else updated the value, return error
 			return nil, txnErr
 		}
-		if txnResponse.Succeeded == false {
+		if !txnResponse.Succeeded {
 			if len(txnResponse.Responses) == 0 {
 				logrus.Infof("Etcd did not return any transaction responses "+
 					"for key (%v) index (%v)", kvp.Key, kvp.ModifiedIndex)
@@ -632,7 +631,7 @@ func (et *etcdKV) CompareAndDelete(
 			}
 			continue
 		}
-		if txnResponse.Succeeded == false {
+		if !txnResponse.Succeeded {
 			if len(txnResponse.Responses) == 0 {
 				logrus.Infof("Etcd did not return any transaction responses for key (%v)", kvp.Key)
 			} else {
@@ -673,6 +672,26 @@ func (et *etcdKV) WatchTree(
 	return nil
 }
 
+func (et *etcdKV) isErrCompacted(err error) bool {
+	// err.Error():
+	//              "etcdserver: mvcc: required revision has been compacted"
+	// ErrGRPCCompacted.Error():
+	//              "rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted"
+	return strings.Contains(rpctypes.ErrGRPCCompacted.Error(), err.Error())
+}
+
+func (et *etcdKV) Compact(
+	index uint64,
+) error {
+	ctx, cancel := et.Context()
+	_, err := et.kvClient.Compact(ctx, int64(index))
+	cancel()
+	if err != nil && !et.isErrCompacted(err) {
+		return err
+	}
+	return nil
+}
+
 func (et *etcdKV) Lock(key string) (*kvdb.KVPair, error) {
 	return et.LockWithID(key, "locked")
 }
@@ -681,7 +700,7 @@ func (et *etcdKV) LockWithID(key string, lockerID string) (
 	*kvdb.KVPair,
 	error,
 ) {
-	return et.LockWithTimeout(key, lockerID, kvdb.DefaultLockTryDuration, et.GetLockTimeout())
+	return et.LockWithTimeout(key, lockerID, et.LockTryDuration, et.GetLockHoldDuration())
 }
 
 func (et *etcdKV) LockWithTimeout(
@@ -719,10 +738,26 @@ func (et *etcdKV) LockWithTimeout(
 	return kvPair, err
 }
 
+func (et *etcdKV) IsKeyLocked(key string) (bool, string, error) {
+	key = et.domain + key
+	kvPair, err := et.Get(key)
+	if err == kvdb.ErrNotFound {
+		return false, "", nil
+	} else if err != nil {
+		return false, "", err
+	}
+	var lockIdInfo ec.LockerIDInfo
+	err = json.Unmarshal(kvPair.Value, &lockIdInfo)
+	if err != nil {
+		return false, "", kvdb.ErrInvalidLock
+	}
+	return true, lockIdInfo.LockerID, nil
+}
+
 func (et *etcdKV) Unlock(kvp *kvdb.KVPair) error {
 	l, ok := kvp.Lock.(*ec.EtcdLock)
 	if !ok {
-		return fmt.Errorf("Invalid lock structure for key %v", string(kvp.Key))
+		return fmt.Errorf("invalid lock structure for key %v", string(kvp.Key))
 	}
 	l.Lock()
 	// Don't modify kvp here, CompareAndDelete does that.
@@ -899,7 +934,7 @@ func (et *etcdKV) refreshLock(
 		select {
 		case <-refresh.C:
 			l.Lock()
-			for !l.Unlocked {
+			if !l.Unlocked {
 				et.CheckLockTimeout(lockMsgString, startTime, lockHoldDuration)
 				kvPair.TTL = ttl
 				kvp, err := et.CompareAndSet(
@@ -920,7 +955,6 @@ func (et *etcdKV) refreshLock(
 				}
 				prevRefresh = currentRefresh
 				kvPair.ModifiedIndex = kvp.ModifiedIndex
-				break
 			}
 			l.Unlock()
 		case <-l.Done:
@@ -977,14 +1011,14 @@ func (et *etcdKV) watchStart(
 	watchQ := newWatchQ(opaque, cb, watchRet)
 	go func() {
 		for wresp := range watchChan {
-			if wresp.Created == true {
+			if wresp.Created {
 				continue
 			}
-			if wresp.Canceled == true {
-				logrus.Errorf("Watch on key %v cancelled. Error: %v %v", key,
+			if wresp.Canceled {
+				logrus.Errorf("Watch on key %v cancelled. Error: %v", key,
 					wresp.Err())
 				retError := kvdb.ErrWatchStopped
-				if strings.Contains(rpctypes.ErrGRPCCompacted.Error(), wresp.Err().Error()) {
+				if et.isErrCompacted(wresp.Err()) {
 					retError = kvdb.ErrWatchRevisionCompacted
 				}
 				watchQ.enqueue(key, nil, retError)
@@ -1090,7 +1124,7 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 		m, ok = opaque.(*sync.Mutex)
 		if !ok {
 			logrus.Infof("Snapshot error, failed to get mutex")
-			watchErr = fmt.Errorf("Failed to get mutex")
+			watchErr = fmt.Errorf("failed to get mutex")
 			sendErr = watchErr
 			goto errordone
 		}
@@ -1121,14 +1155,14 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 		// For a consistent snapshot, start a watch to track updates
 		// happening until we enumerate all the keys
 		if err := et.WatchTree("", 0, mutex, cb); err != nil {
-			return nil, 0, fmt.Errorf("Failed to start watch: %v", err)
+			return nil, 0, fmt.Errorf("failed to start watch: %v", err)
 		}
 		r = rand.New(rand.NewSource(time.Now().UnixNano())).Int63()
 		bootStrapKeyLow = ec.Bootstrap + strconv.FormatInt(r, 10) +
 			strconv.FormatInt(time.Now().UnixNano(), 10)
 		kvPair, err := et.Put(bootStrapKeyLow, time.Now().UnixNano(), 0)
 		if err != nil {
-			return nil, 0, fmt.Errorf("Failed to create snap bootstrap key %v, "+
+			return nil, 0, fmt.Errorf("failed to create snap bootstrap key %v, "+
 				"err: %v", bootStrapKeyLow, err)
 		}
 		lowestKvdbIndex = kvPair.ModifiedIndex
@@ -1141,14 +1175,14 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 		et.FatalCb,
 	)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed to create in-mem kv store: %v", err)
+		return nil, 0, fmt.Errorf("failed to create in-mem kv store: %v", err)
 	}
 
 	// enumerate prefix function
 	enumeratePrefix := func(snapDb kvdb.Kvdb, prefix string) error {
 		kvPairs, err := et.Enumerate(prefix)
 		if err != nil {
-			return fmt.Errorf("Failed to enumerate %v: err: %v", prefix,
+			return fmt.Errorf("failed to enumerate %v: err: %v", prefix,
 				err)
 		}
 
@@ -1158,24 +1192,24 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 				// Only create a leaf node
 				_, err := snapDb.SnapPut(kvPair)
 				if err != nil {
-					return fmt.Errorf("Failed creating snap: %v", err)
+					return fmt.Errorf("failed creating snap: %v", err)
 				}
 			} else {
 				newKvPairs, err := et.Enumerate(kvPair.Key)
 				if err != nil {
-					return fmt.Errorf("Failed to get child keys: %v", err)
+					return fmt.Errorf("failed to get child keys: %v", err)
 				}
 				if len(newKvPairs) == 0 {
 					// empty value for this key
 					_, err := snapDb.SnapPut(kvPair)
 					if err != nil {
-						return fmt.Errorf("Failed creating snap: %v", err)
+						return fmt.Errorf("failed creating snap: %v", err)
 					}
 				} else if len(newKvPairs) == 1 {
 					// empty value for this key
 					_, err := snapDb.SnapPut(newKvPairs[0])
 					if err != nil {
-						return fmt.Errorf("Failed creating snap: %v", err)
+						return fmt.Errorf("failed creating snap: %v", err)
 					}
 				} else {
 					kvPairs = append(kvPairs, newKvPairs...)
@@ -1207,7 +1241,7 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 		strconv.FormatInt(time.Now().UnixNano(), 10)
 	kvPair, err := et.Put(bootStrapKeyHigh, time.Now().UnixNano(), 0)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed to create snap bootstrap key %v, "+
+		return nil, 0, fmt.Errorf("failed to create snap bootstrap key %v, "+
 			"err: %v", bootStrapKeyHigh, err)
 	}
 
@@ -1235,7 +1269,7 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 				_, err = snapDb.SnapPut(kvPair)
 			}
 			if err != nil {
-				return nil, 0, fmt.Errorf("Failed to apply update to snap: %v", err)
+				return nil, 0, fmt.Errorf("failed to apply update to snap: %v", err)
 			}
 
 		}
@@ -1243,12 +1277,12 @@ func (et *etcdKV) Snapshot(prefixes []string, consistent bool) (kvdb.Kvdb, uint6
 
 	_, err = et.Delete(bootStrapKeyLow)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed to delete snap bootstrap key: %v, "+
+		return nil, 0, fmt.Errorf("failed to delete snap bootstrap key: %v, "+
 			"err: %v", bootStrapKeyLow, err)
 	}
 	_, err = et.Delete(bootStrapKeyHigh)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed to delete snap bootstrap key: %v, "+
+		return nil, 0, fmt.Errorf("failed to delete snap bootstrap key: %v, "+
 			"err: %v", bootStrapKeyHigh, err)
 	}
 
@@ -1445,9 +1479,7 @@ func (et *etcdKV) RemoveMember(
 			removeMemberID = member.ID
 		} else {
 			// This member is healthy and does not need to be removed.
-			for _, clientURL := range member.ClientURLs {
-				newClientUrls = append(newClientUrls, clientURL)
-			}
+			newClientUrls = append(newClientUrls, member.ClientURLs...)
 		}
 	}
 	et.kvClient.SetEndpoints(newClientUrls...)
@@ -1471,7 +1503,7 @@ func (et *etcdKV) RemoveMember(
 				return err
 			}
 			if i == (removeMemberRetries - 1) {
-				return fmt.Errorf("Too many retries for RemoveMember: %v %v", nodeName, nodeIP)
+				return fmt.Errorf("too many retries for RemoveMember: %v %v", nodeName, nodeIP)
 			}
 			time.Sleep(2 * time.Second)
 			continue
@@ -1482,53 +1514,84 @@ func (et *etcdKV) RemoveMember(
 }
 
 func (et *etcdKV) ListMembers() (map[string]*kvdb.MemberInfo, error) {
-	ctx, cancel := et.MaintenanceContextWithLeader()
-	memberListResponse, err := et.kvClient.MemberList(ctx)
-	cancel()
-	if err != nil {
-		return nil, err
-	}
-	resp := make(map[string]*kvdb.MemberInfo)
-	mLock.Lock()
-	defer mLock.Unlock()
-	for _, member := range memberListResponse.Members {
-		var (
-			leader     bool
-			dbSize     int64
-			isHealthy  bool
-			clientURLs []string
-		)
-		// etcd versions < v3.2.15 will return empty ClientURLs if
-		// the node is unhealthy. For versions >= v3.2.15 they populate
-		// ClientURLs but return an error status
-		if len(member.ClientURLs) != 0 {
+	var (
+		fnMemberStatus = func(cliURL string) (*kvdb.MemberInfo, uint64, error) {
+			if cliURL == "" {
+				return nil, 0, fmt.Errorf("Must provide client URL")
+			}
 			// Use the context with no leader requirement as we might be hitting
 			// an endpoint which is down
 			ctx, cancel := et.MaintenanceContext()
-			endpointStatus, err := et.maintenanceClient.Status(
-				ctx,
-				member.ClientURLs[0],
-			)
+			endpointStatus, err := et.maintenanceClient.Status(ctx, cliURL)
 			cancel()
-			if err == nil {
-				if member.ID == endpointStatus.Leader {
-					leader = true
+
+			if err != nil {
+				return nil, 0, err
+			}
+
+			mid := endpointStatus.Header.MemberId
+			return &kvdb.MemberInfo{
+				// PeerUrls:   .. must fill later
+				ClientUrls: []string{cliURL},
+				Leader:     endpointStatus.Leader == mid,
+				DbSize:     endpointStatus.DbSize,
+				IsHealthy:  true,
+				ID:         strconv.FormatUint(mid, 16),
+			}, mid, nil
+		}
+	)
+	ctx, cancel := et.MaintenanceContextWithLeader()
+	memberListResponse, err := et.kvClient.MemberList(ctx)
+	cancel()
+
+	if err != nil {
+		return nil, err
+	}
+
+	membersMap := make(map[uint64]*kvdb.MemberInfo)
+	mLock.Lock()
+	defer mLock.Unlock()
+
+	// Get status from Endpoints
+	for _, ep := range et.GetEndpoints() {
+		mi, mid, err := fnMemberStatus(ep)
+		if err != nil || mi == nil {
+			logrus.WithError(err).Warnf("kvClient.Status(%s) returned error", ep)
+			continue
+		}
+		membersMap[mid] = mi
+	}
+
+	// Get status from MemberList() nodes, that were missing from GetEndpoints() list
+	for _, member := range memberListResponse.Members {
+		for _, cu := range member.ClientURLs {
+			if _, has := membersMap[member.ID]; !has {
+
+				mi, mid, err := fnMemberStatus(cu)
+				if err != nil || mi == nil {
+					logrus.WithError(err).Warnf("kvClient.Status(%s) returned error", cu)
+					continue
 				}
-				dbSize = endpointStatus.DbSize
-				isHealthy = true
-				// Only set the urls if status is healthy
-				clientURLs = member.ClientURLs
+				membersMap[mid] = mi
 			}
 		}
-		resp[member.Name] = &kvdb.MemberInfo{
-			PeerUrls:   member.PeerURLs,
-			ClientUrls: clientURLs,
-			Leader:     leader,
-			DbSize:     dbSize,
-			IsHealthy:  isHealthy,
-			ID:         strconv.FormatUint(member.ID, 16),
+	}
+
+	// Fill PeerURLs; also, remap with "Name" as a key
+	resp := make(map[string]*kvdb.MemberInfo)
+	for _, member := range memberListResponse.Members {
+		if mi, has := membersMap[member.ID]; has {
+			mi.PeerUrls = member.PeerURLs
+			resp[member.Name] = mi
+		} else {
+			// no status -- add "blank" MemberInfo
+			resp[member.Name] = &kvdb.MemberInfo{
+				PeerUrls: member.PeerURLs,
+				ID:       strconv.FormatUint(member.ID, 16),
+			}
 		}
 	}
+
 	return resp, nil
 }
 
@@ -1576,8 +1639,12 @@ func (et *etcdKV) listenPeerUrls(ip string, port string) []string {
 }
 
 func (et *etcdKV) constructURL(ip string, port string) string {
-	ip = strings.TrimPrefix(ip, urlPrefix)
-	return urlPrefix + ip + ":" + port
+	prefix := urlPrefix
+	if et.EtcdCommon.IsTLSEnabled() {
+		prefix = urlSecPrefix
+	}
+	ip = strings.TrimPrefix(ip, prefix)
+	return prefix + ip + ":" + port
 }
 
 func (et *etcdKV) getLeaseWithRetries(key string, ttl int64) (*e.LeaseGrantResponse, error) {

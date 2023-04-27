@@ -219,7 +219,7 @@ func New(
 	}
 
 	mem := &memKV{
-		BaseKvdb:   common.BaseKvdb{FatalCb: fatalErrorCb},
+		BaseKvdb:   common.BaseKvdb{FatalCb: fatalErrorCb, LockTryDuration: kvdb.DefaultLockTryDuration},
 		m:          make(map[string]*memKVPair),
 		dist:       NewWatchDistributor(),
 		domain:     domain,
@@ -611,6 +611,12 @@ func (kv *memKV) WatchTree(
 	return nil
 }
 
+func (kv *memKV) Compact(
+	index uint64,
+) error {
+	return kvdb.ErrNotSupported
+}
+
 func (kv *memKV) Lock(key string) (*kvdb.KVPair, error) {
 	return kv.LockWithID(key, "locked")
 }
@@ -619,7 +625,30 @@ func (kv *memKV) LockWithID(
 	key string,
 	lockerID string,
 ) (*kvdb.KVPair, error) {
-	return kv.LockWithTimeout(key, lockerID, kvdb.DefaultLockTryDuration, kv.GetLockTimeout())
+	return kv.LockWithTimeout(key, lockerID, kv.LockTryDuration, kv.GetLockHoldDuration())
+}
+
+func (kv *memKV) IsKeyLocked(key string) (bool, string, error) {
+	key = kv.domain + key
+
+	// First check if such a key exists
+	var lockerID string
+	value, err := kv.Get(key)
+	if err == kvdb.ErrNotFound {
+		return false, "", nil
+	} else if err != nil {
+		return false, "", err
+	}
+	lockerID = string(value.Value)
+
+	// If a key exists, next check if it's a valid lock
+	kv.mutex.Lock()
+	if _, ok := kv.locks[key]; !ok {
+		kv.mutex.Unlock()
+		return false, "", kvdb.ErrInvalidLock
+	}
+	kv.mutex.Unlock()
+	return true, lockerID, nil
 }
 
 func (kv *memKV) LockWithTimeout(

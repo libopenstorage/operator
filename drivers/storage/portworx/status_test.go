@@ -211,7 +211,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 			Namespace: "kube-test",
 		},
 		Status: corev1.StorageClusterStatus{
-			Phase: "Initializing",
+			Phase: string(corev1.ClusterStateInit),
 		},
 	}
 

@@ -62,7 +62,7 @@ func (c *disruptionBudget) IsEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
-	if cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit) {
+	if pxutil.IsFreshInstall(cluster) {
 		return nil
 	}
 

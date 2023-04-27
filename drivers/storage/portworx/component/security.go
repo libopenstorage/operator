@@ -500,7 +500,7 @@ func (c *security) closeSdkConn() {
 }
 
 func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
-	if cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit) {
+	if pxutil.IsFreshInstall(cluster) {
 		return nil
 	}
 

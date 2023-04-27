@@ -39,6 +39,8 @@ import (
 const (
 	// DriverName name of the portworx driver
 	DriverName = "portworx"
+	// PortworxComponentName name of portworx component to show in the cluster conditions
+	PortworxComponentName = "Portworx"
 	// DefaultStartPort is the default start port for Portworx
 	DefaultStartPort = 9001
 	// DefaultOpenshiftStartPort is the default start port for Portworx on OpenShift
@@ -135,6 +137,8 @@ const (
 	AnnotationClusterID = pxAnnotationPrefix + "/cluster-id"
 	// AnnotationDisableCSRAutoApprove annotation to set priority for SCCs.
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
+	// AnnotationPreflightCheck do preflight check before installing Portworx
+	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -294,6 +298,7 @@ func IsAKS(cluster *corev1.StorageCluster) bool {
 
 // IsEKS returns true if the annotation has an EKS annotation and is true value
 func IsEKS(cluster *corev1.StorageCluster) bool {
+	// TODO: use cloud provider to determine EKS
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsEKS])
 	return err == nil && enabled
 }
@@ -1087,4 +1092,14 @@ func SetTelemetryCertOwnerRef(
 	secret.OwnerReferences = references
 
 	return k8sClient.Update(context.TODO(), secret)
+}
+
+// IsFreshInstall checks whether it's a fresh Portworx install
+func IsFreshInstall(cluster *corev1.StorageCluster) bool {
+	// To handle failures during fresh install e.g. validation falures,
+	// extra check for px runtime states is added here to avoid unexpected behaviors
+	return cluster.Status.Phase == "" ||
+		cluster.Status.Phase == string(corev1.ClusterStateInit) ||
+		(cluster.Status.Phase == string(corev1.ClusterStateDegraded) &&
+			util.GetStorageClusterCondition(cluster, PortworxComponentName, corev1.ClusterConditionTypeRuntimeState) == nil)
 }

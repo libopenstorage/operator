@@ -5,17 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	version "github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/cloudstorage"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -25,6 +17,17 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -38,6 +41,7 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
+	defaultEksCloudStorageDevice      = "type=gp3,size=150"
 )
 
 type portworx struct {
@@ -82,8 +86,70 @@ func (p *portworx) Init(
 	return nil
 }
 
-func (p *portworx) Validate() error {
-	return nil
+func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
+	podSpec, err := p.GetStoragePodSpec(cluster, "")
+	if err != nil {
+		return err
+	}
+
+	preFlighter := NewPreFlighter(cluster, p.k8sClient, podSpec)
+
+	// Start the pre-flight container. The pre-flight checks at this time are specific to enabling DMthin
+	err = preFlighter.RunPreFlight()
+	if err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return err
+		}
+		logrus.Debugf("pre-flight: container already running...")
+	}
+
+	cnt := 0
+	//  Wait for all the pre-flight pods to finish
+	for {
+		time.Sleep(3 * time.Second) // Pause before status check
+		completed, inProgress, total, err := preFlighter.GetPreFlightStatus()
+		if err != nil {
+			logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
+			return err
+		}
+		logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+
+		if total != 0 && completed == total {
+			logrus.Infof("pre-flight: completed...")
+			break
+		}
+
+		// Add five minute timeout.  If we do reconcile loop check we will need a different way.
+		cnt++
+		if cnt == 200 { // 3s * 100 = 300s (10 mins)
+			err = fmt.Errorf("pre-flight: pre-flight status check timed out")
+			logrus.Errorf("%v", err)
+			return err
+		}
+	}
+
+	defer func() {
+		// Clean up the pre-flight pods
+		logrus.Infof("pre-flight: cleaning pre-flight ds...")
+		if derr := preFlighter.DeletePreFlight(); derr != nil {
+			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
+		}
+	}()
+
+	// Process all the StorageNode.Status.Checks
+	var storageNodes []*corev1.StorageNode
+
+	storageNodes, err = p.storageNodesList(cluster)
+	if err == nil {
+		err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
+		if err != nil {
+			logrus.Errorf("pre-flight: Error processing results: %v", err)
+		}
+	} else {
+		logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
+	}
+
+	return err
 }
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
@@ -151,6 +217,20 @@ func (p *portworx) GetSelectorLabels() map[string]string {
 }
 
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
+	if toUpdate.Annotations == nil {
+		toUpdate.Annotations = make(map[string]string)
+	}
+	// Initialize the preflight check annotation
+	if preflight.RequiresCheck() {
+		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+		}
+	}
+
+	if preflight.IsEKS() {
+		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
+	}
+
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
 	}
@@ -482,8 +562,7 @@ func (p *portworx) GetStorageNodes(
 	var err error
 	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
 	if err != nil {
-		if (cluster.Status.Phase == "" || cluster.Status.Phase == string(corev1.ClusterInit)) &&
-			strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
+		if pxutil.IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
 			logrus.Warn(err)
@@ -524,12 +603,13 @@ func (p *portworx) DeleteStorage(
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
 		// No Delete strategy provided or Portworx not installed through the operator,
 		// then do not wipe Portworx
-		status := &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
-			Reason: storageClusterDeleteMsg,
+		condition := &corev1.ClusterCondition{
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: storageClusterDeleteMsg,
 		}
-		return status, nil
+		return condition, nil
 	}
 
 	// Portworx needs to be removed if DeleteStrategy is specified
@@ -540,29 +620,31 @@ func (p *portworx) DeleteStorage(
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	deleteCompleted := string(corev1.ClusterConditionTypeDelete) +
-		string(corev1.ClusterOperationCompleted)
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
-		if cluster.Status.Phase == deleteCompleted {
+		deleteCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+		if deleteCondition != nil && deleteCondition.Status == corev1.ClusterConditionStatusCompleted {
 			return &corev1.ClusterCondition{
-				Type:   corev1.ClusterConditionTypeDelete,
-				Status: corev1.ClusterOperationCompleted,
-				Reason: completeMsg,
+				Source:  pxutil.PortworxComponentName,
+				Type:    corev1.ClusterConditionTypeDelete,
+				Status:  corev1.ClusterConditionStatusCompleted,
+				Message: completeMsg,
 			}, nil
 		}
 		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
 			return &corev1.ClusterCondition{
-				Type:   corev1.ClusterConditionTypeDelete,
-				Status: corev1.ClusterOperationFailed,
-				Reason: "Failed to run node wiper: " + err.Error(),
+				Source:  pxutil.PortworxComponentName,
+				Type:    corev1.ClusterConditionTypeDelete,
+				Status:  corev1.ClusterConditionStatusFailed,
+				Message: "Failed to run node wiper: " + err.Error(),
 			}, nil
 		}
 		return &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationInProgress,
-			Reason: "Started node wiper daemonset",
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusInProgress,
+			Message: "Started node wiper daemonset",
 		}, nil
 	} else if err != nil {
 		// We could not get the node wiper status and it does exist
@@ -579,23 +661,26 @@ func (p *portworx) DeleteStorage(
 			if err := u.WipeMetadata(); err != nil {
 				logrus.Errorf("Failed to delete portworx metadata: %v", err)
 				return &corev1.ClusterCondition{
-					Type:   corev1.ClusterConditionTypeDelete,
-					Status: corev1.ClusterOperationFailed,
-					Reason: "Failed to wipe metadata: " + err.Error(),
+					Source:  pxutil.PortworxComponentName,
+					Type:    corev1.ClusterConditionTypeDelete,
+					Status:  corev1.ClusterConditionStatusFailed,
+					Message: "Failed to wipe metadata: " + err.Error(),
 				}, nil
 			}
 		}
 		return &corev1.ClusterCondition{
-			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
-			Reason: completeMsg,
+			Source:  pxutil.PortworxComponentName,
+			Type:    corev1.ClusterConditionTypeDelete,
+			Status:  corev1.ClusterConditionStatusCompleted,
+			Message: completeMsg,
 		}, nil
 	}
 
 	return &corev1.ClusterCondition{
-		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationInProgress,
-		Reason: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypeDelete,
+		Status:  corev1.ClusterConditionStatusInProgress,
+		Message: fmt.Sprintf("Wipe operation still in progress: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total),
 	}, nil
 }
 
@@ -656,126 +741,24 @@ func SetPortworxDefaults(toUpdate *corev1.StorageCluster, k8sVersion *version.Ve
 		return err
 	}
 
-	if toUpdate.Spec.Kvdb == nil {
-		toUpdate.Spec.Kvdb = &corev1.KvdbSpec{}
-	}
-	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
-		toUpdate.Spec.Kvdb.Internal = true
-	}
 	if toUpdate.Spec.SecretsProvider == nil {
 		toUpdate.Spec.SecretsProvider = stringPtr(defaultSecretsProvider)
 	}
 	startPort := uint32(t.startPort)
 	toUpdate.Spec.StartPort = &startPort
 
-	// If no storage spec is provided, initialize one where Portworx takes all available drives
-	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
-		// Only initialize storage spec when there's no node level cloud storage spec specified
-		initializeStorageSpec := true
-		for _, nodeSpec := range toUpdate.Spec.Nodes {
-			if nodeSpec.CloudStorage != nil {
-				initializeStorageSpec = false
-				break
-			}
-		}
-		if initializeStorageSpec {
-			toUpdate.Spec.Storage = &corev1.StorageSpec{}
-		}
-	}
-	if toUpdate.Spec.Storage != nil {
-		if toUpdate.Spec.Storage.Devices == nil &&
-			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
-			toUpdate.Spec.Storage.UseAll == nil {
-			toUpdate.Spec.Storage.UseAll = boolPtr(true)
-		}
-	}
+	setPortworxKvdbDefaults(toUpdate)
+
+	setPortworxStorageSpecDefaults(toUpdate)
 
 	setNodeSpecDefaults(toUpdate)
 
-	if toUpdate.Spec.Placement == nil {
-		toUpdate.Spec.Placement = &corev1.PlacementSpec{}
-	}
-	if toUpdate.Spec.Placement.NodeAffinity == nil {
-		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: t.getSelectorTerms(k8sVersion),
-			},
-		}
-	}
-	if t.runOnMaster {
-		masterTolerationFound := false
-		for _, t := range toUpdate.Spec.Placement.Tolerations {
-			if (t.Key == k8sutil.NodeRoleLabelMaster ||
-				t.Key == k8sutil.NodeRoleLabelControlPlane) &&
-				t.Effect == v1.TaintEffectNoSchedule {
-				masterTolerationFound = true
-				break
-			}
-		}
-		if !masterTolerationFound {
-			toUpdate.Spec.Placement.Tolerations = append(
-				toUpdate.Spec.Placement.Tolerations,
-				v1.Toleration{
-					Key:    k8sutil.NodeRoleLabelMaster,
-					Effect: v1.TaintEffectNoSchedule,
-				},
-			)
-			if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
-				toUpdate.Spec.Placement.Tolerations = append(
-					toUpdate.Spec.Placement.Tolerations,
-					v1.Toleration{
-						Key:    k8sutil.NodeRoleLabelControlPlane,
-						Effect: v1.TaintEffectNoSchedule,
-					},
-				)
-			}
-		}
-	}
+	setPlacementDefaults(toUpdate, t, k8sVersion)
 
-	// Check if feature gate is set. If it is, honor the flag here and remove it.
-	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
-	if featureGateSet {
-		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
-		if err != nil {
-			csiEnabled = true
-		}
-
-		// Feature flag set, but CSI spec is not defined. In this case,
-		// we want to use the feature flag value in the CSI spec.
-		if toUpdate.Spec.CSI == nil {
-			toUpdate.Spec.CSI = &corev1.CSISpec{
-				Enabled: csiEnabled,
-			}
-		} else {
-			// Set CSI spec as enabled if it's already enabled OR the flag is true.
-			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
-		}
-
-		// Always remove the feature flag. Clear the feature gates map if none are set.
-		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
-		if len(toUpdate.Spec.FeatureGates) == 0 {
-			toUpdate.Spec.FeatureGates = nil
-		}
-	}
-
-	// Enable CSI if running in k3s environment or
-	// if this is a new Portworx installation
-	if t.isK3s || toUpdate.Spec.Version == "" {
-		if toUpdate.Spec.CSI == nil {
-			toUpdate.Spec.CSI = &corev1.CSISpec{
-				Enabled: true,
-			}
-		}
-	}
-
-	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
-	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
-		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
-			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
-		}
-	}
+	setCSIDefaults(toUpdate, t, k8sVersion)
 
 	setSecuritySpecDefaults(toUpdate)
+
 	return nil
 }
 
@@ -865,6 +848,147 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		updatedNodeSpecs = append(updatedNodeSpecs, *nodeSpecCopy)
 	}
 	toUpdate.Spec.Nodes = updatedNodeSpecs
+}
+
+func setPortworxKvdbDefaults(toUpdate *corev1.StorageCluster) {
+	if toUpdate.Spec.Kvdb == nil {
+		toUpdate.Spec.Kvdb = &corev1.KvdbSpec{}
+	}
+	if len(toUpdate.Spec.Kvdb.Endpoints) == 0 {
+		toUpdate.Spec.Kvdb.Internal = true
+	}
+}
+
+func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
+	// If no storage spec is provided, initialize one where Portworx takes all available drives
+	if toUpdate.Spec.CloudStorage == nil && toUpdate.Spec.Storage == nil {
+		// Only initialize storage spec when there's no node level cloud storage spec specified
+		initializeStorageSpec := true
+		for _, nodeSpec := range toUpdate.Spec.Nodes {
+			if nodeSpec.CloudStorage != nil {
+				initializeStorageSpec = false
+				break
+			}
+		}
+		if preflight.RunningOnCloud() {
+			setPortworxCloudStorageSpecDefaults(toUpdate)
+			if toUpdate.Spec.CloudStorage != nil {
+				initializeStorageSpec = false
+			}
+		}
+		if initializeStorageSpec {
+			toUpdate.Spec.Storage = &corev1.StorageSpec{}
+		}
+	}
+	if toUpdate.Spec.Storage != nil {
+		if toUpdate.Spec.Storage.Devices == nil &&
+			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
+			toUpdate.Spec.Storage.UseAll == nil {
+			toUpdate.Spec.Storage.UseAll = boolPtr(true)
+		}
+	}
+}
+
+func setPortworxCloudStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
+	if preflight.IsEKS() {
+		if toUpdate.Spec.CloudStorage == nil {
+			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+		if len(toUpdate.Spec.CloudStorage.CapacitySpecs) == 0 &&
+			toUpdate.Spec.CloudStorage.DeviceSpecs == nil {
+			defaultEKSCloudStorageDevice := defaultEksCloudStorageDevice
+			deviceSpecs := []string{defaultEKSCloudStorageDevice}
+			toUpdate.Spec.CloudStorage.DeviceSpecs = &deviceSpecs
+		}
+	}
+	// TODO: add default cloud storage specs for other providers
+}
+
+func setPlacementDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) {
+	if toUpdate.Spec.Placement == nil {
+		toUpdate.Spec.Placement = &corev1.PlacementSpec{}
+	}
+	if toUpdate.Spec.Placement.NodeAffinity == nil {
+		toUpdate.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: t.getSelectorTerms(k8sVersion),
+			},
+		}
+	}
+	if t.runOnMaster {
+		masterTolerationFound := false
+		for _, t := range toUpdate.Spec.Placement.Tolerations {
+			if (t.Key == k8sutil.NodeRoleLabelMaster ||
+				t.Key == k8sutil.NodeRoleLabelControlPlane) &&
+				t.Effect == v1.TaintEffectNoSchedule {
+				masterTolerationFound = true
+				break
+			}
+		}
+		if !masterTolerationFound {
+			toUpdate.Spec.Placement.Tolerations = append(
+				toUpdate.Spec.Placement.Tolerations,
+				v1.Toleration{
+					Key:    k8sutil.NodeRoleLabelMaster,
+					Effect: v1.TaintEffectNoSchedule,
+				},
+			)
+			if k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_24) {
+				toUpdate.Spec.Placement.Tolerations = append(
+					toUpdate.Spec.Placement.Tolerations,
+					v1.Toleration{
+						Key:    k8sutil.NodeRoleLabelControlPlane,
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				)
+			}
+		}
+	}
+}
+
+func setCSIDefaults(toUpdate *corev1.StorageCluster, t *template, k8sVersion *version.Version) {
+	// Check if feature gate is set. If it is, honor the flag here and remove it.
+	csiFeatureFlag, featureGateSet := toUpdate.Spec.FeatureGates[string(pxutil.FeatureCSI)]
+	if featureGateSet {
+		csiEnabled, err := strconv.ParseBool(csiFeatureFlag)
+		if err != nil {
+			csiEnabled = true
+		}
+
+		// Feature flag set, but CSI spec is not defined. In this case,
+		// we want to use the feature flag value in the CSI spec.
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: csiEnabled,
+			}
+		} else {
+			// Set CSI spec as enabled if it's already enabled OR the flag is true.
+			toUpdate.Spec.CSI.Enabled = toUpdate.Spec.CSI.Enabled || csiEnabled
+		}
+
+		// Always remove the feature flag. Clear the feature gates map if none are set.
+		delete(toUpdate.Spec.FeatureGates, string(pxutil.FeatureCSI))
+		if len(toUpdate.Spec.FeatureGates) == 0 {
+			toUpdate.Spec.FeatureGates = nil
+		}
+	}
+
+	// Enable CSI if running in k3s environment or
+	// if this is a new Portworx installation
+	if t.isK3s || toUpdate.Spec.Version == "" {
+		if toUpdate.Spec.CSI == nil {
+			toUpdate.Spec.CSI = &corev1.CSISpec{
+				Enabled: true,
+			}
+		}
+	}
+
+	// Enable CSI snapshot controller by default if it's not configured on k8s 1.17+
+	if pxutil.IsCSIEnabled(toUpdate) && toUpdate.Spec.CSI.InstallSnapshotController == nil {
+		if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_17) {
+			toUpdate.Spec.CSI.InstallSnapshotController = boolPtr(true)
+		}
+	}
 }
 
 func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {

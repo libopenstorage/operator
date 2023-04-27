@@ -11,21 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/mock"
-	"github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	ocp_configv1 "github.com/openshift/api/config/v1"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,6 +38,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/libopenstorage/cloudops"
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/preflight"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func TestInit(t *testing.T) {
@@ -347,7 +350,8 @@ func TestKubernetesVersionValidation(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.Empty(t, updatedCluster.Status.Conditions)
 }
 
 func TestSingleClusterValidation(t *testing.T) {
@@ -394,7 +398,7 @@ func TestSingleClusterValidation(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 }
 
 func TestWaitForMigrationApproval(t *testing.T) {
@@ -421,7 +425,7 @@ func TestWaitForMigrationApproval(t *testing.T) {
 		kubernetesVersion: k8sVersion,
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
@@ -494,7 +498,11 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	require.Len(t, currentCluster.Finalizers, 0)
 
 	// TestCase: Migration is approved but status is still in AwaitingMigrationApproval phase
-	currentCluster.Status.Phase = constants.PhaseAwaitingApproval
+	util.UpdateStorageClusterCondition(currentCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusPending,
+	})
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -514,7 +522,12 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	require.Len(t, currentCluster.Finalizers, 0)
 
 	// TestCase: Migration is approved and status shows migration in progress
-	currentCluster.Status.Phase = constants.PhaseMigrationInProgress
+	util.UpdateStorageClusterCondition(currentCluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeMigration,
+		Status: corev1.ClusterConditionStatusInProgress,
+	})
+
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -532,7 +545,7 @@ func TestWaitForMigrationApproval(t *testing.T) {
 	currentCluster.Finalizers = nil
 	err = k8sClient.Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
-	currentCluster.Status.Phase = "Failed"
+	currentCluster.Status.Phase = string(corev1.ClusterStateDegraded)
 	err = k8sClient.Status().Update(context.TODO(), currentCluster)
 	require.NoError(t, err)
 
@@ -1428,7 +1441,7 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 	}
 	daemonSetList := &appsv1.DaemonSetList{Items: []appsv1.DaemonSet{daemonSet}}
 
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	k8sVersion, _ := version.NewVersion("1.19.0")
 	k8sClient := testutil.FakeK8sClient(cluster, daemonSetList)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
@@ -1440,7 +1453,8 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("mockDriverName").AnyTimes()
-	driver.EXPECT().Validate().Return(fmt.Errorf("daemonset is present"))
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -1457,7 +1471,7 @@ func TestReconcileWithDaemonSet(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 }
 
 func TestReconcileForNonExistingCluster(t *testing.T) {
@@ -1503,7 +1517,7 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetStorkDriverName().Return("mock", nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1551,7 +1565,7 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(fmt.Errorf("preinstall error"))
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
@@ -1604,7 +1618,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1764,7 +1778,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		Spec: expectedPodSpec,
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1878,7 +1892,7 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 		Spec: expectedPodSpec,
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -1960,7 +1974,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	storageLabels := map[string]string{"foo": "bar"}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(storageLabels).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2275,7 +2289,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		*podTemplate1, *podTemplate2, *podTemplate3,
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2387,7 +2401,7 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2490,7 +2504,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2618,7 +2632,7 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -2712,7 +2726,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -2808,7 +2822,7 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).Times(3)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -2949,7 +2963,7 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
@@ -2978,7 +2992,7 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	require.Contains(t, eventMsg, fmt.Sprintf("%v %v", v1.EventTypeWarning, util.FailedSyncReason))
 	require.Contains(t, eventMsg, "pod template error for k8s-node-1")
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	// When pod template creation passes for some and fails for others
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil)
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
@@ -3031,7 +3045,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -3107,7 +3121,7 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -3158,7 +3172,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -3170,7 +3184,12 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1.StorageCluster) {
-			c.Status.Phase = "Online"
+			c.Status.Phase = string(corev1.ClusterStateRunning)
+			util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeRuntimeState,
+				Status: corev1.ClusterConditionStatusOnline,
+			})
 		}).
 		Return(nil)
 
@@ -3189,7 +3208,10 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 	newCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Online", newCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateRunning), newCluster.Status.Phase)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusOnline, condition.Status)
 }
 
 func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
@@ -3212,7 +3234,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -3224,7 +3246,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	driver.EXPECT().
 		UpdateStorageClusterStatus(gomock.Any()).
 		Do(func(c *corev1.StorageCluster) {
-			c.Status.Phase = "Offline"
+			c.Status.Phase = string(corev1.ClusterStateDegraded)
 		}).
 		Return(fmt.Errorf("update status error"))
 
@@ -3245,7 +3267,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 	newCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, newCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Offline", newCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), newCluster.Status.Phase)
 }
 
 func TestFailedPreInstallFromDriver(t *testing.T) {
@@ -3268,7 +3290,7 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -3327,7 +3349,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 		},
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -3355,6 +3377,9 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 	require.NoError(t, err)
 	k8sNode3.Spec.ProviderID = "testcloud://test-instance-id"
 	err = k8sClient.Update(context.TODO(), k8sNode3)
+	require.NoError(t, err)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(k8sNode1, k8sNode2, k8sNode3)))
+	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 
 	expectedDriverInfo.CloudProvider = "testcloud"
@@ -3461,7 +3486,7 @@ func TestGarbageCollection(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("pxd").AnyTimes()
@@ -3488,8 +3513,9 @@ func TestGarbageCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -3552,7 +3578,7 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 
@@ -3634,7 +3660,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	// Empty delete condition should not remove finalizer
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -3667,9 +3693,10 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, pxutil.PortworxComponentName, updatedCluster.Status.Conditions[0].Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
-	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If storage driver returns error, then controller should not return error but raise an event
@@ -3689,9 +3716,10 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 1)
+	require.Equal(t, pxutil.PortworxComponentName, updatedCluster.Status.Conditions[0].Source)
 	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, corev1.ClusterOperationInProgress, updatedCluster.Status.Conditions[0].Status)
-	require.Equal(t, "DeleteInProgress", updatedCluster.Status.Phase)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, updatedCluster.Status.Conditions[0].Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is not present already, then add to the cluster
@@ -3703,8 +3731,9 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), updatedCluster)
 	require.NoError(t, err)
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationFailed,
+		Status: corev1.ClusterConditionStatusFailed,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3717,14 +3746,17 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
-	require.Equal(t, "DeleteFailed", updatedCluster.Status.Phase)
+	c := util.GetStorageClusterCondition(updatedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+	require.NotNil(t, condition)
+	require.Equal(t, condition.Status, c.Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition is present, then update it
 	condition = &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationTimeout,
+		Status: corev1.ClusterConditionStatusTimeout,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3737,14 +3769,17 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, updatedCluster.Status.Conditions, 2)
-	require.Equal(t, *condition, updatedCluster.Status.Conditions[1])
-	require.Equal(t, "DeleteTimeout", updatedCluster.Status.Phase)
+	c = util.GetStorageClusterCondition(updatedCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
+	require.NotNil(t, condition)
+	require.Equal(t, condition.Status, c.Status)
+	require.Equal(t, string(corev1.ClusterStateUninstall), updatedCluster.Status.Phase)
 	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
 
 	// If delete condition status is completed, then remove delete finalizer
 	condition = &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 
@@ -3756,104 +3791,6 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 	updatedCluster = &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-}
-
-func TestDeleteStorageClusterShouldSetTelemetryCertOwnerRef(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	cluster := createStorageCluster()
-	cluster.Spec.DeleteStrategy = &corev1.StorageClusterDeleteStrategy{
-		Type: corev1.UninstallAndWipeStorageClusterStrategyType,
-	}
-	deletionTimeStamp := metav1.Now()
-	cluster.DeletionTimestamp = &deletionTimeStamp
-
-	driverName := "mock-driver"
-	storageLabels := map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  driverName,
-	}
-
-	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
-	driver := testutil.MockDriver(mockCtrl)
-	k8sClient := testutil.FakeK8sClient(cluster)
-	podControl := &k8scontroller.FakePodControl{}
-	recorder := record.NewFakeRecorder(10)
-	controller := Controller{
-		client:            k8sClient,
-		Driver:            driver,
-		podControl:        podControl,
-		recorder:          recorder,
-		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
-	}
-
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
-	// Empty delete condition should not remove finalizer
-	driver.EXPECT().DeleteStorage(gomock.Any()).Return(nil, nil)
-	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
-	driver.EXPECT().String().Return(driverName).AnyTimes()
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
-
-	k8sNode := createK8sNode("k8s-node", 10)
-	storagePod := createStoragePod(cluster, "storage-pod", k8sNode.Name, storageLabels)
-
-	err := k8sClient.Create(context.TODO(), k8sNode)
-	require.NoError(t, err)
-	err = k8sClient.Create(context.TODO(), storagePod)
-	require.NoError(t, err)
-
-	request := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-	}
-	result, err := controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, recorder.Events)
-
-	require.Empty(t, podControl.Templates)
-	require.ElementsMatch(t, []string{storagePod.Name}, podControl.DeletePodName)
-
-	updatedCluster := &corev1.StorageCluster{}
-	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, updatedCluster.Status.Conditions, 1)
-	require.Equal(t, corev1.ClusterConditionTypeDelete, updatedCluster.Status.Conditions[0].Type)
-	require.Equal(t, []string{deleteFinalizerName}, updatedCluster.Finalizers)
-
-	condition := &corev1.ClusterCondition{
-		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
-	}
-	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
-
-	telemetryCert := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pxutil.TelemetryCertName,
-			Namespace: cluster.Namespace,
-		},
-	}
-	err = k8sClient.Create(context.TODO(), telemetryCert)
-	require.NoError(t, err)
-
-	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
-	require.Empty(t, result)
-	require.Empty(t, recorder.Events)
-
-	updatedCluster = &corev1.StorageCluster{}
-	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	secret := &v1.Secret{}
-	err = testutil.Get(k8sClient, secret, pxutil.TelemetryCertName, cluster.Namespace)
-	require.NoError(t, err)
-
-	require.Equal(t, len(secret.OwnerReferences), 1)
 }
 
 func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
@@ -3883,7 +3820,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return("pxd").AnyTimes()
@@ -3950,8 +3887,9 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 	require.NoError(t, err)
 
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -4016,10 +3954,11 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeDelete,
-		Status: corev1.ClusterOperationCompleted,
+		Status: corev1.ClusterConditionStatusCompleted,
 	}
 	driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -4092,7 +4031,7 @@ func TestRollingUpdateWithMinReadySeconds(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -4198,7 +4137,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -4353,7 +4292,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
 	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -4565,7 +4504,7 @@ func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -4702,7 +4641,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -4912,7 +4851,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5075,7 +5014,7 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5136,7 +5075,7 @@ func TestUpdateStorageClusterWhenDriverReportsPodNotUpdated(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5204,7 +5143,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5266,7 +5205,7 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5375,7 +5314,7 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5482,7 +5421,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5602,7 +5541,7 @@ func TestUpdateStorageClusterResourceRequirements(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5718,7 +5657,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -5991,7 +5930,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6217,7 +6156,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6310,7 +6249,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6405,7 +6344,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6497,7 +6436,7 @@ func TestUpdateStorageClusterVolumes(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6760,7 +6699,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6851,7 +6790,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -6945,7 +6884,7 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -7120,7 +7059,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -7587,7 +7526,7 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -7682,7 +7621,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -7850,7 +7789,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -7933,7 +7872,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -8105,6 +8044,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
+	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypeRuntimeState,
+		Status: corev1.ClusterConditionStatusOnline,
+	})
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	storageLabels := map[string]string{
@@ -8123,7 +8068,7 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
 	}
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -8249,7 +8194,7 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Failed", updatedCluster.Status.Phase)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 
 	// TestCase: Add unsupported custom annotation key and remove previous one
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -8323,7 +8268,7 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -8476,7 +8421,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	operatorops.SetInstance(operatorops.New(fakeClient))
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -8643,7 +8588,7 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -8791,7 +8736,7 @@ func TestHistoryCleanup(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
-	driver.EXPECT().Validate().Return(nil).AnyTimes()
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -9172,7 +9117,7 @@ func TestDoesTelemetryMatch(t *testing.T) {
 			kubernetesVersion: k8sVersion,
 		}
 
-		driver.EXPECT().Validate().Return(nil).AnyTimes()
+		driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 		driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 		driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 		driver.EXPECT().String().Return(driverName).AnyTimes()
@@ -9184,8 +9129,9 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 		condition := &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
 			Type:   corev1.ClusterConditionTypeDelete,
-			Status: corev1.ClusterOperationCompleted,
+			Status: corev1.ClusterConditionStatusCompleted,
 		}
 		driver.EXPECT().DeleteStorage(gomock.Any()).Return(condition, nil).AnyTimes()
 
@@ -9250,7 +9196,167 @@ func TestDoesTelemetryMatch(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result)
 	}
+}
 
+func TestEKSPreflightCheck(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	preflightOps := mock.NewMockCheckerOps(mockCtrl)
+	preflight.SetInstance(preflightOps)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+				pxutil.AnnotationIsEKS:          "true",
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	// TestCase: eks cloud permission check failed
+	errMsg := "eks cloud permission check failed"
+
+	preflightOps.EXPECT().ProviderName().Return(string(cloudops.AWS)).AnyTimes()
+	preflightOps.EXPECT().K8sDistributionName().Return("eks").AnyTimes()
+	preflightOps.EXPECT().CheckCloudDrivePermission(cluster).Return(fmt.Errorf(errMsg))
+
+	err := controller.runPreflightCheck(cluster)
+	require.Error(t, err)
+	require.Contains(t, errMsg, err.Error())
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+
+	// TestCase: without the permission fixed, preflight check should return error directly
+	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
+	err = controller.runPreflightCheck(cluster)
+	require.Error(t, err)
+	require.Contains(t, errMsg, err.Error())
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
+
+	// TestCase: fix the permission then rerun preflight
+	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+	preflightOps.EXPECT().CheckCloudDrivePermission(cluster).Return(nil)
+	err = controller.runPreflightCheck(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	require.NotNil(t, condition)
+	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+}
+
+func TestStorageClusterStateDuringValidation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "ns",
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion("1.19.0")
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	validationErr := fmt.Errorf("minimum supported kubernetes version by the operator is 1.21.0")
+	driver.EXPECT().Validate(gomock.Any()).Return(validationErr).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any()).Return(nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	// Validation failed during fresh install
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	require.Len(t, recorder.Events, 1)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedValidationReason, validationErr.Error()))
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.True(t, pxutil.IsFreshInstall(updatedCluster))
+
+	// Reconcile again and storage cluster phase should not be changed during fresh install
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	updatedCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.True(t, pxutil.IsFreshInstall(updatedCluster))
+
+	// Validation failed when updating a running cluster
+	updatedCluster.Status = corev1.StorageClusterStatus{
+		Phase: string(corev1.ClusterStateRunning),
+		Conditions: []corev1.ClusterCondition{
+			{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeRuntimeState,
+				Status: corev1.ClusterConditionStatusOnline,
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), updatedCluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Contains(t, err.Error(), validationErr.Error())
+
+	updatedCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
+	require.False(t, pxutil.IsFreshInstall(updatedCluster))
 }
 
 func replaceOldPod(
