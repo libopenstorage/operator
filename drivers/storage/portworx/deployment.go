@@ -1546,9 +1546,9 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 			mountPath: "/run/containerd/containerd.sock",
 		},
 		{
-			name:      "containerddir-rke2",
-			hostPath:  "/var/lib/rancher/rke2/agent/containerd",
-			mountPath: "/var/lib/rancher/rke2/agent/containerd",
+			name:      "containerddir-k3s",
+			hostPath:  "/var/lib/rancher",
+			mountPath: "/var/lib/rancher",
 		},
 	}
 }
