@@ -110,6 +110,7 @@ func newTemplate(
 		return nil, err
 	}
 
+	t.isK3s = isK3sClusterExt(ext)
 	t.runOnMaster = t.isK3s || pxutil.RunOnMaster(cluster)
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
@@ -126,7 +127,6 @@ func newTemplate(
 		t.csiConfig = csiGenerator.GetBasicCSIConfiguration()
 	}
 
-	t.isK3s = isK3sClusterExt(ext)
 	t.isPKS = pxutil.IsPKS(cluster)
 	t.isIKS = pxutil.IsIKS(cluster) || isIKSClusterExt(ext)
 	t.isOpenshift = pxutil.IsOpenshift(cluster)
