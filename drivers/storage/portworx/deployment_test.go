@@ -3856,8 +3856,9 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 	assert.True(t, appsSecretSet)
 }
 
-func TestIKSEnvVariables(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+func TestPodSpecForIKS(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
 	nodeName := "testNode"
 
 	cluster := &corev1.StorageCluster{
@@ -3896,6 +3897,22 @@ func TestIKSEnvVariables(t *testing.T) {
 	}
 	assert.Equal(t, expectedPodIPEnv, *podIPEnv)
 
+	// ensure additional volumes have been added
+	vol := v1.Volume{
+		Name: "cripersistentstorage-iks",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: "/var/data/cripersistentstorage",
+			},
+		},
+	}
+	volMnt := v1.VolumeMount{
+		Name:      "cripersistentstorage-iks",
+		MountPath: "/var/data/cripersistentstorage",
+	}
+	assert.Contains(t, actual.Volumes, vol)
+	assert.Contains(t, actual.Containers[0].VolumeMounts, volMnt)
+
 	// TestCase: When IKS is not enabled
 	cluster.Annotations[pxutil.AnnotationIsIKS] = "false"
 
@@ -3910,6 +3927,17 @@ func TestIKSEnvVariables(t *testing.T) {
 		}
 	}
 	assert.Nil(t, podIPEnv)
+	assert.NotContains(t, actual.Volumes, vol)
+	assert.NotContains(t, actual.Containers[0].VolumeMounts, volMnt)
+
+	// now that the annotation is off, check if we can activate IKS via Kubernets version
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.8+IKS",
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assert.Contains(t, actual.Volumes, vol)
+	assert.Contains(t, actual.Containers[0].VolumeMounts, volMnt)
 }
 
 func TestPruneVolumes(t *testing.T) {
@@ -4058,7 +4086,7 @@ func getExpectedPodSpecFromDaemonset(t *testing.T, fileName string) *v1.PodSpec 
 	assert.NoError(t, err)
 
 	ds, ok := obj.(*v1beta1.DaemonSet)
-	assert.True(t, ok, "Expected daemon set object")
+	require.True(t, ok, "Expected daemon set object, got %T", obj)
 
 	return &ds.Spec.Template.Spec
 }

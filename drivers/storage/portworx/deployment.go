@@ -110,7 +110,6 @@ func newTemplate(
 		return nil, err
 	}
 
-	t.isK3s = isK3sCluster(ext)
 	t.runOnMaster = t.isK3s || pxutil.RunOnMaster(cluster)
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
@@ -127,8 +126,9 @@ func newTemplate(
 		t.csiConfig = csiGenerator.GetBasicCSIConfiguration()
 	}
 
+	t.isK3s = isK3sClusterExt(ext)
 	t.isPKS = pxutil.IsPKS(cluster)
-	t.isIKS = pxutil.IsIKS(cluster)
+	t.isIKS = pxutil.IsIKS(cluster) || isIKSClusterExt(ext)
 	t.isOpenshift = pxutil.IsOpenshift(cluster)
 	t.serviceType = pxutil.ServiceType(cluster, "")
 	t.imagePullPolicy = pxutil.ImagePullPolicy(cluster)
@@ -1274,6 +1274,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
 		t.getK3sVolumeInfoList,
+		t.getIKSVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
@@ -1334,6 +1335,7 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getCSIVolumeInfoList,
 		t.getTelemetryVolumeInfoList,
 		t.getK3sVolumeInfoList,
+		t.getIKSVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
@@ -1549,6 +1551,20 @@ func (t *template) getK3sVolumeInfoList() []volumeInfo {
 			name:      "containerddir-k3s",
 			hostPath:  "/var/lib/rancher",
 			mountPath: "/var/lib/rancher",
+		},
+	}
+}
+
+func (t *template) getIKSVolumeInfoList() []volumeInfo {
+	if !t.isIKS {
+		return []volumeInfo{}
+	}
+
+	return []volumeInfo{
+		{
+			name:      "cripersistentstorage-iks",
+			hostPath:  "/var/data/cripersistentstorage",
+			mountPath: "/var/data/cripersistentstorage",
 		},
 	}
 }
@@ -1795,9 +1811,16 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	return list
 }
 
-func isK3sCluster(ext string) bool {
+func isK3sClusterExt(ext string) bool {
 	if len(ext) > 0 {
 		return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
+	}
+	return false
+}
+
+func isIKSClusterExt(ext string) bool {
+	if len(ext) > 0 {
+		return strings.HasSuffix(ext[1:], "IKS")
 	}
 	return false
 }
