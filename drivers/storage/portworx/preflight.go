@@ -40,7 +40,8 @@ type PreFlightPortworx interface {
 	// RunPreFlight runs the pre-flight  daemonset
 	RunPreFlight() error
 	// GetPreFlightStatus returns the status of the pre-flight daemonset
-	// returns the no. of completed, in progress and total pods
+	// returns the no. of completed, in progress and total pods, plus how
+	// long the daemonset  has been running.
 	GetPreFlightStatus() (int32, int32, int32, time.Duration, error)
 	// GetPreFlightPods returns the pods of the pre-flight daemonset
 	GetPreFlightPods() ([]*v1.Pod, error)

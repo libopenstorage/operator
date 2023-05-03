@@ -508,7 +508,6 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
 		}
 	}
-
 	// TODO: validate cloud permission for other providers as well
 
 	// Skip over driver Validate() if an error has occurred
