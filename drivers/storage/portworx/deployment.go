@@ -1569,6 +1569,10 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 			name:      "containerdvardir",
 			hostPath:  "/var/lib/containerd",
 			mountPath: "/var/lib/containerd",
+			pks: &pksVolumeInfo{
+				hostPath:  "/var/vcap/store/containerd",
+				mountPath: "/var/vcap/store/containerd",
+			},
 		},
 		{
 			name:      "criosock",
