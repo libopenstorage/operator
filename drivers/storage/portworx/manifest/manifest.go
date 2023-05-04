@@ -32,9 +32,9 @@ const (
 	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
 	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
-	defaultCCMGoImage          = "purestorage/ccm-go:1.0.0"
+	defaultCCMGoImage          = "purestorage/ccm-go:1.0.3"
 	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
-	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.0"
+	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.1"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
