@@ -65,7 +65,7 @@ spec:
             - name: containerddir
               mountPath: /run/containerd
             - name: containerdvardir
-              mountPath: /var/lib/containerd
+              mountPath: /var/vcap/store/containerd
             - name: criosock
               mountPath: /var/run/crio
             - name: crioconf
@@ -130,7 +130,7 @@ spec:
             path: /run/containerd
         - name: containerdvardir
           hostPath:
-            path: /var/lib/containerd
+            path: /var/vcap/store/containerd
         - name: etcpwx
           hostPath:
             path: /var/vcap/store/etc/pwx
