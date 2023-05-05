@@ -3018,7 +3018,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse",
+				Image:   "portworx/px-lighthouse:latest",
 			},
 		},
 	}
@@ -3032,13 +3032,13 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:latest", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
-	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync:latest", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
-	require.Equal(t, "docker.io/portworx/lh-config-sync", image)
+	require.Equal(t, "docker.io/portworx/lh-config-sync:latest", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhStorkConnectorContainerName)
-	require.Equal(t, "docker.io/portworx/lh-stork-connector", image)
+	require.Equal(t, "docker.io/portworx/lh-stork-connector:latest", image)
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
@@ -3057,7 +3057,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 		Spec: corev1.StorageClusterSpec{
 			UserInterface: &corev1.UserInterfaceSpec{
 				Enabled: true,
-				Image:   "portworx/px-lighthouse",
+				Image:   "portworx/px-lighthouse:latest",
 				Env: []v1.EnvVar{
 					{
 						Name:  component.EnvKeyLhConfigSyncImage,
@@ -3081,7 +3081,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	err = testutil.Get(k8sClient, lhDeployment, component.LhDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	image := k8sutil.GetImageFromDeployment(lhDeployment, component.LhContainerName)
-	require.Equal(t, "docker.io/portworx/px-lighthouse", image)
+	require.Equal(t, "docker.io/portworx/px-lighthouse:latest", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigInitContainerName)
 	require.Equal(t, "docker.io/test/config-sync:t1", image)
 	image = k8sutil.GetImageFromDeployment(lhDeployment, component.LhConfigSyncContainerName)
@@ -7883,7 +7883,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
-				Image:   "testImage",
+				Image:   "testImage:latest",
 			},
 		},
 		Status: corev1.StorageClusterStatus{ClusterUID: "test-uid"},
@@ -8756,7 +8756,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 			},
 			PxRepo: &corev1.PxRepoSpec{
 				Enabled: true,
-				Image:   "pxRepoImage",
+				Image:   "pxRepoImage:latest",
 			},
 		},
 		Status: corev1.StorageClusterStatus{
