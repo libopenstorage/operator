@@ -442,7 +442,7 @@ func getDeprecatedCRDBasePath() string {
 }
 
 func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
-	if storagenode.Status.Storage.TotalSize.IsZero() {
+	if storagenode.Status.Storage == nil || storagenode.Status.Storage.TotalSize.IsZero() {
 		return false
 	}
 

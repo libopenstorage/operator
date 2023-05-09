@@ -3134,12 +3134,14 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
 	require.Equal(t, driver.GetSelectorLabels(), nodeStatus.Labels)
 	require.Equal(t, "node-1", nodeStatus.Status.NodeUID)
+	require.NotNil(t, nodeStatus.Status.Network)
 	require.Equal(t, "10.0.1.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
 
@@ -3150,12 +3152,14 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
 	require.Equal(t, driver.GetSelectorLabels(), nodeStatus.Labels)
 	require.Equal(t, "node-2", nodeStatus.Status.NodeUID)
+	require.NotNil(t, nodeStatus.Status.Network)
 	require.Equal(t, "10.0.2.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
 
@@ -4169,6 +4173,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
 	require.Equal(t, corev1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatusList.Items[0].Status.Network)
 	require.Equal(t, "1.1.1.1", nodeStatusList.Items[0].Status.Network.DataIP)
 
 	// Update status based on the latest object
@@ -4197,6 +4202,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
 	require.Equal(t, corev1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatusList.Items[0].Status.Network)
 	require.Equal(t, "2.2.2.2", nodeStatusList.Items[0].Status.Network.DataIP)
 }
 

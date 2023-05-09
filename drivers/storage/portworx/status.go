@@ -440,6 +440,9 @@ func (p *portworx) updateStorageNodeStatus(
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
 ) error {
+	if storageNode.Status.Storage == nil {
+		storageNode.Status.Storage = &corev1.StorageStatus{}
+	}
 	originalTotalSize := storageNode.Status.Storage.TotalSize
 	storageNode.Status.Storage.TotalSize = *resource.NewQuantity(0, resource.BinarySI)
 	originalUsedSize := storageNode.Status.Storage.UsedSize
@@ -447,7 +450,7 @@ func (p *portworx) updateStorageNodeStatus(
 	originalStorageNodeStatus := storageNode.Status.DeepCopy()
 
 	storageNode.Status.NodeUID = node.Id
-	storageNode.Status.Network = corev1.NetworkStatus{
+	storageNode.Status.Network = &corev1.NetworkStatus{
 		DataIP: node.DataIp,
 		MgmtIP: node.MgmtIp,
 	}
