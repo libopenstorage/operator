@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
@@ -204,6 +206,10 @@ func run(c *cli.Context) {
 	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
+	k8sClient := mgr.GetClient()
+	//register plugin
+	cm := k8s.NewPluginConfigMap(k8sClient)
+	cm.CreateConfigMap()
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
 	metricsPort := c.Int(flagMetricsPort)
@@ -229,11 +235,11 @@ func run(c *cli.Context) {
 		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
-	if err := preflight.InitPreflightChecker(mgr.GetClient()); err != nil {
+	if err := preflight.InitPreflightChecker(k8sClient); err != nil {
 		log.Fatalf("Error initializing preflight checker: %v", err)
 	}
 
-	if err := d.Init(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
+	if err := d.Init(k8sClient, mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
