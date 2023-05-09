@@ -1,0 +1,406 @@
+---
+# Source: openshift-console-plugin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: px-plugin-test
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+
+
+---
+# Source: openshift-console-plugin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: px-plugin-test
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+
+
+---
+# Source: openshift-console-plugin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: px-plugin-test-cert
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: 9443-tcp
+      protocol: TCP
+      port: 9443
+      targetPort: 9443
+  selector:
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+# Source: openshift-console-plugin/templates/patcher-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: px-plugin-test-patcher
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+
+
+---
+# Source: openshift-console-plugin/templates/patcher-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: px-plugin-test-patcher
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: px-plugin-test-patcher
+subjects:
+  - kind: ServiceAccount
+    name: px-plugin-test-patcher
+    namespace: default
+
+
+---
+# Source: openshift-console-plugin/templates/patcher-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: px-plugin-test-patcher
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["operator.openshift.io"]
+    resources: ["consoles"]
+    verbs: ["get","list","patch", "update"]
+
+
+---
+# Source: openshift-console-plugin/templates/patch-consoles-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: px-plugin-test-patcher
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: openshift-console-plugin-0.1.0
+        app: px-plugin-test
+        app.kubernetes.io/name: px-plugin-test
+        app.kubernetes.io/instance: test
+        app.kubernetes.io/part-of: px-plugin-test
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: px-plugin-test-patcher
+      securityContext: 
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 400
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: px-plugin-test-patcher
+          image: registry.redhat.io/openshift4/ose-tools-rhel8@sha256:e44074f21e0cca6464e50cb6ff934747e0bd11162ea01d522433a1a1ae116103
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          command:
+            - /bin/bash
+            - -c
+            - |
+                existingPlugins=$(oc get consoles.operator.openshift.io cluster -o json | jq -c '.spec.plugins // []')
+                mergedPlugins=$(jq --argjson existingPlugins "${existingPlugins}" --argjson consolePlugin '["px-plugin-test"]' -c  -n '$existingPlugins + $consolePlugin | unique')
+                patchedPlugins=$(jq --argjson mergedPlugins $mergedPlugins -n -c  '{ "spec": { "plugins": $mergedPlugins } }')
+                oc patch consoles.operator.openshift.io cluster --patch $patchedPlugins  --type=merge
+
+---
+# Source: openshift-console-plugin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+    app.openshift.io/runtime-namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: px-plugin-test
+      app.kubernetes.io/name: px-plugin-test
+      app.kubernetes.io/instance: test
+      app.kubernetes.io/part-of: px-plugin-test
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: openshift-console-plugin-0.1.0
+        app: px-plugin-test
+        app.kubernetes.io/name: px-plugin-test
+        app.kubernetes.io/instance: test
+        app.kubernetes.io/part-of: px-plugin-test
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: px-plugin-test
+          image: quay.io/kravichandran-px/portworx-dynamic-plugin
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - name: px-plugin-test-cert
+              readOnly: true
+              mountPath: /var/cert
+            - name: nginx-conf
+              readOnly: true
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: px-plugin-test-cert
+          secret:
+            secretName: px-plugin-test-cert
+            defaultMode: 420
+        - name: nginx-conf
+          configMap:
+            name: px-plugin-test
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext: 
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+
+
+---
+# Source: openshift-console-plugin/templates/consoleplugin.yaml
+apiVersion: console.openshift.io/v1alpha1
+kind: ConsolePlugin
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+spec:
+  proxy:
+  - type: Service
+    alias: portworx-api
+    endpoint:
+      service:
+        name: portworx-console-proxy
+        namespace: portworx-operators
+  displayName: px-plugin-test Plugin
+  service:
+    name: px-plugin-test
+    namespace: default
+    port: 9443
+    basePath: /
+
+---
+# Source: openshift-console-plugin/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+data:
+  nginx.conf: |
+    error_log /dev/stdout info;
+    events {}
+    http {
+      access_log         /dev/stdout;
+      include            /etc/nginx/mime.types;
+      default_type       application/octet-stream;
+      keepalive_timeout  65;
+      server {
+        listen              9443 ssl;
+        ssl_certificate     /var/cert/tls.crt;
+        ssl_certificate_key /var/cert/tls.key;
+        root                /usr/share/nginx/html;
+      }
+    }
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: portworx-console-proxy
+  namespace: portworx-operators
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: portworx-console-proxy
+spec:
+  selector:
+    name: portworx-console-proxy
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: https
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: portworx-console-proxy
+  namespace: portworx-operators
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: portworx-console-proxy
+  template:
+    metadata:
+      labels:
+        name: portworx-console-proxy
+    spec:
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: portworx-console-proxy-conf
+        - name: nginx-certs
+          secret:
+            secretName: portworx-console-proxy
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.23
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx
+            - name: nginx-certs
+              mountPath: /etc/nginx/certs
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: portworx-console-proxy-conf
+  namespace: portworx-operators
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    events {
+      worker_connections 1024;
+    }
+    http {
+      server {
+        listen 8080;
+        server_name portworx-console-proxy.openshift-operators.svc.cluster.local;
+        location / {
+          proxy_pass http://portworx-api.portworx-operators.svc.cluster.local:9021;
+        }
+      }
+      server {
+        listen 8443 ssl;
+        server_name portworx-console-proxy.openshift-operators.svc.cluster.local;
+        ssl_certificate /etc/nginx/certs/tls.crt;
+        ssl_certificate_key /etc/nginx/certs/tls.key;
+        location / {
+          proxy_pass http://portworx-api.portworx-operators.svc.cluster.local:9021;
+        }
+      }
+    }
