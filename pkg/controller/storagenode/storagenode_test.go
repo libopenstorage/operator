@@ -291,7 +291,7 @@ func TestReconcile(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
@@ -312,7 +312,7 @@ func TestReconcile(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: defaultQuantity,
 				UsedSize:  defaultQuantity,
 			},
@@ -425,7 +425,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
 		Status: corev1.NodeStatus{
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
@@ -445,7 +445,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
 		Status: corev1.NodeStatus{
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: defaultQuantity,
 				UsedSize:  defaultQuantity,
 			},
@@ -609,7 +609,7 @@ func TestReconcileKVDB(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
@@ -874,7 +874,7 @@ func TestSyncStorageNodeErrors(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
