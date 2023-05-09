@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/plugin"
 
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -208,10 +208,13 @@ func run(c *cli.Context) {
 	}
 	k8sClient := mgr.GetClient()
 	//register plugin
-	cm := k8s.NewPluginConfigMap(k8sClient)
-	cm.CreateConfigMap()
+	fmt.Println("Starting to create plugin configmap")
+	cm := plugin.NewPlugin(k8sClient)
+	cm.DeployPlugin()
+	fmt.Println("end to create plugin configmap")
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
+
 	metricsPort := c.Int(flagMetricsPort)
 	metricsServicePorts := []v1.ServicePort{
 		{

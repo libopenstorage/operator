@@ -1,0 +1,77 @@
+---
+# Source: openshift-console-plugin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+    app.openshift.io/runtime-namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: px-plugin-test
+      app.kubernetes.io/name: px-plugin-test
+      app.kubernetes.io/instance: test
+      app.kubernetes.io/part-of: px-plugin-test
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: openshift-console-plugin-0.1.0
+        app: px-plugin-test
+        app.kubernetes.io/name: px-plugin-test
+        app.kubernetes.io/instance: test
+        app.kubernetes.io/part-of: px-plugin-test
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: px-plugin-test
+          image: quay.io/kravichandran-px/portworx-dynamic-plugin
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - name: px-plugin-test-cert
+              readOnly: true
+              mountPath: /var/cert
+            - name: nginx-conf
+              readOnly: true
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: px-plugin-test-cert
+          secret:
+            secretName: px-plugin-test-cert
+            defaultMode: 420
+        - name: nginx-conf
+          configMap:
+            name: px-plugin-test
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext: 
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%

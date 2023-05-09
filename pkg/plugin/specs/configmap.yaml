@@ -1,0 +1,30 @@
+---
+# Source: openshift-console-plugin/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+data:
+  nginx.conf: |
+    error_log /dev/stdout info;
+    events {}
+    http {
+      access_log         /dev/stdout;
+      include            /etc/nginx/mime.types;
+      default_type       application/octet-stream;
+      keepalive_timeout  65;
+      server {
+        listen              9443 ssl;
+        ssl_certificate     /var/cert/tls.crt;
+        ssl_certificate_key /var/cert/tls.key;
+        root                /usr/share/nginx/html;
+      }
+    }

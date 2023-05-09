@@ -1,0 +1,28 @@
+---
+# Source: openshift-console-plugin/templates/consoleplugin.yaml
+apiVersion: console.openshift.io/v1alpha1
+kind: ConsolePlugin
+metadata:
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+spec:
+  proxy:
+  - type: Service
+    alias: portworx-api
+    endpoint:
+      service:
+        name: portworx-console-proxy
+        namespace: portworx-operators
+  displayName: px-plugin-test Plugin
+  service:
+    name: px-plugin-test
+    namespace: default
+    port: 9443
+    basePath: /

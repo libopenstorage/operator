@@ -20,7 +20,7 @@ type configMap struct {
 	cm *v1.ConfigMap
 }
 
-func newCxonfigMapManifest(
+func newConfigMapManifest(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
 ) (versionProvider, error) {

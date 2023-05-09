@@ -1,0 +1,29 @@
+---
+# Source: openshift-console-plugin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: px-plugin-test-cert
+  name: px-plugin-test
+  namespace: default
+  labels:
+    helm.sh/chart: openshift-console-plugin-0.1.0
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: 9443-tcp
+      protocol: TCP
+      port: 9443
+      targetPort: 9443
+  selector:
+    app: px-plugin-test
+    app.kubernetes.io/name: px-plugin-test
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/part-of: px-plugin-test
+  type: ClusterIP
+  sessionAffinity: None
