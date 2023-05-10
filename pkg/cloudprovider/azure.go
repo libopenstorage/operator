@@ -10,6 +10,7 @@ import (
 	"github.com/libopenstorage/cloudops"
 )
 
+//lint:file-ignore U1000 Ignore unused code
 type azure struct {
 	defaultProvider
 }
