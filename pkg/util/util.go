@@ -117,11 +117,6 @@ func AddDefaultRegistryToImage(image string) string {
 
 	parts := strings.Split(image, "/")
 
-	// no separate parts, always add registry-server
-	if len(parts) <= 0 {
-		return DefaultImageRegistry + "/" + image
-	}
-
 	hn := parts[0]
 
 	// if host:port and not IPv6, reset to host
