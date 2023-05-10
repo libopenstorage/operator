@@ -9,8 +9,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
+/*
 const (
 	pluginConfigMapFile           = "configmap.yaml"
 	nginxConfigMapFile            = "nginx-configmap.yaml"
@@ -22,13 +25,17 @@ const (
 	patcherClusterRoleBindingFile = "patcher-clusterrolebinding.yaml"
 	pluginServiceAccountFile      = "patcher-serviceaccount.yaml"
 )
+*/
 
 type Plugin struct {
-	Client client.Client
+	client client.Client
+	scheme *runtime.Scheme
 }
 
-func NewPlugin(client client.Client) *Plugin {
-	return &Plugin{Client: client}
+func NewPlugin(client client.Client, scheme *runtime.Scheme) *Plugin {
+	return &Plugin{
+		client: client,
+		scheme: scheme}
 }
 
 func (p *Plugin) DeployPlugin() {
@@ -47,6 +54,9 @@ func (p *Plugin) DeployPlugin() {
 	if err := p.createServiceAccount(); err != nil {
 		logrus.Errorf("error during creating service acount %s ", err)
 	}
+	if err := p.createConfigmap(); err != nil {
+		logrus.Errorf("error during creating config map  %s ", err)
+	}
 }
 
 func (p *Plugin) createDeployment() error {
@@ -54,58 +64,58 @@ func (p *Plugin) createDeployment() error {
 	if err != nil {
 		return err
 	}
-	return k8s.CreateOrUpdateDeployment(p.Client, deployment, nil)
+	return k8s.CreateOrUpdateDeployment(p.client, deployment, nil)
 }
 
 func (p *Plugin) createClusterRole() error {
 	roleObj := &rbacv1.ClusterRole{}
-	err := k8s.ParseObjectFromFile("patcher-clusterrole.yaml", nil, roleObj)
+	err := k8s.ParseObjectFromFile("/configs/patcher-clusterrole.yaml", p.scheme, roleObj)
 	if err != nil {
 		return err
 	}
-	return k8s.CreateOrUpdateClusterRole(p.Client, roleObj)
+	return k8s.CreateOrUpdateClusterRole(p.client, roleObj)
 }
 
 func (p *Plugin) createClusterRoleBinding() error {
 	roleBindingObj := &rbacv1.ClusterRoleBinding{}
-	err := k8s.ParseObjectFromFile("patcher-clusterrole-binding.yaml", nil, roleBindingObj)
+	err := k8s.ParseObjectFromFile("/configs/patcher-clusterrolebinding.yaml", p.scheme, roleBindingObj)
 	if err != nil {
 		return err
 	}
-	return k8s.CreateOrUpdateClusterRoleBinding(p.Client, roleBindingObj)
+	return k8s.CreateOrUpdateClusterRoleBinding(p.client, roleBindingObj)
 }
 
 func (p *Plugin) createService() error {
 	service := &v1.Service{}
-	err := k8s.ParseObjectFromFile("service.yaml", nil, service)
+	err := k8s.ParseObjectFromFile("/configs/service.yaml", p.scheme, service)
 	if err != nil {
 		return err
 	}
-	return k8s.CreateOrUpdateService(p.Client, service, nil)
+	return k8s.CreateOrUpdateService(p.client, service, nil)
 }
 
-func (p *Plugin) createServiceAccount(fileName string) error {
+func (p *Plugin) createServiceAccount() error {
 	serviceAccount := &v1.ServiceAccount{}
-	err := k8s.ParseObjectFromFile(fileName, nil, serviceAccount)
+	err := k8s.ParseObjectFromFile("/configs/serviceaccount.yaml", p.scheme, serviceAccount)
 	if err != nil {
 		return err
 	}
-	return k8s.CreateOrUpdateServiceAccount(p.Client, serviceAccount, nil)
+	return k8s.CreateOrUpdateServiceAccount(p.client, serviceAccount, nil)
 }
 
-func (p *Plugin) createConfigmap(fileName string) error {
+func (p *Plugin) createConfigmap() error {
 	cm := &v1.ConfigMap{}
-	err := k8s.ParseObjectFromFile(fileName, nil, cm)
+	err := k8s.ParseObjectFromFile("/configs/configmap.yaml", p.scheme, cm)
 	if err != nil {
 		return err
 	}
-	created, err := k8s.CreateOrUpdateConfigMap(p.Client, cm, nil)
+	created, err := k8s.CreateOrUpdateConfigMap(p.client, cm, nil)
 	if err != nil {
 		return err
 	}
 	if !created {
 		logrus.Info("Configmap is not created")
-		return errors.New("Configmap is not created")
+		return errors.New("configmap is not created")
 	}
 	return nil
 

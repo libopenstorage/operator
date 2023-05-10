@@ -189,29 +189,25 @@ func run(c *cli.Context) {
 	if err != nil {
 		log.Fatalf("Failed to create controller manager: %v", err)
 	}
+	k8sClient := mgr.GetClient()
+	scheme := mgr.GetScheme()
 
 	// Add custom resources to scheme
 	// TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := apis.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
-	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := monitoringv1.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
 	}
 
-	if err := cluster_v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := cluster_v1alpha1.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
-	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := ocp_configv1.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
-	k8sClient := mgr.GetClient()
-	//register plugin
-	fmt.Println("Starting to create plugin configmap")
-	cm := plugin.NewPlugin(k8sClient)
-	cm.DeployPlugin()
-	fmt.Println("end to create plugin configmap")
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
 
@@ -263,6 +259,12 @@ func run(c *cli.Context) {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
+	//register plugin
+	fmt.Println("Starting to create plugin configmap")
+	cm := plugin.NewPlugin(k8sClient, scheme)
+	cm.DeployPlugin()
+	fmt.Println("end to create plugin configmap")
+
 	if c.BoolT(flagMigration) {
 		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
@@ -272,6 +274,7 @@ func run(c *cli.Context) {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
 	}
+
 }
 
 func getObjects(objectKinds string) []client.Object {
