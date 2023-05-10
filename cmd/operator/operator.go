@@ -211,7 +211,6 @@ func run(c *cli.Context) {
 	}
 
 	// Create Service and ServiceMonitor objects to expose the metrics to Prometheus
-
 	metricsPort := c.Int(flagMetricsPort)
 	metricsServicePorts := []v1.ServicePort{
 		{
@@ -266,22 +265,17 @@ func run(c *cli.Context) {
 	cm.DeployPlugin()
 	fmt.Println("end to create plugin configmap")
 
-	
-
-	
 	if c.BoolT(flagMigration) {
 		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
 		go migrationHandler.Start()
 	}
-	
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
 	} else {
 		fmt.Println("manager started!!!!")
 	}
-
 
 }
 

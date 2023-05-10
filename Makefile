@@ -1,6 +1,6 @@
 # set defaults
 ifndef DOCKER_HUB_REPO
-    DOCKER_HUB_REPO := nikitabhatia78
+    DOCKER_HUB_REPO := portworx
     $(warning DOCKER_HUB_REPO not defined, using '$(DOCKER_HUB_REPO)' instead)
 endif
 ifndef DOCKER_HUB_OPERATOR_IMG
@@ -57,7 +57,6 @@ BUILDFLAGS += -gcflags "-N -l"
 endif
 
 RELEASE_VER := 23.5.0
-TAG := n9
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
@@ -66,8 +65,8 @@ VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
 OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_IMG):$(DOCKER_HUB_OPERATOR_TAG)
 OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_TEST_IMG):$(DOCKER_HUB_OPERATOR_TEST_TAG)
-BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(TAG)
-REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(TAG)
+BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(RELEASE_VER)
+REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(RELEASE_VER)
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-42.1.0
