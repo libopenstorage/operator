@@ -119,7 +119,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("Error starting openstorage operator: %v", err)
 	}
-	fmt.Println("app started ########")
 }
 
 func run(c *cli.Context) {
@@ -261,7 +260,7 @@ func run(c *cli.Context) {
 
 	//register plugin
 	fmt.Println("Starting to create plugin configmap")
-	cm := plugin.NewPlugin(k8sClient, scheme)
+	cm := plugin.NewPlugin(scheme)
 	cm.DeployPlugin()
 	fmt.Println("end to create plugin configmap")
 
