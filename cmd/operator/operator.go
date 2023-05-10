@@ -119,6 +119,7 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("Error starting openstorage operator: %v", err)
 	}
+	fmt.Println("app started ########")
 }
 
 func run(c *cli.Context) {
@@ -265,15 +266,22 @@ func run(c *cli.Context) {
 	cm.DeployPlugin()
 	fmt.Println("end to create plugin configmap")
 
+	
+
+	
 	if c.BoolT(flagMigration) {
 		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
 		go migrationHandler.Start()
 	}
+	
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
+	} else {
+		fmt.Println("manager started!!!!")
 	}
+
 
 }
 

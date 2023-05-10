@@ -64,6 +64,7 @@ func (p *Plugin) createDeployment() error {
 	if err != nil {
 		return err
 	}
+	logrus.Info(*deployment)
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, nil)
 }
 
