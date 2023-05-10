@@ -59,6 +59,7 @@ var (
 )
 
 // Release is a single release object with images for different components
+// -note: please keep in sync w/ `storagecluster.ComponentImages` structure
 type Release struct {
 	Stork                      string `yaml:"stork,omitempty"`
 	Lighthouse                 string `yaml:"lighthouse,omitempty"`
@@ -83,6 +84,9 @@ type Release struct {
 	LogUploader                string `yaml:"logUploader,omitempty"`
 	TelemetryProxy             string `yaml:"telemetryProxy,omitempty"` // Use a new field for easy backward compatibility
 	PxRepo                     string `yaml:"pxRepo,omitempty"`
+	KubeScheduler              string `yaml:"kubeScheduler,omitempty"`
+	KubeControllerManager      string `yaml:"kubeControllerManager,omitempty"`
+	Pause                      string `yaml:"pause,omitempty"`
 }
 
 // Version is the response structure from a versions source

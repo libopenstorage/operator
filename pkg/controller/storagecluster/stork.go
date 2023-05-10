@@ -879,10 +879,11 @@ func (c *Controller) createStorkSchedDeployment(
 	} else {
 		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
 	}
-	imageName := util.GetImageURN(
-		cluster,
-		kubeSchedImage,
-	)
+	imageName := kubeSchedImage
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeScheduler != "" {
+		imageName = cluster.Status.DesiredImages.KubeScheduler
+	}
+	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
 	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {

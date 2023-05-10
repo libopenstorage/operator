@@ -550,6 +550,21 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
+		// set misc image defaults
+		imagesData := []struct {
+			desiredImage *string
+			releaseImage string
+		}{
+			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
+			{&toUpdate.Status.DesiredImages.KubeScheduler, release.Components.KubeScheduler},
+			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
+		}
+		for _, v := range imagesData {
+			if *v.desiredImage == "" {
+				*v.desiredImage = v.releaseImage
+			}
+		}
+
 		// Reset the component update strategy if it is 'Once', so that we don't
 		// upgrade components again during next reconcile loop
 		if toUpdate.Spec.AutoUpdateComponents != nil &&
