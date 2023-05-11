@@ -3,7 +3,6 @@ package plugin
 import (
 	console "github.com/openshift/api/console/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,7 +27,6 @@ const (
 	nginxDeploymentFile           = "nginx-deployment.yaml"
 	nginxServiceFile              = "nginx-service.yaml"
 	consolePluginFile             = "consoleplugin.yaml"
-	patchConsoleJobFile           = "patch-consoles-job.yaml"
 	patcherClusterRoleFile        = "patcher-clusterrole.yaml"
 	patcherClusterRoleBindingFile = "patcher-clusterrolebinding.yaml"
 	patcherServiceAccountFile     = "patcher-serviceaccount.yaml"
@@ -108,9 +106,6 @@ func (p *Plugin) DeployPlugin() {
 	}
 	if err := p.createClusterRoleBinding(patcherClusterRoleBindingFile); err != nil {
 		logrus.Errorf("error during creating cluster role binding %s ", err)
-	}
-	if err := p.createJob(patchConsoleJobFile); err != nil {
-		logrus.Errorf("error during creating job %s ", err)
 	}
 	if err := p.createConsolePlugin(consolePluginFile); err != nil {
 		logrus.Errorf("error during creating console plugin %s ", err)
@@ -205,32 +200,6 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 	if errors.IsNotFound(err) {
 		logrus.Infof("Creating %s Consoleplugin", existingPlugin.Name)
 		return p.client.Create(context.TODO(), cp)
-	} else if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (p *Plugin) createJob(filename string) error {
-	job := &batchv1.Job{}
-	job.Namespace = p.ns
-	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, job)
-	if err != nil {
-		return err
-	}
-
-	existingJob := &batchv1.Job{}
-	err = p.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-		},
-		existingJob,
-	)
-	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s Job", job.Name)
-		return p.client.Create(context.TODO(), job)
 	} else if err != nil {
 		return err
 	}

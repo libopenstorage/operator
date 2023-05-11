@@ -244,7 +244,8 @@ getccmconfigs:
 	cp deploy/ccm/* bin/configs/
 
 getpluginconfigs:
-	sudo cp pkg/plugin/specs/* bin/configs/
+	cp pkg/plugin/specs/* bin/configs/
+	cp pkg/plugin/nginx/* bin/configs/
 
 getconfigs: cleanconfigs getccmconfigs getpluginconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
